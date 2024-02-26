@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>ESP32-连接参数/间隔更新 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="ESP32-连接参数/间隔更新" />
+<meta property="og:description" content="连接间隔的设置是一个协商的过程，ESP32提供了一些协商的接口，按顺序分析一下。
+Step 1：首先是Client连接时对Server要求的连接间隔（确定值） 在连接的时候，Client会把当前的连接间隔发送给Server。在Server的连接事件回调函数中，我们是可以看到这个Client要求的连接间隔的，主要是从这个结构体获得。
+再具体些是这样一个结构体。
+以下是在连接事件回调函数中查看Client要求的连接间隔的代码，适用于Arduino和ESP-IDF
+// 在连接事件回调函数中查看Client要求的连接间隔 // 适用于Arduino和ESP-IDF esp_gatt_conn_params_t conn_params; memcpy(&amp;conn_params, &amp;param-&gt;connect.conn_params, sizeof(esp_gatt_conn_params_t)); Serial.println(conn_params.interval*1.25); // 换成ESP-IDF的LOG就行 Step 2：然后是Server请求更新间隔范围（是范围哦） 主要是调用这个函数，Server向Client发送的连接间隔更新请求。
+esp_err_t esp_ble_gap_update_conn_params(esp_ble_conn_update_params_t *params); 用的这样的一个结构体： 在ESP-IDF里面，在Server连接之后，在连接事件的回调函数里请求更新：
+case ESP_GATTS_CONNECT_EVT: ESP_LOGI(GATTS_TABLE_TAG, &#34;ESP_GATTS_CONNECT_EVT, conn_id = %d&#34;, param-&gt;connect.conn_id); esp_log_buffer_hex(GATTS_TABLE_TAG, param-&gt;connect.remote_bda, 6); // 在这里把Step1的代码放进来可以看到Client在本次连接开始时要求的连接参数： // 以下时Step2的关键代码： esp_ble_conn_update_params_t conn_params = {0}; memcpy(conn_params.bda, param-&gt;connect.remote_bda, sizeof(esp_bd_addr_t)); conn_params.latency = 0; conn_params.max_int = 0x20; // max_int = 0x20*1.25ms = 40ms conn_params.min_int = 0x10; // min_int = 0x10*1.25ms = 20ms conn_params." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b723e80ad72fdc350a63a2796a7a96c6/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-13T19:55:25+08:00" />
+<meta property="article:modified_time" content="2023-08-13T19:55:25+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">ESP32-连接参数/间隔更新</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p> 连接间隔的设置是一个协商的过程，ESP32提供了一些协商的接口，按顺序分析一下。</p> 
+<h3>Step 1：首先是Client连接时对Server要求的连接间隔（确定值）</h3> 
+<p>在连接的时候，Client会把当前的连接间隔发送给Server。在Server的连接事件回调函数中，我们是可以看到这个Client要求的连接间隔的，主要是从这个结构体获得。</p> 
+<p><img alt="" height="273" src="https://images2.imgbox.com/a9/05/6xIGCjNq_o.png" width="1168"></p> 
+<p>再具体些是这样一个结构体。</p> 
+<p><img alt="" height="292" src="https://images2.imgbox.com/62/89/YwoWit1X_o.png" width="1200"></p> 
+<p>以下是在连接事件回调函数中查看Client要求的连接间隔的代码，适用于Arduino和ESP-IDF</p> 
+<pre><code class="language-cpp">// 在连接事件回调函数中查看Client要求的连接间隔
+// 适用于Arduino和ESP-IDF
+esp_gatt_conn_params_t conn_params;
+memcpy(&amp;conn_params, &amp;param-&gt;connect.conn_params, sizeof(esp_gatt_conn_params_t));
+Serial.println(conn_params.interval*1.25); // 换成ESP-IDF的LOG就行</code></pre> 
+<h3>Step 2：然后是Server请求更新间隔范围（是范围哦）</h3> 
+<p>主要是调用这个函数，Server向Client发送的连接间隔更新请求。</p> 
+<pre><code class="language-cpp">esp_err_t esp_ble_gap_update_conn_params(esp_ble_conn_update_params_t *params);</code></pre> 
+<p>用的这样的一个结构体： </p> 
+<p><img alt="" height="302" src="https://images2.imgbox.com/0f/fc/mcFbXaVc_o.png" width="1200"></p> 
+<p> 在ESP-IDF里面，在Server连接之后，在连接事件的回调函数里请求更新：</p> 
+<pre><code class="language-cpp">case ESP_GATTS_CONNECT_EVT:
+    ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_CONNECT_EVT, conn_id = %d", param-&gt;connect.conn_id);
+    esp_log_buffer_hex(GATTS_TABLE_TAG, param-&gt;connect.remote_bda, 6);
+    // 在这里把Step1的代码放进来可以看到Client在本次连接开始时要求的连接参数：
+    // 以下时Step2的关键代码：
+    esp_ble_conn_update_params_t conn_params = {0};
+    memcpy(conn_params.bda, param-&gt;connect.remote_bda, sizeof(esp_bd_addr_t));
+    conn_params.latency = 0;
+    conn_params.max_int = 0x20;    // max_int = 0x20*1.25ms = 40ms
+    conn_params.min_int = 0x10;    // min_int = 0x10*1.25ms = 20ms
+    conn_params.timeout = 400;    // timeout = 400*10ms = 4000ms
+    esp_ble_gap_update_conn_params(&amp;conn_params);
+    break;</code></pre> 
+<p>而在Arduino ESP32里面，大佬们已经把这段话封装成了函数，就是下面这个：</p> 
+<p><img alt="" height="323" src="https://images2.imgbox.com/61/66/x31PrS5D_o.png" width="1198"></p> 
+<p> 因此在Arduino里面，只需要在连接回调函数里调用这个函数就可以请求更新间隔了。</p> 
+<pre><code class="language-cpp">
+esp_bd_addr_t connectedAddress;  // 被连接的地址
+
+class MyServerCallbacks: public BLEServerCallbacks 
+{
+    void onConnect(BLEServer* pServer,esp_ble_gatts_cb_param_t* param) {
+    // 在这里把Step1的代码放进来可以看到Client在本次连接开始时要求的连接参数：
+    // 以下时Step2的关键代码：
+      memcpy(connectedAddress, param-&gt;connect.remote_bda, sizeof(esp_bd_addr_t));
+      pServer-&gt;updateConnParams(connectedAddress,6,6,0,500);
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+    }
+};</code></pre> 
+<h3>Step 3：最后是查看Client和Server的当前连接间隔</h3> 
+<p>连接间隔是一个协商的过程，最开始，也就是刚连接上时，Server是可以看到Client要求的连接间隔的，然后Server请求更新一个更适合自己的参数范围，Client收到请求后，Client的协议栈会根据情况最终决定一个新的连接间隔，这个最终决定权在Client，那要怎么知道是否更新成功呢，或者说怎么知道当前的连接间隔呢。</p> 
+<h6><strong><span style="color:#fe2c24;">法1，利用回调事件，</span></strong>仅适用于ESP-IDF的Server端<s>（其实Arduino应该也会有这个事件啦，但是好像没有暴露接口给我们，就不去改源码了）。</s></h6> 
+<p>主要是通过每次更新后产生的一个gap层的回调事件，通过回调的结构体参数打印：</p> 
+<pre><code class="language-cpp">case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:
+    ESP_LOGI(GATTS_TABLE_TAG, "update connection params status = %d, min_int = %d, max_int = %d,conn_int = %d,latency = %d, timeout = %d",
+    param-&gt;update_conn_params.status,
+    param-&gt;update_conn_params.min_int,
+    param-&gt;update_conn_params.max_int,
+    param-&gt;update_conn_params.conn_int,    //当前连接间隔可能不在范围内，因为是由Client决定的
+    param-&gt;update_conn_params.latency,
+    param-&gt;update_conn_params.timeout);
+    break;</code></pre> 
+<p>要注意，<strong><span style="color:#0d0016;">当前连接间隔可能不在Server请求的范围内，因为决定权最终是由Client决定的。</span></strong></p> 
+<h6><span style="color:#fe2c24;">法2：调用查询函数，</span>这个函数可以用在Server和Client，用在连接后的任意地方，这个函数是：</h6> 
+<pre><code class="language-cpp">esp_err_t esp_ble_get_current_conn_params(esp_bd_addr_t bd_addr, esp_gap_conn_params_t *conn_params);</code></pre> 
+<p>它用到这样一个结构体变量，但是只要新建这个变量就行，然后把指针传到上面这个函数，函数会把结果放进这个结构体</p> 
+<p><img alt="" height="244" src="https://images2.imgbox.com/02/d2/jlo4448R_o.png" width="1200">就是下面这段代码</p> 
+<pre><code class="language-cpp">esp_gap_conn_params_t conn_params;
+esp_err_t ret = esp_ble_get_current_conn_params(connectedAddress, &amp;conn_params);
+Serial.println(ret);
+Serial.println(conn_param2.interval*1.25);</code></pre> 
+<p>好了，这样就可以知道当前实际的连接间隔了。</p> 
+<h3>Step 4：回到最初的设置</h3> 
+<p>回到最初，说的是一开始Client会给Server发送一个初始的连接间隔，那这个初始的间隔俺们能不能自己设置呢。我找了一个这个接口，这个应该是在连接建立之前让Client调用来进行设置的，很奇怪，设置的是一个范围而不是一个具体的值。</p> 
+<pre><code class="language-cpp">esp_err_t esp_ble_gap_set_prefer_conn_params(esp_bd_addr_t bd_addr, uint16_t min_conn_int, uint16_t max_conn_int, uint16_t slave_latency, uint16_t supervision_tout);</code></pre> 
+<p>由于没有对这个函数进行测试，这里简单说说我的总结（猜想），最开始，用这个函数设置了Client的连接间隔范围，协议栈从中选定一个初始连接间隔对Server发起连接，Server通过Step1可以看到这个初始连接间隔，Server通过Step2发来一个它需要的连接间隔范围，Client的协议栈在两个范围内取交集，如果没有交集则优先满足Client的范围。我们最后通过Step3可以查到最终的连接间隔是什么。也就是说，Client的协议栈才是最终的老大。 </p> 
+<p></p> 
+<p> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/99a973f8d82b6160d90fc2f1c638df3f/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">2023下半年软考改成机考，对考生有哪些影响？</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3734b7db2c04b042286846e1779c2073/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Vue使用svg-sprite-loader自动引入svg图标 [自己遇到的问题解决]</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

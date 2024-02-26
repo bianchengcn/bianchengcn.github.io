@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>看书标记【R语言数据分析项目精解：理论、方法、实战 4】 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="看书标记【R语言数据分析项目精解：理论、方法、实战 4】" />
+<meta property="og:description" content="看书标记——R语言 Chapter 4 指标监控系统4.1项目背景、目标方案4.1.1项目背景4.1.2项目目标4.1.3项目方案 4.2项目技术理论简介4.2.1时间序列基本统计量4.2.2数据观测与描述性统计4.2.3随机性4.2.4周期性4.2.5节假日模式识别4.2.6建模数据集1.挑选建模数据集2.寻找离群点3.平滑离群点 4.2.7指标监控方法（不含节假日）1.ARIMA模型2.季节乘积ARIMA模型3.指数平滑4.质量控制图5.判断异常值的方法 4.2.9R语言实例代码5.均值-极差图 4.3项目实践4.3.1数据概览1.折线图 4.3.2节假日模式识别1.节假日模式分类2.转化率指标节假日模式识别 4.3.3模型数据集的建立1.挑选数据集 4.3.4指标监控（非节假日）1.数据概览2.乘积季节模型的建立3.三次指数平滑4.质量监控图2.差值建模3.模型拟合 【R语言数据分析项目精解：理论、方法、实战】 Chapter 4 指标监控系统 4.1项目背景、目标方案 4.1.1项目背景 指标过多，人工跟踪工作量大，效率低，所以希望可以针对重要指标制定一套自动报警机制，把每天有异常的指标自动输出，达到有效降低人力成本的目的，进一步的，可以在这方面通过历史数据对未来进行预测。
+4.1.2项目目标 针对重要指标建立预测模型，通过预测模型的95%预测上下限建立监控范围。这样就可以一举两得，预测模型可以对未来进行预估，另外95%上下限建立的范围可以用于监控，若当天数值超出当天预测值的监控范围，则报警。最后，通过可视化工具前端展示整个需求就可以了。
+4.1.3项目方案 分成两种情况，节假日和非节假日。非节假日建立平稳时期指标量化模型，节假日建立影响数据量化模型，然后加一个示性函数，得到包含节假日的综合量化模型。
+4.2项目技术理论简介 4.2.1时间序列基本统计量 时间序列均值和方差、自协方差函数和自相关函数
+4.2.2数据观测与描述性统计 1.折线图：时间序列数据最直观的统计图形，能很好地反映整个趋势的走向和周期性，从而为下一步的分析提供指引性的先验知识。
+2.平稳性：（严平稳）当序列所有的统计性质都不会随着时间的推移而发生变化；（宽平稳）当序列的统计性质只与时间间隔的变化而发生变化，以上两种都说明序列稳定。
+3.检验方法：正态性检验（序列服从正态分布，一定平稳，所以也叫平稳性检验，此时H0：数据服从正态分布）；自相关图（自相关系数是否随着延迟期数的增加而迅速衰减到零，通常平稳序列具有6期以内的短期相关性，而后平稳）；单位根检验（单位根检验有单位根说明序列非平稳，非平稳序列在d阶差分后成平稳序列，称序列d阶单整。DF检验用于一阶自相关模型检验，ADF检验用于高阶自相关、高阶移动平均的模型，PP检验用于扰动项之间存在序列相关，KPSS检验用于序列是平稳或趋势平稳，优于DF检验）
+4.非平稳序列平稳化：不通过平稳性检验的就变换序列使得变化后的序列通过平稳性检验。常用的变换方法有：差分变换、对数变换、Box-Cox变换。
+4.2.3随机性 序列平稳后需对数据的随机性进行检验，若数据是随机的，那么对数据的近一步探讨建模将会是没有意义的。
+Barlett定理、LB随机检验统计量
+4.2.4周期性 除平稳性和随机性外，周期性也是时间序列的一个基本属性，除了折线图外，周期性还可以在谱分析的周期图中查看，高峰值可计算周期。
+4.2.5节假日模式识别 针对带有周期的时间序列数据，提出周期相同天的配对t检验识别算法，找出带有周期的时间序列数据节假日影响模式的识别方法，具体步骤如下：
+1.取原始数据》2.标注可疑的异常日期（主观标记）》3.周期相同天分组》4.周期相同天分组均值和》5.配对样本t检验
+4.2.6建模数据集 1.挑选建模数据集 根据行业特征选取适合进行数据分析的时间范围内 的数据。
+2.寻找离群点 噪声数据会对指标序列产生不利影响，一般来说，指标的不稳定性主要有：框架程序出错、导致记录不全；ETL调度工具运行不稳，导致用户行为记录不全甚至缺失；业务本身导致指标异常（举办活动等）；节假日因素。
+先对“每周相同天定义”，同周期的第一天作为一个数据集，对每个集合使用检验方法（Grubbs检验、Dixon检验（小样本）、线箱图法（没有分布约束）和基于密度的局部异常因子法），挑出离群点。
+3.平滑离群点 对于被剔除的离群点，通常会选择均值进行填补，具体的填补公式见P123详解。
+4.2.7指标监控方法（不含节假日） 1.ARIMA模型 AR模型：自回归模型又称为中心化的AR§模型，平稳过程为因果平稳（ AR模型的自相关系数是呈复指数衰减– 有拖尾性；AR模型的偏自相关系数有截尾性）MA模型：移动平均模型，MA模型总是平稳的，只有MA模型是依历史可逆的，该过程才具有预测意义（自相关系数q阶截尾；偏自相关系数q阶拖尾）ARMA模型：AR和MA的结合，所以性质与其相似差分运算：p阶差分（p次只跨一个时刻）；k步差分（一次跨k个时刻）ARIMA模型：应用差分运算提取确定性信息后建模，所以ARIMA就是ARMA与差分运算的结合。 ARIMA模型模式识别
+ACF法和PACF法判断p、q的值，或者AIC、BIC信息准则选取模型（autoarima中常用）
+残差分析（真实值与模型预测值比较）
+标准残差——时间图：零线上下无规则波动
+标准残差的独立性检验：ACF图里滞后阶相关系数都在标准差范围内，则认为满足独立性检验。
+残差随机性检验：广义方差检验和LB统计量检验（残差具有随机性则表明模型将规律部分全部提取）
+正态性检验：Shapiro-Wilk检验和QQ图判断数据是否正态（残差符合正态分布，模型效果较好）
+2.季节乘积ARIMA模型 季节乘积ARMA模型和季节乘积ARIMA模型（是否有差分运算的区别）
+3.指数平滑 最近的数据对未来的影响更大，故应赋予较大的权重。指数平滑法本质上是对过去的数据进行加权和，距今越近，权重越高。
+一次指数平滑：适用于序列无明显趋势，缺点是序列出现线性趋势时，一次指数平滑会出现严重滞后。
+二次指数平滑：适用于序列存在线性趋势，缺点是序列出现周期性，则二次平滑预测序列偏差较大。
+三次指数平滑：适用于序列存在线性及周期性趋势。累加和累乘，当季节变化在整个系列中大致恒定时，优选加法，而当季节变化与系列水平成比例变化时，优选乘法。
+指数平滑对历史数据采取加权的方式比较符合实际情况，模型容易搭建，且具有自适应性，会根据数据变化自动变换。但是指数平滑模型对时间序列的转折点洞悉不足，适合短期预测。
+4.质量控制图 用于监控产品零件生产品质" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/c626ce1b62fbd5f4cd7de7702a826b8c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-12-29T20:19:29+08:00" />
+<meta property="article:modified_time" content="2023-12-29T20:19:29+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">看书标记【R语言数据分析项目精解：理论、方法、实战 4】</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>看书标记——R语言</h4> 
+ <ul><li><a href="#Chapter_4__3" rel="nofollow">Chapter 4 指标监控系统</a></li><li><ul><li><ul><li><a href="#41_4" rel="nofollow">4.1项目背景、目标方案</a></li><li><ul><li><a href="#411_5" rel="nofollow">4.1.1项目背景</a></li><li><a href="#412_7" rel="nofollow">4.1.2项目目标</a></li><li><a href="#413_9" rel="nofollow">4.1.3项目方案</a></li></ul> 
+    </li><li><a href="#42_12" rel="nofollow">4.2项目技术理论简介</a></li><li><ul><li><a href="#421_13" rel="nofollow">4.2.1时间序列基本统计量</a></li><li><a href="#422_15" rel="nofollow">4.2.2数据观测与描述性统计</a></li><li><a href="#423_23" rel="nofollow">4.2.3随机性</a></li><li><a href="#424_26" rel="nofollow">4.2.4周期性</a></li><li><a href="#425_28" rel="nofollow">4.2.5节假日模式识别</a></li><li><a href="#426_31" rel="nofollow">4.2.6建模数据集</a></li><li><ul><li><a href="#1_32" rel="nofollow">1.挑选建模数据集</a></li><li><a href="#2_34" rel="nofollow">2.寻找离群点</a></li><li><a href="#3_39" rel="nofollow">3.平滑离群点</a></li></ul> 
+     </li><li><a href="#427_41" rel="nofollow">4.2.7指标监控方法（不含节假日）</a></li><li><ul><li><a href="#1ARIMA_42" rel="nofollow">1.ARIMA模型</a></li><li><a href="#2ARIMA_57" rel="nofollow">2.季节乘积ARIMA模型</a></li><li><a href="#3_59" rel="nofollow">3.指数平滑</a></li><li><a href="#4_67" rel="nofollow">4.质量控制图</a></li><li><ul><li><a href="#5_73" rel="nofollow">5.判断异常值的方法</a></li></ul> 
+     </li></ul> 
+     </li><li><a href="#429R_76" rel="nofollow">4.2.9R语言实例代码</a></li><li><ul><li><a href="#5_209" rel="nofollow">5.均值-极差图</a></li></ul> 
+    </li></ul> 
+    </li><li><a href="#43_249" rel="nofollow">4.3项目实践</a></li><li><ul><li><a href="#431_250" rel="nofollow">4.3.1数据概览</a></li><li><ul><li><a href="#1_252" rel="nofollow">1.折线图</a></li></ul> 
+     </li><li><a href="#432_309" rel="nofollow">4.3.2节假日模式识别</a></li><li><ul><li><a href="#1_310" rel="nofollow">1.节假日模式分类</a></li><li><a href="#2_312" rel="nofollow">2.转化率指标节假日模式识别</a></li></ul> 
+     </li><li><a href="#433_487" rel="nofollow">4.3.3模型数据集的建立</a></li><li><ul><li><a href="#1_488" rel="nofollow">1.挑选数据集</a></li></ul> 
+     </li><li><a href="#434_554" rel="nofollow">4.3.4指标监控（非节假日）</a></li><li><ul><li><a href="#1_555" rel="nofollow">1.数据概览</a></li><li><a href="#2_584" rel="nofollow">2.乘积季节模型的建立</a></li><li><a href="#3_630" rel="nofollow">3.三次指数平滑</a></li><li><a href="#4_682" rel="nofollow">4.质量监控图</a></li><li><a href="#2_806" rel="nofollow">2.差值建模</a></li><li><a href="#3_815" rel="nofollow">3.模型拟合</a></li></ul> 
+    </li></ul> 
+   </li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<br> 【R语言数据分析项目精解：理论、方法、实战】 
+<p></p> 
+<h2><a id="Chapter_4__3"></a>Chapter 4 指标监控系统</h2> 
+<h4><a id="41_4"></a>4.1项目背景、目标方案</h4> 
+<h5><a id="411_5"></a>4.1.1项目背景</h5> 
+<p>指标过多，人工跟踪工作量大，效率低，所以希望可以针对重要指标制定一套自动报警机制，把每天有异常的指标自动输出，达到有效降低人力成本的目的，进一步的，可以在这方面通过历史数据对未来进行预测。</p> 
+<h5><a id="412_7"></a>4.1.2项目目标</h5> 
+<p>针对重要指标建立预测模型，通过预测模型的95%预测上下限建立监控范围。这样就可以一举两得，预测模型可以对未来进行预估，另外95%上下限建立的范围可以用于监控，若当天数值超出当天预测值的监控范围，则报警。最后，通过可视化工具前端展示整个需求就可以了。</p> 
+<h5><a id="413_9"></a>4.1.3项目方案</h5> 
+<p><img src="https://images2.imgbox.com/8b/80/y87cErJg_o.png" alt="监控系统技术流程"><br> 分成两种情况，节假日和非节假日。非节假日建立平稳时期指标量化模型，节假日建立影响数据量化模型，然后加一个示性函数，得到包含节假日的综合量化模型。</p> 
+<h4><a id="42_12"></a>4.2项目技术理论简介</h4> 
+<h5><a id="421_13"></a>4.2.1时间序列基本统计量</h5> 
+<p>时间序列均值和方差、自协方差函数和自相关函数</p> 
+<h5><a id="422_15"></a>4.2.2数据观测与描述性统计</h5> 
+<p>1.折线图：时间序列数据最直观的统计图形，能很好地反映整个趋势的走向和周期性，从而为下一步的分析提供指引性的先验知识。</p> 
+<p>2.平稳性：（严平稳）当序列所有的统计性质都不会随着时间的推移而发生变化；（宽平稳）当序列的统计性质只与时间间隔的变化而发生变化，以上两种都说明序列稳定。</p> 
+<p>3.检验方法：正态性检验（序列服从正态分布，一定平稳，所以也叫平稳性检验，此时H0：数据服从正态分布）；自相关图（自相关系数是否随着延迟期数的增加而迅速衰减到零，通常平稳序列具有6期以内的短期相关性，而后平稳）；单位根检验（单位根检验有单位根说明序列非平稳，非平稳序列在d阶差分后成平稳序列，称序列d阶单整。<strong>DF检验</strong>用于一阶自相关模型检验，<strong>ADF检验</strong>用于高阶自相关、高阶移动平均的模型，<strong>PP检验</strong>用于扰动项之间存在序列相关，<strong>KPSS检验</strong>用于序列是平稳或趋势平稳，优于DF检验）</p> 
+<p>4.非平稳序列平稳化：不通过平稳性检验的就变换序列使得变化后的序列通过平稳性检验。常用的变换方法有：差分变换、对数变换、Box-Cox变换。</p> 
+<h5><a id="423_23"></a>4.2.3随机性</h5> 
+<p>序列平稳后需对数据的随机性进行检验，若数据是随机的，那么对数据的近一步探讨建模将会是没有意义的。<br> Barlett定理、LB随机检验统计量</p> 
+<h5><a id="424_26"></a>4.2.4周期性</h5> 
+<p>除平稳性和随机性外，周期性也是时间序列的一个基本属性，除了折线图外，周期性还可以在谱分析的周期图中查看，高峰值可计算周期。</p> 
+<h5><a id="425_28"></a>4.2.5节假日模式识别</h5> 
+<p>针对带有周期的时间序列数据，提出周期相同天的配对t检验识别算法，找出带有周期的时间序列数据节假日影响模式的识别方法，具体步骤如下：<br> 1.取原始数据》2.标注可疑的异常日期（主观标记）》3.周期相同天分组》4.周期相同天分组均值和》5.配对样本t检验</p> 
+<h5><a id="426_31"></a>4.2.6建模数据集</h5> 
+<h6><a id="1_32"></a>1.挑选建模数据集</h6> 
+<p>根据行业特征选取适合进行数据分析的时间范围内 的数据。</p> 
+<h6><a id="2_34"></a>2.寻找离群点</h6> 
+<p>噪声数据会对指标序列产生不利影响，一般来说，指标的不稳定性主要有：框架程序出错、导致记录不全；ETL调度工具运行不稳，导致用户行为记录不全甚至缺失；业务本身导致指标异常（举办活动等）；节假日因素。</p> 
+<p>先对“每周相同天定义”，同周期的第一天作为一个数据集，对每个集合使用检验方法（Grubbs检验、Dixon检验（小样本）、线箱图法（没有分布约束）和基于密度的局部异常因子法），挑出离群点。</p> 
+<h6><a id="3_39"></a>3.平滑离群点</h6> 
+<p>对于被剔除的离群点，通常会选择均值进行填补，具体的填补公式见P123详解。</p> 
+<h5><a id="427_41"></a>4.2.7指标监控方法（不含节假日）</h5> 
+<h6><a id="1ARIMA_42"></a>1.ARIMA模型</h6> 
+<ul><li>AR模型：自回归模型又称为中心化的AR§模型，平稳过程为因果平稳（ AR模型的自相关系数是呈复指数衰减– 有拖尾性；AR模型的偏自相关系数有截尾性）</li><li>MA模型：移动平均模型，MA模型总是平稳的，只有MA模型是依历史可逆的，该过程才具有预测意义（自相关系数q阶截尾；偏自相关系数q阶拖尾）</li><li>ARMA模型：AR和MA的结合，所以性质与其相似</li><li>差分运算：p阶差分（p次只跨一个时刻）；k步差分（一次跨k个时刻）</li><li>ARIMA模型：应用差分运算提取确定性信息后建模，所以ARIMA就是ARMA与差分运算的结合。</li></ul> 
+<p>ARIMA模型模式识别<br> ACF法和PACF法判断p、q的值，或者AIC、BIC信息准则选取模型（autoarima中常用）<br> <img src="https://images2.imgbox.com/8e/86/iwW6qgsf_o.png" alt="ACF和PACF"><br> 残差分析（真实值与模型预测值比较）<br> 标准残差——时间图：零线上下无规则波动<br> 标准残差的独立性检验：ACF图里滞后阶相关系数都在标准差范围内，则认为满足独立性检验。<br> 残差随机性检验：广义方差检验和LB统计量检验（残差具有随机性则表明模型将规律部分全部提取）<br> 正态性检验：Shapiro-Wilk检验和QQ图判断数据是否正态（残差符合正态分布，模型效果较好）</p> 
+<h6><a id="2ARIMA_57"></a>2.季节乘积ARIMA模型</h6> 
+<p>季节乘积ARMA模型和季节乘积ARIMA模型（是否有差分运算的区别）</p> 
+<h6><a id="3_59"></a>3.指数平滑</h6> 
+<p>最近的数据对未来的影响更大，故应赋予较大的权重。指数平滑法本质上是对过去的数据进行加权和，距今越近，权重越高。</p> 
+<p>一次指数平滑：适用于序列无明显趋势，缺点是序列出现线性趋势时，一次指数平滑会出现严重滞后。<br> 二次指数平滑：适用于序列存在线性趋势，缺点是序列出现周期性，则二次平滑预测序列偏差较大。<br> 三次指数平滑：适用于序列存在线性及周期性趋势。累加和累乘，当季节变化在整个系列中大致恒定时，优选加法，而当季节变化与系列水平成比例变化时，优选乘法。</p> 
+<p>指数平滑对历史数据采取加权的方式比较符合实际情况，模型容易搭建，且具有自适应性，会根据数据变化自动变换。但是指数平滑模型对时间序列的转折点洞悉不足，适合短期预测。</p> 
+<h6><a id="4_67"></a>4.质量控制图</h6> 
+<p>用于监控产品零件生产品质<br> （1）适用条件：当监控指标变化较平稳且近似正态时，也可以用于互联网指标监控中。<br> （2）均值-极差控制图（hat_x—MR图）<br> （3）过程能力指数：衡量了过程加工内在的一致性，表现的是加工过程固有的波动状态。<br> <img src="https://images2.imgbox.com/b8/71/SaWuIkty_o.png" alt="在这里插入图片描述"></p> 
+<h6><a id="5_73"></a>5.判断异常值的方法</h6> 
+<p>季节乘积ARIMA模型和指数平滑模型由样本内拟合均方误差和样本外预测均方误差SSE的值选择，若拟合和预测选择的不一致，则可以，计算样本内两拟合均方误差的倒数得到两模型权重，随后以权重整合模型，得到预测值和置信限。</p> 
+<h5><a id="429R_76"></a>4.2.9R语言实例代码</h5> 
+<p>1.Grubbs检验</p> 
+<pre><code class="prism language-r"><span class="token comment">######################################################################</span>
+<span class="token comment">#函数功能：Grubbs检验</span>
+<span class="token comment">#参数说明：x：要进行判断的数据</span>
+<span class="token comment">#####################################################################</span>
+library<span class="token punctuation">(</span>outliers<span class="token punctuation">)</span>
+grubbs<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  x<span class="token operator">&lt;-</span>round<span class="token punctuation">(</span>x<span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">)</span>
+  grubbs_outliers<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+  grubbs_p.value<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+  grubbs_g.value<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+  grubbs_g<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+  grubbs_minormax<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+  grubbs_pvalue<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+  <span class="token comment">#设定初始值判断值</span>
+  grubbs_p<span class="token operator">&lt;-</span><span class="token number">0</span>
+  <span class="token keyword">while</span><span class="token punctuation">(</span>grubbs_p<span class="token operator">&lt;</span><span class="token number">0.05</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    grubbs_outliers<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>grubbs_outliers<span class="token punctuation">,</span>grubbs_minormax<span class="token punctuation">)</span>
+    grubbs_p.value<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>grubbs_p.value<span class="token punctuation">,</span>grubbs_pvalue<span class="token punctuation">)</span>
+    grubbs_g<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>grubbs_g<span class="token punctuation">,</span>grubbs_g.value<span class="token punctuation">)</span>
+    <span class="token comment">#去除最大、最小值然后再进行检验</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>sum<span class="token punctuation">(</span>x<span class="token operator">==</span>grubbs_minormax<span class="token punctuation">)</span><span class="token operator">!=</span><span class="token number">0</span><span class="token punctuation">)</span>x<span class="token operator">&lt;-</span>x<span class="token punctuation">[</span><span class="token operator">-</span>which<span class="token punctuation">(</span>x<span class="token operator">==</span>grubbs_minormax<span class="token punctuation">)</span><span class="token punctuation">]</span>
+    <span class="token comment">#若数据各值都相等则跳出</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>sd<span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token operator">==</span><span class="token number">0</span><span class="token punctuation">)</span> <span class="token keyword">break</span>
+    <span class="token comment">#进行grubbs检验</span>
+    grubbs_test<span class="token operator">&lt;-</span>grubbs.test<span class="token punctuation">(</span>x<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token number">10</span><span class="token punctuation">,</span>opposite<span class="token operator">=</span>F<span class="token punctuation">,</span>two.sided<span class="token operator">=</span>F<span class="token punctuation">)</span>
+    grubbs_p<span class="token operator">&lt;-</span>grubbs_test<span class="token operator">$</span>p.value
+    grubbs_pvalue<span class="token operator">&lt;-</span>grubbs_test<span class="token operator">$</span>p.value
+    grubbs_g.value<span class="token operator">&lt;-</span>grubbs_test<span class="token operator">$</span>statistic<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span>
+    grubbs_a<span class="token operator">&lt;-</span>strsplit<span class="token punctuation">(</span>grubbs_test<span class="token operator">$</span>alternative<span class="token punctuation">,</span><span class="token string">" "</span><span class="token punctuation">,</span>fixed<span class="token operator">=</span>T<span class="token punctuation">)</span>
+    grubbs_minormax<span class="token operator">&lt;-</span>as.numeric<span class="token punctuation">(</span>unlist<span class="token punctuation">(</span>grubbs_a<span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  <span class="token punctuation">}</span>
+  outliner_res<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>outliers<span class="token operator">=</span>grubbs_outliers<span class="token punctuation">,</span>gvalue<span class="token operator">=</span>grubbs_g<span class="token punctuation">,</span>pvalue<span class="token operator">=</span>grubbs_p.value<span class="token punctuation">)</span>
+  return<span class="token punctuation">(</span>outliner_res<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+tt<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token number">8.3</span><span class="token punctuation">,</span><span class="token number">5.5</span><span class="token punctuation">,</span><span class="token number">14</span><span class="token punctuation">,</span><span class="token number">7.5</span><span class="token punctuation">,</span><span class="token number">4.7</span><span class="token punctuation">,</span><span class="token number">9</span><span class="token punctuation">,</span><span class="token number">6.5</span><span class="token punctuation">,</span><span class="token number">10.2</span><span class="token punctuation">,</span><span class="token number">7.7</span><span class="token punctuation">,</span><span class="token number">6.2</span><span class="token punctuation">)</span>
+grubbs<span class="token punctuation">(</span>tt<span class="token punctuation">)</span>
+</code></pre> 
+<p>代码说明:grubbs. test是<strong>Grubbs检验</strong>实现函数，其调用格式为Grubbs. test (x，type=10，opposite=FALSE，two. sided=FALSE)。其中，参数x为检验数据向量；type=10表示检验一个异常值，type=11表示检验分别处于两个端点的异常值，type=20表示检验两个在同一侧的异常值；two. sided表示双边检验。上述代码通过Grubbs. test函数找出一个异常值，然后去除这个异常值再次检验，直到没有异常值为止，最后输出所有检验出来的异常值、G统计量和pvalue。</p> 
+<p>2.Dixon检验</p> 
+<pre><code class="prism language-r"><span class="token comment">######################################################################</span>
+<span class="token comment">#函数功能：Dixon检验</span>
+<span class="token comment">#参数说明：x：要进行判断的数据</span>
+<span class="token comment">#####################################################################</span>
+library<span class="token punctuation">(</span>outliers<span class="token punctuation">)</span>
+dixon<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    dixon_p.value<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    dixon_q.value<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    dixon_q<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    dixon_pvalue<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    dixon_outliers<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    dixon_minormax<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    dixon_p<span class="token operator">&lt;-</span><span class="token number">0</span>
+    <span class="token keyword">while</span><span class="token punctuation">(</span>dixon_p<span class="token operator">&lt;</span><span class="token number">0.05</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+      dixon_outliers<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>dixon_outliers<span class="token punctuation">,</span>dixon_minormax<span class="token punctuation">)</span>
+      dixon_p.value<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>dixon_p.value<span class="token punctuation">,</span>dixon_pvalue<span class="token punctuation">)</span>
+      dixon_q<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>dixon_q<span class="token punctuation">,</span>dixon_q.value<span class="token punctuation">)</span>
+      <span class="token keyword">if</span><span class="token punctuation">(</span>sum<span class="token punctuation">(</span>x<span class="token operator">==</span>dixon_minormax<span class="token punctuation">)</span><span class="token operator">!=</span><span class="token number">0</span><span class="token punctuation">)</span>x<span class="token operator">&lt;-</span>x<span class="token punctuation">[</span><span class="token operator">-</span>which<span class="token punctuation">(</span>x<span class="token operator">==</span>dixon_minormax<span class="token punctuation">)</span><span class="token punctuation">]</span>
+      <span class="token keyword">if</span><span class="token punctuation">(</span>sd<span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token operator">==</span><span class="token number">0</span><span class="token punctuation">)</span> <span class="token keyword">break</span>
+      dixon_test<span class="token operator">&lt;-</span>dixon.test<span class="token punctuation">(</span>x<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">,</span>opposite<span class="token operator">=</span>F<span class="token punctuation">,</span>two.sided<span class="token operator">=</span>F<span class="token punctuation">)</span>
+      dixon_p<span class="token operator">&lt;-</span>dixon_test<span class="token operator">$</span>p.value
+      dixon_pvalue<span class="token operator">&lt;-</span>dixon_test<span class="token operator">$</span>p.value
+      dixon_q.value<span class="token operator">&lt;-</span>dixon_test<span class="token operator">$</span>statistic<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span>
+      dixon_a<span class="token operator">&lt;-</span>strsplit<span class="token punctuation">(</span>dixon_test<span class="token operator">$</span>alternative<span class="token punctuation">,</span><span class="token string">" "</span><span class="token punctuation">,</span>fixed<span class="token operator">=</span>T<span class="token punctuation">)</span>
+      dixon_minormax<span class="token operator">&lt;-</span>as.numeric<span class="token punctuation">(</span>unlist<span class="token punctuation">(</span>dixon_a<span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+    <span class="token punctuation">}</span>
+    outliner_res<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>outliers<span class="token operator">=</span>dixon_outliers<span class="token punctuation">,</span>qvalue<span class="token operator">=</span>dixon_q<span class="token punctuation">,</span>pvalue<span class="token operator">=</span>dixon_p.value<span class="token punctuation">)</span>
+    return<span class="token punctuation">(</span>outliner_res<span class="token punctuation">)</span>
+  <span class="token punctuation">}</span>
+
+tt<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token number">8.3</span><span class="token punctuation">,</span><span class="token number">5.5</span><span class="token punctuation">,</span><span class="token number">14</span><span class="token punctuation">,</span><span class="token number">7.5</span><span class="token punctuation">,</span><span class="token number">4.7</span><span class="token punctuation">,</span><span class="token number">9</span><span class="token punctuation">,</span><span class="token number">6.5</span><span class="token punctuation">,</span><span class="token number">10.2</span><span class="token punctuation">,</span><span class="token number">7.7</span><span class="token punctuation">,</span><span class="token number">6.2</span><span class="token punctuation">)</span>
+dixon<span class="token punctuation">(</span>tt<span class="token punctuation">)</span>
+</code></pre> 
+<p>代码说明:函数思路和Grubbs检验的函数思路相似。dixon. test为Dixon检验的主要函数，其调用格式为dixon. test (x，type=10，<br> 参数x为检验数据;<br> opposite=FALSE,two. sided=TRUE)。其中，<br> type=10表示检验数据集为8～10个的数据，type=21表示检验数据集为11～13个的数据，type=22表示检验数据集为14个或14个以上的数据;two. sided表示双边检验。通过自定义的Dixon检验函数，没有发现异常值。</p> 
+<p>3.LOF检验</p> 
+<pre><code class="prism language-r"><span class="token comment">########################################################################</span>
+<span class="token comment">#函数功能：lof检验</span>
+<span class="token comment">#参数说明：x：要进行判断的数据</span>
+<span class="token comment">########################################################################</span>
+library<span class="token punctuation">(</span>DMwR<span class="token punctuation">)</span>
+library<span class="token punctuation">(</span>outliers<span class="token punctuation">)</span>
+
+loffun<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>klb<span class="token punctuation">,</span>kup<span class="token punctuation">,</span>indexnum<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    lof_value<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    indexdata<span class="token operator">&lt;-</span>indexnum
+    indexname<span class="token operator">&lt;-</span><span class="token string">"indexdata"</span>
+    index_lof<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>indexdata<span class="token operator">=</span>indexdata<span class="token punctuation">)</span>
+
+    <span class="token keyword">for</span> <span class="token punctuation">(</span>k <span class="token keyword">in</span> klb<span class="token operator">:</span>kup<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    lof_score<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"lof_score"</span><span class="token punctuation">,</span>k<span class="token punctuation">,</span><span class="token string">"&lt;-lofactor("</span><span class="token punctuation">,</span>indexname<span class="token punctuation">,</span><span class="token string">","</span><span class="token punctuation">,</span>k<span class="token punctuation">,</span><span class="token string">")"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+    add_lof<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"index_lof$lof_score"</span><span class="token punctuation">,</span>k<span class="token punctuation">,</span><span class="token string">"&lt;-lof_score"</span><span class="token punctuation">,</span>k<span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+    eval<span class="token punctuation">(</span>parse<span class="token punctuation">(</span>text<span class="token operator">=</span>lof_score<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    eval<span class="token punctuation">(</span>parse<span class="token punctuation">(</span>text<span class="token operator">=</span>add_lof<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    cr_lofresult<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"lof_value&lt;-apply(cbind(lof_value,lof_score"</span><span class="token punctuation">,</span>k<span class="token punctuation">,</span><span class="token string">"),1,max)"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+    eval<span class="token punctuation">(</span>parse<span class="token punctuation">(</span>text<span class="token operator">=</span>cr_lofresult<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">}</span>
+   
+    index_lof<span class="token operator">$</span>lofvalue<span class="token operator">&lt;-</span>round<span class="token punctuation">(</span>lof_value<span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">)</span>    
+    index_lof<span class="token operator">$</span>num<span class="token operator">&lt;-</span><span class="token number">1</span>
+    lof_thres<span class="token operator">&lt;-</span>grubbs<span class="token punctuation">(</span>index_lof<span class="token operator">$</span>lofvalue<span class="token punctuation">)</span>
+    index_lof<span class="token operator">$</span>lofflag<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>index_lof<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    index_lof<span class="token punctuation">[</span>index_lof<span class="token operator">$</span>lofvalue<span class="token percent-operator operator">%in%</span>lof_thres<span class="token operator">$</span>outliers<span class="token punctuation">,</span><span class="token punctuation">]</span><span class="token operator">$</span>lofflag<span class="token operator">&lt;-</span><span class="token number">1</span>
+    lof_result<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>index_lof<span class="token punctuation">,</span>lofflag<span class="token operator">==</span><span class="token number">1</span><span class="token punctuation">)</span>
+    lof_result<span class="token punctuation">[</span>order<span class="token punctuation">(</span><span class="token operator">-</span>lof_result<span class="token operator">$</span>lofvalue<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+    lof_data<span class="token operator">&lt;-</span>lof_result<span class="token punctuation">[</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token string">"indexdata"</span><span class="token punctuation">,</span><span class="token string">"lofvalue"</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+    lof_data<span class="token punctuation">[</span>order<span class="token punctuation">(</span><span class="token operator">-</span>lof_data<span class="token operator">$</span>lofvalue<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+
+    return<span class="token punctuation">(</span>lof_data<span class="token punctuation">)</span> 
+<span class="token punctuation">}</span>
+klb<span class="token operator">&lt;-</span><span class="token number">10</span>
+kup<span class="token operator">&lt;-</span><span class="token number">14</span>
+
+<span class="token comment">#生成测试数据</span>
+indexdata<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">,</span><span class="token number">5</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">,</span><span class="token number">5</span><span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">22</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">33</span><span class="token punctuation">)</span>
+loffun<span class="token punctuation">(</span>klb<span class="token punctuation">,</span>klb<span class="token punctuation">,</span>indexdata<span class="token punctuation">)</span>
+</code></pre> 
+<p>代码说明: lofactor函数用于LOF离群点的判断，其中k为每个族中最少包含的元素个数。通过循环函数，对不同k的可能取值依次计算LOF值，然后取最大的一个作为该数值的LOF值;接着用前面的Grubbs函数确定LOF阈值（找出离群点），最终LOF值离群点对应的数值即为样本离群点。假定k取10～14，通过循环检验，最终找出了10个离群点。</p> 
+<p>4.指数平滑</p> 
+<pre><code class="prism language-r">HoltWinters<span class="token punctuation">(</span>co2<span class="token punctuation">)</span> <span class="token comment">#三次指数平滑</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c2/0e/hAfYU1AC_o.png" alt="参数及其说明"></p> 
+<h6><a id="5_209"></a>5.均值-极差图</h6> 
+<pre><code class="prism language-r"><span class="token comment">#####################################################################</span>
+<span class="token comment">#函数功能：极差均值控制图</span>
+<span class="token comment">#参数说明：x：要进行判断的数据</span>
+<span class="token comment">#####################################################################</span>
+xmr<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>index<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  opar <span class="token operator">&lt;-</span> par<span class="token punctuation">(</span>no.readonly<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+  par<span class="token punctuation">(</span>mfrow<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+  color<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"green"</span><span class="token punctuation">,</span><span class="token string">"red"</span><span class="token punctuation">)</span>
+  title1<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"cr_xmr_单值"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+  title2<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"cr_xmr_移动极差"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+
+ <span class="token comment">#计算极差均值数据</span>
+  R<span class="token operator">&lt;-</span>abs<span class="token punctuation">(</span>diff<span class="token punctuation">(</span>index<span class="token punctuation">)</span><span class="token punctuation">)</span>
+  Rbar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>R<span class="token punctuation">)</span>
+  xbar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>index<span class="token punctuation">)</span>
+  xucl<span class="token operator">&lt;-</span>xbar<span class="token operator">+</span><span class="token number">2.66</span><span class="token operator">*</span>Rbar
+  xlcl<span class="token operator">&lt;-</span>xbar<span class="token operator">-</span><span class="token number">2.66</span><span class="token operator">*</span>Rbar
+  Rucl<span class="token operator">&lt;-</span><span class="token number">3.267</span><span class="token operator">*</span>Rbar
+  Rlcl<span class="token operator">&lt;-</span><span class="token number">0</span>
+
+  <span class="token comment">#作图</span>
+  plot<span class="token punctuation">(</span>index<span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span>xlcl<span class="token operator">-</span><span class="token number">0.2</span><span class="token operator">*</span>xlcl<span class="token punctuation">,</span>xucl<span class="token operator">+</span><span class="token number">0.2</span><span class="token operator">*</span>xucl<span class="token punctuation">)</span><span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'o'</span><span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">19</span><span class="token punctuation">,</span>main<span class="token operator">=</span>title1<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>xucl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>xlcl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+  plot<span class="token punctuation">(</span>R<span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span>Rlcl<span class="token operator">-</span><span class="token number">0.2</span><span class="token operator">*</span>Rlcl<span class="token punctuation">,</span>Rucl<span class="token operator">+</span><span class="token number">0.2</span><span class="token operator">*</span>Rucl<span class="token punctuation">)</span><span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'o'</span><span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">19</span><span class="token punctuation">,</span>main<span class="token operator">=</span>title2<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>Rucl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>Rlcl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>  
+  par<span class="token punctuation">(</span>opar<span class="token punctuation">)</span>
+
+  interval<span class="token operator">&lt;-</span>list<span class="token punctuation">(</span>ucl<span class="token operator">=</span>xucl<span class="token punctuation">,</span>lcl<span class="token operator">=</span>xlcl<span class="token punctuation">)</span>
+  return<span class="token punctuation">(</span>interval<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">#生成指标</span>
+indexdata<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token number">0.1071</span><span class="token punctuation">,</span><span class="token number">0.1097</span><span class="token punctuation">,</span><span class="token number">0.1069</span><span class="token punctuation">,</span><span class="token number">0.116</span><span class="token punctuation">,</span><span class="token number">0.0893</span><span class="token punctuation">,</span><span class="token number">0.0877</span><span class="token punctuation">,</span><span class="token number">0.1181</span><span class="token punctuation">,</span><span class="token number">0.1107</span><span class="token punctuation">,</span><span class="token number">0.1122</span><span class="token punctuation">)</span>
+xmr<span class="token punctuation">(</span>indexdata<span class="token punctuation">)</span>
+</code></pre> 
+<h4><a id="43_249"></a>4.3项目实践</h4> 
+<h5><a id="431_250"></a>4.3.1数据概览</h5> 
+<p>文中用到的是订单支付转化率，CR是一个相对平稳的指标，结合了订单和流量这两个核心指标，也是KPI重要的核心指标。</p> 
+<h6><a id="1_252"></a>1.折线图</h6> 
+<pre><code class="prism language-r"><span class="token comment">#数据获取</span>
+setwd<span class="token punctuation">(</span><span class="token string">"C:\\Users\\用户路径"</span><span class="token punctuation">)</span>
+crtot<span class="token operator">&lt;-</span>read.csv<span class="token punctuation">(</span><span class="token string">"2011~2016.10总体数据.csv"</span><span class="token punctuation">,</span>header<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+crtot<span class="token operator">$</span>orderdate<span class="token operator">&lt;-</span>as.Date<span class="token punctuation">(</span>crtot<span class="token operator">$</span>orderdate<span class="token punctuation">)</span>
+indexdata<span class="token operator">&lt;-</span>crtot<span class="token operator">$</span>indexdata
+x.text<span class="token operator">&lt;-</span>crtot<span class="token operator">$</span>orderdate
+
+<span class="token comment">#总体折线图</span>
+plot<span class="token punctuation">(</span>indexdata<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">"l"</span><span class="token punctuation">,</span>xaxt<span class="token operator">=</span><span class="token string">"n"</span><span class="token punctuation">,</span>xlab<span class="token operator">=</span><span class="token string">"日期"</span><span class="token punctuation">,</span>ylab<span class="token operator">=</span><span class="token string">"数值"</span><span class="token punctuation">)</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span>mean<span class="token punctuation">(</span>indexdata<span class="token punctuation">)</span><span class="token punctuation">)</span>
+axis<span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span>at<span class="token operator">=</span><span class="token number">1</span><span class="token operator">:</span>length<span class="token punctuation">(</span>indexdata<span class="token punctuation">)</span><span class="token punctuation">,</span>labels<span class="token operator">=</span>x.text<span class="token punctuation">,</span>tick<span class="token operator">=</span><span class="token boolean">FALSE</span><span class="token punctuation">)</span>
+
+<span class="token comment">#每年折线图</span>
+crtot<span class="token operator">$</span>year<span class="token operator">&lt;-</span>as.numeric<span class="token punctuation">(</span>format<span class="token punctuation">(</span>crtot<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">"%Y"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+flt_11<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crtot<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2011</span><span class="token punctuation">)</span>
+flt_12<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crtot<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2012</span><span class="token punctuation">)</span>
+flt_13<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crtot<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2013</span><span class="token punctuation">)</span>
+flt_14<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crtot<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2014</span><span class="token punctuation">)</span>
+flt_15<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crtot<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2015</span><span class="token punctuation">)</span>
+flt_16<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crtot<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2016</span><span class="token punctuation">)</span>
+
+id<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token string">"2011年"</span><span class="token punctuation">,</span><span class="token string">"2012年"</span><span class="token punctuation">,</span><span class="token string">"2013年"</span><span class="token punctuation">,</span><span class="token string">"2014年"</span><span class="token punctuation">,</span><span class="token string">"2015年"</span><span class="token punctuation">,</span><span class="token string">"2016年"</span><span class="token punctuation">)</span>
+col<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token string">"black"</span><span class="token punctuation">,</span><span class="token string">"red"</span><span class="token punctuation">,</span><span class="token string">"orange"</span><span class="token punctuation">,</span><span class="token string">"purple"</span><span class="token punctuation">,</span><span class="token string">"yellow"</span><span class="token punctuation">,</span><span class="token string">"blue"</span><span class="token punctuation">)</span>
+
+plot<span class="token punctuation">(</span>flt_11<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'l'</span><span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">0.2</span><span class="token punctuation">)</span><span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span>main<span class="token operator">=</span><span class="token string">"各年数据"</span><span class="token punctuation">)</span>
+legend<span class="token punctuation">(</span><span class="token string">"topleft"</span><span class="token punctuation">,</span>legend<span class="token operator">=</span>id<span class="token punctuation">,</span>horiz<span class="token operator">=</span>T<span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">15</span><span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">,</span>cex<span class="token operator">=</span><span class="token number">0.8</span><span class="token punctuation">,</span>bty<span class="token operator">=</span><span class="token string">"n"</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_12<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_13<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_14<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_15<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_16<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>每年同期的折线图基本平稳</p> 
+<p>2.平稳性检验</p> 
+<pre><code class="prism language-r">library<span class="token punctuation">(</span>TSA<span class="token punctuation">)</span>
+adfresult<span class="token operator">&lt;-</span>adf.test<span class="token punctuation">(</span>indexdata<span class="token punctuation">,</span>alt<span class="token operator">=</span><span class="token string">"stationary"</span><span class="token punctuation">)</span> <span class="token comment">#adf检验</span>
+adfresult
+</code></pre> 
+<p>3.随机性检验</p> 
+<pre><code class="prism language-r">Box.test<span class="token punctuation">(</span>indexdata<span class="token punctuation">,</span> type<span class="token operator">=</span><span class="token string">"Ljung-Box"</span><span class="token punctuation">,</span>lag<span class="token operator">=</span><span class="token number">6</span><span class="token punctuation">)</span>
+Box.test<span class="token punctuation">(</span>indexdata<span class="token punctuation">,</span> type<span class="token operator">=</span><span class="token string">"Ljung-Box"</span><span class="token punctuation">,</span>lag<span class="token operator">=</span><span class="token number">12</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>4.周期性检验<br> 根据行业情况判断周期，普遍为7天，文中有用谱分析中的周期图来验证7天的假设是否正确。每年的指标数据大致相同；节假日对数据整体影响较大，所以先提出固定节假日的数据。</p> 
+<pre><code class="prism language-r">flt_pfx<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt_16<span class="token punctuation">,</span>orderdate<span class="token operator">&gt;=</span><span class="token string">'2016-06-01'</span> <span class="token operator">&amp;</span> orderdate<span class="token operator">&lt;=</span><span class="token string">'2016-09-09'</span><span class="token punctuation">)</span> <span class="token comment">#选取样本数据</span>
+pr<span class="token operator">&lt;-</span>periodogram<span class="token punctuation">(</span>flt_pfx<span class="token operator">$</span>indexdata<span class="token punctuation">)</span>  <span class="token comment">#画出谱分析中的周期图</span>
+score1<span class="token operator">&lt;-</span>pr<span class="token operator">$</span>freq<span class="token punctuation">[</span>which<span class="token punctuation">(</span>pr<span class="token operator">$</span>spec<span class="token operator">==</span>max<span class="token punctuation">(</span>pr<span class="token operator">$</span>spec<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">]</span>  <span class="token comment">#计算最高点对应的周期</span>
+f<span class="token operator">&lt;-</span><span class="token number">1</span><span class="token operator">/</span>score1 <span class="token punctuation">;</span>f  <span class="token comment">#周期</span>
+</code></pre> 
+<p>由最高尖峰的频率来计算，1/0.1388=7.2046天</p> 
+<h5><a id="432_309"></a>4.3.2节假日模式识别</h5> 
+<h6><a id="1_310"></a>1.节假日模式分类</h6> 
+<p>根据各指标节前、节中、节后的不同变化趋势，对节假日期间的指标进行大致分类。</p> 
+<h6><a id="2_312"></a>2.转化率指标节假日模式识别</h6> 
+<p>文中用的是国庆节相关数据，首先要对指标数据打上假日标识，大致确定节前、节中、节后的时间段。</p> 
+<pre><code class="prism language-r">library<span class="token punctuation">(</span>plyr<span class="token punctuation">)</span>
+holidayflag<span class="token operator">&lt;-</span>read.csv<span class="token punctuation">(</span><span class="token string">"holiday.csv"</span><span class="token punctuation">,</span>header<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">,</span>stringsAsFactors<span class="token operator">=</span><span class="token boolean">FALSE</span><span class="token punctuation">)</span>   <span class="token comment">#读取节假日标识数据</span>
+holidayflag<span class="token operator">$</span>orderdate<span class="token operator">&lt;-</span>as.Date<span class="token punctuation">(</span>holidayflag<span class="token operator">$</span>orderdate<span class="token punctuation">)</span>
+flt<span class="token operator">&lt;-</span>read.csv<span class="token punctuation">(</span><span class="token string">"2011~2016.10总体数据.csv"</span><span class="token punctuation">,</span>header<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>  <span class="token comment">#读取指标数据</span>
+flt<span class="token operator">$</span>orderdate<span class="token operator">&lt;-</span>as.Date<span class="token punctuation">(</span>flt<span class="token operator">$</span>orderdate<span class="token punctuation">)</span>
+flt<span class="token operator">&lt;-</span>join<span class="token punctuation">(</span>flt<span class="token punctuation">,</span>holidayflag<span class="token punctuation">)</span> <span class="token comment">#将节假日标识打在指标数据上</span>
+flt<span class="token operator">$</span>year<span class="token operator">&lt;-</span>as.numeric<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">"%Y"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token comment">#每年数据分别存储</span>
+flt_11<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2011</span><span class="token punctuation">)</span>
+flt_12<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2012</span><span class="token punctuation">)</span>
+flt_13<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2013</span><span class="token punctuation">)</span>
+flt_14<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2014</span><span class="token punctuation">)</span>
+flt_15<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2015</span><span class="token punctuation">)</span>
+flt_16<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt<span class="token punctuation">,</span>year<span class="token operator">==</span><span class="token number">2016</span><span class="token punctuation">)</span>
+
+<span class="token comment">#国庆前后明细数据图</span>
+
+id<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token string">"2011年"</span><span class="token punctuation">,</span><span class="token string">"2012年"</span><span class="token punctuation">,</span><span class="token string">"2013年"</span><span class="token punctuation">,</span><span class="token string">"2014年"</span><span class="token punctuation">,</span><span class="token string">"2015年"</span><span class="token punctuation">,</span><span class="token string">"2016年"</span><span class="token punctuation">)</span>
+col<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token string">"black"</span><span class="token punctuation">,</span><span class="token string">"red"</span><span class="token punctuation">,</span><span class="token string">"orange"</span><span class="token punctuation">,</span><span class="token string">"purple"</span><span class="token punctuation">,</span><span class="token string">"yellow"</span><span class="token punctuation">,</span><span class="token string">"blue"</span><span class="token punctuation">)</span>
+
+xtext<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt_11_2<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">"%m"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>flt_11_2<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">"%d"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">'-'</span><span class="token punctuation">)</span>
+plot<span class="token punctuation">(</span>flt_11_2<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'l'</span><span class="token punctuation">,</span>xaxt<span class="token operator">=</span><span class="token string">'n'</span><span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">0.2</span><span class="token punctuation">)</span><span class="token punctuation">,</span>main<span class="token operator">=</span><span class="token string">"国庆前后明细数据"</span><span class="token punctuation">)</span>
+axis<span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span>at<span class="token operator">=</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">61</span><span class="token punctuation">,</span>labels<span class="token operator">=</span>xtext<span class="token punctuation">,</span>tick<span class="token operator">=</span><span class="token boolean">FALSE</span><span class="token punctuation">)</span>
+legend<span class="token punctuation">(</span><span class="token string">"topleft"</span><span class="token punctuation">,</span>legend<span class="token operator">=</span>id<span class="token punctuation">,</span>horiz<span class="token operator">=</span>T<span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">15</span><span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">,</span>cex<span class="token operator">=</span><span class="token number">0.8</span><span class="token punctuation">,</span>bty<span class="token operator">=</span><span class="token string">"n"</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_12_2<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_13_2<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_14_2<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_15_2<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>flt_16_2<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>col<span class="token operator">=</span>col<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>然后周期相同天组成各自对应的样本集，计算出均值与之匹配，实现样本的配对</p> 
+<pre><code class="prism language-r"><span class="token comment">##周期相同天数据整理</span>
+flt_11<span class="token operator">$</span>number<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>flt_11<span class="token punctuation">)</span><span class="token percent-operator operator">%/%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token operator">:</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>flt_11<span class="token punctuation">)</span><span class="token percent-operator operator">%%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+flt_12<span class="token operator">$</span>number<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>flt_12<span class="token punctuation">)</span><span class="token percent-operator operator">%/%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token operator">:</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>flt_12<span class="token punctuation">)</span><span class="token percent-operator operator">%%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+flt_13<span class="token operator">$</span>number<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>flt_13<span class="token punctuation">)</span><span class="token percent-operator operator">%/%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token operator">:</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>flt_13<span class="token punctuation">)</span><span class="token percent-operator operator">%%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+flt_14<span class="token operator">$</span>number<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>flt_14<span class="token punctuation">)</span><span class="token percent-operator operator">%/%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token operator">:</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>flt_14<span class="token punctuation">)</span><span class="token percent-operator operator">%%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+flt_15<span class="token operator">$</span>number<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>flt_15<span class="token punctuation">)</span><span class="token percent-operator operator">%/%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token operator">:</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>flt_15<span class="token punctuation">)</span><span class="token percent-operator operator">%%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+flt_16<span class="token operator">$</span>number<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>flt_16<span class="token punctuation">)</span><span class="token percent-operator operator">%/%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token operator">:</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>flt_16<span class="token punctuation">)</span><span class="token percent-operator operator">%%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+<span class="token comment">#----------离群点判断----------------</span>
+library<span class="token punctuation">(</span>outliers<span class="token punctuation">)</span>
+library<span class="token punctuation">(</span>DMwR<span class="token punctuation">)</span>
+<span class="token comment">##Grubbs'Test</span>
+Grubbs<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>initial<span class="token punctuation">,</span>cycle<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  grubbs<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    x<span class="token operator">&lt;-</span>round<span class="token punctuation">(</span>x<span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span>
+    grubbs_outliers<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    grubbs_minormax<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    grubbs_p<span class="token operator">&lt;-</span><span class="token number">0</span>
+    <span class="token keyword">while</span><span class="token punctuation">(</span>grubbs_p<span class="token operator">&lt;</span><span class="token number">0.05</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+      grubbs_outliers<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>grubbs_outliers<span class="token punctuation">,</span>grubbs_minormax<span class="token punctuation">)</span>
+      <span class="token keyword">if</span><span class="token punctuation">(</span>sum<span class="token punctuation">(</span>x<span class="token operator">==</span>grubbs_minormax<span class="token punctuation">)</span><span class="token operator">!=</span><span class="token number">0</span><span class="token punctuation">)</span>x<span class="token operator">&lt;-</span>x<span class="token punctuation">[</span><span class="token operator">-</span>which<span class="token punctuation">(</span>x<span class="token operator">==</span>grubbs_minormax<span class="token punctuation">)</span><span class="token punctuation">]</span>
+      <span class="token keyword">if</span><span class="token punctuation">(</span>sd<span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token operator">==</span><span class="token number">0</span><span class="token punctuation">)</span> <span class="token keyword">break</span>
+      grubbs_test<span class="token operator">&lt;-</span>grubbs.test<span class="token punctuation">(</span>x<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token number">10</span><span class="token punctuation">,</span>opposite<span class="token operator">=</span>F<span class="token punctuation">,</span>two.sided<span class="token operator">=</span>F<span class="token punctuation">)</span>
+      grubbs_p<span class="token operator">&lt;-</span>grubbs_test<span class="token operator">$</span>p.value
+      grubbs_a<span class="token operator">&lt;-</span>strsplit<span class="token punctuation">(</span>grubbs_test<span class="token operator">$</span>alternative<span class="token punctuation">,</span><span class="token string">" "</span><span class="token punctuation">,</span>fixed<span class="token operator">=</span>T<span class="token punctuation">)</span>
+      grubbs_minormax<span class="token operator">&lt;-</span>as.numeric<span class="token punctuation">(</span>unlist<span class="token punctuation">(</span>grubbs_a<span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+    <span class="token punctuation">}</span>
+    return<span class="token punctuation">(</span>grubbs_outliers<span class="token punctuation">)</span>
+  <span class="token punctuation">}</span>
+  Grubbs.outliers<span class="token operator">&lt;-</span>tapply<span class="token punctuation">(</span>initial<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>initial<span class="token operator">$</span>number<span class="token punctuation">,</span>grubbs<span class="token punctuation">)</span>
+  initial<span class="token operator">$</span>Grubbs.test<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>initial<span class="token punctuation">)</span><span class="token punctuation">)</span>
+  <span class="token keyword">for</span><span class="token punctuation">(</span>i <span class="token keyword">in</span> <span class="token number">1</span><span class="token operator">:</span>cycle<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    initial<span class="token operator">$</span>Grubbs.test<span class="token punctuation">[</span>which<span class="token punctuation">(</span>initial<span class="token operator">$</span>indexdata<span class="token percent-operator operator">%in%</span>Grubbs.outliers<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token operator">&amp;</span>initial<span class="token operator">$</span>number<span class="token operator">==</span>i<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token number">1</span>
+  <span class="token punctuation">}</span>
+  return<span class="token punctuation">(</span>initial<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">##Boxplot</span>
+Boxplot<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>initial<span class="token punctuation">,</span>cycle<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  Boxplot.outliers<span class="token operator">&lt;-</span>tapply<span class="token punctuation">(</span>initial<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>initial<span class="token operator">$</span>number<span class="token punctuation">,</span><span class="token keyword">function</span><span class="token punctuation">(</span>x<span class="token punctuation">)</span> boxplot.stats<span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token operator">$</span>out<span class="token punctuation">)</span>
+  initial<span class="token operator">$</span>Boxplot.test<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>initial<span class="token punctuation">)</span><span class="token punctuation">)</span>
+  <span class="token keyword">for</span><span class="token punctuation">(</span>i <span class="token keyword">in</span> <span class="token number">1</span><span class="token operator">:</span>cycle<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    initial<span class="token operator">$</span>Boxplot.test<span class="token punctuation">[</span>which<span class="token punctuation">(</span>initial<span class="token operator">$</span>indexdata<span class="token percent-operator operator">%in%</span>Boxplot.outliers<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token operator">&amp;</span>initial<span class="token operator">$</span>number<span class="token operator">==</span>i<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token number">1</span>
+  <span class="token punctuation">}</span>
+  return<span class="token punctuation">(</span>initial<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">##Lofactor</span>
+Lof<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>initial<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  initial<span class="token operator">$</span>Lof.test<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>initial<span class="token punctuation">)</span><span class="token punctuation">)</span>
+  Lof.scores<span class="token operator">&lt;-</span>lofactor<span class="token punctuation">(</span>initial<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>k<span class="token operator">=</span>floor<span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>initial<span class="token punctuation">)</span><span class="token operator">/</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+  Lof.outliers<span class="token operator">&lt;-</span>initial<span class="token operator">$</span>indexdata<span class="token punctuation">[</span>which<span class="token punctuation">(</span>Lof.scores<span class="token operator">&gt;</span><span class="token number">1.75</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+  initial<span class="token operator">$</span>Lof.test<span class="token punctuation">[</span>which<span class="token punctuation">(</span>Lof.scores<span class="token operator">&gt;</span><span class="token number">1.75</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token number">1</span>
+  return<span class="token punctuation">(</span>initial<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+holvalue<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>tbdata<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  res_after4<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>tbdata<span class="token punctuation">,</span>orderdate<span class="token operator">&gt;=</span>paste<span class="token punctuation">(</span>unique<span class="token punctuation">(</span>tbdata<span class="token operator">$</span>year<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"-06-01"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span> <span class="token operator">&amp;</span> orderdate<span class="token operator">&lt;=</span>paste<span class="token punctuation">(</span>unique<span class="token punctuation">(</span>tbdata<span class="token operator">$</span>year<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"-09-16"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+  grubbs<span class="token operator">&lt;-</span>Grubbs<span class="token punctuation">(</span>res_after4<span class="token punctuation">,</span><span class="token number">7</span><span class="token punctuation">)</span>
+  boxplot<span class="token operator">&lt;-</span>Boxplot<span class="token punctuation">(</span>res_after4<span class="token punctuation">,</span><span class="token number">7</span><span class="token punctuation">)</span>
+  lof<span class="token operator">&lt;-</span>Lof<span class="token punctuation">(</span>res_after4<span class="token punctuation">)</span>
+
+  res_after4<span class="token operator">$</span>Grubbs.test<span class="token operator">&lt;-</span>grubbs<span class="token operator">$</span>Grubbs.test
+  res_after4<span class="token operator">$</span>Boxplot.test<span class="token operator">&lt;-</span>boxplot<span class="token operator">$</span>Boxplot.test
+  res_after4<span class="token operator">$</span>Lof.test<span class="token operator">&lt;-</span>lof<span class="token operator">$</span>Lof.test
+  res_after4<span class="token operator">$</span>abnflag<span class="token operator">&lt;-</span>res_after4<span class="token operator">$</span>Grubbs.test<span class="token operator">+</span>res_after4<span class="token operator">$</span>Boxplot.test<span class="token operator">+</span>res_after4<span class="token operator">$</span>Lof.test
+
+  tb_adj<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>res_after4<span class="token punctuation">,</span>abnflag<span class="token operator">&lt;</span><span class="token number">2</span><span class="token punctuation">)</span>
+  tb_adjmean<span class="token operator">&lt;-</span>aggregate<span class="token punctuation">(</span>tb_adj<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>by<span class="token operator">=</span>list<span class="token punctuation">(</span>tb_adj<span class="token operator">$</span>number<span class="token punctuation">)</span><span class="token punctuation">,</span>mean<span class="token punctuation">)</span>
+  names<span class="token punctuation">(</span>tb_adjmean<span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token string">"number"</span>
+
+  tb_hol<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>tbdata<span class="token punctuation">,</span>complete.cases<span class="token punctuation">(</span>tbdata<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">)</span>
+  tb_rb<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>tb_hol<span class="token punctuation">,</span>tb_adjmean<span class="token punctuation">,</span>all.tb_hol<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+  return<span class="token punctuation">(</span>tb_rb<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">############相同周期点配对数据输出调整格式#############</span>
+flt_11hol_adj<span class="token operator">&lt;-</span>flt_11hol<span class="token punctuation">[</span>order<span class="token punctuation">(</span>flt_11hol<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+flt_12hol_adj<span class="token operator">&lt;-</span>flt_12hol<span class="token punctuation">[</span>order<span class="token punctuation">(</span>flt_12hol<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+flt_13hol_adj<span class="token operator">&lt;-</span>flt_13hol<span class="token punctuation">[</span>order<span class="token punctuation">(</span>flt_13hol<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+flt_14hol_adj<span class="token operator">&lt;-</span>flt_14hol<span class="token punctuation">[</span>order<span class="token punctuation">(</span>flt_14hol<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+flt_15hol_adj<span class="token operator">&lt;-</span>flt_15hol<span class="token punctuation">[</span>order<span class="token punctuation">(</span>flt_15hol<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+flt_16hol_adj<span class="token operator">&lt;-</span>flt_16hol<span class="token punctuation">[</span>order<span class="token punctuation">(</span>flt_16hol<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span>
+
+flt_11hol_adj<span class="token operator">$</span>date<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt_11hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%m'</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">'-'</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>flt_11hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%d'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+flt_12hol_adj<span class="token operator">$</span>date<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt_12hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%m'</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">'-'</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>flt_12hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%d'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+flt_13hol_adj<span class="token operator">$</span>date<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt_13hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%m'</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">'-'</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>flt_13hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%d'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+flt_14hol_adj<span class="token operator">$</span>date<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt_14hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%m'</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">'-'</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>flt_14hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%d'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+flt_15hol_adj<span class="token operator">$</span>date<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt_15hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%m'</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">'-'</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>flt_15hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%d'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+flt_16hol_adj<span class="token operator">$</span>date<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>flt_16hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%m'</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">'-'</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>flt_16hol_adj<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">'%d'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+
+names<span class="token punctuation">(</span>flt_11hol_adj<span class="token punctuation">)</span><span class="token punctuation">[</span>c<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"2011index"</span><span class="token punctuation">,</span><span class="token string">"2011avg"</span><span class="token punctuation">)</span>
+names<span class="token punctuation">(</span>flt_12hol_adj<span class="token punctuation">)</span><span class="token punctuation">[</span>c<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"2012index"</span><span class="token punctuation">,</span><span class="token string">"2012avg"</span><span class="token punctuation">)</span>
+names<span class="token punctuation">(</span>flt_13hol_adj<span class="token punctuation">)</span><span class="token punctuation">[</span>c<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"2013index"</span><span class="token punctuation">,</span><span class="token string">"2013avg"</span><span class="token punctuation">)</span>
+names<span class="token punctuation">(</span>flt_14hol_adj<span class="token punctuation">)</span><span class="token punctuation">[</span>c<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"2014index"</span><span class="token punctuation">,</span><span class="token string">"2014avg"</span><span class="token punctuation">)</span>
+names<span class="token punctuation">(</span>flt_15hol_adj<span class="token punctuation">)</span><span class="token punctuation">[</span>c<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"2015index"</span><span class="token punctuation">,</span><span class="token string">"2015avg"</span><span class="token punctuation">)</span>
+names<span class="token punctuation">(</span>flt_16hol_adj<span class="token punctuation">)</span><span class="token punctuation">[</span>c<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"2016index"</span><span class="token punctuation">,</span><span class="token string">"2016avg"</span><span class="token punctuation">)</span>
+flt_11hol_adj<span class="token operator">&lt;-</span>flt_11hol_adj<span class="token punctuation">[</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token string">"flag"</span><span class="token punctuation">,</span><span class="token string">"date"</span><span class="token punctuation">,</span><span class="token string">"2011index"</span><span class="token punctuation">,</span><span class="token string">"2011avg"</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+flt_12hol_adj<span class="token operator">&lt;-</span>flt_12hol_adj<span class="token punctuation">[</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token string">"flag"</span><span class="token punctuation">,</span><span class="token string">"date"</span><span class="token punctuation">,</span><span class="token string">"2012index"</span><span class="token punctuation">,</span><span class="token string">"2012avg"</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+flt_13hol_adj<span class="token operator">&lt;-</span>flt_13hol_adj<span class="token punctuation">[</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token string">"flag"</span><span class="token punctuation">,</span><span class="token string">"date"</span><span class="token punctuation">,</span><span class="token string">"2013index"</span><span class="token punctuation">,</span><span class="token string">"2013avg"</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+flt_14hol_adj<span class="token operator">&lt;-</span>flt_14hol_adj<span class="token punctuation">[</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token string">"flag"</span><span class="token punctuation">,</span><span class="token string">"date"</span><span class="token punctuation">,</span><span class="token string">"2014index"</span><span class="token punctuation">,</span><span class="token string">"2014avg"</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+flt_15hol_adj<span class="token operator">&lt;-</span>flt_15hol_adj<span class="token punctuation">[</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token string">"flag"</span><span class="token punctuation">,</span><span class="token string">"date"</span><span class="token punctuation">,</span><span class="token string">"2015index"</span><span class="token punctuation">,</span><span class="token string">"2015avg"</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+flt_16hol_adj<span class="token operator">&lt;-</span>flt_16hol_adj<span class="token punctuation">[</span><span class="token punctuation">,</span>c<span class="token punctuation">(</span><span class="token string">"flag"</span><span class="token punctuation">,</span><span class="token string">"date"</span><span class="token punctuation">,</span><span class="token string">"2016index"</span><span class="token punctuation">,</span><span class="token string">"2016avg"</span><span class="token punctuation">)</span><span class="token punctuation">]</span>
+
+flt_tot_adj<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>flt_11hol_adj<span class="token punctuation">,</span>flt_12hol_adj<span class="token punctuation">)</span>
+flt_tot_adj<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>flt_tot_adj<span class="token punctuation">,</span>flt_13hol_adj<span class="token punctuation">)</span>
+flt_tot_adj<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>flt_tot_adj<span class="token punctuation">,</span>flt_14hol_adj<span class="token punctuation">)</span>
+flt_tot_adj<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>flt_tot_adj<span class="token punctuation">,</span>flt_15hol_adj<span class="token punctuation">)</span>
+flt_tot_adj<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>flt_tot_adj<span class="token punctuation">,</span>flt_16hol_adj<span class="token punctuation">)</span>
+write.csv<span class="token punctuation">(</span>flt_tot_adj<span class="token punctuation">,</span><span class="token string">"相同周期点配对数据.csv"</span><span class="token punctuation">)</span>  <span class="token comment">#结果输出到本地</span>
+</code></pre> 
+<p>先用两种及以上方法剔除对均值会有影响的离群点，然后计算均值后的配对样本数据调整格式并输出。</p> 
+<pre><code class="prism language-r"><span class="token comment">#------3）配对T检验</span>
+flt_tot<span class="token operator">&lt;-</span>rbind<span class="token punctuation">(</span>flt_11hol<span class="token punctuation">,</span>flt_12hol<span class="token punctuation">,</span>flt_13hol<span class="token punctuation">,</span>flt_14hol<span class="token punctuation">,</span>flt_15hol<span class="token punctuation">,</span>flt_16hol<span class="token punctuation">)</span>
+<span class="token comment">#配对T检验函数</span>
+tvalue<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span>flt_tot<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  aa<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt_tot<span class="token punctuation">,</span>flag<span class="token operator">==</span>id<span class="token punctuation">)</span><span class="token operator">$</span>indexdata
+  bb<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>flt_tot<span class="token punctuation">,</span>flag<span class="token operator">==</span>id<span class="token punctuation">)</span><span class="token operator">$</span>x
+  t_value<span class="token operator">&lt;-</span>t.test<span class="token punctuation">(</span>aa<span class="token punctuation">,</span>bb<span class="token punctuation">,</span>paired<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span><span class="token operator">$</span>p.value
+  return<span class="token punctuation">(</span>t_value<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+<span class="token comment">#针对每个日期，进行配对T检验</span>
+ttest_pvalue<span class="token operator">&lt;-</span>unlist<span class="token punctuation">(</span>lapply<span class="token punctuation">(</span>sort<span class="token punctuation">(</span>unique<span class="token punctuation">(</span>flt_tot<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>tvalue<span class="token punctuation">,</span>flt_tot<span class="token punctuation">)</span><span class="token punctuation">)</span>
+result_pvalue<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>flag<span class="token operator">=</span>sort<span class="token punctuation">(</span>unique<span class="token punctuation">(</span>flt_12hol<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>pvalue<span class="token operator">=</span>ttest_pvalue<span class="token punctuation">)</span>
+
+<span class="token comment">#计算均值</span>
+indexdata_avg<span class="token operator">&lt;-</span>aggregate<span class="token punctuation">(</span>flt_tot<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>by<span class="token operator">=</span>list<span class="token punctuation">(</span>flt_tot<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span>mean<span class="token punctuation">)</span>
+x_avg<span class="token operator">&lt;-</span>aggregate<span class="token punctuation">(</span>flt_tot<span class="token operator">$</span>x<span class="token punctuation">,</span>by<span class="token operator">=</span>list<span class="token punctuation">(</span>flt_tot<span class="token operator">$</span>flag<span class="token punctuation">)</span><span class="token punctuation">,</span>mean<span class="token punctuation">)</span>
+names<span class="token punctuation">(</span>x_avg<span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token string">"xavg"</span>
+x_avg_df<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>indexdata_avg<span class="token punctuation">,</span>x_avg<span class="token punctuation">,</span>all.indexdata_avg<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+names<span class="token punctuation">(</span>x_avg_df<span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token string">'flag'</span>
+
+ttest_result<span class="token operator">&lt;-</span>merge<span class="token punctuation">(</span>x_avg_df<span class="token punctuation">,</span>result_pvalue<span class="token punctuation">)</span>
+ttest_result<span class="token operator">$</span>x_cf<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token string">"higher"</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>ttest_result<span class="token punctuation">)</span><span class="token punctuation">)</span>
+ttest_result<span class="token punctuation">[</span>which<span class="token punctuation">(</span>ttest_result<span class="token operator">$</span>x<span class="token operator">&lt;=</span>ttest_result<span class="token operator">$</span>xavg<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span><span class="token operator">$</span>x_cf<span class="token operator">&lt;-</span><span class="token string">"lower"</span>
+ttest_result<span class="token operator">$</span>pvalueflag<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token string">"F"</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>ttest_result<span class="token punctuation">)</span><span class="token punctuation">)</span>
+ttest_result<span class="token punctuation">[</span>which<span class="token punctuation">(</span>ttest_result<span class="token operator">$</span>pvalue<span class="token operator">&lt;</span><span class="token number">0.01</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span><span class="token operator">$</span>pvalueflag<span class="token operator">&lt;-</span><span class="token string">"T"</span>
+</code></pre> 
+<h5><a id="433_487"></a>4.3.3模型数据集的建立</h5> 
+<h6><a id="1_488"></a>1.挑选数据集</h6> 
+<pre><code class="prism language-r">cr<span class="token operator">&lt;-</span>read.csv<span class="token punctuation">(</span><span class="token string">"建模数据1031-带异常值.csv"</span><span class="token punctuation">,</span>header<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>  <span class="token comment">#读取数据</span>
+cr<span class="token operator">$</span>orderdate<span class="token operator">&lt;-</span>as.Date<span class="token punctuation">(</span>cr<span class="token operator">$</span>orderdate<span class="token punctuation">)</span>
+cr<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>cr<span class="token punctuation">,</span>cr<span class="token operator">$</span>orderdate<span class="token operator">&lt;=</span><span class="token string">'2016-09-11'</span><span class="token punctuation">)</span>
+cycle<span class="token operator">&lt;-</span><span class="token number">7</span>  <span class="token comment">#设置周期</span>
+cr<span class="token operator">$</span>number<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span>cycle<span class="token punctuation">,</span>len<span class="token operator">=</span>nrow<span class="token punctuation">(</span>cr<span class="token punctuation">)</span><span class="token punctuation">)</span>
+xtext<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span>format<span class="token punctuation">(</span>cr<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">"%m"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>format<span class="token punctuation">(</span>cr<span class="token operator">$</span>orderdate<span class="token punctuation">,</span><span class="token string">"%d"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">'-'</span><span class="token punctuation">)</span>  <span class="token comment">#画出折线图</span>
+plot<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'l'</span><span class="token punctuation">,</span>xaxt<span class="token operator">=</span><span class="token string">'n'</span><span class="token punctuation">)</span>
+axis<span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span>at<span class="token operator">=</span><span class="token number">1</span><span class="token operator">:</span>length<span class="token punctuation">(</span>cr<span class="token operator">$</span>orderdate<span class="token punctuation">)</span><span class="token punctuation">,</span>labels<span class="token operator">=</span>xtext<span class="token punctuation">,</span>tick<span class="token operator">=</span><span class="token boolean">FALSE</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>2.寻找离群点</p> 
+<pre><code class="prism language-r"><span class="token comment">#--Grubbs检验</span>
+Grubbs.outliers<span class="token operator">&lt;-</span>tapply<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>cr<span class="token operator">$</span>number<span class="token punctuation">,</span>grubbs<span class="token punctuation">)</span>
+cr<span class="token operator">$</span>grubbsflag<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>cr<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+<span class="token keyword">for</span><span class="token punctuation">(</span>i <span class="token keyword">in</span> <span class="token number">1</span><span class="token operator">:</span>cycle<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>Grubbs.outliers<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">&gt;</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        grubbs_df<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>Grubbs.outliers<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">,</span>pvalue<span class="token operator">&lt;=</span><span class="token number">0.1</span><span class="token punctuation">)</span>
+        grubbs_outliers<span class="token operator">&lt;-</span>grubbs_df<span class="token operator">$</span>outliers
+        cr<span class="token operator">$</span>grubbsflag<span class="token punctuation">[</span>which<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token percent-operator operator">%in%</span>grubbs_outliers<span class="token operator">&amp;</span>cr<span class="token operator">$</span>number<span class="token operator">==</span>i<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token number">1</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+head<span class="token punctuation">(</span>cr<span class="token punctuation">)</span>
+
+
+<span class="token comment">#--Dixon检验</span>
+Dixon.outliers<span class="token operator">&lt;-</span>tapply<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>cr<span class="token operator">$</span>number<span class="token punctuation">,</span>dixon<span class="token punctuation">)</span>
+cr<span class="token operator">$</span>dixonflag<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>cr<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token keyword">for</span><span class="token punctuation">(</span>i <span class="token keyword">in</span> <span class="token number">1</span><span class="token operator">:</span>cycle<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>nrow<span class="token punctuation">(</span>Dixon.outliers<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">&gt;</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        dixon_df<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>Dixon.outliers<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">,</span>pvalue<span class="token operator">&lt;=</span><span class="token number">0.1</span><span class="token punctuation">)</span>
+        dixon_outliers<span class="token operator">&lt;-</span>dixon_df<span class="token operator">$</span>outliers
+        cr<span class="token operator">$</span>dixonflag<span class="token punctuation">[</span>which<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token percent-operator operator">%in%</span>dixon_outliers<span class="token operator">&amp;</span>cr<span class="token operator">$</span>number<span class="token operator">==</span>i<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token number">1</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+head<span class="token punctuation">(</span>cr<span class="token punctuation">)</span>
+
+<span class="token comment">#--线箱图</span>
+Boxplot.outliers<span class="token operator">&lt;-</span>tapply<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>cr<span class="token operator">$</span>number<span class="token punctuation">,</span><span class="token keyword">function</span><span class="token punctuation">(</span>x<span class="token punctuation">)</span> boxplot.stats<span class="token punctuation">(</span>x<span class="token punctuation">)</span><span class="token operator">$</span>out<span class="token punctuation">)</span>
+cr<span class="token operator">$</span>boxplotflag<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>cr<span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token keyword">for</span><span class="token punctuation">(</span>i <span class="token keyword">in</span> <span class="token number">1</span><span class="token operator">:</span>cycle<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    cr<span class="token operator">$</span>boxplotflag<span class="token punctuation">[</span>which<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token percent-operator operator">%in%</span>Boxplot.outliers<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token operator">&amp;</span>cr<span class="token operator">$</span>number<span class="token operator">==</span>i<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token number">1</span>
+<span class="token punctuation">}</span>
+
+head<span class="token punctuation">(</span>cr<span class="token punctuation">)</span>
+
+<span class="token comment">#--LOF局部离群点</span>
+klb<span class="token operator">&lt;-</span><span class="token number">10</span>
+kup<span class="token operator">&lt;-</span><span class="token number">14</span>
+crlof<span class="token operator">&lt;-</span>loffun<span class="token punctuation">(</span>klb<span class="token punctuation">,</span>kup<span class="token punctuation">,</span>cr<span class="token operator">$</span>indexdata<span class="token punctuation">)</span>
+cr<span class="token operator">$</span>lofflag<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span>nrow<span class="token punctuation">(</span>cr<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+cr<span class="token operator">$</span>lofflag<span class="token punctuation">[</span>which<span class="token punctuation">(</span>cr<span class="token operator">$</span>indexdata<span class="token percent-operator operator">%in%</span>crlof<span class="token operator">$</span>indexdata<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span><span class="token number">1</span>
+
+head<span class="token punctuation">(</span>cr<span class="token punctuation">)</span>
+
+<span class="token comment">#--整合四种方法</span>
+cr<span class="token operator">$</span>outlierflag<span class="token operator">&lt;-</span>cr<span class="token operator">$</span>grubbsflag<span class="token operator">+</span>cr<span class="token operator">$</span>dixonflag<span class="token operator">+</span>cr<span class="token operator">$</span>boxplotflag<span class="token operator">+</span>cr<span class="token operator">$</span>lofflag
+<span class="token comment">#查看总体结果</span>
+head<span class="token punctuation">(</span>cr<span class="token punctuation">[</span>order<span class="token punctuation">(</span><span class="token operator">-</span>cr<span class="token operator">$</span>outlierflag<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token punctuation">]</span><span class="token punctuation">,</span><span class="token number">10</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>至少有两种方法判定为离群点（“1”）的数据可以是真正的离群点。<br> 3.离群点平滑：普遍采用均值填补</p> 
+<h5><a id="434_554"></a>4.3.4指标监控（非节假日）</h5> 
+<h6><a id="1_555"></a>1.数据概览</h6> 
+<p>建模</p> 
+<pre><code class="prism language-r">crdf<span class="token operator">&lt;-</span>read.csv<span class="token punctuation">(</span><span class="token string">"建模数据1031-带异常值 平滑后 adj.csv"</span><span class="token punctuation">,</span>header<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>  <span class="token comment">#获取数据</span>
+crdf<span class="token operator">$</span>orderdate<span class="token operator">&lt;-</span>as.Date<span class="token punctuation">(</span>crdf<span class="token operator">$</span>orderdate<span class="token punctuation">)</span>
+
+<span class="token comment">#9月11日之前用来建模，9月12日~9月18日的用来检验</span>
+cr_df<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crdf<span class="token punctuation">,</span>orderdate<span class="token operator">&lt;=</span><span class="token string">'2016-09-11'</span><span class="token punctuation">)</span>
+cr_tot<span class="token operator">&lt;-</span>cr_df<span class="token operator">$</span>indexdata
+
+plot<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'o'</span><span class="token punctuation">)</span>  <span class="token comment">#画折线图</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span>mean<span class="token punctuation">(</span>cr_tot<span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+<span class="token comment">#计算自相关图和偏自相关</span>
+opar <span class="token operator">&lt;-</span> par<span class="token punctuation">(</span>no.readonly<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+par<span class="token punctuation">(</span>mfrow<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+acf<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span>lag.max<span class="token operator">=</span><span class="token number">60</span><span class="token punctuation">)</span>
+pacf<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span>lag.max<span class="token operator">=</span><span class="token number">60</span><span class="token punctuation">)</span> 
+par<span class="token punctuation">(</span>opar<span class="token punctuation">)</span> 
+
+<span class="token comment">#随机性检验</span>
+Box.test<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span> type<span class="token operator">=</span><span class="token string">"Ljung-Box"</span><span class="token punctuation">,</span>lag<span class="token operator">=</span><span class="token number">6</span><span class="token punctuation">)</span>
+Box.test<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span> type<span class="token operator">=</span><span class="token string">"Ljung-Box"</span><span class="token punctuation">,</span>lag<span class="token operator">=</span><span class="token number">12</span><span class="token punctuation">)</span>
+
+<span class="token comment">#平稳化检验</span>
+library<span class="token punctuation">(</span>TSA<span class="token punctuation">)</span>
+adfresult<span class="token operator">&lt;-</span>adf.test<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span>alt<span class="token operator">=</span><span class="token string">"stationary"</span><span class="token punctuation">)</span> <span class="token comment">#adf检验</span>
+</code></pre> 
+<p>原始序列具有7天的周期；Ljung-Box检验，p&lt;0.05拒绝H0:序列随机的假设，有相关性信息；ADF检验，p&lt;0.05拒绝H0:序列有单位根的假设，序列平稳。</p> 
+<h6><a id="2_584"></a>2.乘积季节模型的建立</h6> 
+<pre><code class="prism language-r"><span class="token comment">#选择ARIMA(0,1,2)×(2,0,1)7.</span>
+library<span class="token punctuation">(</span>forecast<span class="token punctuation">)</span>
+arimatt_opt<span class="token operator">&lt;-</span>arima<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span>order<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">,</span>seasonal<span class="token operator">=</span>list<span class="token punctuation">(</span>order<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">,</span>period<span class="token operator">=</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>method<span class="token operator">=</span><span class="token string">'ML'</span><span class="token punctuation">)</span>
+arimatt_opt
+<span class="token comment">#残差分析</span>
+res<span class="token operator">&lt;-</span>arimatt_opt<span class="token operator">$</span>res  <span class="token comment">#计算残差</span>
+<span class="token comment">#残差-时间图</span>
+plot<span class="token punctuation">(</span>rstandard<span class="token punctuation">(</span>arimatt_opt<span class="token punctuation">)</span><span class="token punctuation">,</span>ylab<span class="token operator">=</span><span class="token string">'Standardized Residuals'</span><span class="token punctuation">,</span>main<span class="token operator">=</span><span class="token string">'标准残差-时间'</span><span class="token punctuation">)</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">)</span>
+acf<span class="token punctuation">(</span>res<span class="token punctuation">,</span>main<span class="token operator">=</span><span class="token string">"ACF of residuals"</span><span class="token punctuation">,</span>lag.max<span class="token operator">=</span><span class="token number">60</span><span class="token punctuation">)</span>   <span class="token comment">#残差独立性检验</span>
+
+<span class="token comment">#随机性检验</span>
+<span class="token comment">#----广义方差检验</span>
+library<span class="token punctuation">(</span>portes<span class="token punctuation">)</span>
+plot<span class="token punctuation">(</span>gvtest<span class="token punctuation">(</span>arimatt_opt<span class="token punctuation">,</span><span class="token number">1</span><span class="token operator">:</span><span class="token number">60</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">,</span>main<span class="token operator">=</span><span class="token string">"广义方差检验"</span><span class="token punctuation">,</span>ylab<span class="token operator">=</span><span class="token string">'p-value   '</span><span class="token punctuation">,</span>xlab<span class="token operator">=</span><span class="token string">"lag"</span><span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">16</span><span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span><span class="token number">0.05</span><span class="token punctuation">,</span>lty<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">)</span>
+<span class="token comment">#----LB检验</span>
+Box.test<span class="token punctuation">(</span>res<span class="token punctuation">,</span> type<span class="token operator">=</span><span class="token string">"Ljung-Box"</span><span class="token punctuation">,</span>lag<span class="token operator">=</span><span class="token number">6</span><span class="token punctuation">)</span>
+
+<span class="token comment">#正态性检验</span>
+qqnorm<span class="token punctuation">(</span>res<span class="token punctuation">)</span>
+qqline<span class="token punctuation">(</span>res<span class="token punctuation">)</span>
+sol<span class="token operator">&lt;-</span>shapiro.test<span class="token punctuation">(</span>res<span class="token punctuation">)</span>   <span class="token comment">#原假设：数据服从正太分布</span>
+sol
+
+
+<span class="token comment">#---模型拟合与预测</span>
+prop.fore <span class="token operator">=</span> predict<span class="token punctuation">(</span>arimatt_opt<span class="token punctuation">,</span> n.ahead <span class="token operator">=</span><span class="token number">7</span><span class="token punctuation">)</span>
+<span class="token comment">#95%预测上线限</span>
+u<span class="token operator">&lt;-</span> prop.fore<span class="token operator">$</span>pred <span class="token operator">+</span> <span class="token number">1.96</span><span class="token operator">*</span> prop.fore<span class="token operator">$</span>se 
+l<span class="token operator">&lt;-</span>prop.fore<span class="token operator">$</span>pred<span class="token operator">-</span><span class="token number">1.96</span><span class="token operator">*</span>prop.fore<span class="token operator">$</span>se
+cr_ts<span class="token operator">&lt;-</span>ts<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span>frequency<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>
+ts.plot<span class="token punctuation">(</span>cr_ts<span class="token punctuation">,</span> prop.fore<span class="token operator">$</span>pred<span class="token punctuation">,</span> col<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token string">"black"</span><span class="token punctuation">,</span><span class="token string">"blue"</span><span class="token punctuation">)</span><span class="token punctuation">)</span> 
+lines<span class="token punctuation">(</span>u<span class="token punctuation">,</span> col<span class="token operator">=</span><span class="token string">"red"</span><span class="token punctuation">,</span> lty<span class="token operator">=</span><span class="token string">"dashed"</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>l<span class="token punctuation">,</span> col<span class="token operator">=</span><span class="token string">"red"</span><span class="token punctuation">,</span> lty<span class="token operator">=</span><span class="token string">"dashed"</span><span class="token punctuation">)</span> 
+<span class="token comment">#样本内拟合</span>
+fit<span class="token operator">&lt;-</span>cr_tot<span class="token operator">-</span>res
+lines<span class="token punctuation">(</span>fit<span class="token punctuation">,</span>col<span class="token operator">=</span><span class="token string">"chocolate"</span><span class="token punctuation">)</span> 
+
+<span class="token comment">#样本外预测</span>
+cryz<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crdf<span class="token punctuation">,</span>orderdate<span class="token operator">&gt;=</span><span class="token string">'2016-09-12'</span> <span class="token operator">&amp;</span> orderdate<span class="token operator">&lt;=</span><span class="token string">'2016-09-18'</span><span class="token punctuation">)</span>
+realvalue<span class="token operator">&lt;-</span>cryz<span class="token operator">$</span>indexdata
+outlinepre_ar<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>pre<span class="token operator">=</span>prop.fore<span class="token operator">$</span>pred<span class="token punctuation">,</span>realvalue<span class="token operator">=</span>realvalue<span class="token punctuation">)</span>
+</code></pre> 
+<h6><a id="3_630"></a>3.三次指数平滑</h6> 
+<pre><code class="prism language-r"><span class="token comment">#模型拟合</span>
+cr_ts <span class="token operator">&lt;-</span> ts<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span> frequency<span class="token operator">=</span><span class="token number">7</span><span class="token punctuation">,</span>start<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">1987</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+plot.ts<span class="token punctuation">(</span>cr_ts<span class="token punctuation">)</span>
+cr_ht <span class="token operator">&lt;-</span> HoltWinters<span class="token punctuation">(</span>cr_ts<span class="token punctuation">)</span>
+plot<span class="token punctuation">(</span>cr_ht<span class="token punctuation">)</span>
+
+<span class="token comment">#残差分析</span>
+e<span class="token operator">&lt;-</span>cr_ht<span class="token operator">$</span>x<span class="token operator">-</span>cr_ht<span class="token operator">$</span>fitted<span class="token punctuation">[</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">]</span>   <span class="token comment">#计算残差</span>
+plot<span class="token punctuation">(</span>e<span class="token punctuation">,</span>ylab<span class="token operator">=</span><span class="token string">'Standardized Residuals'</span><span class="token punctuation">,</span>main<span class="token operator">=</span><span class="token string">'标准残差-时间'</span><span class="token punctuation">)</span>  <span class="token comment">#残差-时间图</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">)</span>
+acf<span class="token punctuation">(</span>e<span class="token punctuation">,</span>main<span class="token operator">=</span><span class="token string">"ACF of residuals"</span><span class="token punctuation">,</span>lag.max<span class="token operator">=</span><span class="token number">60</span><span class="token punctuation">)</span>   <span class="token comment">#独立性检验</span>
+Box.test<span class="token punctuation">(</span>e<span class="token punctuation">,</span> type<span class="token operator">=</span><span class="token string">"Ljung-Box"</span><span class="token punctuation">,</span>lag<span class="token operator">=</span><span class="token number">6</span><span class="token punctuation">)</span>   <span class="token comment">#随机性检验</span>
+Box.test<span class="token punctuation">(</span>e<span class="token punctuation">,</span> type<span class="token operator">=</span><span class="token string">"Ljung-Box"</span><span class="token punctuation">,</span>lag<span class="token operator">=</span><span class="token number">12</span><span class="token punctuation">)</span>
+
+<span class="token comment">#正态性检验 #QQ图</span>
+qqnorm<span class="token punctuation">(</span>e<span class="token punctuation">)</span>
+qqline<span class="token punctuation">(</span>e<span class="token punctuation">)</span>
+sol<span class="token operator">&lt;-</span>shapiro.test<span class="token punctuation">(</span>e<span class="token punctuation">)</span>   <span class="token comment">#原假设：数据服从正太分布</span>
+
+<span class="token comment">#（3）拟合与预测</span>
+library<span class="token punctuation">(</span><span class="token string">"forecast"</span><span class="token punctuation">)</span>
+fitvalue<span class="token operator">&lt;-</span>fitted<span class="token punctuation">(</span>cr_ht<span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">]</span>  <span class="token comment">#样本内预测</span>
+plot<span class="token punctuation">(</span>cr_ts<span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>fitvalue<span class="token punctuation">,</span>col<span class="token operator">=</span><span class="token string">'chocolate'</span><span class="token punctuation">)</span>
+
+cr_ht_fore <span class="token operator">&lt;-</span> forecast.HoltWinters<span class="token punctuation">(</span>cr_ht<span class="token punctuation">,</span> h<span class="token operator">=</span><span class="token number">7</span><span class="token punctuation">)</span>  <span class="token comment">#样本外预测</span>
+plot.forecast<span class="token punctuation">(</span>cr_ht_fore<span class="token punctuation">)</span>
+
+<span class="token comment">#95%样本外预测上下限</span>
+l<span class="token operator">&lt;-</span>cr_ht_fore<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token operator">$</span>lower<span class="token punctuation">[</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">]</span>
+u<span class="token operator">&lt;-</span>cr_ht_fore<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token operator">$</span>upper<span class="token punctuation">[</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">]</span>
+
+<span class="token comment">#样本外预测均方误</span>
+outlinepre_hw<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>realvalue<span class="token operator">=</span>realvalue<span class="token punctuation">,</span>prevalue<span class="token operator">=</span>cr_ht_fore<span class="token punctuation">[</span><span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+<span class="token comment">#（4）整合乘积季节模型和Holt-Winters模型</span>
+<span class="token comment">#乘积季节模型样本内拟合均方误</span>
+inline_mse_ar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>abs<span class="token punctuation">(</span>arimatt_opt<span class="token operator">$</span>res<span class="token punctuation">)</span><span class="token operator">^</span><span class="token number">2</span><span class="token punctuation">)</span>
+<span class="token comment">#Holt-Winter样本内拟合均方误</span>
+inline_mse_hw<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>e<span class="token operator">^</span><span class="token number">2</span><span class="token punctuation">)</span>
+<span class="token comment">#乘积季节模型样本外拟合均方误</span>
+outline_mse_ar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span><span class="token punctuation">(</span>outlinepre_ar<span class="token operator">$</span>pre<span class="token operator">-</span>outlinepre_ar<span class="token operator">$</span>realvalue<span class="token punctuation">)</span><span class="token operator">^</span><span class="token number">2</span><span class="token punctuation">)</span>
+<span class="token comment">#Holt-Winter样本外拟合均方误</span>
+outline_mse_hw<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span><span class="token punctuation">(</span>outlinepre_hw<span class="token operator">$</span>realvalue<span class="token operator">-</span>outlinepre_hw<span class="token operator">$</span>prevalue<span class="token punctuation">)</span><span class="token operator">^</span><span class="token number">2</span><span class="token punctuation">)</span>
+modelcf<span class="token operator">&lt;-</span>matrix<span class="token punctuation">(</span>rep<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">,</span>nrow<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">)</span>
+rownames<span class="token punctuation">(</span>modelcf<span class="token punctuation">)</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"样本内拟合均方误"</span><span class="token punctuation">,</span><span class="token string">"样本外预测均方误"</span><span class="token punctuation">)</span>
+colnames<span class="token punctuation">(</span>modelcf<span class="token punctuation">)</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"季节乘积模型"</span><span class="token punctuation">,</span><span class="token string">"Holt-Winters"</span><span class="token punctuation">)</span>
+modelcf<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>inline_mse_ar<span class="token punctuation">,</span>inline_mse_hw<span class="token punctuation">)</span>
+modelcf<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token punctuation">]</span><span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>outline_mse_ar<span class="token punctuation">,</span>outline_mse_hw<span class="token punctuation">)</span>
+</code></pre> 
+<h6><a id="4_682"></a>4.质量监控图</h6> 
+<pre><code class="prism language-r"><span class="token comment">#（1）对每周相同天集合做正态性检验</span>
+crdf<span class="token operator">&lt;-</span>read.csv<span class="token punctuation">(</span><span class="token string">"建模数据1031-带异常值 平滑后 adj.csv"</span><span class="token punctuation">,</span>header<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+crdf<span class="token operator">$</span>orderdate<span class="token operator">&lt;-</span>as.Date<span class="token punctuation">(</span>crdf<span class="token operator">$</span>orderdate<span class="token punctuation">)</span>
+
+cycle<span class="token operator">&lt;-</span><span class="token number">7</span>
+cr_df<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crdf<span class="token punctuation">,</span>orderdate<span class="token operator">&lt;=</span><span class="token string">'2016-09-11'</span><span class="token punctuation">)</span>
+cr_df<span class="token operator">$</span>number<span class="token operator">&lt;-</span>rep<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span>cycle<span class="token punctuation">,</span>len<span class="token operator">=</span>nrow<span class="token punctuation">(</span>cr_df<span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+<span class="token comment">#正态性检验函数</span>
+normtest<span class="token operator">&lt;-</span>tapply<span class="token punctuation">(</span>cr_df<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>list<span class="token punctuation">(</span>cr_df<span class="token operator">$</span>number<span class="token punctuation">)</span><span class="token punctuation">,</span>shapiro.test<span class="token punctuation">)</span>
+
+weekday<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"周一"</span><span class="token punctuation">,</span><span class="token string">"周二"</span><span class="token punctuation">,</span><span class="token string">"周三"</span><span class="token punctuation">,</span><span class="token string">"周四"</span><span class="token punctuation">,</span><span class="token string">"周五"</span><span class="token punctuation">,</span><span class="token string">"周六"</span><span class="token punctuation">,</span><span class="token string">"周日"</span><span class="token punctuation">)</span>
+normpvalue<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token keyword">for</span> <span class="token punctuation">(</span>i <span class="token keyword">in</span> <span class="token number">1</span><span class="token operator">:</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  normpvalue<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>normpvalue<span class="token punctuation">,</span>normtest<span class="token punctuation">[</span><span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token operator">$</span>p.value<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+normtest<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>weekday<span class="token operator">=</span>weekday<span class="token punctuation">,</span>pvalue<span class="token operator">=</span>normpvalue<span class="token punctuation">)</span>
+normtest
+
+<span class="token comment">#（2）制作X-MR分析用控制图</span>
+<span class="token comment">##################################################################</span>
+<span class="token comment">#函数功能：极差均值控制图</span>
+<span class="token comment">#参数说明：df 数据框</span>
+<span class="token comment">#i：整数值</span>
+<span class="token comment">##################################################################</span>
+xmr<span class="token operator">&lt;-</span><span class="token keyword">function</span><span class="token punctuation">(</span>df<span class="token punctuation">,</span>i<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+  opar <span class="token operator">&lt;-</span> par<span class="token punctuation">(</span>no.readonly<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+  par<span class="token punctuation">(</span>mfrow<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+  color<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"green"</span><span class="token punctuation">,</span><span class="token string">"red"</span><span class="token punctuation">)</span>
+  index<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>df<span class="token punctuation">,</span>number<span class="token operator">==</span>i<span class="token punctuation">)</span><span class="token operator">$</span>indexdata
+  title1<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"cr_xmr_单值：第"</span><span class="token punctuation">,</span>i<span class="token punctuation">,</span><span class="token string">"组"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+  title2<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"cr_xmr_移动极差：第"</span><span class="token punctuation">,</span>i<span class="token punctuation">,</span><span class="token string">"组"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+
+  R<span class="token operator">&lt;-</span>abs<span class="token punctuation">(</span>diff<span class="token punctuation">(</span>index<span class="token punctuation">)</span><span class="token punctuation">)</span>
+  Rbar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>R<span class="token punctuation">)</span>
+  xbar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>index<span class="token punctuation">)</span>
+  xucl<span class="token operator">&lt;-</span>xbar<span class="token operator">+</span><span class="token number">2.66</span><span class="token operator">*</span>Rbar
+  xlcl<span class="token operator">&lt;-</span>xbar<span class="token operator">-</span><span class="token number">2.66</span><span class="token operator">*</span>Rbar
+  Rucl<span class="token operator">&lt;-</span><span class="token number">3.267</span><span class="token operator">*</span>Rbar
+  Rlcl<span class="token operator">&lt;-</span><span class="token number">0</span>
+
+  plot<span class="token punctuation">(</span>index<span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span>xlcl<span class="token operator">-</span><span class="token number">0.2</span><span class="token operator">*</span>xlcl<span class="token punctuation">,</span>xucl<span class="token operator">+</span><span class="token number">0.2</span><span class="token operator">*</span>xucl<span class="token punctuation">)</span><span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'o'</span><span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">19</span><span class="token punctuation">,</span>main<span class="token operator">=</span>title1<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>xucl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>xlcl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+  plot<span class="token punctuation">(</span>R<span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span>Rlcl<span class="token operator">-</span><span class="token number">0.2</span><span class="token operator">*</span>Rlcl<span class="token punctuation">,</span>Rucl<span class="token operator">+</span><span class="token number">0.2</span><span class="token operator">*</span>Rucl<span class="token punctuation">)</span><span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'o'</span><span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">19</span><span class="token punctuation">,</span>main<span class="token operator">=</span>title2<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>Rucl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  abline<span class="token punctuation">(</span>h<span class="token operator">=</span>Rlcl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+  par<span class="token punctuation">(</span>opar<span class="token punctuation">)</span> 
+
+  interval<span class="token operator">&lt;-</span>list<span class="token punctuation">(</span>ucl<span class="token operator">=</span>xucl<span class="token punctuation">,</span>lcl<span class="token operator">=</span>xlcl<span class="token punctuation">)</span>
+  return<span class="token punctuation">(</span>interval<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+xmr_1<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span>
+<span class="token comment">#均值和移动极差都在范围内，对有超出范围的部分，需要对该组数据进行分析和修正</span>
+xmr_3<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">)</span>
+
+index<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span>number<span class="token operator">==</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token operator">$</span>indexdata
+abs<span class="token punctuation">(</span>diff<span class="token punctuation">(</span>index<span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token comment">##所以需要去除第12个值后再进行计算</span>
+
+index<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span>number<span class="token operator">==</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token operator">$</span>indexdata
+abs<span class="token punctuation">(</span>diff<span class="token punctuation">(</span>index<span class="token punctuation">)</span><span class="token punctuation">)</span>
+i<span class="token operator">&lt;-</span><span class="token number">3</span>
+index<span class="token operator">&lt;-</span>index<span class="token punctuation">[</span><span class="token operator">-</span>length<span class="token punctuation">(</span>index<span class="token punctuation">)</span><span class="token punctuation">]</span>
+title1<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"cr_xmr_单值：第"</span><span class="token punctuation">,</span>i<span class="token punctuation">,</span><span class="token string">"组"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+title2<span class="token operator">&lt;-</span>paste<span class="token punctuation">(</span><span class="token string">"cr_xmr_移动极差：第"</span><span class="token punctuation">,</span>i<span class="token punctuation">,</span><span class="token string">"组"</span><span class="token punctuation">,</span>sep<span class="token operator">=</span><span class="token string">""</span><span class="token punctuation">)</span>
+
+R<span class="token operator">&lt;-</span>abs<span class="token punctuation">(</span>diff<span class="token punctuation">(</span>index<span class="token punctuation">)</span><span class="token punctuation">)</span>
+Rbar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>R<span class="token punctuation">)</span>
+xbar<span class="token operator">&lt;-</span>mean<span class="token punctuation">(</span>index<span class="token punctuation">)</span>
+xucl_3_adj<span class="token operator">&lt;-</span>xbar<span class="token operator">+</span><span class="token number">2.66</span><span class="token operator">*</span>Rbar
+xlcl_3_adj<span class="token operator">&lt;-</span>xbar<span class="token operator">-</span><span class="token number">2.66</span><span class="token operator">*</span>Rbar
+Rucl<span class="token operator">&lt;-</span><span class="token number">3.267</span><span class="token operator">*</span>Rbar
+Rlcl<span class="token operator">&lt;-</span><span class="token number">0</span>
+color<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"green"</span><span class="token punctuation">,</span><span class="token string">"red"</span><span class="token punctuation">)</span>
+plot<span class="token punctuation">(</span>index<span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span>xlcl_3_adj<span class="token operator">-</span><span class="token number">0.2</span><span class="token operator">*</span>xlcl_3_adj<span class="token punctuation">,</span>xucl_3_adj<span class="token operator">+</span><span class="token number">0.2</span><span class="token operator">*</span>xucl_3_adj<span class="token punctuation">)</span><span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'o'</span><span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">19</span><span class="token punctuation">,</span>main<span class="token operator">=</span>title1<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span>xucl_3_adj<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span>xlcl_3_adj<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+plot<span class="token punctuation">(</span>R<span class="token punctuation">,</span>ylim<span class="token operator">=</span>c<span class="token punctuation">(</span>Rlcl<span class="token operator">-</span><span class="token number">0.2</span><span class="token operator">*</span>Rlcl<span class="token punctuation">,</span>Rucl<span class="token operator">+</span><span class="token number">0.2</span><span class="token operator">*</span>Rucl<span class="token punctuation">)</span><span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'o'</span><span class="token punctuation">,</span>pch<span class="token operator">=</span><span class="token number">19</span><span class="token punctuation">,</span>main<span class="token operator">=</span>title2<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span>Rucl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+abline<span class="token punctuation">(</span>h<span class="token operator">=</span>Rlcl<span class="token punctuation">,</span>col<span class="token operator">=</span>color<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+<span class="token comment">##由质量监控图知，第三组均值和移动极差均在范围内</span>
+
+<span class="token comment">#（3）上下限确定</span>
+xmr_1<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span>
+xmr_2<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">)</span>
+xmr_4<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">)</span>
+xmr_5<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">5</span><span class="token punctuation">)</span>
+xmr_6<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">)</span>
+xmr_7<span class="token operator">&lt;-</span>xmr<span class="token punctuation">(</span>cr_df<span class="token punctuation">,</span><span class="token number">7</span><span class="token punctuation">)</span>
+
+weekday<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span><span class="token string">"周一"</span><span class="token punctuation">,</span><span class="token string">"周二"</span><span class="token punctuation">,</span><span class="token string">"周三"</span><span class="token punctuation">,</span><span class="token string">"周四"</span><span class="token punctuation">,</span><span class="token string">"周五"</span><span class="token punctuation">,</span><span class="token string">"周六"</span><span class="token punctuation">,</span><span class="token string">"周日"</span><span class="token punctuation">)</span>
+ucl_interval<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>xmr_1<span class="token operator">$</span>ucl<span class="token punctuation">,</span>xmr_2<span class="token operator">$</span>ucl<span class="token punctuation">,</span>xucl_3_adj<span class="token punctuation">,</span>xmr_4<span class="token operator">$</span>ucl<span class="token punctuation">,</span>xmr_5<span class="token operator">$</span>ucl<span class="token punctuation">,</span>xmr_6<span class="token operator">$</span>ucl<span class="token punctuation">,</span>xmr_7<span class="token operator">$</span>ucl<span class="token punctuation">)</span>
+lcl_interval<span class="token operator">&lt;-</span>c<span class="token punctuation">(</span>xmr_1<span class="token operator">$</span>lcl<span class="token punctuation">,</span>xmr_2<span class="token operator">$</span>lcl<span class="token punctuation">,</span>xlcl_3_adj<span class="token punctuation">,</span>xmr_4<span class="token operator">$</span>lcl<span class="token punctuation">,</span>xmr_5<span class="token operator">$</span>lcl<span class="token punctuation">,</span>xmr_6<span class="token operator">$</span>lcl<span class="token punctuation">,</span>xmr_7<span class="token operator">$</span>lcl<span class="token punctuation">)</span>
+
+xmr_interval<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>weekday<span class="token operator">=</span>weekday<span class="token punctuation">,</span>ucl<span class="token operator">=</span>round<span class="token punctuation">(</span>ucl_interval<span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">,</span>lcl<span class="token operator">=</span>round<span class="token punctuation">(</span>lcl_interval<span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token comment">##给出转化率指标的最小值后，可以计算得到过程能力指数，将之与登记表对比可得过程稳定。</span>
+<span class="token comment">#### 4.3.5 节假日指标监控</span>
+<span class="token comment">##### 1.预测节假日数据</span>
+```r
+library<span class="token punctuation">(</span>TSA<span class="token punctuation">)</span>
+library<span class="token punctuation">(</span>portes<span class="token punctuation">)</span>
+library<span class="token punctuation">(</span>forecast<span class="token punctuation">)</span>
+crdf<span class="token operator">&lt;-</span>read.csv<span class="token punctuation">(</span><span class="token string">"建模数据1031-带异常值 平滑后 adj.csv"</span><span class="token punctuation">,</span>header<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+crdf<span class="token operator">$</span>orderdate<span class="token operator">&lt;-</span>as.Date<span class="token punctuation">(</span>crdf<span class="token operator">$</span>orderdate<span class="token punctuation">)</span>
+cr_df<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crdf<span class="token punctuation">,</span>orderdate<span class="token operator">&lt;=</span><span class="token string">'2016-09-18'</span><span class="token punctuation">)</span>
+cr_tot<span class="token operator">&lt;-</span>cr_df<span class="token operator">$</span>indexdata
+
+arimatt_opt<span class="token operator">&lt;-</span>arima<span class="token punctuation">(</span>cr_tot<span class="token punctuation">,</span>order<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">,</span>seasonal<span class="token operator">=</span>list<span class="token punctuation">(</span>order<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">,</span>period<span class="token operator">=</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">,</span>method<span class="token operator">=</span><span class="token string">'ML'</span><span class="token punctuation">)</span>
+prop.fore <span class="token operator">&lt;-</span> predict<span class="token punctuation">(</span>arimatt_opt<span class="token punctuation">,</span> n.ahead <span class="token operator">=</span><span class="token number">25</span><span class="token punctuation">)</span>
+<span class="token comment">#95%预测上线限</span>
+ucl_ar<span class="token operator">&lt;-</span> prop.fore<span class="token operator">$</span>pred <span class="token operator">+</span> <span class="token number">1.96</span><span class="token operator">*</span> prop.fore<span class="token operator">$</span>se 
+lcl_ar<span class="token operator">&lt;-</span>prop.fore<span class="token operator">$</span>pred<span class="token operator">-</span><span class="token number">1.96</span><span class="token operator">*</span>prop.fore<span class="token operator">$</span>se
+cr_hol<span class="token operator">&lt;-</span>subset<span class="token punctuation">(</span>crdf<span class="token punctuation">,</span>orderdate<span class="token operator">&gt;=</span><span class="token string">'2016-09-19'</span> <span class="token operator">&amp;</span> orderdate<span class="token operator">&lt;=</span><span class="token string">'2016-10-13'</span><span class="token punctuation">)</span>
+crhol<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>indexdata<span class="token operator">=</span>cr_hol<span class="token operator">$</span>indexdata<span class="token punctuation">,</span>pred<span class="token operator">=</span>prop.fore<span class="token operator">$</span>pred<span class="token punctuation">)</span>
+crhol<span class="token operator">$</span>diff<span class="token operator">&lt;-</span>crhol<span class="token operator">$</span>indexdata<span class="token operator">-</span>crhol<span class="token operator">$</span>pred
+crhol
+</code></pre> 
+<h6><a id="2_806"></a>2.差值建模</h6> 
+<pre><code class="prism language-r">cr_tot_diff<span class="token operator">&lt;-</span>crhol<span class="token operator">$</span>diff
+plot<span class="token punctuation">(</span>cr_tot_diff<span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'l'</span><span class="token punctuation">)</span>
+pr<span class="token operator">&lt;-</span>periodogram<span class="token punctuation">(</span>cr_tot_diff<span class="token punctuation">)</span>
+prspec<span class="token operator">&lt;-</span>sort<span class="token punctuation">(</span>pr<span class="token operator">$</span>spec<span class="token punctuation">,</span>decreasing<span class="token operator">=</span><span class="token boolean">TRUE</span><span class="token punctuation">)</span>
+f_1<span class="token operator">&lt;-</span>pr<span class="token operator">$</span>freq<span class="token punctuation">[</span>which<span class="token punctuation">(</span>pr<span class="token operator">$</span>spec<span class="token operator">==</span>prspec<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">]</span>  <span class="token comment">##第一个周期频率</span>
+f_2<span class="token operator">&lt;-</span>pr<span class="token operator">$</span>freq<span class="token punctuation">[</span>which<span class="token punctuation">(</span>pr<span class="token operator">$</span>spec<span class="token operator">==</span>prspec<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">]</span>  <span class="token comment">##第二个周期频率</span>
+</code></pre> 
+<h6><a id="3_815"></a>3.模型拟合</h6> 
+<pre><code class="prism language-r"><span class="token comment">#生成衍生变量，谱分析拟合</span>
+gydf<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>id<span class="token operator">=</span>c<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">:</span>length<span class="token punctuation">(</span>cr_tot_diff<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>indexdata<span class="token operator">=</span>cr_tot_diff<span class="token punctuation">)</span>
+gydf<span class="token operator">$</span>v1_cos<span class="token operator">&lt;-</span>cos<span class="token punctuation">(</span><span class="token number">2</span><span class="token operator">*</span>pi<span class="token operator">*</span>f_1<span class="token operator">*</span>gydf<span class="token operator">$</span>id<span class="token punctuation">)</span>
+gydf<span class="token operator">$</span>v1_sin<span class="token operator">&lt;-</span>sin<span class="token punctuation">(</span><span class="token number">2</span><span class="token operator">*</span>pi<span class="token operator">*</span>f_1<span class="token operator">*</span>gydf<span class="token operator">$</span>id<span class="token punctuation">)</span>
+gydf<span class="token operator">$</span>v2_cos<span class="token operator">&lt;-</span>cos<span class="token punctuation">(</span><span class="token number">2</span><span class="token operator">*</span>pi<span class="token operator">*</span>f_2<span class="token operator">*</span>gydf<span class="token operator">$</span>id<span class="token punctuation">)</span>
+gydf<span class="token operator">$</span>v2_sin<span class="token operator">&lt;-</span>sin<span class="token punctuation">(</span><span class="token number">2</span><span class="token operator">*</span>pi<span class="token operator">*</span>f_2<span class="token operator">*</span>gydf<span class="token operator">$</span>id<span class="token punctuation">)</span>
+
+<span class="token comment">#线性拟合</span>
+tt<span class="token operator">&lt;-</span>lm<span class="token punctuation">(</span>formula<span class="token operator">=</span>indexdata <span class="token operator">~</span> v1_cos<span class="token operator">+</span>v1_sin<span class="token operator">+</span>v2_sin<span class="token punctuation">,</span>data<span class="token operator">=</span>gydf<span class="token punctuation">)</span>
+summary<span class="token punctuation">(</span>tt<span class="token punctuation">)</span>   <span class="token comment">##R^2接近1，拟合效果较好</span>
+
+<span class="token comment">#拟合图</span>
+plot<span class="token punctuation">(</span>as.vector<span class="token punctuation">(</span>cr_tot_diff<span class="token punctuation">)</span><span class="token punctuation">,</span>type<span class="token operator">=</span><span class="token string">'l'</span><span class="token punctuation">)</span>
+lines<span class="token punctuation">(</span>fitted<span class="token punctuation">(</span>tt<span class="token punctuation">)</span><span class="token punctuation">,</span>col<span class="token operator">=</span><span class="token string">"blue"</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>4.残差分析</p> 
+<pre><code class="prism language-r"><span class="token comment">#残差图</span>
+res<span class="token operator">&lt;-</span>tt<span class="token operator">$</span>residuals  <span class="token comment">#计算残差</span>
+plot<span class="token punctuation">(</span>tt<span class="token punctuation">,</span>which<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>  <span class="token comment">#残差图  近似水平，无规律</span>
+library<span class="token punctuation">(</span>car<span class="token punctuation">)</span>
+durbinWatsonTest<span class="token punctuation">(</span>tt<span class="token punctuation">)</span>   <span class="token comment">#DW独立性检验，p-value&gt;0.05，符合独立性假设。</span>
+<span class="token comment">#同方差性</span>
+library<span class="token punctuation">(</span>car<span class="token punctuation">)</span>
+ncvTest<span class="token punctuation">(</span>tt<span class="token punctuation">)</span>  <span class="token comment">##p-value&gt;0.05，符合同方差性。</span>
+shapiro.test<span class="token punctuation">(</span>res<span class="token punctuation">)</span>   <span class="token comment">#正态性检验</span>
+
+<span class="token comment">#预测上下限</span>
+<span class="token comment">#节假日第一天预测值</span>
+id_pre<span class="token operator">&lt;-</span><span class="token number">1</span>
+v1_cos_pre1<span class="token operator">&lt;-</span>cos<span class="token punctuation">(</span><span class="token number">2</span><span class="token operator">*</span>pi<span class="token operator">*</span>f_1<span class="token operator">*</span>id_pre<span class="token punctuation">)</span>
+v1_sin_pre1<span class="token operator">&lt;-</span>sin<span class="token punctuation">(</span><span class="token number">2</span><span class="token operator">*</span>pi<span class="token operator">*</span>f_1<span class="token operator">*</span>id_pre<span class="token punctuation">)</span>
+v2_sin_pre1<span class="token operator">&lt;-</span>sin<span class="token punctuation">(</span><span class="token number">2</span><span class="token operator">*</span>pi<span class="token operator">*</span>f_2<span class="token operator">*</span>id_pre<span class="token punctuation">)</span>
+
+pre_point<span class="token operator">&lt;-</span>data.frame<span class="token punctuation">(</span>v1_cos<span class="token operator">=</span>v1_cos_pre1<span class="token punctuation">,</span>v1_sin<span class="token operator">=</span>v1_sin_pre1<span class="token punctuation">,</span>v2_sin<span class="token operator">=</span>v2_sin_pre1<span class="token punctuation">)</span>
+hol.pred <span class="token operator">&lt;-</span> predict<span class="token punctuation">(</span>tt<span class="token punctuation">,</span>pre_point<span class="token punctuation">,</span>interval <span class="token operator">=</span> <span class="token string">'prediction'</span><span class="token punctuation">,</span>  level <span class="token operator">=</span> <span class="token number">0.95</span><span class="token punctuation">)</span> 
+lcl_hol<span class="token operator">&lt;-</span>hol.pred<span class="token punctuation">[</span><span class="token punctuation">,</span><span class="token string">'lwr'</span><span class="token punctuation">]</span>
+ucl_hol<span class="token operator">&lt;-</span>hol.pred<span class="token punctuation">[</span><span class="token punctuation">,</span><span class="token string">'upr'</span><span class="token punctuation">]</span>
+
+<span class="token comment">#节假日范围=非节假日预测范围+节假日预测范围  ？</span>
+lcl_holtot<span class="token operator">&lt;-</span>lcl_ar<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">+</span>lcl_hol
+ucl_holtot<span class="token operator">&lt;-</span>ucl_ar<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">+</span>ucl_hol
+</code></pre> 
+<p>根据节假日模型预测节假日第一天数值的上下限，再加上非节假日模型预测的节假日第一天数值的上下限，两者总和就是节假日第一天预测值的上下限。模型也需要周期的检测，根据实际情况调参。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/681e1c58b24bb253c7e8064e2526e2a8/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Java——猫猫图鉴微信小程序（前后端分离版）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/d50be142109fac834e890bc2af62930c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">李沐大佬工具autocut</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

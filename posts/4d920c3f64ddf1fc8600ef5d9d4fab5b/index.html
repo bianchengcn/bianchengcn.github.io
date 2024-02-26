@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Redis：bigkeys内存分析 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Redis：bigkeys内存分析" />
+<meta property="og:description" content="场景 随着时间流逝，redis内存逐步增大，需要对redis内存进行清理，发现问题，解决问题。
+方案 bigkeys 命令用于识别在 Redis 数据库中占用最多内存的键。
+对服务有一定开销，在使用系统低峰期操作。
+redis-cli -c -h 127.0.0.1 -p 7021 --bigkeys 输出结果 # Scanning the entire keyspace to find biggest keys as well as # average sizes per key type. You can use -i 0.1 to sleep 0.1 sec # per 100 SCAN commands (not usually needed). [00.00%] Biggest string found so far &#39;&#34;xxx22&#34;&#39; with 172 bytes [00.45%] Biggest hash found so far &#39;&#34;xx111&#34;&#39; with 1 fields ." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/4d920c3f64ddf1fc8600ef5d9d4fab5b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-02-01T18:07:44+08:00" />
+<meta property="article:modified_time" content="2024-02-01T18:07:44+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Redis：bigkeys内存分析</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2>场景</h2> 
+<p>        随着时间流逝，redis内存逐步增大，需要对redis内存进行清理，发现问题，解决问题。</p> 
+<h2>方案</h2> 
+<p><code>bigkeys</code> 命令用于识别在 Redis 数据库中占用最多内存的键。</p> 
+<p><span style="color:#fe2c24;">对服务有一定开销，在使用系统低峰期操作。</span></p> 
+<pre><code class="language-bash">redis-cli -c -h 127.0.0.1 -p 7021 --bigkeys</code></pre> 
+<h5>输出结果</h5> 
+<pre><code class="language-bash"># Scanning the entire keyspace to find biggest keys as well as
+# average sizes per key type.  You can use -i 0.1 to sleep 0.1 sec
+# per 100 SCAN commands (not usually needed).
+
+[00.00%] Biggest string found so far '"xxx22"' with 172 bytes
+[00.45%] Biggest hash   found so far '"xx111"' with 1 fields
+....
+[06.72%] Biggest list   found so far '"lizzList"' with 1 items
+...
+[39.70%] Biggest set    found so far '"setlizz:20"' with 8 members
+[50.22%] Biggest hash   found so far '"hashlizz:123123"' with 2480 fields
+[85.93%] Biggest string found so far '"string111:12321312"' with 445240 bytes
+[95.07%] Biggest zset   found so far '"lizzZset"' with 30 members
+
+-------- summary -------
+
+Sampled 32329 keys in the keyspace!
+Total key length in bytes is 1496560 (avg len 46.29)
+
+Biggest   list found '"lizzList"' has 1 items
+Biggest   hash found '"hashlizz:123123"' has 2480 fields
+Biggest string found '"string111:12321312"' has 445240 bytes
+Biggest    set found '"setlizz:20"' has 8 members
+Biggest   zset found '"lizzZset"' has 30 members
+
+4 lists with 4 items (00.01% of keys, avg size 1.00)
+329 hashs with 3956 fields (01.02% of keys, avg size 12.02)
+31922 strings with 6028942 bytes (98.74% of keys, avg size 188.86)
+0 streams with 0 entries (00.00% of keys, avg size 0.00)
+16 sets with 27 members (00.05% of keys, avg size 1.69)
+58 zsets with 237 members (00.18% of keys, avg size 4.09)</code></pre> 
+<h3> 结果说明</h3> 
+<pre><code class="language-bash">[95.07%] Biggest zset   found so far '"lizzZset"' with 30 members</code></pre> 
+<ol><li>表示当前在内存使用最大的键，不包括值内容</li><li>95.07% ：当前扫描进度</li><li>zset ：键值类型为，包括zset、list、set、hash、string</li><li>'"lizzZset"' ： 键名</li><li>n members：队列键值有n成员</li><li>n items：队列键值有n个成员</li><li>n bytes ：字符串键值占用n个字节</li><li>n fields ： 集合键有n个字段</li></ol> 
+<pre><code class="language-bash">Sampled 32329 keys in the keyspace!
+Total key length in bytes is 1496560 (avg len 46.29)</code></pre> 
+<ul><li>对键空间采样，共检查了 32329 个键。</li><li>键的总长度为 1496560 字节，平均长度为 46.29 字节。</li></ul> 
+<pre><code class="language-bash">Biggest   list found '"lizzList"' has 1 items
+Biggest   hash found '"hashlizz:123123"' has 2480 fields
+Biggest string found '"string111:12321312"' has 445240 bytes
+Biggest    set found '"setlizz:20"' has 8 members
+Biggest   zset found '"lizzZset"' has 30 members</code></pre> 
+<ul><li>每个数据类型的最大占用健 </li></ul> 
+<pre><code class="language-bash">31922 strings with 6028942 bytes (98.74% of keys, avg size 188.86)
+</code></pre> 
+<ul><li>31922 个String类型的健，总的内存空间为6028942个字节，健数量的占比为98.74%，健值大小平均为188.86bytes。</li><li>其他类型。</li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/79b420fe9b2836eee05977bd945210b4/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">探索密码学的未来：SM1、SM2、SM3、SM4、同态加密、密态计算、隐私计算和安全多方计算</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/de583db2c0d80b3626aedbfa9dd89758/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">SpringBoot统一功能处理，拦截器，统一数据格式，捕捉异常</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

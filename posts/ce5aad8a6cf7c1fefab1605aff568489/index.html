@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>JVM篇：CMS与G1区别&amp;适用场景 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="JVM篇：CMS与G1区别&amp;适用场景" />
+<meta property="og:description" content="关于JMV垃圾收集器，面试常问CMS与G1的区别问题，总是记不住。为了方便记录，整理成如下表格，从不同维度对比CMS和G1两个收集器。
+区别CMSG1回收对象 回收老年代
+需要配合新生代收集器一起使用
+老年代和新生代STW时间以最小停顿时间为目标可预计的垃圾回收停顿时间回收算法标记清除标记整理垃圾碎片产生内存碎片没有内存碎片垃圾回收过程 初始标记（STW）并发标记重新标记（STW）并发清除 初始标记(STW)并发标记最终标记(STW)筛选回收(STW)浮动垃圾 会产生浮动垃圾（第四阶段产生）
+没有浮动垃圾（第四阶段，用户线程卡停）
+浮动垃圾产生原因第四阶段并发清楚，GC线程和用户线程同时运行，用户线程会产生浮动垃圾浮动垃圾导致结果浮动垃圾导致内存不足时候，出现“Concurrent Mode Failure”，出现此错误时就会切换到SerialOld收集模式大对象处理直接进入老年代如果大于一个region的50%，会横跨多个region进行存放优点 并发收集，低停顿 控制垃圾回收时间：选择一组合适的region最为回收目标，达到实时收集目的空间整理：不会产生空间碎片缺点 标记清除，产生大量内存碎片。（导致fullGc）无法处理浮动垃圾，内存不足时出现“Concurrent Mode Failure”（并发模式故障），切换到SerialOld收集模式CPU敏感资源敏感，第二阶段并发阶段虽然不会导致用户线程停顿，但如果再CPU资源不足情况下，应用会有明显卡顿使用场景 JDK8及更高版本同等环境下只要cpu性能比较好并且内存不算大 (最少4G)可以使用CMSJDK7及更低版本同等环境下 可选择CMS (G1不完善) 实时数据占用超过一半的堆空间对象分配或者晋升的速度变化大希望消除长时间的GC停顿G1适合8/16G以上的内存使用 参考资料
+垃圾回收器CMS和G1_Ysming88的博客-CSDN博客
+CMS收集器和G1收集器的区别_cms和g1的区别_技术无产者的博客-CSDN博客" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/ce5aad8a6cf7c1fefab1605aff568489/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-05T17:17:50+08:00" />
+<meta property="article:modified_time" content="2023-07-05T17:17:50+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">JVM篇：CMS与G1区别&amp;适用场景</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p></p> 
+<p>        关于JMV垃圾收集器，面试常问CMS与G1的区别问题，总是记不住。为了方便记录，整理成如下表格，从不同维度对比CMS和G1两个收集器。</p> 
+<table border="1" cellpadding="1" cellspacing="1" style="width:595px;"><tbody><tr><td style="width:112px;">区别</td><td style="width:248px;">CMS</td><td style="width:233px;">G1</td></tr><tr><td style="width:112px;">回收对象</td><td style="width:248px;"> <p>回收老年代</p> <p></p> <p>需要配合新生代收集器一起使用</p> </td><td style="width:233px;">老年代和新生代</td></tr><tr><td style="width:112px;">STW时间</td><td style="width:248px;">以最小停顿时间为目标</td><td style="width:233px;">可预计的垃圾回收停顿时间</td></tr><tr><td style="width:112px;">回收算法</td><td style="width:248px;">标记清除</td><td style="width:233px;">标记整理</td></tr><tr><td style="width:112px;">垃圾碎片</td><td style="width:248px;">产生内存碎片</td><td style="width:233px;">没有内存碎片</td></tr><tr><td style="width:112px;">垃圾回收过程</td><td style="width:248px;"> 
+    <ol><li>初始标记（STW）</li><li>并发标记</li><li>重新标记（STW）</li><li>并发清除</li></ol></td><td style="width:233px;"> 
+    <ol><li>初始标记(STW)</li><li>并发标记</li><li>最终标记(STW)</li><li>筛选回收(STW)</li></ol></td></tr><tr><td style="width:112px;">浮动垃圾</td><td style="width:248px;"> <p>会产生浮动垃圾（第四阶段产生）</p> </td><td style="width:233px;"> <p>没有浮动垃圾（第四阶段，用户线程卡停）</p> </td></tr><tr><td style="width:112px;">浮动垃圾产生原因</td><td style="width:248px;">第四阶段并发清楚，GC线程和用户线程同时运行，用户线程会产生浮动垃圾</td><td style="width:233px;"></td></tr><tr><td style="width:112px;">浮动垃圾导致结果</td><td style="width:248px;">浮动垃圾导致内存不足时候，出现“Concurrent Mode Failure”，出现此错误时就会切换到SerialOld收集模式</td><td style="width:233px;"></td></tr><tr><td style="width:112px;">大对象处理</td><td style="width:248px;">直接进入老年代</td><td style="width:233px;">如果大于一个region的50%，会横跨多个region进行存放</td></tr><tr><td style="width:112px;">优点</td><td style="width:248px;"> 
+    <ol><li>并发收集，低停顿</li></ol></td><td style="width:233px;"> 
+    <ol><li>控制垃圾回收时间：选择一组合适的region最为回收目标，达到实时收集目的</li><li>空间整理：不会产生空间碎片</li></ol></td></tr><tr><td style="width:112px;">缺点</td><td style="width:248px;"> 
+    <ol><li>标记清除，产生大量内存碎片。（导致fullGc）</li><li>无法处理浮动垃圾，内存不足时出现“Concurrent Mode Failure”（并发模式故障），切换到SerialOld收集模式</li><li>CPU敏感资源敏感，第二阶段并发阶段虽然不会导致用户线程停顿，但如果再CPU资源不足情况下，应用会有明显卡顿</li></ol></td><td style="width:233px;"></td></tr><tr><td style="width:112px;">使用场景</td><td style="width:248px;"> 
+    <ol><li>JDK8及更高版本同等环境下只要cpu性能比较好并且内存不算大 (最少4G)可以使用CMS</li><li>JDK7及更低版本同等环境下 可选择CMS (G1不完善)</li></ol></td><td style="width:233px;"> 
+    <ol><li>实时数据占用超过一半的堆空间</li><li>对象分配或者晋升的速度变化大</li><li>希望消除长时间的GC停顿</li><li>G1适合8/16G以上的内存使用</li></ol></td></tr></tbody></table> 
+<p>参考资料</p> 
+<p><a href="https://blog.csdn.net/m0_45861545/article/details/125660711?spm=1001.2101.3001.6650.9&amp;utm_medium=distribute.pc_relevant.none-task-blog-2~default~BlogCommendFromBaidu~Rate-9-125660711-blog-79219953.235%5Ev38%5Epc_relevant_sort_base1&amp;depth_1-utm_source=distribute.pc_relevant.none-task-blog-2~default~BlogCommendFromBaidu~Rate-9-125660711-blog-79219953.235%5Ev38%5Epc_relevant_sort_base1&amp;utm_relevant_index=14" title="垃圾回收器CMS和G1_Ysming88的博客-CSDN博客">垃圾回收器CMS和G1_Ysming88的博客-CSDN博客</a></p> 
+<p><a href="https://blog.csdn.net/qq_39552268/article/details/122584628?spm=1001.2014.3001.5506" title="CMS收集器和G1收集器的区别_cms和g1的区别_技术无产者的博客-CSDN博客">CMS收集器和G1收集器的区别_cms和g1的区别_技术无产者的博客-CSDN博客</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a112943661935baf886b14156c9ed42c/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">保姆级VMware虚拟机安装Linux(CentOS7)</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/6e0276232013ebd78d5e8e6423ec811c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">虚拟机内更换账户</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

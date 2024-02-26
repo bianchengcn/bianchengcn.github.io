@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【MAXScript】3DMax批量修改贴图名及模型名 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【MAXScript】3DMax批量修改贴图名及模型名" />
+<meta property="og:description" content="这应该是我的Coder路上的一段小插曲~~~
+一堆废话 想不到自己还会接触3DMAX的脚本语言——MAXScript。首先申明一下，本人不是建模组的，对建模什么的不甚了解。倒是想学来着，会点建模如果自己要独立开发一些小项目，也可以不麻烦人，如果可以，什么事情还是自己亲力亲为来得快。可是同事说怕我抢了他的饭碗，愣是没有教我。嘿嘿！其实我知道那不过是他的玩笑话，主要还是我自己没有时间去学啦，毕竟不是一朝一夕就能够学会的。 “这么多模型，这么多贴图要怎么改？”又听见建模组同事在仰天长哮~~~公司早期有很多项目是使用一款叫virtools（我也有幸用过一段时间，oh no！跟unity真的不是一个等级的，最关键的是网上完全没有资料可寻，碰到一个问题，可以折腾你一个星期也束手无策~）的引擎来开发的，后来客户要求将一些virtools项目改成unity3D，而virtools引擎支持中文命名的模型及贴图，但是众所周知，unity对中文的支持不是很好，经常因为中文发生莫名的错误，或者乱码之类的问题，所以不得不将这些模型和贴图的名称全部改成英文的。“你们3DMAX有没有什么脚本之类的，可以使用脚本来批量改啊，一般软件都会自带脚本，以解决软件自身功能局限的问题。”我刚说完，就感受到了来自对面的‘杀气’，只见同事恶狠狠的盯着我。。。好吧！我错了，忘了同事压根没有写过代码，说了也是白说（我不是有意要打击你们的哟）。“好吧，我帮你看看3DMAX有没有脚本，研究一下要怎么写。”同事听罢，嘴角上扬。。。唉，这奸笑意味着我又要折腾一番了。于是，便开始了MAXScript编程之旅。
+批量修改模型名 没有任何MAXScript基础该怎么开始呢？总要先了解一下该脚本语言的语法规则和常用API吧，于是上网下载了本电子书《3ds MAXScript 脚本语言完全学习手册》（各位看官可自行搜索下载，很好找哦，一搜一大把）。（由于自己机子上没有装3DMAX，所以也不方便附上测试的截图，但是代码之前都是在同事机子上实验过的，成功帮助他们改了模型名以及贴图名，所以在特定条件下是没有问题的，关于这个“特定条件下”以及可能会出现的问题在后面也会提到。） 步骤： 1. 建立两个txt文件，一个是用于存放原模型名的列表，一个用于存放新模型名的列表（之所以分成两个txt文件，而不是一个txt文件存储两个列表， 是因为对maxscript比较陌生，使用两个列表省了解析字符串的麻烦）； 2. 逐行读取两个txt文件的内容； 3. 读取一行，就搜索场景中名称匹配的模型，然后替换成新名称。 具体实现： 1. 只能手动解决，这个没有什么快捷方式。 2. 可以通过书中第三章3.2.19节的FileStream（文件数据流）的OpenFile方法对文本文件进行I/O操作。切记： maxscript的函数并不是以一对“()”括号来标识的，传参数的方法也不像其他常用语言那样在“()”里填入参数，而是在函数名后“ ”加“空格”然后在后面带上函数参数，如要读取D盘下的maxscript.txt文件内容，应如此写：
+source = OpenFile &#34;d:\maxscript.txt&#34; --后面不带封号，不一样的注释符号&#34;--&#34;; 而不是：
+source = OpenFile(&#34;d:\maxscript.txt&#34;); 3. 这个步骤主要是获取指定名称的对象，找了好久，终于找到一个“好东西”：$（好像是叫“选择符”），用处貌似还蛮大，但是我只会它的一种功能：搜索场景中指定名称的模型物体，并返回该物体对象，如：要搜索一个名称叫“box1”的物体，可以采用如下方式：
+$box1 各位注意看了，有没有发现非常坑爹的一点，就是 ‘$’这个选择符后的box1居然不用加双引号，也就是box1被直接识别成了字符串，那么问题来了：如果我要传一个字符串变量该怎么办？假如，我有一个变量str，并搜索str所代表的模型，如下：
+str = &#34;box1&#34; --不需要申明变量类型，应该是自动识别的 $str --如果是通过这样，那便会搜索名称为&#34;str&#34;的模型，而不是搜索&#34;box1&#34; 尝试很多方法也无法向 ‘$’传入变量，至此，也只能抛弃这个神奇的符号了（没有深入研究，不了解它的用法，各位如果知道怎么传入变量，还请留言告知，谢谢）。好吧，继续翻看一下学习手册吧，看看有没有其他的方法。就是你了：selection（当前选择对象集合），可参看手册“3.5.3 ObjectSet（对象集）”，几番测试，可以通过for循环遍历selection中所有的模型对象，但是此法效率过于低下，因为找一个物体就要遍历一遍selection，没找到更好的方法，将就用吧，下面附上源码：
+source = OpenFile &#34;C:\Users\Administrator\Desktop\批量改名\原名.txt&#34; --获取&#34;原名.txt文件&#34;的io流 des = OpenFile &#34;C:\Users\Administrator\Desktop\批量改名\新名.txt&#34; --获取&#34;新名.txt文件&#34;的io流 for j = 1 to 3 do --列表几条记录就写几条，maxscript习惯从1开始计数 ( str = readLine source --逐行读取文本内容 strD = readLine des for obj in selection do --遍历场景中所有模型，注：selection需要选中场景中的模型哦 ( if obj." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/8cedad80de2d9be53a0deada3253eaf6/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2015-05-11T16:19:11+08:00" />
+<meta property="article:modified_time" content="2015-05-11T16:19:11+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【MAXScript】3DMax批量修改贴图名及模型名</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>　　这应该是我的Coder路上的一段小插曲~~~</p> 
+<h3 id="一堆废话"><strong>一堆废话</strong></h3> 
+<p>　　想不到自己还会接触3DMAX的脚本语言——MAXScript。首先申明一下，本人不是建模组的，对建模什么的不甚了解。倒是想学来着，会点建模如果自己要独立开发一些小项目，也可以不麻烦人，如果可以，什么事情还是自己亲力亲为来得快。可是同事说怕我抢了他的饭碗，愣是没有教我。嘿嘿！其实我知道那不过是他的玩笑话，主要还是我自己没有时间去学啦，毕竟不是一朝一夕就能够学会的。 <br> 　　“这么多模型，这么多贴图要怎么改？”又听见建模组同事在仰天长哮~~~公司早期有很多项目是使用一款叫virtools（我也有幸用过一段时间，oh no！跟unity真的不是一个等级的，最关键的是网上完全没有资料可寻，碰到一个问题，可以折腾你一个星期也束手无策~）的引擎来开发的，后来客户要求将一些virtools项目改成unity3D，而virtools引擎支持中文命名的模型及贴图，但是众所周知，unity对中文的支持不是很好，经常因为中文发生莫名的错误，或者乱码之类的问题，所以不得不将这些模型和贴图的名称全部改成英文的。“你们3DMAX有没有什么脚本之类的，可以使用脚本来批量改啊，一般软件都会自带脚本，以解决软件自身功能局限的问题。”我刚说完，就感受到了来自对面的‘杀气’，只见同事恶狠狠的盯着我。。。好吧！我错了，忘了同事压根没有写过代码，说了也是白说（我不是有意要打击你们的哟）。“好吧，我帮你看看3DMAX有没有脚本，研究一下要怎么写。”同事听罢，嘴角上扬。。。唉，这奸笑意味着我又要折腾一番了。于是，便开始了MAXScript编程之旅。</p> 
+<h3 id="批量修改模型名"><strong>批量修改模型名</strong></h3> 
+<p>　　没有任何MAXScript基础该怎么开始呢？总要先了解一下该脚本语言的语法规则和常用API吧，于是上网下载了本电子书《3ds MAXScript 脚本语言完全学习手册》（各位看官可自行搜索下载，很好找哦，一搜一大把）。（<strong>由于自己机子上没有装3DMAX，所以也不方便附上测试的截图，但是代码之前都是在同事机子上实验过的，成功帮助他们改了模型名以及贴图名，所以在特定条件下是没有问题的，关于这个“特定条件下”以及可能会出现的问题在后面也会提到。</strong>） <br> 　　<strong>步骤：</strong> <br> 　　<strong>1.</strong> 建立两个txt文件，一个是用于存放原模型名的列表，一个用于存放新模型名的列表（之所以分成两个txt文件，而不是一个txt文件存储两个列表， <br> 　　　是因为对maxscript比较陌生，使用两个列表省了解析字符串的麻烦）； <br> 　　<strong>2.</strong> 逐行读取两个txt文件的内容； <br> 　　<strong>3.</strong> 读取一行，就搜索场景中名称匹配的模型，然后替换成新名称。 <br> 　　<strong>具体实现：</strong> <br> 　　<strong>1.</strong> 只能手动解决，这个没有什么快捷方式。 <br> 　　<strong>2.</strong> 可以通过书中<strong>第三章3.2.19节的FileStream（文件数据流）</strong>的OpenFile方法对文本文件进行I/O操作。<strong>切记：</strong> maxscript的函数并不是以一对“()”括号来标识的，传参数的方法也不像其他常用语言那样在“()”里填入参数，而是在函数名后“ ”加“空格”然后在后面带上函数参数，如要读取D盘下的maxscript.txt文件内容，应如此写：</p> 
+<pre class="prettyprint"><code class=" hljs bash"><span class="hljs-built_in">source</span> = OpenFile <span class="hljs-string">"d:\maxscript.txt"</span>    --后面不带封号，不一样的注释符号<span class="hljs-string">"--"</span>;</code></pre> 
+<p>而不是：</p> 
+<pre class="prettyprint"><code class=" hljs bash"><span class="hljs-built_in">source</span> = OpenFile(<span class="hljs-string">"d:\maxscript.txt"</span>);</code></pre> 
+<p>　　<strong>3.</strong> 这个步骤主要是获取指定名称的对象，找了好久，终于找到一个“好东西”：<strong>$</strong>（好像是叫“选择符”），用处貌似还蛮大，但是我只会它的一种功能：搜索场景中指定名称的模型物体，并返回该物体对象，如：要搜索一个名称叫“box1”的物体，可以采用如下方式：</p> 
+<pre class="prettyprint"><code class=" hljs bash"><span class="hljs-variable">$box1</span></code></pre> 
+<p>　　各位注意看了，有没有发现非常坑爹的一点，就是 ‘$’这个选择符后的box1居然不用加双引号，也就是box1被直接识别成了字符串，那么问题来了：如果我要传一个<strong>字符串变量</strong>该怎么办？假如，我有一个<strong>变量str</strong>，并搜索str所代表的模型，如下：</p> 
+<pre class="prettyprint"><code class=" hljs rust"><span class="hljs-keyword">str</span> = <span class="hljs-string">"box1"</span>    --不需要申明变量类型，应该是自动识别的
+$<span class="hljs-keyword">str</span>           --如果是通过这样，那便会搜索名称为<span class="hljs-string">"str"</span>的模型，而不是搜索<span class="hljs-string">"box1"</span></code></pre> 
+<p>　　尝试很多方法也无法向 ‘$’传入变量，至此，也只能抛弃这个神奇的符号了（没有深入研究，不了解它的用法，各位如果知道怎么传入变量，还请留言告知，谢谢）。好吧，继续翻看一下学习手册吧，看看有没有其他的方法。就是你了：<strong>selection</strong>（当前选择对象集合），可参看手册<strong>“3.5.3 ObjectSet（对象集）”</strong>，几番测试，可以通过for循环遍历selection中所有的模型对象，但是此法效率过于低下，因为找一个物体就要遍历一遍selection，没找到更好的方法，将就用吧，下面附上源码：</p> 
+<pre class="prettyprint"><code class=" hljs applescript">source = OpenFile <span class="hljs-string">"C:\Users\Administrator\Desktop\批量改名\原名.txt"</span>   <span class="hljs-comment">--获取"原名.txt文件"的io流</span>
+des = OpenFile <span class="hljs-string">"C:\Users\Administrator\Desktop\批量改名\新名.txt"</span>    <span class="hljs-comment">--获取"新名.txt文件"的io流</span>
+
+<span class="hljs-keyword">for</span> j = <span class="hljs-number">1</span> <span class="hljs-keyword">to</span> <span class="hljs-number">3</span> do   <span class="hljs-comment">--列表几条记录就写几条，maxscript习惯从1开始计数</span>
+(
+    str = readLine source   <span class="hljs-comment">--逐行读取文本内容</span>
+    strD = readLine des
+
+    <span class="hljs-keyword">for</span> obj <span class="hljs-keyword">in</span> selection do    <span class="hljs-comment">--遍历场景中所有模型，注：selection需要选中场景中的模型哦</span>
+    (
+        <span class="hljs-keyword">if</span> obj.<span class="hljs-property">name</span>==str <span class="hljs-keyword">then</span>  <span class="hljs-comment">--判断模型名称是否与原名一致，如果一致，就替换成新名</span>
+        (
+            obj.<span class="hljs-property">name</span> = strD
+            <span class="hljs-keyword">exit</span>    <span class="hljs-comment">--退出循环</span>
+        )
+    )
+)</code></pre> 
+<p>　　代码是不是有点简单？千万千万不要说我絮絮叨叨的侃了一堆，只写出了这么几行代码，要知道，这几行代码可都是精华呀，好啦，下面才是重头戏。</p> 
+<h3 id="批量修改贴图名"><strong>批量修改贴图名</strong></h3> 
+<p>　　说起修改贴图名，真的不得不吐槽一下3DMAX以正常的方式修改贴图名的办法：先修改硬盘上该贴图的名字，然后再关联该贴图的路径，真真是个鸡肋，且不说几千张贴图了，就是几百张也要耗费诸多人力物力啊。3DMAX没办法像Unity3D一样，在Project视图下修改一个文件名，自动对硬盘上相同的文件进行修改，而不需要再次关联。所以，修改贴图名的小程序就在这样的背景下，应运而生了。（说的有点夸张了哈，好像顺应了历史的潮流，历史发展的必然趋势，哈哈） <br> 　　不废话，先从兜里掏出那万能的maxscript手册，直接翻开讲述贴图的那一章内容<strong>“11.3 TextureMap:Material（贴图）”</strong>，看看有没有什么惊喜。只看到了这个东西和修改贴图名有关：assignNewName &lt;TextureMap&gt;，描述说明：“修改指定纹理贴图的名称，以保持其名称的惟一性。修改后的名称格式为“Map #1”，其中数字表示该纹理贴图在场景中的创建序号。”想来这种方法也是不行的，即使修改了场景中的贴图名，也无法修改硬盘上的贴图名，最后被修改的贴图也只能是missing了。（这个方法我也没有试过，大家可以自行尝试。）接着往下找的时候，看到了这样几句示例代码：</p> 
+<pre class="prettyprint"><code class=" hljs avrasm">rm = renderMap $foo<span class="hljs-preprocessor">.Material</span><span class="hljs-preprocessor">.diffuseMap</span> size:[<span class="hljs-number">640</span>,<span class="hljs-number">480</span>] \
+<span class="hljs-label">fileName:</span> <span class="hljs-string">"foodif.bmp"</span>
+save rm
+close rm</code></pre> 
+<p>　　通过上述代码的启发，是不是可以通过 <strong>(模型对象).Material.diffuseMap.fileName = “贴图路径”</strong>，其实在3DMAX中，贴图名可看成是贴图在硬盘上的路径。测试一下，首先在场景中随便建个Box用于测试，先给其关联上一张贴图，然后再随便选择一个路径放一张其他的贴图，然后将其路径复制下来作为要修改的贴图名，然后打开maxscript侦听器，执行脚本，成功修改贴图名，并关联上硬盘的贴图文件。应该说，核心的问题已经解决了。写代码之前，照例整理一下思路，归纳一下<strong>步骤：</strong> <br> 　　<strong>1.</strong> 保留原贴图路径及位置，将硬盘上的原贴图复制到另一个文件夹下，并修改贴图名，作为新贴图； <br> 　　<strong>2.</strong> 将原贴图完整路径与新贴图完整路径分别写进两个txt列表中； <br> 　　<strong>3.</strong> 读取两个txt文件，通过遍历模型，找到材质，找到贴图，再将贴图与txt的原贴图进行匹配，匹配成功后，替换成新贴图。 <br> 　　<strong>具体实现：</strong> <br> 　　<strong>1.</strong> 如果对新贴图名的命名并没有什么要求，其实这一个步骤有一个快捷的方法，随便使用什么编程语言，写一个小程序，让程序帮你做复制贴图，并将贴图路径写入各自的txt文件中，几秒就可以搞定第一个步骤；如果对贴图名称有要求，那就比较麻烦了，要一个个改贴图名称，还要一一对应写入列表； <br> 　　<strong>2.</strong> 参见1； <br> 　　<strong>3.</strong> 使用openfile读取列表，selection遍历模型，并遍历每个模型的材质和贴图，然后替换贴图。这个我在测试场景中（就只有几个模型）是没有问题的，后来在一个几千个模型的场景中就报错了，主要如下几个错误：<strong>a.</strong>关于<strong>“Multi-Material”</strong>的错误，<strong>错误原因：</strong>场景中存在<strong>多维材质</strong>，至此，我也知道了程序的局限性，之前的程序没有考虑到材质的种类，实际上只对<strong>标准材质</strong>有效果，这里也解释了我<strong>上文中提到</strong>的，程序只在<strong>特定条件下</strong>没问题，主要是因为没办法考虑所有的材质种类。因为<strong>多维材质</strong>还比较常用，为了使程序局限性小一点，所以将<strong>多维材质</strong>添加进判断条件中，结果最最坑爹的事情你知道是什么吗？我判断了多维材质以后，将多维材质中的子材质按标准材质处理，结果又报错，原来多维材质中还有多维材质，结果在多维材质中又作了一次判断，所以看起来代码很长，复用性比较差，各位可以写一个方法封装，这里就不深究在maxscript中方法的定义了；<strong>b.</strong>关于<strong>diffuseMap “undefined”</strong>的错误，<strong>错误原因：</strong>有些模型无材质，所以出现材质上的贴图未定义的异常；<strong>c.</strong>关于<strong>filename “undefined”</strong>的错误，<strong>错误原因：</strong>有些材质无贴图，所以出现贴图名称未定义的异常。上代码：</p> 
+<h4 id="遍历模型法"><font size="3" color="ff7900"><strong>遍历模型法</strong></font></h4> 
+<pre class="prettyprint"><code class=" hljs applescript">source = OpenFile <span class="hljs-string">"F:\新名.txt"</span>
+des = OpenFile <span class="hljs-string">"F:\原名.txt"</span>
+
+<span class="hljs-keyword">for</span> j = <span class="hljs-number">1</span> <span class="hljs-keyword">to</span> <span class="hljs-number">39</span> do
+(
+    str = readLine source
+    strD = readLine des
+
+    print(str)
+    print(strD)
+    <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> selection do   <span class="hljs-comment">--遍历场景中所有选中的物体</span>
+    (
+        s = i.Material <span class="hljs-keyword">as</span> <span class="hljs-type">string</span>    <span class="hljs-comment">--将材质属性转成字符串格式</span>
+
+        <span class="hljs-keyword">if</span> s!=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>(   <span class="hljs-comment">--模型没有材质时，材质为  "undefined"    </span>
+            <span class="hljs-keyword">if</span> s.<span class="hljs-command">count</span>&gt;<span class="hljs-number">18</span> <span class="hljs-keyword">then</span>
+            (
+                ss = substring s  <span class="hljs-number">1</span> <span class="hljs-number">18</span>   <span class="hljs-comment">--获得材质属性子字符串，用于判断是否是“多维材质”</span>
+            )
+            <span class="hljs-comment">--多维材质</span>
+            <span class="hljs-keyword">if</span> ss == <span class="hljs-string">"#Multi/Sub-Object:"</span> <span class="hljs-keyword">then</span>  <span class="hljs-comment">--子字符串中若含有多维材质的信息，则为多维材质，按多维材质处理</span>
+            (
+                <span class="hljs-keyword">for</span> k=<span class="hljs-number">1</span> <span class="hljs-keyword">to</span>  i.Material.MaterialList.<span class="hljs-command">count</span> do    <span class="hljs-comment">--将多维材质中的子材质放入数组中，并遍历每个子材质中的贴图</span>
+                (
+                    multi = i.Material.MaterialList[k] <span class="hljs-keyword">as</span> <span class="hljs-type">string</span>   <span class="hljs-comment">--将多维材质中的子材质属性转成字符串格式</span>
+                    <span class="hljs-keyword">if</span> multi !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>      <span class="hljs-comment">--若多维材质无子材质，则为  "undefined"</span>
+                    (
+                        dif = i.Material.MaterialList[k].diffuseMap <span class="hljs-keyword">as</span> <span class="hljs-type">string</span>   <span class="hljs-comment">--将贴图属性转成字符串格式</span>
+                        <span class="hljs-keyword">if</span> dif !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>    <span class="hljs-comment">--若材质无贴图，则贴图为  "undefined"</span>
+                        (
+                            <span class="hljs-keyword">if</span> i.Material.MaterialList[k].diffuseMap.filename==str <span class="hljs-keyword">then</span> 
+                            (   i.Material.MaterialList[k].diffuseMap.filename = strD
+                                <span class="hljs-keyword">exit</span>    <span class="hljs-comment">--退出循环</span>
+                            )
+                        )
+                    )
+                )
+            )
+            <span class="hljs-keyword">else</span>   <span class="hljs-comment">--标准材质</span>
+            (
+
+                difS = i.material.diffuseMap <span class="hljs-keyword">as</span> <span class="hljs-type">string</span>    
+                <span class="hljs-keyword">if</span> difS !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>    
+
+                (
+                    <span class="hljs-keyword">if</span> i.material.diffuseMap.filename==str <span class="hljs-keyword">then</span> 
+                    (
+
+                        i.material.diffuseMap.filename = strD
+                        <span class="hljs-keyword">exit</span>
+                    )
+                )
+            )
+        )
+    )
+)</code></pre> 
+<p>　　和修改模型名一样的问题，此方法效率低下，耗时太长，当时一个场景5000多个模型，替换一张贴图要50s左右，因为替换一张贴图就要遍历5000多个模型，所以后来也一直在想有没有不通过遍历模型的方式。比如遍历材质，相对而言，材质要少得多，但是也是很久没有发现比较好的方式。那天下班回家又想起了这个问题，终于功夫不负有心人啊，无意中发现手册中<strong>3.5.13节</strong>一个叫MaterialLibrary（材质库）的类，类中有一个系统变量：<strong>SceneMaterials</strong>（场景里的材质的集合），于是又优化了一下程序，这次可快得多了，替换一张贴图只需要0.x秒，这么激动人心的时刻，快上代码：</p> 
+<h4 id="遍历材质法"><font size="3" color="ff7900"><strong>遍历材质法</strong></font></h4> 
+<pre class="prettyprint"><code class=" hljs livecodeserver">source = OpenFile <span class="hljs-string">"F:\贴图改名程序\原名.txt"</span>
+des = OpenFile <span class="hljs-string">"F:\贴图改名程序\新名.txt"</span>
+
+<span class="hljs-comment">--b = false</span>
+
+<span class="hljs-keyword">for</span> j = <span class="hljs-number">1</span> <span class="hljs-built_in">to</span> <span class="hljs-number">176</span> <span class="hljs-built_in">do</span>
+(
+    str = readLine source
+    strD = readLine des
+
+    print(str)
+    print(strD)
+
+    start =timeStamp()
+
+    <span class="hljs-keyword">for</span> i = <span class="hljs-number">0</span> <span class="hljs-built_in">to</span> SceneMaterials.count <span class="hljs-built_in">do</span>    <span class="hljs-comment">--SceneMaterials：为系统变量，是一个包含场景中的所有材质的数组。</span>
+    (
+        s = SceneMaterials[i] <span class="hljs-keyword">as</span> <span class="hljs-keyword">string</span>    <span class="hljs-comment">--将材质属性转成字符串格式</span>
+        <span class="hljs-keyword">if</span> s!=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>(      <span class="hljs-comment">--模型没有材质时，材质为  "undefined"（此判断在通过遍历模型中的材质时用到）  </span>
+            <span class="hljs-keyword">if</span> s.count&gt;<span class="hljs-number">18</span> <span class="hljs-keyword">then</span>
+            (
+                ss = substring s  <span class="hljs-number">1</span> <span class="hljs-number">18</span>    <span class="hljs-comment">--获得材质属性子字符串，用于判断是否是“多维材质”</span>
+            )
+
+            <span class="hljs-comment">--多维材质</span>
+            <span class="hljs-keyword">if</span> ss == <span class="hljs-string">"#Multi/Sub-Object:"</span> <span class="hljs-keyword">then</span>  <span class="hljs-comment">--子字符串中若含有多维材质的信息，则为多维材质，按多维材质处理</span>
+            (
+                <span class="hljs-keyword">for</span> k=<span class="hljs-number">1</span> <span class="hljs-built_in">to</span>  SceneMaterials[i].MaterialList.count <span class="hljs-built_in">do</span> <span class="hljs-comment">--将多维材质中的子材质放入数组中，并遍历每个子材质中的贴图</span>
+                (
+                    mat = SceneMaterials[i].MaterialList[k]     <span class="hljs-comment">--将材质赋值给  mat  变量。</span>
+
+                    multi = mat <span class="hljs-keyword">as</span> <span class="hljs-keyword">string</span>
+
+                    <span class="hljs-keyword">if</span> multi !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>
+                    (
+                        <span class="hljs-keyword">if</span> multi.count&gt;<span class="hljs-number">18</span> <span class="hljs-keyword">then</span>
+                        (
+                            sss = substring multi  <span class="hljs-number">1</span> <span class="hljs-number">18</span>
+                        )
+
+                        <span class="hljs-comment">--多维材质子材质为多维材质</span>
+                        <span class="hljs-keyword">if</span> sss == <span class="hljs-string">"#Multi/Sub-Object:"</span> <span class="hljs-keyword">then</span>
+                        (
+                            <span class="hljs-keyword">for</span> subk=<span class="hljs-number">1</span> <span class="hljs-built_in">to</span>  mat.MaterialList.count <span class="hljs-built_in">do</span>    <span class="hljs-comment">--将多维材质中的子材质放入数组中，并遍历每个子材质中的贴图</span>
+                            (
+                                subMat = mat.MaterialList[subk]     <span class="hljs-comment">--将材质赋值给  subMat  变量。</span>
+
+
+                                submulti = subMat <span class="hljs-keyword">as</span> <span class="hljs-keyword">string</span>
+
+                                <span class="hljs-keyword">if</span> submulti !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>
+                                (
+
+                                    <span class="hljs-keyword">if</span> submulti.count&gt;<span class="hljs-number">18</span> <span class="hljs-keyword">then</span>
+                                    (
+
+                                        ssss = substring submulti  <span class="hljs-number">1</span> <span class="hljs-number">18</span>
+
+                                    )
+
+                                    <span class="hljs-keyword">if</span> ssss == <span class="hljs-string">"#Multi/Sub-Object:"</span> <span class="hljs-keyword">then</span>
+                                    (
+
+                                    )
+                                    <span class="hljs-keyword">else</span>
+                                    (
+                                        subdif = subMat.diffuseMap <span class="hljs-keyword">as</span> <span class="hljs-keyword">string</span>
+
+                                        <span class="hljs-keyword">if</span> subdif !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>
+                                        (
+                                            <span class="hljs-keyword">if</span> subMat.diffuseMap.filename==str <span class="hljs-keyword">then</span> 
+                                            (
+                                                subMat.diffuseMap.filename = strD
+                                                <span class="hljs-comment">--exit</span>
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+
+                        <span class="hljs-comment">--多维材质子材质为标准材质</span>
+                        <span class="hljs-keyword">else</span>
+                        (
+
+                            dif = mat.diffuseMap <span class="hljs-keyword">as</span> <span class="hljs-keyword">string</span>    
+                            <span class="hljs-keyword">if</span> dif !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>   <span class="hljs-comment">--若材质无贴图，则贴图为  "undefined"</span>
+
+                            (
+                                <span class="hljs-keyword">if</span> mat.diffuseMap.filename==str <span class="hljs-keyword">then</span> 
+                                (
+
+                                    <span class="hljs-comment">--b = true</span>
+                                    mat.diffuseMap.filename = strD     
+                                    <span class="hljs-comment">--exit</span>
+                                )
+
+                            )
+
+                        )
+                    )
+
+                )
+
+
+            )
+
+            <span class="hljs-comment">--标准材质</span>
+            <span class="hljs-keyword">else</span>
+            (
+
+                difS = SceneMaterials[i].diffuseMap <span class="hljs-keyword">as</span> <span class="hljs-keyword">string</span>    
+                <span class="hljs-keyword">if</span> difS !=<span class="hljs-string">"undefined"</span> <span class="hljs-keyword">then</span>    
+
+                (
+                    <span class="hljs-keyword">if</span> SceneMaterials[i].diffuseMap.filename==str <span class="hljs-keyword">then</span> 
+                    (
+
+                        SceneMaterials[i].diffuseMap.filename = <span class="hljs-built_in">replace</span> SceneMaterials[i].diffuseMap.filename <span class="hljs-number">1</span> SceneMaterials[i].diffuseMap.filename.count strD
+                        <span class="hljs-comment">--exit</span>
+                    )
+                )
+            )
+        )
+
+    )
+    <span class="hljs-function"><span class="hljs-keyword">end</span> =<span class="hljs-title">timeStamp</span>()</span>
+
+    intervalTime = (<span class="hljs-function"><span class="hljs-keyword">end</span> - <span class="hljs-title">start</span>)/ <span class="hljs-title">1000</span>.<span class="hljs-title">0</span></span>
+    print(intervalTime)
+
+)</code></pre> 
+<p>　　好了，怕大家看不懂，多写了一些注释，大家应该已经懂了，希望这个小程序可以给大家省去很多麻烦，需要注意的是，大家应该看到了，程序中只对<strong>diffuseMap</strong>（即漫反射贴图）进行了处理，听同事说还有通道贴图，烘焙贴图等等，这个如有需要，大家略微修改程序即可。如若还有问题，可以在下面留言哦。 <br> 　 <br> 　　<strong>注：</strong><font color="red"><strong>如非特别说明，本博客的博文均为原创</strong></font>，如需转载请注明出处，本文链接：<u><a href="http://blog.csdn.net/yiyikela/article/details/45645253">http://blog.csdn.net/yiyikela/article/details/45645253</a></u>，尊重他人的劳动成果，谢谢！</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0066879fe32ba41b67738f6475ff48c0/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">SemEval2015语义评测任务总结</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1eb7032b2413924d3baf113402463ef1/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Log4j详细使用教程</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

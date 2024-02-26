@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Stm32 中RTC秒中断的使用方法及例子 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Stm32 中RTC秒中断的使用方法及例子" />
+<meta property="og:description" content="RTC（Real Time Clock）是实时时钟的意思，它其实和TIM有点类似，也是利用计数的原理，选择RTC时钟源，再进行分频，到达计数的目的。
+RTC的秒中断功能类似SysTick系统滴答的功能。RTC秒中断功能其实是每计数一次就中断一次。注意，秒中断并非一定是一秒的时间，它是由RTC时钟源和分频值决定的“秒”的时间，当然也是可以做到1秒钟中断一次。
+例：
+主函数间隔0.5秒LED变化一次；
+秒中断一次打印数据&#34;RTC Sec...&#34;；
+也就是LED变化一次，串口打印一次数据&#34;RTC Sec...&#34;
+扩展部分的功能RTC计数：可以实现RTC闹钟
+原理描述
+从框图中大概就可以看到该模块有些什么功能及其工作的原理。
+RTC框图：
+从上面系统框图来分析“RTC秒中断”的原理：
+1、RTC时钟源，总共有三类：可任意选择，并配置成任意秒数为周期
+RCC_RTCCLKSource_LSE
+RCC_RTCCLKSource_LSI
+RCC_RTCCLKSource_HSE_Div128
+本文实例代码是：RCC_RTCCLKConfig(RCC_RTCCLKSource_HSE_Div128);
+使用“RCC_RTCCLKSource_HSE_Div128”作为时钟源（高速时钟源），也就是外部高速时钟的128分频，也就是每秒8M/128(62500)个脉冲；
+当然，我们也可以选择另外两个时钟源，也就是使用低速时钟源，一般应用在RTC闹钟可RTC日历等都使用低速时钟源。
+2、RTC分频：
+本文实例代码是：RTC_SetPrescaler(62500);
+这个值是和上面对应的，因为我们这里是实现真正的1秒钟中断一次。
+3、RTC中断：
+RTC中断有三种：
+RTC_IT_SEC秒中断（一个周期中断一次，自己进行配置）
+RTC_IT_ALR闹钟中断
+RTC_IT_OW（计数）溢出中断
+本文实例是：RTC_ITConfig(RTC_IT_SEC, ENABLE);
+使能RTC_IT_SEC秒中断。
+再次强调：
+这里的“秒中断”是概念上的秒中断，它的中断间隔时间是根据你选择的时钟源和分频值决定的，并非真正的1秒钟中断一次。
+我们可以试着将源代码中的分频值该62500的一半31250，可以看得出来，秒中断的间隔时间为0.5秒（请自行修改实验测试）。
+下面将讲述关于“RTC秒中断”重要的、容易弄错的几点：
+1.RCC时钟源
+该函数位于bsp.c文件下面；
+RCC是很多初学者，甚至已经工作的朋友容易遗漏的地方，有很多朋友觉得它使用的外设不正常，很大部分是没有配置RCC导致的。
+重点注意：
+A.外设RCC时钟的配置要在其外设初始化的前面；
+B.匹配对应时钟。
+比如：RCC_APB2外设不要配置在RCC_APB1时钟里面
+2. RTC秒中断配置
+该函数位于rtc.c文件下面；
+该函数请结合参考手册（框图和寄存器）理解。
+注意4点：
+A.使能后备区域：PWR_BackupAccessCmd(ENABLE);
+从系统框图可以看见RTC有阴影部分，其实这部分就是后备区域。因此，需要使能，这也是为什么上面需要配置RCC时钟的原因。
+B.选择RTC时钟源：RCC_RTCCLKConfig(RCC_RTCCLKSource_HSE_Div128);
+在原理描述中说了，RTC时钟源有三种：任意选择
+RCC_RTCCLKSource_LSE
+RCC_RTCCLKSource_LSI
+RCC_RTCCLKSource_HSE_Div128
+C.使能RTC秒中断：RTC_ITConfig(RTC_IT_SEC,ENABLE);
+RTC有三类中断：
+RTC_IT_SEC秒中断
+RTC_IT_ALR闹钟中断
+RTC_IT_OW（计数）溢出中断
+D.RTC分频：RTC_SetPrescaler(62500);
+我们是为了得到真正的1秒钟中断一次，所以这里的值是62500 = 8M/128，这样才能刚好1秒中断一次。
+3. NVIC配置
+该函数位于bsp.c文件下面；
+我们要中断，就需要配置NVIC（中断控制器），为其分配优先级。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/1779a278228c33d8909460fe7b74c235/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-04-08T13:10:34+08:00" />
+<meta property="article:modified_time" content="2020-04-08T13:10:34+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Stm32 中RTC秒中断的使用方法及例子</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>RTC（Real Time Clock）是实时时钟的意思，它其实和TIM有点类似，也是利用计数的原理，选择RTC时钟源，再进行分频，到达计数的目的。</p> 
+<p>RTC的秒中断功能类似SysTick系统滴答的功能。RTC秒中断功能其实是每计数一次就中断一次。注意，秒中断并非一定是一秒的时间，它是由RTC时钟源和分频值决定的“秒”的时间，当然也是可以做到1秒钟中断一次。</p> 
+<p>例：</p> 
+<p>主函数间隔0.5秒LED变化一次；</p> 
+<p>秒中断一次打印数据"RTC Sec..."；</p> 
+<p>也就是LED变化一次，串口打印一次数据"RTC Sec..."</p> 
+<p>扩展部分的功能RTC计数：可以实现RTC闹钟</p> 
+<p><span style="color:#f33b45;"><strong>原理描述</strong></span></p> 
+<p>    从框图中大概就可以看到该模块有些什么功能及其工作的原理。</p> 
+<p> </p> 
+<p>RTC框图：</p> 
+<p><img alt="" class="has" src="https://images2.imgbox.com/f7/72/B1TRGwau_o.png"></p> 
+<p>从上面系统框图来分析“RTC秒中断”的原理：</p> 
+<p>1、RTC时钟源，总共有三类：可任意选择，并配置成任意秒数为周期</p> 
+<p>RCC_RTCCLKSource_LSE</p> 
+<p>RCC_RTCCLKSource_LSI</p> 
+<p>RCC_RTCCLKSource_HSE_Div128</p> 
+<p>本文实例代码是：RCC_RTCCLKConfig(RCC_RTCCLKSource_HSE_Div128);</p> 
+<p>使用“RCC_RTCCLKSource_HSE_Div128”作为时钟源（高速时钟源），也就是外部高速时钟的128分频，也就是每秒8M/128(62500)个脉冲；</p> 
+<p>当然，我们也可以选择另外两个时钟源，也就是使用低速时钟源，一般应用在RTC闹钟可RTC日历等都使用低速时钟源。</p> 
+<p>2、RTC分频：</p> 
+<p>本文实例代码是：RTC_SetPrescaler(62500);</p> 
+<p>这个值是和上面对应的，因为我们这里是实现真正的1秒钟中断一次。</p> 
+<p>3、RTC中断：</p> 
+<p>RTC中断有三种：</p> 
+<p>RTC_IT_SEC秒中断（一个周期中断一次，自己进行配置）</p> 
+<p>RTC_IT_ALR闹钟中断</p> 
+<p>RTC_IT_OW（计数）溢出中断</p> 
+<p> </p> 
+<p>本文实例是：RTC_ITConfig(RTC_IT_SEC, ENABLE);</p> 
+<p>使能RTC_IT_SEC秒中断。</p> 
+<p> </p> 
+<p>再次强调：</p> 
+<p>这里的“秒中断”是概念上的秒中断，它的中断间隔时间是根据你选择的时钟源和分频值决定的，并非真正的1秒钟中断一次。</p> 
+<p>我们可以试着将源代码中的分频值该62500的一半31250，可以看得出来，秒中断的间隔时间为0.5秒（请自行修改实验测试）。</p> 
+<p>下面将讲述关于“RTC秒中断”重要的、容易弄错的几点：</p> 
+<p><span style="color:#f33b45;">1.RCC时钟源</span></p> 
+<p><img alt="" class="has" src="https://images2.imgbox.com/9b/3b/5FkALvq1_o.png"></p> 
+<p>该函数位于bsp.c文件下面；</p> 
+<p>RCC是很多初学者，甚至已经工作的朋友容易遗漏的地方，有很多朋友觉得它使用的外设不正常，很大部分是没有配置RCC导致的。</p> 
+<p>重点注意：</p> 
+<p>A.外设RCC时钟的配置要在其外设初始化的前面；</p> 
+<p>B.匹配对应时钟。</p> 
+<p>比如：RCC_APB2外设不要配置在RCC_APB1时钟里面</p> 
+<p><span style="color:#f33b45;">2. RTC秒中断配置</span></p> 
+<p><img alt="" class="has" src="https://images2.imgbox.com/33/a8/6q4wMIp8_o.png"></p> 
+<p>该函数位于rtc.c文件下面；</p> 
+<p>该函数请结合参考手册（框图和寄存器）理解。</p> 
+<p>注意4点：</p> 
+<p><span style="color:#f33b45;">A.使能后备区域</span>：PWR_BackupAccessCmd(ENABLE);</p> 
+<p>从系统框图可以看见RTC有阴影部分，其实这部分就是后备区域。因此，需要使能，这也是为什么上面需要配置RCC时钟的原因。</p> 
+<p><span style="color:#f33b45;">B.选择RTC时钟源：</span>RCC_RTCCLKConfig(RCC_RTCCLKSource_HSE_Div128);</p> 
+<p>在原理描述中说了，RTC时钟源有三种：任意选择</p> 
+<p>RCC_RTCCLKSource_LSE</p> 
+<p>RCC_RTCCLKSource_LSI</p> 
+<p>RCC_RTCCLKSource_HSE_Div128</p> 
+<p><span style="color:#f33b45;">C.使能RTC秒中断</span>：RTC_ITConfig(RTC_IT_SEC,ENABLE);</p> 
+<p>RTC有三类中断：</p> 
+<p>RTC_IT_SEC秒中断</p> 
+<p>RTC_IT_ALR闹钟中断</p> 
+<p>RTC_IT_OW（计数）溢出中断</p> 
+<p><span style="color:#f33b45;">D.RTC分频</span>：RTC_SetPrescaler(62500);</p> 
+<p>我们是为了得到真正的1秒钟中断一次，所以这里的值是62500 = 8M/128，这样才能刚好1秒中断一次。</p> 
+<p><span style="color:#f33b45;">3. NVIC配置</span></p> 
+<p><img alt="" class="has" src="https://images2.imgbox.com/fb/ce/ccKcSchs_o.png"></p> 
+<p>该函数位于bsp.c文件下面；</p> 
+<p>我们要中断，就需要配置NVIC（中断控制器），为其分配优先级。</p> 
+<p>很多人觉得自己的配置没问题，但程序就是不进入中断，原因可能就在这里。因此，NVIC这里也是容易忽略的地方。</p> 
+<p><span style="color:#f33b45;">4. RTC中断</span></p> 
+<p><img alt="" class="has" src="https://images2.imgbox.com/b2/7b/guNIuRME_o.png"></p> 
+<p>该函数位于stm32f10x_it.c文件下面；</p> 
+<p>这里需要注意，RTC有三类中断，但入口都是这个函数，因此，需要在函数体里面分辨是哪一个中断进入了该函数。</p> 
+<p>注意1点：</p> 
+<p>清除中断标志位：RTC_ClearITPendingBit(RTC_IT_SEC);</p> 
+<p>这是通过RTC_GetCounter();函数获取计数值，然后把这个计数值分别用小时、分钟、秒来表示的过程。代码如下</p> 
+<p>RTCCount=RTC_GetCounter();//获得计数值并计算当前时钟</p> 
+<p>THH=RTCCount/3600;//小时</p> 
+<p>TMM=(RTCCount%3600)/60;//分钟</p> 
+<p>TSS=(RTCCount%3600)%60;//秒</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/3791eaec98c0a95a2ceb95cf0f53d18d/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【牛客网】字符串计数</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/90938dd225aeba2531e18bd68bdb1645/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">什么是列存储？一文秒懂</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

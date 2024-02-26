@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>yolov1详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="yolov1详解" />
+<meta property="og:description" content="YOLOv1 YOLOv1是单阶段目标检测方法，不需要像Faster RCNN这种两阶段目标检测方法一样，需要生成先验框。Yolo算法采用一个单独的CNN模型实现end-to-end的目标检测。
+整个YOLO目标检测pipeline如上图所示：首先将输入图片resize到448x448，然后送入CNN网络，最后处理网络预测结果得到检测的目标。相比R-CNN系列算法，其是一个统一的框架，其速度更快，而且Yolo的训练过程也是end-to-end的。
+具体来说，YOLO将全图划分为 S × S S×S S×S的格子， 每个格子负责对落入其中的目标进行检测，一次性预测所有格子所含目标的边界框、置信度、以及所有类别概率向量。
+论文思想
+将一幅图像分成SxS个网格，如果某个object的中心落在这个网格中，则这个网络就负责预测这个object每个网格要预测B个bounding box，每个bounding box，除了要预测位置之外，还要附带预测一个confidence值。每个网格还要预测c个类别的分数 网格单元（Grid Cell）
+YOLO将目标检测问题作为回归问题。会将输入图像分成 S × S S \times S S×S的网格（cell），如果一个物体的中心点落入到一个cell中，那么该cell就要负责预测该物体，一个格子只能预测一个物体，会生成两个预测框。
+对于每个网格单元cell：
+YOLOv1会预测两个边界框每个边界框包含5个元素： ( x , y , w , h ) (x,y,w,h) (x,y,w,h) 和 边界框的置信度得分(box confidence score)只负责预测一个目标预测 C C C 个条件概率类别（conditional class probabilities） 为了评估PASCAL VOC，YOLO V1使用 7×7 的网格（S×S），每个单元格回归2个边界框 和 20个条件类别概率。条件类别概率 (conditional class probability) 是检测到的目标属于特定类别的概率（每个单元对每个类别有一个概率）。
+最终的预测特征由边框的位置、边框的置信度得分以及类别概率组成，这三者的含义如下：
+边框位置：对每一个边框需要预测其中心坐标及宽、高这4个量， 两个边框共计8个预测值 边界框宽度w和高度h用图像宽度和高度归一化。因此 x , y , w , h x, y, w, h x,y,w,h 都在0和1之间。 x x x 和 y y y 是相应单元格的偏移量。 置信度得分(box confidence score) c ：框包含一个目标的可能性(objectness)以及边界框的准确程度。类似于Faster RCNN 中是前景还是背景。由于有两个边框，因此会存在两个置信度预测值。类别概率：由于PASCAL VOC数据集一共有20个物体类别，因此这里预测的是边框属于哪一个类别。 一个cell预测的两个边界框共用一个类别预测， 在训练时会选取与标签IoU更大的一个边框负责回归该真实物体框，在测试时会选取置信度更高的一个边框，另一个会被舍弃，因此整张图最多检测出49个物体。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/7b763b343e848c5a2715e9fa416b3b45/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-03-15T11:37:51+08:00" />
+<meta property="article:modified_time" content="2022-03-15T11:37:51+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">yolov1详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-github-gist">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="YOLOv1_0"></a>YOLOv1</h3> 
+<p>YOLOv1是单阶段目标检测方法，不需要像Faster RCNN这种两阶段目标检测方法一样，需要生成先验框。Yolo算法采用一个单独的CNN模型实现end-to-end的目标检测。</p> 
+<p><img src="https://images2.imgbox.com/4f/0e/AIpVBHJp_o.png" alt=""></p> 
+<p>整个YOLO目标检测pipeline如上图所示：首先将输入图片resize到448x448，然后送入CNN网络，最后处理网络预测结果得到检测的目标。相比R-CNN系列算法，其是一个统一的框架，其速度更快，而且Yolo的训练过程也是end-to-end的。</p> 
+<p>具体来说，YOLO将全图划分为<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         S 
+        
+       
+         × 
+        
+       
+         S 
+        
+       
+      
+        S×S 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.05764em;">S</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathdefault" style="margin-right: 0.05764em;">S</span></span></span></span></span>的格子， 每个格子负责对落入其中的目标进行检测，一次性预测所有格子所含目标的边界框、置信度、以及所有类别概率向量。</p> 
+<p>论文思想</p> 
+<ol><li>将一幅图像分成SxS个网格，如果某个object的中心落在这个网格中，则这个网络就负责预测这个object</li><li>每个网格要预测B个bounding box，每个bounding box，除了要预测位置之外，还要附带预测一个confidence值。每个网格还要预测c个类别的分数</li></ol> 
+<p><strong>网格单元（Grid Cell）</strong></p> 
+<p>YOLO将目标检测问题作为回归问题。会将输入图像分成<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         S 
+        
+       
+         × 
+        
+       
+         S 
+        
+       
+      
+        S \times S 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.05764em;">S</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathdefault" style="margin-right: 0.05764em;">S</span></span></span></span></span>的网格（cell），如果一个物体的中心点落入到一个cell中，那么该cell就要负责预测该物体，一个格子只能预测一个物体，会生成两个预测框。</p> 
+<p>对于每个网格单元cell：</p> 
+<ul><li>YOLOv1会预测两个边界框</li><li>每个边界框包含5个元素：<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          ( 
+         
+        
+          x 
+         
+        
+          , 
+         
+        
+          y 
+         
+        
+          , 
+         
+        
+          w 
+         
+        
+          , 
+         
+        
+          h 
+         
+        
+          ) 
+         
+        
+       
+         (x,y,w,h) 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathdefault">x</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault" style="margin-right: 0.03588em;">y</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault" style="margin-right: 0.02691em;">w</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault">h</span><span class="mclose">)</span></span></span></span></span> 和 边界框的置信度得分(box confidence score)</li><li>只负责预测一个目标</li><li>预测 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          C 
+         
+        
+       
+         C 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span></span></span></span></span> 个条件概率类别（conditional class probabilities）</li></ul> 
+<p><img src="https://images2.imgbox.com/9c/9a/smoTd8AF_o.png" alt=""></p> 
+<p>为了评估PASCAL VOC，YOLO V1使用 7×7 的网格（S×S），每个单元格回归2个边界框 和 20个条件类别概率。条件类别概率 (conditional class probability) 是检测到的目标属于特定类别的概率（每个单元对每个类别有一个概率）。</p> 
+<p>最终的预测特征由边框的位置、边框的置信度得分以及类别概率组成，这三者的含义如下：</p> 
+<ul><li>边框位置：对每一个边框需要预测其中心坐标及宽、高这4个量， 两个边框共计8个预测值 
+  <ul><li>边界框宽度w和高度h用图像宽度和高度归一化。因此 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+        
+         
+          
+          
+            x 
+           
+          
+            , 
+           
+          
+            y 
+           
+          
+            , 
+           
+          
+            w 
+           
+          
+            , 
+           
+          
+            h 
+           
+          
+         
+           x, y, w, h 
+          
+         
+       </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.88888em; vertical-align: -0.19444em;"></span><span class="mord mathdefault">x</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault" style="margin-right: 0.03588em;">y</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault" style="margin-right: 0.02691em;">w</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault">h</span></span></span></span></span> 都在0和1之间。 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+        
+         
+          
+          
+            x 
+           
+          
+         
+           x 
+          
+         
+       </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">x</span></span></span></span></span> 和 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+        
+         
+          
+          
+            y 
+           
+          
+         
+           y 
+          
+         
+       </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.625em; vertical-align: -0.19444em;"></span><span class="mord mathdefault" style="margin-right: 0.03588em;">y</span></span></span></span></span> 是相应单元格的偏移量。</li></ul> </li><li>置信度得分(box confidence score) c ：框包含一个目标的可能性(objectness)以及边界框的准确程度。类似于Faster RCNN 中是前景还是背景。由于有两个边框，因此会存在两个置信度预测值。</li><li>类别概率：由于PASCAL VOC数据集一共有20个物体类别，因此这里预测的是边框属于哪一个类别。</li></ul> 
+<p>一个cell预测的两个边界框共用一个类别预测， 在训练时会选取与标签IoU更大的一个边框负责回归该真实物体框，在测试时会选取置信度更高的一个边框，另一个会被舍弃，因此整张图最多检测出49个物体。</p> 
+<p><strong>网络结构</strong></p> 
+<p><img src="https://images2.imgbox.com/0c/06/kWxfM3fu_o.png" alt=""></p> 
+<p>YOLO输入图像的尺寸为<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         448 
+        
+       
+         × 
+        
+       
+         448 
+        
+       
+      
+        448 \times 448 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">4</span><span class="mord">4</span><span class="mord">8</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">4</span><span class="mord">4</span><span class="mord">8</span></span></span></span></span>，经过24个卷积层，2个全连接的层（FC），最后在reshape操作，输出的特征图大小为<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         7 
+        
+       
+         × 
+        
+       
+         7 
+        
+       
+         × 
+        
+       
+         30 
+        
+       
+      
+        7 \times 7 \times 30 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">3</span><span class="mord">0</span></span></span></span></span>。</p> 
+<ul><li>YOLO主要是建立一个CNN网络生成预测 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          7 
+         
+        
+          × 
+         
+        
+          7 
+         
+        
+          × 
+         
+        
+          1024 
+         
+        
+       
+         7 \times 7 \times 1024 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span><span class="mord">0</span><span class="mord">2</span><span class="mord">4</span></span></span></span></span> 的张量，</li><li>然后使用两个全连接层执行线性回归，以进行<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          7 
+         
+        
+          × 
+         
+        
+          7 
+         
+        
+          × 
+         
+        
+          2 
+         
+        
+       
+         7 \times 7 \times 2 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">2</span></span></span></span></span> 边界框预测。将具有高置信度得分（大于0.25）的结果作为最终预测。</li><li>在<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          3 
+         
+        
+          × 
+         
+        
+          3 
+         
+        
+       
+         3 \times 3 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">3</span></span></span></span></span>的卷积后通常会接一个通道数更低<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          1 
+         
+        
+          × 
+         
+        
+          1 
+         
+        
+       
+         1 \times 1 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">1</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span></span></span></span></span>的卷积，这种方式既降低了计算量，同时也提升了模型的非线性能力。</li><li>除了最后一层使用了线性激活函数外，其余层的激活函数为 Leaky ReLU ;</li><li>在训练中使用了 Dropout 与数据增强的方法来防止过拟合。</li><li>对于最后一个卷积层，它输出一个形状为 (7, 7, 1024) 的张量。 然后张量展开。使用2个全连接的层作为一种线性回归的形式，它输出 个参数，然后重新塑形为 (7, 7, 30) 。</li></ul> 
+<p><img src="https://images2.imgbox.com/ad/f5/CLpR8may_o.png" alt=""></p> 
+<p><strong>损失函数</strong></p> 
+<p>YOLO V1每个网格单元能够预测多个边界框。为了计算true positive的损失，只希望其中一个框负责该目标，为此选择与GT具有最高IOU的那个框</p> 
+<ul><li>YOLO正样本选择 
+  <ul><li>当一个真实物体的中心点落在了某个cell内时，该cell就负责检测该物体。</li><li>具体做法是将与该真实物体有最大IoU的边框设为正样本， 这个区域的类别真值为该真实物体的类别，该边框的置信度真值为1。</li></ul> </li><li>YOLO负样本选择 
+  <ul><li>除了上述被赋予正样本的边框，其余边框都为负样本。负样本没有类别损失与边框位置损失，只有置信度损失，其真值为0。</li></ul> </li></ul> 
+<p>YOLO使用预测值和GT之间的误差平方的求和（MSE）来计算损失。 损失函数包括</p> 
+<ul><li>localization loss -&gt; 坐标损失（预测边界框与GT之间的误差）</li><li>classification loss -&gt; 分类损失</li><li>confidence loss -&gt; 置信度损失（框里有无目标, objectness of the box)</li></ul> 
+<p><img src="https://images2.imgbox.com/e8/01/as3JvsV0_o.png" alt=""></p> 
+<p><em><strong>坐标损失</strong></em></p> 
+<p>坐标损失也分为两部分，坐标中心误差和位置宽高的误差，其中 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          1 
+         
+         
+         
+           i 
+          
+         
+           j 
+          
+         
+         
+         
+           o 
+          
+         
+           b 
+          
+         
+           j 
+          
+         
+        
+       
+      
+        \mathbb{1}^{obj}_{ij} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1.37999em; vertical-align: -0.412972em;"></span><span class="mord"><span class="mord"><span class="mord">1</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.967016em;"><span class="" style="top: -2.42314em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">i</span><span class="mord mathdefault mtight" style="margin-right: 0.05724em;">j</span></span></span></span><span class="" style="top: -3.18091em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">o</span><span class="mord mathdefault mtight">b</span><span class="mord mathdefault mtight" style="margin-right: 0.05724em;">j</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.412972em;"><span class=""></span></span></span></span></span></span></span></span></span></span> 表示第i个网格中的第j个预测框是否负责obj这个物体的预测，只有当某个预测框对某个物体负责的时候，才会对box的coordinate error进行惩罚，而对哪个物体负责就看其预测值和GT box的IoU是不是在那个网格的所有box中最大。</p> 
+<p>我们可以看到，对于中心点的损失直接用了均方误差，但是对于宽高为什么用了平方根呢？这里是这样的，我们先来看下图：<br> <img src="https://images2.imgbox.com/2a/ed/m5eunQcz_o.png" alt=""><br> 上图中，蓝色为bounding box，红色框为真实标注，如果W和h没有平方根的话，那么bounding box跟两个真实标注的位置loss是相同的。但是从面积看来B框是A框的25倍，C框是B框的81/25倍。B框跟A框的大小偏差更大，所以不应该有相同的loss。</p> 
+<p>如果W和h加上平方根，那么B对A的位置loss约为3.06，B对C的位置loss约为1.17，B对A的位置loss的值更大，这更加符合我们的实际判断。所以，算法对位置损失中的宽高损失加上了平方根。<br> 而公式中的 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          λ 
+         
+         
+         
+           c 
+          
+         
+           o 
+          
+         
+           o 
+          
+         
+           r 
+          
+         
+           d 
+          
+         
+        
+       
+      
+        \lambda_{coord} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.84444em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathdefault">λ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.336108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">c</span><span class="mord mathdefault mtight">o</span><span class="mord mathdefault mtight">o</span><span class="mord mathdefault mtight" style="margin-right: 0.02778em;">r</span><span class="mord mathdefault mtight">d</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span></span></span></span></span> 为位置损失的权重系数，在pascal VOC训练中取5。</p> 
+<p><em><strong>置信度损失</strong></em></p> 
+<p>置信度也分成了两部分，一部分是包含物体时置信度的损失，一个是不包含物体时置信度的值。</p> 
+<p>其中前一项表示有无人工标记的物体落入网格内，如果有，则为1，否则为0.第二项代表预测框bounding box和真实标记的box之间的IoU。值越大则box越接近真实位置。</p> 
+<p>confidence是针对预测框bounding box的，由于每个网格有两个bounding box，所以每个网格会有两个confidence与之相对应。</p> 
+<p>从损失函数上看，当网格i中的第j个预测框包含物体的时候，用上面的置信度损失，而不包含物体的时候，用下面的损失函数。对没有物体的预测框的置信度损失，赋予小的loss weight， 记为在pascal VOC训练中<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          λ 
+         
+         
+         
+           n 
+          
+         
+           o 
+          
+         
+           o 
+          
+         
+           b 
+          
+         
+           j 
+          
+         
+        
+       
+      
+        \lambda_{noobj} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.980548em; vertical-align: -0.286108em;"></span><span class="mord"><span class="mord mathdefault">λ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.336108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">n</span><span class="mord mathdefault mtight">o</span><span class="mord mathdefault mtight">o</span><span class="mord mathdefault mtight">b</span><span class="mord mathdefault mtight" style="margin-right: 0.05724em;">j</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.286108em;"><span class=""></span></span></span></span></span></span></span></span></span></span>取0.5。有有物体的预测框的置信度损失和类别的loss的loss weight正常取1。</p> 
+<p><em><strong>类别损失</strong></em></p> 
+<p>类别损失这里也用了均方误差。其中 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          1 
+         
+        
+          i 
+         
+         
+         
+           o 
+          
+         
+           b 
+          
+         
+           j 
+          
+         
+        
+       
+      
+        \mathbb{1}^{obj}_{i} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1.24388em; vertical-align: -0.276864em;"></span><span class="mord"><span class="mord"><span class="mord">1</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.967016em;"><span class="" style="top: -2.42314em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">i</span></span></span></span><span class="" style="top: -3.18091em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">o</span><span class="mord mathdefault mtight">b</span><span class="mord mathdefault mtight" style="margin-right: 0.05724em;">j</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.276864em;"><span class=""></span></span></span></span></span></span></span></span></span></span> 表示有无物体的中心点落到网格i中，如果网格中包含有物体object的中心的话，那么就负责预测该object的概率。</p> 
+<p><strong>YOLOv1的缺点</strong><br> 由于YOLOV1的框架设计，该网络存在以下缺点：</p> 
+<ul><li>每个网格只对应两个bounding box，当物体的长宽比不常见(也就是训练数据集覆盖不到时)，效果较差。</li><li>原始图片只划分为7x7的网格，当两个物体靠的很近时，效果比较差。</li><li>最终每个网格只对应一个类别，容易出现漏检(物体没有被识别到)。</li><li>对于图片中比较小的物体，效果比较差。这其实是所有目标检测算法的通病。</li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/cc6b03ed021a4f4c566fb21534eb5fd7/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">珍藏已久的三款国产优质软件，让你的电脑好用数倍不止</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f980e68b90ebd708cf011e0f2699ea4f/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">IDEA关闭git提交代码时的代码检测</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

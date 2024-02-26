@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>redis之分布式锁(四) - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="redis之分布式锁(四)" />
+<meta property="og:description" content="分布式锁 一.为什么需要分布式锁二.分布式锁的基本原理三.分布式锁的实现形式1.使用 redis的set命令 四.使用Redisson1.添加pom文件2.配置redisson 五.Redisson-lock（重入锁）1.lock的两大特点2.看门狗的原理 六.Redisson-lock（读写锁）七.闭锁八.redisson信号量九.保证数据一致性 一.为什么需要分布式锁 在分布式的情况下，比如：会员服务，可能会有多个，然而单个服务的加锁行为，只能锁住一个服务，这样就会出现问题。
+二.分布式锁的基本原理 三.分布式锁的实现形式 分布式锁重点：保证 加锁 和 解锁 的原子性。
+1.使用 redis的set命令 set key value [EX seconds][PX milliseconds][NX|XX] // EX：过期时间单位是秒。 // PX：过期时间单位是毫秒。 // NX：key不存在，才会放。 // XX：key存在，才会放。 实现逻辑1 使用 1）.获取锁（set lock ikun nx） 2）.设置过期时间（Expire lock 60） 3）.处理业务 4）.释放锁 问题：如果在获取锁之后，如果断网了，那么就不会设置过期时间，就会造成死锁。 实现逻辑2 解决实现逻辑1的问题 1）.获取锁和设置过期时间同时（原子性）set lock ikun ex 20 nx 2）.处理业务 3）.释放锁 问题：如果业务执行的时间大于设置的过期时间，然后锁已经释放，可能被别的线程获取到了，然后咱们再去执行删锁的时候，就会删除别人的锁。 实现逻辑3 解决实现逻辑2的问题 1）.获取锁和设置过期时间同时（原子性）set lock uuid ex 20 nx 2）.处理业务 3）.判断是否是自己的锁（使用UUID） 4）.释放锁 缺点：判断是自己的锁，然后准备去释放锁，然后锁过期自动释放，在3）完成，4）还没执行的时候，有线程又重新设置值，然后我们再去删锁，那我们就删了别人的锁。 实现逻辑4（使用redis和Lua脚本实现） 解决实现逻辑3的问题 1）.获取锁和设置过期时间同时（原子性）set lock uuid ex 20 nx 2）." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/49010e64e6f190627307f3dc99ca72cf/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-02T21:15:00+08:00" />
+<meta property="article:modified_time" content="2024-01-02T21:15:00+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">redis之分布式锁(四)</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-tomorrow-night">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>分布式锁</h4> 
+ <ul><li><ul><li><a href="#_1" rel="nofollow">一.为什么需要分布式锁</a></li><li><a href="#_4" rel="nofollow">二.分布式锁的基本原理</a></li><li><a href="#_7" rel="nofollow">三.分布式锁的实现形式</a></li><li><ul><li><a href="#1_redisset_10" rel="nofollow">1.使用 redis的set命令</a></li></ul> 
+   </li><li><a href="#Redisson_60" rel="nofollow">四.使用Redisson</a></li><li><ul><li><a href="#1pom_61" rel="nofollow">1.添加pom文件</a></li><li><a href="#2redisson_70" rel="nofollow">2.配置redisson</a></li></ul> 
+   </li><li><a href="#Redissonlock_90" rel="nofollow">五.Redisson-lock（重入锁）</a></li><li><ul><li><a href="#1lock_91" rel="nofollow">1.lock的两大特点</a></li><li><a href="#2_109" rel="nofollow">2.看门狗的原理</a></li></ul> 
+   </li><li><a href="#Redissonlock_112" rel="nofollow">六.Redisson-lock（读写锁）</a></li><li><a href="#_129" rel="nofollow">七.闭锁</a></li><li><a href="#redisson_151" rel="nofollow">八.redisson信号量</a></li><li><a href="#_174" rel="nofollow">九.保证数据一致性</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h3><a id="_1"></a>一.为什么需要分布式锁</h3> 
+<p>在分布式的情况下，比如：会员服务，可能会有多个，然而单个服务的加锁行为，只能锁住一个服务，这样就会出现问题。<br> <img src="https://images2.imgbox.com/b0/78/HbjlxsNJ_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="_4"></a>二.分布式锁的基本原理</h3> 
+<p><img src="https://images2.imgbox.com/5a/a8/1w8cn69v_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="_7"></a>三.分布式锁的实现形式</h3> 
+<p><font color="red" size="3"><strong>分布式锁重点：</strong></font>保证 <strong>加锁</strong> 和 <strong>解锁</strong> 的原子性。</p> 
+<h4><a id="1_redisset_10"></a>1.使用 redis的set命令</h4> 
+<pre><code class="prism language-xml">set key value [EX seconds][PX milliseconds][NX|XX]
+// EX：过期时间单位是秒。
+// PX：过期时间单位是毫秒。
+// NX：key不存在，才会放。
+// XX：key存在，才会放。
+</code></pre> 
+<pre><code class="prism language-java">实现逻辑<span class="token number">1</span>
+使用 
+<span class="token number">1</span>）<span class="token punctuation">.</span>获取锁（set lock ikun nx）
+<span class="token number">2</span>）<span class="token punctuation">.</span>设置过期时间（<span class="token class-name">Expire</span> lock <span class="token number">60</span>）
+<span class="token number">3</span>）<span class="token punctuation">.</span>处理业务
+<span class="token number">4</span>）<span class="token punctuation">.</span>释放锁
+问题：如果在获取锁之后，如果断网了，那么就不会设置过期时间，就会造成死锁。
+</code></pre> 
+<pre><code class="prism language-java">实现逻辑<span class="token number">2</span>
+解决实现逻辑<span class="token number">1</span>的问题
+<span class="token number">1</span>）<span class="token punctuation">.</span>获取锁和设置过期时间同时（原子性）set lock ikun ex <span class="token number">20</span> nx
+<span class="token number">2</span>）<span class="token punctuation">.</span>处理业务
+<span class="token number">3</span>）<span class="token punctuation">.</span>释放锁
+问题：如果业务执行的时间大于设置的过期时间，然后锁已经释放，可能被别的线程获取到了，然后咱们再去执行删锁的时候，就会删除别人的锁。
+</code></pre> 
+<pre><code class="prism language-java">实现逻辑<span class="token number">3</span>
+解决实现逻辑<span class="token number">2</span>的问题
+<span class="token number">1</span>）<span class="token punctuation">.</span>获取锁和设置过期时间同时（原子性）set lock uuid ex <span class="token number">20</span> nx
+<span class="token number">2</span>）<span class="token punctuation">.</span>处理业务
+<span class="token number">3</span>）<span class="token punctuation">.</span>判断是否是自己的锁（使用<span class="token constant">UUID</span>）
+<span class="token number">4</span>）<span class="token punctuation">.</span>释放锁
+缺点：判断是自己的锁，然后准备去释放锁，然后锁过期自动释放，在<span class="token number">3</span>）完成，<span class="token number">4</span>）还没执行的时候，有线程又重新设置值，然后我们再去删锁，那我们就删了别人的锁。
+</code></pre> 
+<pre><code class="prism language-java">实现逻辑<span class="token number">4</span>（使用redis和<span class="token class-name">Lua</span>脚本实现）
+解决实现逻辑<span class="token number">3</span>的问题
+<span class="token number">1</span>）<span class="token punctuation">.</span>获取锁和设置过期时间同时（原子性）set lock uuid ex <span class="token number">20</span> nx
+<span class="token number">2</span>）<span class="token punctuation">.</span>处理业务
+<span class="token number">3</span>）<span class="token punctuation">.</span>Lua脚本释放锁（原子性）
+
+## java代码中使用<span class="token class-name">Lua</span>脚本
+	<span class="token comment">//使用get命令取到key然后和传进来的key作对比，相等就删掉返回1，否则就返回0。（要么全成功，要么全失败）</span>
+	<span class="token class-name">String</span> lua <span class="token operator">=</span> <span class="token string">"if redis.call("</span>get<span class="token string">",KEYS[1]) == ARGV[1] then return redis.call("</span>del<span class="token string">",KEYS[1]) else return 0 end"</span><span class="token punctuation">;</span>
+	<span class="token comment">//执行脚本  Arrays.asList("key")相当于KEYS[1],uuid相当于ARGV[1]</span>
+	<span class="token class-name">Integer</span> result <span class="token operator">=</span> redisTemplate<span class="token punctuation">.</span><span class="token function">execute</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">DefaultRedisScript</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Integer</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span>lua<span class="token punctuation">,</span><span class="token class-name">Integer</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token class-name">Arrays</span><span class="token punctuation">.</span><span class="token function">asList</span><span class="token punctuation">(</span><span class="token string">"key"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>uuid<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<h3><a id="Redisson_60"></a>四.使用Redisson</h3> 
+<h4><a id="1pom_61"></a>1.添加pom文件</h4> 
+<pre><code class="prism language-xml"><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.redisson<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>redisson<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>3.25.2<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<h4><a id="2redisson_70"></a>2.配置redisson</h4> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Configuration</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">RedissonConfig</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token annotation punctuation">@Bean</span><span class="token punctuation">(</span>destroyMethod<span class="token operator">=</span><span class="token string">"shutdown"</span><span class="token punctuation">)</span>
+	<span class="token keyword">public</span> <span class="token class-name">RedissonClient</span> <span class="token function">redisson</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">throws</span> <span class="token class-name">IOException</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token comment">//1.创建配置</span>
+		<span class="token class-name">Config</span> config <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Config</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token comment">//2.配置单机的redisson连接  redis://必须加，如果启用SSL(安全连接)，必须加rediss://</span>
+		config<span class="token punctuation">.</span><span class="token function">useSingleServer</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+				<span class="token punctuation">.</span><span class="token function">setAddress</span><span class="token punctuation">(</span><span class="token string">"redis://redis地址:端口号"</span><span class="token punctuation">)</span>
+				<span class="token punctuation">.</span><span class="token function">setPassword</span><span class="token punctuation">(</span><span class="token string">"redis密码"</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">setDatabase</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//使用redis的第几个库</span>
+       <span class="token comment">//3.返回RedissonClient对象</span>
+       <span class="token class-name">RedissonClient</span> redissonClient <span class="token operator">=</span> <span class="token class-name">Redisson</span><span class="token punctuation">.</span><span class="token function">create</span><span class="token punctuation">(</span>config<span class="token punctuation">)</span><span class="token punctuation">;</span>
+       <span class="token keyword">return</span> redissonClient<span class="token punctuation">;</span> 
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="Redissonlock_90"></a>五.Redisson-lock（重入锁）</h3> 
+<h4><a id="1lock_91"></a>1.lock的两大特点</h4> 
+<pre><code class="prism language-java"><span class="token comment">//Lock锁实例</span>
+<span class="token class-name">RLock</span> lock <span class="token operator">=</span> redisson<span class="token punctuation">.</span><span class="token function">getLock</span><span class="token punctuation">(</span><span class="token string">"ikunLock"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">//最常见用法（会自动续期）</span>
+lock<span class="token punctuation">.</span><span class="token function">lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+或
+<span class="token comment">//手动设置过期时间（不会自动续期）</span>
+lock<span class="token punctuation">.</span><span class="token function">lock</span><span class="token punctuation">(</span><span class="token number">22</span><span class="token punctuation">,</span><span class="token class-name">TimeUnit</span><span class="token punctuation">.</span><span class="token constant">SECONDS</span><span class="token punctuation">)</span>
+
+<span class="token comment">//尝试加锁，最多等待100S,上锁以后10S自动解锁</span>
+<span class="token keyword">boolean</span> flag <span class="token operator">=</span> lock<span class="token punctuation">.</span><span class="token function">tryLock</span><span class="token punctuation">(</span><span class="token number">100</span><span class="token punctuation">,</span><span class="token number">10</span><span class="token punctuation">,</span><span class="token class-name">TimeUnit</span><span class="token punctuation">.</span><span class="token constant">SECONDS</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>（1）看门狗-锁在运行期间，自动进行续期。<br> （2）为了防止死锁，默认是30S的过期时间。</p> 
+<h4><a id="2_109"></a>2.看门狗的原理</h4> 
+<p><strong>看门狗的原理：</strong> 只要占锁成功，会开启一个定时任务，锁超时就会重新给默认的过期时间30S，续期时间 = 默认的过期时间/3 = 10S。默认过期时间也就是看门狗时间。</p> 
+<h3><a id="Redissonlock_112"></a>六.Redisson-lock（读写锁）</h3> 
+<pre><code class="prism language-java">分布式可重入读写锁允许有多个读锁和一个写锁：写锁没释放，读就必须等待。可以包装拿到的数据一定是最新的值。
+<span class="token class-name">RReadWriteLock</span> rwLock <span class="token operator">=</span> redisson<span class="token punctuation">.</span><span class="token function">getReadWriteLock</span><span class="token punctuation">(</span><span class="token string">"ikunLock"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">//读锁</span>
+rwLock<span class="token punctuation">.</span><span class="token function">readLock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">//写锁</span>
+rwLock<span class="token punctuation">.</span><span class="token function">writeLock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">//也可以设置自动时间和最大尝试时间</span>
+</code></pre> 
+<p><strong>1、读 + 读：</strong> 相当于无所。<br> <strong>2、写 + 读：</strong> 等待写锁释放。<br> <strong>3、读 + 写 ：</strong> 写需要等待。<br> <strong>4、写 + 写 ：</strong> 等待上一个写锁释放。<br> <strong>只要有写锁，都需要等待。</strong></p> 
+<h3><a id="_129"></a>七.闭锁</h3> 
+<pre><code class="prism language-java">举一个例子：坤哥开演唱会，只有听演唱会的小黑子走了，保安才能关门。
+<span class="token keyword">public</span> <span class="token class-name">String</span> <span class="token function">guanmen</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">RCountDownLatch</span> latch <span class="token operator">=</span> redisson<span class="token punctuation">.</span><span class="token function">getCountDownLatch</span><span class="token punctuation">(</span><span class="token string">"ikun"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//一共两个人</span>
+	latch<span class="token punctuation">.</span><span class="token function">trySetCount</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//等待</span>
+	latch<span class="token punctuation">.</span><span class="token function">await</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token string">"小黑子走了，开心"</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">public</span> <span class="token class-name">String</span> <span class="token function">sanhui</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">RCountDownLatch</span> latch <span class="token operator">=</span> redisson<span class="token punctuation">.</span><span class="token function">getCountDownLatch</span><span class="token punctuation">(</span><span class="token string">"ikun"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//走出演唱会</span>
+	latch<span class="token punctuation">.</span><span class="token function">countDown</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token string">"见不到哥哥了，难受"</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+执行<span class="token function">guanmen</span><span class="token punctuation">(</span><span class="token punctuation">)</span>方法，然后必须执行两遍<span class="token function">sanhui</span><span class="token punctuation">(</span><span class="token punctuation">)</span>方法，<span class="token function">guanmen</span><span class="token punctuation">(</span><span class="token punctuation">)</span>方法才会执行完毕，不然会一直等待。
+</code></pre> 
+<h3><a id="redisson_151"></a>八.redisson信号量</h3> 
+<pre><code class="prism language-java">举一个例子：去看坤哥开演唱会，找地方停车，停车场有<span class="token number">2.5</span><span class="token operator">*</span><span class="token number">2</span>个位置。（可以进行限流）
+<span class="token keyword">public</span> <span class="token class-name">String</span> <span class="token function">stop</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">RSemaphore</span> stop <span class="token operator">=</span> redisson<span class="token punctuation">.</span><span class="token function">getSemaphore</span><span class="token punctuation">(</span><span class="token string">"ikun"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//尝试获取车位</span>
+	<span class="token keyword">boolean</span> flag <span class="token operator">=</span> stop<span class="token punctuation">.</span><span class="token function">tryAcquire</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>flag<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//有车位，停车</span>
+	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> <span class="token string">"没有车位"</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token string">"停车成功，开心"</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">public</span> <span class="token class-name">String</span> <span class="token function">out</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">RSemaphore</span> out <span class="token operator">=</span> redisson<span class="token punctuation">.</span><span class="token function">getSemaphore</span><span class="token punctuation">(</span><span class="token string">"ikun"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//开出车库，释放车位</span>
+	out<span class="token punctuation">.</span><span class="token function">release</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token string">"开出停车场"</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="_174"></a>九.保证数据一致性</h3> 
+<p><strong>1.先写缓存，在写数据库</strong><br> <strong>缺点：</strong> 如果写缓存成功，数据库失败。那么数据就是脏数据。</p> 
+<p><strong>2.先写数据库，在写缓存</strong><br> <strong>缺点：</strong> 数据库成功，缓存失败。缓存数据就是旧数据。</p> 
+<p><strong>3.先删缓存，再写数据库</strong><br> <strong>缺点：</strong> 在删除缓存后，网络卡顿还没来的急去写数据库，那么再次取缓存，那还是旧数据。<br> <strong>解决：</strong> 缓存双删，网络卡顿之后，写入数据库，然后间隔一段时间再去删除缓存。</p> 
+<p><strong>4.先写数据库，再删缓存</strong><br> <strong>缺点：</strong> 数据库写入之后，还没来的急删除缓存，就被读取到旧值。<strong>（但是正常情况下读操作也比写操作更快，所以比较推荐此操作，相对其他方案，问题出现的概率要小）</strong></p> 
+<p><strong>删除缓存失败：</strong><br> ①使用定时任务，存放进数据库，进行重试。重试到一定次数记录失败，等待后续处理，任意重试成功就返回成功。实时性没那么高。</p> 
+<p>②使用mq，存放到mq消息里面，进行处理，重试到一定次数，加入到死信队列。实时性比较高。</p> 
+<p>③使用canal（阿里开源的中间件，可以当做是数据的从服务器），数据库改变，canal就会记录什么数据改变，然后再去更新缓存。还可以解决数据异构问题：就是淘宝每个人推荐的东西都不一样，因为canal记录了你的浏览记录然后结合商品表去做计算，然后给你推送你需要的东西。</p> 
+<p><a href="https://github.com/redisson/redisson/wiki/Table-of-Content">更多配置请看redisson文档</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9d52716765290b7e4aa542523183424e/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">pytorch 转 onnx</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/5f6f08a539ab15feaf51d61e9279fb29/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Idea 关闭代码检查 idea 模糊搜索方法 全局设置打开新窗口 idea设置背景图片 idea 2022.2</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MySQL分页查询的实现方式及性能优化技巧 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MySQL分页查询的实现方式及性能优化技巧" />
+<meta property="og:description" content="1. 前言
+MySQL 的分页查询在我们的开发过程中还是很常见的，比如一些后台管理系统，我们一般会有查询订单列表页、商品列表页等。
+示例：
+SELECT&amp;nbsp;*&amp;nbsp; FROM&amp;nbsp; `goods`&amp;nbsp;&amp;nbsp; order&amp;nbsp; by&amp;nbsp;create_time&amp;nbsp;&amp;nbsp; limit&amp;nbsp; 0, 10; 在了解order by和limit的工作原理之前，我们首先回顾下 MySQL 的执行流程和索引结构。
+注： 下面没有特别说明默认 MySQL 的引擎为 InnoDB
+为讲述方便使用&amp;nbsp;select *&amp;nbsp;，生产环境不建议使用
+1.1. 执行流程 MySQL 可以分为 Server 层和存储引擎层两部分，对于这个就不展开讲了。只需要知道一条 SQL 语句是从客户端发起请求到 Server 层，Server 层处理之后选出成本最低的执行计划去存储引擎层进行数据查询，查询出来的数据返回给 Server 层处理，最后返回给客户端。（存储引擎层根据扫描区间定位拿到数据给到 Server 层，剩下的过滤、排序、分页等操作是在 Server 层载进行处理的）。
+1.2 索引结构 InnoDB 存储引擎的索引是一颗 B&#43; 树，只有主键索引树会存储全部的行记录数据，二级索引只会存储该记录对应的主键 id。所以我们使用二级索引查询数据时，如果查询的字段在二级索引没办法完全覆盖，则需要回表。
+2. order by 工作原理 &amp;nbsp; 准备工作 创建一张商品表，并且给价格字段设置索引
+插入测试数据
+2.1 索引扫描排序 EXPLAIN&amp;nbsp; SELECT&amp;nbsp;*&amp;nbsp; FROM&amp;nbsp;goods&amp;nbsp; where&amp;nbsp;price&amp;nbsp;&gt;&amp;nbsp; 10&amp;nbsp; and&amp;nbsp;price&amp;nbsp;&lt;&amp;nbsp; 13&amp;nbsp; ORDER&amp;nbsp; BY&amp;nbsp;price; 我们发现这条 sql 使用了索引 idx_price,索引结构如下：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9d4c3e0472be08996165c37986b32b56/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-11-09T13:34:14+08:00" />
+<meta property="article:modified_time" content="2023-11-09T13:34:14+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MySQL分页查询的实现方式及性能优化技巧</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><span style="color:rgba(0,0,0,.85);font-size:24px;">1. 前言</span><br></p> 
+<p style="text-align:left;">MySQL 的分页查询在我们的开发过程中还是很常见的，比如一些后台管理系统，我们一般会有查询订单列表页、商品列表页等。</p> 
+<p style="text-align:left;">示例：</p> 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp; 
+`goods`&amp;nbsp;&amp;nbsp; 
+order&amp;nbsp; 
+by&amp;nbsp;create_time&amp;nbsp;&amp;nbsp; 
+limit&amp;nbsp; 
+0, 
+10; 
+<br> 
+<p style="text-align:left;">在了解order by和limit的工作原理之前，我们首先回顾下 MySQL 的执行流程和索引结构。</p> 
+<blockquote> 
+ <span style="font-size:16px;">注：</span> 
+ <p>下面没有特别说明默认 MySQL 的引擎为 InnoDB</p> 
+ <p>为讲述方便使用&amp;nbsp;select *&amp;nbsp;，生产环境不建议使用</p> 
+</blockquote> 
+<h4>1.1. 执行流程</h4> 
+<img src="https://images2.imgbox.com/77/23/9n6YAWQ1_o.jpg" alt="3461e337c46eedc834b74e40a88f36b6.jpeg"> 
+<p style="text-align:left;">MySQL 可以分为 Server 层和存储引擎层两部分，对于这个就不展开讲了。只需要知道一条 SQL 语句是从客户端发起请求到 Server 层，Server 层处理之后选出成本最低的执行计划去存储引擎层进行数据查询，查询出来的数据返回给 Server 层处理，最后返回给客户端。（存储引擎层根据扫描区间定位拿到数据给到 Server 层，剩下的过滤、排序、分页等操作是在 Server 层载进行处理的）。</p> 
+<h4>1.2 索引结构</h4> 
+<img src="https://images2.imgbox.com/d4/a5/ZeDIazyA_o.jpg" alt="c29fa2675dcd472bccb4865eeba90008.jpeg"> 
+<p style="text-align:left;">InnoDB 存储引擎的索引是一颗 B+ 树，只有主键索引树会存储全部的行记录数据，二级索引只会存储该记录对应的主键 id。所以我们使用二级索引查询数据时，如果查询的字段在二级索引没办法完全覆盖，则需要回表。</p> 
+<h3>2. order by 工作原理</h3> 
+<blockquote>
+  &amp;nbsp; 
+ <span style="font-size:16px;">准备工作</span> 
+</blockquote> 
+<p style="text-align:left;">创建一张商品表，并且给价格字段设置索引</p> 
+<p><img src="https://images2.imgbox.com/9c/1c/c3kdenAg_o.jpg" alt="e70e13d1182ac6a8b6a8a4522c49b30e.jpeg"></p> 
+<p style="text-align:left;">插入测试数据</p> 
+<p><img src="https://images2.imgbox.com/70/72/iLH0PdYC_o.jpg" alt="9e9f7af74669ae2a9d182ee661768c66.jpeg"></p> 
+<h4>2.1 索引扫描排序</h4> 
+EXPLAIN&amp;nbsp; 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+where&amp;nbsp;price&amp;nbsp;&gt;&amp;nbsp; 
+10&amp;nbsp; 
+and&amp;nbsp;price&amp;nbsp;&lt;&amp;nbsp; 
+13&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp;price; 
+<br> 
+<img src="https://images2.imgbox.com/59/a9/BdrqX5XN_o.jpg" alt="67acf7be83a99f12eaf3d14cceed6e5f.jpeg"> 
+<p style="text-align:left;">我们发现这条 sql 使用了索引 idx_price,索引结构如下：</p> 
+<img src="https://images2.imgbox.com/95/53/HyjJl6N6_o.jpg" alt="bc8e29da7a11ce93ae3a4560e7afbef5.jpeg"> 
+<p style="text-align:left;">首先会根据二级索引idx_price进行查询找到满足price &gt; 10 and price &lt; 13区间的主键值，因为我们的查询条件是SELECT *,所以需要回表查询到对应的行记录。由于ORDER BY price，我们是需要对查询出来的结果按照价格从小到大进行排序。我们刚刚的数据就是从二级索引idx_price查询出来的，本就是根据price字段排序的，所以无需再排序，直接把查询的数据返回给客户端就行了。</p> 
+<img src="https://images2.imgbox.com/f7/58/nKOWxJur_o.jpg" alt="384149f147d23d95c6625a90d71513a7.jpeg"> 
+<h4>2.2 文件排序（filesort）</h4> 
+<p style="text-align:left;">以下 3条 sql 语句都会使用文件排序</p> 
+<span style="font-style:italic;">--&amp;nbsp;Using&amp;nbsp;where;&amp;nbsp;Using&amp;nbsp;filesort</span> 
+<br> 
+EXPLAIN&amp;nbsp; 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+where&amp;nbsp;price&amp;nbsp;&gt;&amp;nbsp; 
+10&amp;nbsp; 
+and&amp;nbsp;price&amp;nbsp;&lt;&amp;nbsp; 
+30&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp;price; 
+<br> 
+<span style="font-style:italic;">--&amp;nbsp;Using&amp;nbsp;where;&amp;nbsp;Using&amp;nbsp;filesort</span> 
+<br> 
+EXPLAIN&amp;nbsp; 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+where&amp;nbsp; 
+name&amp;nbsp; 
+like&amp;nbsp; 
+'商品&amp;nbsp;1%'&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp;price; 
+<br> 
+<span style="font-style:italic;">--&amp;nbsp;Using&amp;nbsp;index&amp;nbsp;condition;&amp;nbsp;Using&amp;nbsp;filesort</span> 
+<br> 
+EXPLAIN&amp;nbsp; 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+where&amp;nbsp;price&amp;nbsp;&gt;&amp;nbsp; 
+10&amp;nbsp; 
+and&amp;nbsp;price&amp;nbsp;&lt;&amp;nbsp; 
+13&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp; 
+name; 
+<br> 
+<p style="text-align:left;">对于第二条 sql ，我们很容易判断出来，使用不了二级索引idx_price，只能全表扫描查询出符合条件的行记录再去进行文件排序。</p> 
+<p style="text-align:left;">那么第一条 sql 只是查询范围比之前的更大了，为什么就不走二级索引了呢？</p> 
+<p style="text-align:left;">我们前面介绍执行流程时说道：MySQL 会选择执行成本最低的执行计划。这条 sql 的查询范围是price &gt; 10 and price &lt; 30,满足这个条件的数据是很多的，每一条数据都需要进行回表查询。这样大量的回表查询，MySQL 认为是很慢的，所以没有使用二级索引。</p> 
+<p style="text-align:left;">第三条 sql 虽然可以使用到二级索引idx_price，但是需要排序的字段是name，那么二级索引的作用就只是帮助我们加快查询，而排序操作还是需要使用文件排序。</p> 
+<p style="text-align:left;">什么是文件排序呢？</p> 
+<p style="text-align:left;">文件排序分成两种：全字段排序、rowid 排序。接下来，我们分别讲解这两种排序工作原理。</p> 
+<h5>2.2.1 全字段排序</h5> 
+<p style="text-align:left;">MySQL 会给每个线程分配一块内存用于排序 sort_buffer。sort_buffer_size，就是 MySQL 为排序开辟内存（sort_buffer）的大小。</p> 
+<p style="text-align:left;">如果要排序的数据量小于 sort_buffer_size，排序就在内存中完成。但如果排序数据量太大，内存放不下，则不得不利用磁盘临时文件来辅助排序。</p> 
+EXPLAIN&amp;nbsp; 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+where&amp;nbsp;price&amp;nbsp;&gt;&amp;nbsp; 
+10&amp;nbsp; 
+and&amp;nbsp;price&amp;nbsp;&lt;&amp;nbsp; 
+13&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp; 
+name; 
+<br> 
+<img src="https://images2.imgbox.com/2b/c5/UGfBKSJQ_o.jpg" alt="a46d5e8b1d00c2b045fc80c612db3feb.jpeg"> 
+<p style="text-align:left;">我们根据这条 sql 来分析查询过程：</p> 
+<ol><li><p>先根据二级索引idx_price查询出满足过滤条件的数据</p></li><li><p>根据主键 id 进行回表操作查询出对应的行记录</p></li><li><p>数据汇总到 sort_buffer 按照name进行排序</p></li><li><p>将排序好的结果集返回给客户端</p></li></ol> 
+<h5>2.2.2 rowid 排序</h5> 
+<p style="text-align:left;">我们发现全字段排序会存在一个问题：如果表中的字段非常多，我们把整个行记录放入 sort_buffer 里面进行排序时，能够放入的行记录就会很少，排序性能差。</p> 
+<p style="text-align:left;">max_length_for_sort_data ，是 MySQL 中专门控制用于排序的行数据的长度的一个参数。它的意思是，如果单行的长度超过这个值，MySQL 就认为单行太大，要换一个算法。使用 rowid 排序：需要排序的字段 + 主键 id 放入 sort_buffer 进行排序。</p> 
+<img src="https://images2.imgbox.com/7a/1f/JaFmUylR_o.jpg" alt="ddddb19ea83e5b4a07c0a54a823eb359.jpeg"> 
+<p style="text-align:left;">还是使用上述 sql 分析：</p> 
+<ol><li>可以使用二级索引，所以先根据二级索引idx_price查询出满足过滤条件的数据</li><li>根据主键 id 进行回表操作查询出对应的行记录</li><li>将排序字段name和主键 id 一起放入 sort_buffer 进行排序</li><li>根据主键 id 再去主键索引查询全部字段返回给客户端</li></ol> 
+<p style="text-align:left;">如果 MySQL 实在是担心排序内存太小，会影响排序效率，才会采用 rowid 排序算法，这样排序过程中一次可以排序更多行，但是需要再回到原表去取数据。如果 MySQL 认为内存足够大，会优先选择全字段排序，把需要的字段都放到 sort_buffer 中，这样排序后就会直接从内存里面返回查询结果了，不用再回到原表去取数据。</p> 
+<p style="text-align:left;">这也就体现了 MySQL 的一个设计思想：如果内存够，就要多利用内存，尽量减少磁盘访问。</p> 
+<p style="text-align:left;">对于 InnoDB 表来说，rowid 排序要求回表多造成磁盘读，因此不会被优先选择。</p> 
+<h5>2.2.3 排序算法</h5> 
+<p style="text-align:left;">我们前面说在 sort_buffer 进行排序，但是没有说明具体是什么排序算法，其实我们这个排序算法是需要分情况的，具体如下：</p> 
+<ol><li>若排序内容能全部放入内存，则仅在内存中使用<strong>快速排序</strong>；</li><li>若排序内容不能全部放入内存，则分批次将排好序的内容放入文件，然后将多个文件进行<strong>归并排序</strong></li><li>若排序中包含 limit 语句，则使用<strong>堆排序</strong>优化排序过程</li></ol> 
+<h3>3. limit 工作原理</h3> 
+<p style="text-align:left;">Server 层维护了一个称作 limit_count 的变量用于统计已经跳过了多少条记录。limit m , n 工作原理就是先读取前面 m+n 条记录，然后抛弃前 m条，读后面 n条想要的，所以 m越大，偏移量越大，性能就越差。</p> 
+EXPLAIN&amp;nbsp; 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+where&amp;nbsp;price&amp;nbsp;&gt;&amp;nbsp; 
+10&amp;nbsp; 
+and&amp;nbsp;price&amp;nbsp;&lt;&amp;nbsp; 
+13&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp; 
+name&amp;nbsp; 
+limit&amp;nbsp; 
+500, 
+10; 
+<br> 
+<p style="text-align:left;">如上述 sql 语句，MySQL 先查询 510 条数据，按照ORDER BY的工作原理进行条件查询和排序，最后汇总的结果在返回给客户端之前，MySQL 会截取第 501 到 510 条数据，最后把这 10 行记录返回给前端。</p> 
+<h3>4. 常见问题分析</h3> 
+<h4>4.1 排序字段使用非唯一字段导致乱序问题</h4> 
+<p style="text-align:left;">我们平常使用的分页查询,如果没有用到索引排序底层的排序算法是堆排序，由于是堆排序是不稳定排序，会产生乱序问题。</p> 
+<blockquote>
+  &amp;nbsp; 
+ <p>分页查询商品表，根据创建时间进行排序</p> 
+</blockquote> 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp; 
+`goods`&amp;nbsp;&amp;nbsp; 
+order&amp;nbsp; 
+by&amp;nbsp;create_time&amp;nbsp;&amp;nbsp; 
+limit&amp;nbsp; 
+0, 
+10; 
+<br> 
+<p style="text-align:left;">但是如果此时数据库的商品数据都是通过 Excel 导入进去的，那么它们的创建时间都是一样的，那就会乱序。</p> 
+<img src="https://images2.imgbox.com/71/5b/yCXtHn6X_o.jpg" alt="fabb204257d8303a966c95afa03f125f.jpeg"> 
+<img src="https://images2.imgbox.com/f9/4a/xaxKBCZe_o.jpg" alt="c8c59a63f361bf86563b5d8b4b81ed28.jpeg"> 
+<p style="text-align:left;">5 个商品的顺序是不一定的（堆排序：不稳定排序），当我们从第一页到第二页时，商品 3又到了第一页。</p> 
+<p style="text-align:left;">那么我们就一直找不到商品 3。对于这个问题，我们可以改成按照主键 id 排序。</p> 
+<h4>4.2 深度分页问题</h4> 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp;price&amp;nbsp; 
+LIMIT&amp;nbsp; 
+80000, 
+10 
+<br> 
+<img src="https://images2.imgbox.com/65/f8/vHNKE93U_o.jpg" alt="87a2b9db1d3f1c8a690ad2ac48bb77d9.jpeg"> 
+<p style="text-align:left;">这样的 sql 就是深度分页了，我们之前讲到，MySQL 的底层会查询出 80010 条数据进行文件排序（因为查询数量太多，回表次数过多，MySQL 便不使用二级索引），然后再截取第 80001 到 第80010 条数据返回给客户端。</p> 
+<p style="text-align:left;">要解决这种深度分页问题首先应该在产品的设计方面避免这种情况，还有就是我们在查询分页数据时应该需要根据时间做好限制，减少数据，以及对前端传进来的 start、limit 字段进行判断限制。如果还是需要深度分页，就需要利用子查询来实现。</p> 
+SELECT&amp;nbsp;*&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp;g 
+<br> 
+INNER&amp;nbsp; 
+JOIN 
+<br>( 
+SELECT&amp;nbsp; 
+id&amp;nbsp; 
+FROM&amp;nbsp;goods&amp;nbsp; 
+ORDER&amp;nbsp; 
+BY&amp;nbsp;price&amp;nbsp; 
+LIMIT&amp;nbsp; 
+80000, 
+10)&amp;nbsp; 
+AS&amp;nbsp;d 
+<br> 
+ON&amp;nbsp;g.id=d.id; 
+<br> 
+<img src="https://images2.imgbox.com/00/6e/fr06zRYB_o.jpg" alt="77b7b17bf7b36ab1d4e1e3e0b064da94.jpeg"> 
+<p style="text-align:left;">子查询使用二级索引查出满足条件的主键，然后进行分页过滤出我们需要主键 id，再去主键索引查询数据（因为排序字段就是我们的二级索引字段，所以查询出来的数据直接就是有序的，无需再进行文件排序）。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1a2d01357c4b25e1282b5e6cfbf275c3/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">uniapp H5 JSSDK自定义分享微信内容</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f44c582fa7b36c567108b370abc072c9/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">PHP&#43;MySQL实现简单的登录注册</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

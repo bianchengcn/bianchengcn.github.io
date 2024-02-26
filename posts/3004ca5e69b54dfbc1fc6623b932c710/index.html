@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>redisson的延时队列机制简述 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="redisson的延时队列机制简述" />
+<meta property="og:description" content="概述 业务中经常会遇到一些延迟执行的需求；通常想到的都是rabbitmq或者rocketmq的延迟消息；
+但是系统中不一定集成了mq，但为了控制分布式下的并发，一般redis都是有集成的；
+redis的key过期监听那个时间不准确，在集群环境下节点挂了也容易丢失；
+那么用redisson的延迟队列，正好可以用来解决轻量级的延时消息;
+简单的来说就是消费者生产了一个消息任务，塞到ZSet里(用当前时间戳&#43;延迟时间作为分数)，等时间到了，就会放到任务List中，然后消费者真正去执行任务都是从任务List中获取任务；
+redisson中的消费者并不是一直轮询获取任务；而是有具体时间的延迟任务，时间到了去任务队列中获取任务；
+注意点，在消费者监听处如果使用thread相关操作因为redisson的默认线程name为redisson-netty会抛异常，我的处理方式是把相关操作都放到自己的线程池中操作.
+官方解释是在netty线程中调用同步方法可能会导致超时;
+issue:https://github.com/redisson/redisson/issues/3549
+异常见源码
+org.redisson.command.CommandAsyncService.get(org.redisson.api.RFuture&lt;V&gt;) 版本
+redisson：redisson-spring-boot-starter-3.17.6.jar
+redis:6.2.7
+redisson延时任务机制简述 生产者先将任务push到delay_queue_timeout等待队列中，延迟时间到了，消费者会把任务从timeout队列挪到SANYOU任务队列中（消费者实际获取任务的队列），然后消费者就能拿到最终要执行的任务了;
+这里具体要说的就是客户端通知和获取机制；
+消费者在启动时通常都会去get一下队列,达到订阅队列的目的；
+RBlockingQueue&lt;String&gt; blockingQueue = redissonClient.getBlockingQueue(&#34;SANYOU&#34;); RDelayedQueue&lt;String&gt; delayQueue = redissonClient.getDelayedQueue(blockingQueue); 这样做的目的：
+消费者订阅队列，从delay_queue_timeout等待延迟队列中将已经到达时间的任务挪到真正的任务List队列中，然后再将delay_queue_timeout队列中第一个（也就是第一个要执行的）的任务的时间拿到，用这个时间开启一个延迟任务，时间到了之后，会发布一个消息到时间通知channel中；然后客户端监听到这个channel中的消息后，会再次重复上述步骤，让delay_queue_timeout中的任务，可以都放到真正的任务List队列中；
+这样有一个好处就是不用一直while扫描等待，客户端的延迟任务时间和delay_queue_timeout中的延迟时间是一样的，可以精准利用cpu，理论上是没有延迟的，但是实际消息数量大量增加，消费者消费比较慢，还是会造成延迟任务消费延迟;
+另外由于客户端都是用lua脚本去redis的同一个List队列中获取任务，lua脚本在redis中都是原子任务，而且redis真正的操作是单线程的，所以不会存在任务广播情况（并发获取时，一个任务不会被多个消费者同时拿到）；
+捞一张图片
+代码Demo import cn.hutool.extra.spring.SpringUtil; import lombok.extern.slf4j.Slf4j; import org.redisson.api.RBlockingDeque; import org.redisson.api.RBlockingQueue; import org.redisson.api.RDelayedQueue; import org.redisson.api.RedissonClient; import org.springframework.beans.factory.InitializingBean; import org.springframework.stereotype.Component; import javax.annotation.PostConstruct; import javax.annotation.Resource; import java.util.Map; import java.util.concurrent.ConcurrentHashMap; @Slf4j @Component public class RedissonDelayQueueConfig implements InitializingBean { @Resource private RedissonClient redissonClient; //延时队列map private final Map&lt;String, RDelayedQueue&lt;DelayMessageDTO&gt;&gt; delayQueueMap = new ConcurrentHashMap&lt;&gt;(16); /** * 消费者初始化所有队列,订阅对应的队列，并开启第一个过期任务的过期时间对应的延迟任务 */ @PostConstruct public void reScheduleDelayedTasks() { DelayQueueEnum[] queueEnums = DelayQueueEnum." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/3004ca5e69b54dfbc1fc6623b932c710/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-20T11:03:11+08:00" />
+<meta property="article:modified_time" content="2024-01-20T11:03:11+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">redisson的延时队列机制简述</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>概述</h3> 
+<p>业务中经常会遇到一些延迟执行的需求；通常想到的都是<code>rabbitmq</code>或者<code>rocketmq</code>的延迟消息；<br> 但是系统中不一定集成了<code>mq</code>，但为了控制分布式下的并发，一般<code>redis</code>都是有集成的；<br> <code>redis</code>的<code>key</code>过期监听那个时间不准确，在集群环境下节点挂了也容易丢失；</p> 
+<p>那么用<code>redisson</code>的延迟队列，正好可以用来解决轻量级的延时消息;<br> 简单的来说就是消费者生产了一个消息任务，塞到<code>ZSet</code>里(用当前时间戳+延迟时间作为分数)，等时间到了，就会放到任务List中，然后消费者真正去执行任务都是从任务<code>List</code>中获取任务；</p> 
+<p><code>redisson</code>中的消费者并不是一直轮询获取任务；而是有具体时间的延迟任务，时间到了去任务队列中获取任务；</p> 
+<p>注意点，在消费者监听处如果使用<code>thread</code>相关操作因为<code>redisson</code>的默认线程<code>name</code>为<code>redisson-netty</code>会抛异常，我的处理方式是把相关操作都放到自己的线程池中操作.</p> 
+<p>官方解释是在<code>netty</code>线程中调用同步方法可能会导致超时;<br> <code>issue</code>:<a href="https://github.com/redisson/redisson/issues/3549">https://github.com/redisson/redisson/issues/3549</a></p> 
+<p>异常见源码</p> 
+<pre><code class="prism language-java"><span class="token class-name"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>command<span class="token punctuation">.</span></span>CommandAsyncService</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token class-name"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span>RFuture</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">V</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">)</span>
+</code></pre> 
+<p><strong>版本</strong><br> <code>redisson</code>：<code>redisson-spring-boot-starter-3.17.6.jar</code><br> <code>redis</code>:<code>6.2.7</code></p> 
+<h3><a id="redisson_27"></a>redisson延时任务机制简述</h3> 
+<p>生产者先将任务<code>push</code>到<code>delay_queue_timeout</code>等待队列中，延迟时间到了，消费者会把任务从<code>timeout</code>队列挪到<code>SANYOU</code>任务队列中（消费者实际获取任务的队列），然后消费者就能拿到最终要执行的任务了;</p> 
+<p>这里具体要说的就是客户端通知和获取机制；<br> 消费者在启动时通常都会去<code>get</code>一下队列,达到订阅队列的目的；</p> 
+<pre><code class="prism language-java"><span class="token class-name">RBlockingQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> blockingQueue <span class="token operator">=</span> redissonClient<span class="token punctuation">.</span><span class="token function">getBlockingQueue</span><span class="token punctuation">(</span><span class="token string">"SANYOU"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token class-name">RDelayedQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> delayQueue <span class="token operator">=</span> redissonClient<span class="token punctuation">.</span><span class="token function">getDelayedQueue</span><span class="token punctuation">(</span>blockingQueue<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>这样做的目的：<br> 消费者订阅队列，从<code>delay_queue_timeout</code>等待延迟队列中将已经到达时间的任务挪到真正的任务<code>List</code>队列中，然后再将<code>delay_queue_timeout</code>队列中第一个（也就是第一个要执行的）的任务的时间拿到，用这个时间开启一个延迟任务，时间到了之后，会发布一个消息到时间通知<code>channel</code>中；然后客户端监听到这个<code>channel</code>中的消息后，会再次重复上述步骤，让<code>delay_queue_timeout</code>中的任务，可以都放到真正的任务<code>List</code>队列中；</p> 
+<p>这样有一个好处就是不用一直<code>while</code>扫描等待，客户端的延迟任务时间和<code>delay_queue_timeout</code>中的延迟时间是一样的，可以精准利用<code>cpu</code>，理论上是没有延迟的，但是实际消息数量大量增加，消费者消费比较慢，还是会造成延迟任务消费延迟;</p> 
+<p>另外由于客户端都是用<code>lua</code>脚本去<code>redis</code>的同一个<code>List</code>队列中获取任务，<code>lua</code>脚本在<code>redis</code>中都是原子任务，而且<code>redis</code>真正的操作是单线程的，所以不会存在任务广播情况（并发获取时，一个任务不会被多个消费者同时拿到）；</p> 
+<p>捞一张图片<br> <img src="https://images2.imgbox.com/d5/0b/GQOBJz9j_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="Demo_55"></a>代码Demo</h3> 
+<pre><code class="prism language-java">
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">cn<span class="token punctuation">.</span>hutool<span class="token punctuation">.</span>extra<span class="token punctuation">.</span>spring<span class="token punctuation">.</span></span><span class="token class-name">SpringUtil</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">lombok<span class="token punctuation">.</span>extern<span class="token punctuation">.</span>slf4j<span class="token punctuation">.</span></span><span class="token class-name">Slf4j</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span><span class="token class-name">RBlockingDeque</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span><span class="token class-name">RBlockingQueue</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span><span class="token class-name">RDelayedQueue</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span><span class="token class-name">RedissonClient</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>beans<span class="token punctuation">.</span>factory<span class="token punctuation">.</span></span><span class="token class-name">InitializingBean</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>stereotype<span class="token punctuation">.</span></span><span class="token class-name">Component</span></span><span class="token punctuation">;</span>
+
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">javax<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">PostConstruct</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">javax<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Resource</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">java<span class="token punctuation">.</span>util<span class="token punctuation">.</span></span><span class="token class-name">Map</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">java<span class="token punctuation">.</span>util<span class="token punctuation">.</span>concurrent<span class="token punctuation">.</span></span><span class="token class-name">ConcurrentHashMap</span></span><span class="token punctuation">;</span>
+
+
+<span class="token annotation punctuation">@Slf4j</span>
+<span class="token annotation punctuation">@Component</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">RedissonDelayQueueConfig</span> <span class="token keyword">implements</span> <span class="token class-name">InitializingBean</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Resource</span>
+    <span class="token keyword">private</span> <span class="token class-name">RedissonClient</span> redissonClient<span class="token punctuation">;</span>
+
+    <span class="token comment">//延时队列map</span>
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">RDelayedQueue</span><span class="token punctuation">&lt;</span><span class="token class-name">DelayMessageDTO</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> delayQueueMap <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ConcurrentHashMap</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token number">16</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+    <span class="token comment">/**
+     * 消费者初始化所有队列,订阅对应的队列，并开启第一个过期任务的过期时间对应的延迟任务
+     */</span>
+    <span class="token annotation punctuation">@PostConstruct</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">reScheduleDelayedTasks</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DelayQueueEnum</span><span class="token punctuation">[</span><span class="token punctuation">]</span> queueEnums <span class="token operator">=</span> <span class="token class-name">DelayQueueEnum</span><span class="token punctuation">.</span><span class="token function">values</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">DelayQueueEnum</span> queueEnum <span class="token operator">:</span> queueEnums<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">RBlockingDeque</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> blockingDeque <span class="token operator">=</span> redissonClient<span class="token punctuation">.</span><span class="token function">getBlockingDeque</span><span class="token punctuation">(</span>queueEnum<span class="token punctuation">.</span><span class="token function">getCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token class-name">RDelayedQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> delayedQueue <span class="token operator">=</span> redissonClient<span class="token punctuation">.</span><span class="token function">getDelayedQueue</span><span class="token punctuation">(</span>blockingDeque<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">afterPropertiesSet</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// 有新的延迟队列在这里添加，队列消费类需要继承DelayQueueConsumer</span>
+        <span class="token class-name">DelayQueueEnum</span><span class="token punctuation">[</span><span class="token punctuation">]</span> queueEnums <span class="token operator">=</span> <span class="token class-name">DelayQueueEnum</span><span class="token punctuation">.</span><span class="token function">values</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">DelayQueueEnum</span> queueEnum <span class="token operator">:</span> queueEnums<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">DelayQueueConsumer</span> delayQueueConsumer <span class="token operator">=</span> <span class="token class-name">SpringUtil</span><span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span>queueEnum<span class="token punctuation">.</span><span class="token function">getBeanName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>delayQueueConsumer <span class="token operator">==</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">ServiceException</span><span class="token punctuation">(</span><span class="token string">"queueName="</span> <span class="token operator">+</span> queueEnum<span class="token punctuation">.</span><span class="token function">getBeanName</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">",delayQueueConsumer=null,请检查配置..."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token comment">// Redisson的延时队列是对另一个队列的再包装，使用时要先将延时消息添加到延时队列中，当延时队列中的消息达到设定的延时时间后，</span>
+            <span class="token comment">// 该延时消息才会进行进入到被包装队列中，因此，我们只需要对被包装队列进行监听即可。</span>
+            <span class="token class-name">RBlockingQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">DelayMessageDTO</span><span class="token punctuation">&gt;</span></span> rBlockingQueue <span class="token operator">=</span> redissonClient<span class="token punctuation">.</span><span class="token function">getBlockingDeque</span><span class="token punctuation">(</span>queueEnum<span class="token punctuation">.</span><span class="token function">getCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+            <span class="token comment">//消费者初始化队列</span>
+            <span class="token class-name">RDelayedQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">DelayMessageDTO</span><span class="token punctuation">&gt;</span></span> rDelayedQueue <span class="token operator">=</span> redissonClient<span class="token punctuation">.</span><span class="token function">getDelayedQueue</span><span class="token punctuation">(</span>rBlockingQueue<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token comment">//set到map中方便获取</span>
+            delayQueueMap<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span>queueEnum<span class="token punctuation">.</span><span class="token function">getCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> rDelayedQueue<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token comment">// 订阅新元素的到来，调用的是takeAsync()，异步执行</span>
+            rBlockingQueue<span class="token punctuation">.</span><span class="token function">subscribeOnElements</span><span class="token punctuation">(</span>delayQueueConsumer<span class="token operator">::</span><span class="token function">execute</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token class-name">RedissonClient</span> <span class="token function">getRedissonClient</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> redissonClient<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">RDelayedQueue</span><span class="token punctuation">&lt;</span><span class="token class-name">DelayMessageDTO</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> <span class="token function">getDelayQueueMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> delayQueueMap<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+
+
+
+
+
+
+
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">cn<span class="token punctuation">.</span>hutool<span class="token punctuation">.</span>core<span class="token punctuation">.</span>date<span class="token punctuation">.</span></span><span class="token class-name">DateUtil</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">lombok<span class="token punctuation">.</span>extern<span class="token punctuation">.</span>slf4j<span class="token punctuation">.</span></span><span class="token class-name">Slf4j</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span><span class="token class-name">RBlockingDeque</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span><span class="token class-name">RDelayedQueue</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>redisson<span class="token punctuation">.</span>api<span class="token punctuation">.</span></span><span class="token class-name">RedissonClient</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>stereotype<span class="token punctuation">.</span></span><span class="token class-name">Component</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>util<span class="token punctuation">.</span></span><span class="token class-name">Assert</span></span><span class="token punctuation">;</span>
+
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">javax<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Resource</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">java<span class="token punctuation">.</span>util<span class="token punctuation">.</span></span><span class="token class-name">Collections</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">java<span class="token punctuation">.</span>util<span class="token punctuation">.</span></span><span class="token class-name">Map</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">java<span class="token punctuation">.</span>util<span class="token punctuation">.</span>concurrent<span class="token punctuation">.</span></span><span class="token class-name">TimeUnit</span></span><span class="token punctuation">;</span>
+
+
+<span class="token annotation punctuation">@Slf4j</span>
+<span class="token annotation punctuation">@Component</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">DelayQueueUtil</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token class-name">RedissonDelayQueueConfig</span> redissonDelayQueueConfig<span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Resource</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">setRedissonDelayQueueConfig</span><span class="token punctuation">(</span><span class="token class-name">RedissonDelayQueueConfig</span> redissonDelayQueueConfig<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DelayQueueUtil</span><span class="token punctuation">.</span>redissonDelayQueueConfig <span class="token operator">=</span> redissonDelayQueueConfig<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">RDelayedQueue</span><span class="token punctuation">&lt;</span><span class="token class-name">DelayMessageDTO</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> <span class="token function">getDelayQueueMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token keyword">null</span> <span class="token operator">==</span> redissonDelayQueueConfig<span class="token punctuation">)</span> <span class="token keyword">return</span> <span class="token class-name">Collections</span><span class="token punctuation">.</span><span class="token function">emptyMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> redissonDelayQueueConfig<span class="token punctuation">.</span><span class="token function">getDelayQueueMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token class-name">RedissonClient</span> <span class="token function">getRedissonClient</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token keyword">null</span> <span class="token operator">==</span> redissonDelayQueueConfig<span class="token punctuation">)</span> <span class="token keyword">return</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> redissonDelayQueueConfig<span class="token punctuation">.</span><span class="token function">getRedissonClient</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 添加延迟消息
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">addDelayMessage</span><span class="token punctuation">(</span><span class="token class-name">DelayMessageDTO</span> delayMessage<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"delayMessage={}"</span><span class="token punctuation">,</span> delayMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token class-name">Assert</span><span class="token punctuation">.</span><span class="token function">isTrue</span><span class="token punctuation">(</span><span class="token function">getDelayQueueMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">containsKey</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">.</span><span class="token function">getQueueName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"队列不存在"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        delayMessage<span class="token punctuation">.</span><span class="token function">setCreateTime</span><span class="token punctuation">(</span><span class="token class-name">DateUtil</span><span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token keyword">null</span> <span class="token operator">==</span> delayMessage<span class="token punctuation">.</span><span class="token function">getTimeUnit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+            delayMessage<span class="token punctuation">.</span><span class="token function">setTimeUnit</span><span class="token punctuation">(</span><span class="token class-name">TimeUnit</span><span class="token punctuation">.</span><span class="token constant">SECONDS</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token class-name">RDelayedQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">DelayMessageDTO</span><span class="token punctuation">&gt;</span></span> rDelayedQueue <span class="token operator">=</span> <span class="token function">getDelayQueueMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">.</span><span class="token function">getQueueName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">//移除相同的消息</span>
+        rDelayedQueue<span class="token punctuation">.</span><span class="token function">remove</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">//添加消息</span>
+        rDelayedQueue<span class="token punctuation">.</span><span class="token function">offer</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">,</span> delayMessage<span class="token punctuation">.</span><span class="token function">getDelayTime</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> delayMessage<span class="token punctuation">.</span><span class="token function">getTimeUnit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * 移除指定队列中的消息
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">removeDelayMessage</span><span class="token punctuation">(</span><span class="token class-name">DelayMessageDTO</span> delayMessage<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"取消：delayMessage={}"</span><span class="token punctuation">,</span> delayMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">getDelayQueueMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">containsKey</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">.</span><span class="token function">getQueueName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token string">"queueName={},该延迟队列不存在，请确认后再试..."</span><span class="token punctuation">,</span> delayMessage<span class="token punctuation">.</span><span class="token function">getQueueName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token class-name">RDelayedQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">DelayMessageDTO</span><span class="token punctuation">&gt;</span></span> rDelayedQueue <span class="token operator">=</span> <span class="token function">getDelayQueueMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">.</span><span class="token function">getQueueName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        rDelayedQueue<span class="token punctuation">.</span><span class="token function">remove</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">removeDelayQueue</span><span class="token punctuation">(</span>delayMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * 从所有队列中删除消息
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">removeDelayQueue</span><span class="token punctuation">(</span><span class="token class-name">DelayMessageDTO</span> value<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DelayQueueEnum</span><span class="token punctuation">[</span><span class="token punctuation">]</span> queueEnums <span class="token operator">=</span> <span class="token class-name">DelayQueueEnum</span><span class="token punctuation">.</span><span class="token function">values</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">DelayQueueEnum</span> queueEnum <span class="token operator">:</span> queueEnums<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">RBlockingDeque</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> blockingDeque <span class="token operator">=</span> <span class="token function">getRedissonClient</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getBlockingDeque</span><span class="token punctuation">(</span>queueEnum<span class="token punctuation">.</span><span class="token function">getCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token class-name">RDelayedQueue</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> delayedQueue <span class="token operator">=</span> <span class="token function">getRedissonClient</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getDelayedQueue</span><span class="token punctuation">(</span>blockingDeque<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            delayedQueue<span class="token punctuation">.</span><span class="token function">remove</span><span class="token punctuation">(</span>value<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+
+
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<p>参考了大佬的博文<br> <a href="https://lhalcyon.com/delay-task/index.html" rel="nofollow">https://lhalcyon.com/delay-task/index.html</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/938f95f8c6e9db46afc802cbeca6c7f3/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">《数字图像处理》第三章学习总结感悟2：直方图处理</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3148d36a9d567c53a8e2ab1945567d8f/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">SpringCloud之Nacos的学习、快速上手</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>2022算法岗秋招面试总结——CV基础（一） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="2022算法岗秋招面试总结——CV基础（一）" />
+<meta property="og:description" content="2022秋招已经结束，这是我从去年8月份投简历以来，面试被问到的一些问题做了总结，方便自己以后回顾，现将一部分分享给大家，后面想起来继续更新，如有问题，还请纠正。
+CV基础——深度学习 1、YOLOv4相对于YOLOv3做了哪些改进？2、目标检测中的NMS，介绍一下？3、关于K-means算法，讲讲？4、在模型训练的过程中，遇到了一些情况如何收敛loss的？5、 如何提高目标检测模型的置信度，提高map？6、目标检测正负样本不均衡怎么解决？7、卷积核的大小，如何选取？感受野概念具体做法 8、有哪些方法可以提高CNN的泛化能力？9、围绕BN层问的一些问题由来原理训练和测试阶段的不同注意点 10、深度学习炼丹有哪些可以调的超参数？11、Focal Loss的作用？12、目标检测中如何解决遮挡问题？13、算法开发阶段涉及到加速，具体讲讲？14、pytorch中nn.module和nn.functional的区别？ 1、YOLOv4相对于YOLOv3做了哪些改进？ 输入端：主要是训练时对输入的改进，主要包括Mosaic数据增强、标签平滑、SAT自对抗训练；BackBone主干网络：将各种新的方式结合起来，包括：CSPDarknet53、Mish激活函数；Neck：目标检测网络在BackBone后面添加的一些层，比如Yolov4中的SPP模块、FPN&#43;PAN结构；Prediction：输出层的锚框机制和Yolov3相同，主要改进的是训练时的损失函数CIOU_Loss，以及预测框筛选的nms变为DIOU_nms;损失函数组成：回归框的预测误差、分类误差、置信度误差； 2、目标检测中的NMS，介绍一下？ NMS就是非极大值抑制，具体算法流程如下：
+设定一个阈值，将低于该阈值的预测框进行剔除；将所有框的按照得分进行排序，选中最高分及其对应的框；遍历其余的框，如果和当前最高分框的重叠面积(IOU)大于一定阈值，我们就将框删除。（删除是因为超过设定阈值，认为两个框的里面的物体属于同一个类别，比如都属于狗这个类别。）从未处理的框中继续选一个得分最高的，重复上述过程，找到所有被保留下来的框。如果有很多框的话，说明检测场景中有多个类别。 3、关于K-means算法，讲讲？ 算法思想：
+根据给定的n个数据对象的数据集，构建k个划分聚类的方法，每个划分聚类即为一个簇。该方法将数据划分为n个簇，每个簇至少有一个数据对象，每个数据对象必须属于而且只能属于一个簇，同时要满足同一簇中的数据对象相似度高，不同簇中的数据对象相似度较小，聚类相似度是利用各簇中对象的均值来进行计算的。
+操作流程：
+首先，如果已经知道要分为2类，随机选取样本空间的2个数据点作为起始点，计算其余的点分别到2个起始点的距离，接着将距离最近的点归为一类；接着，将分好的两个类别中，找到对应的质心，计算其余点到两个质心的距离，按照距离远近进行分类，距离最近的归为一类；最后，重复上述操作，直到分出来的类，与上一次的结果一致，分类结束。 **K值的确定：**Kmeans聚类的评估方法是看误差项平方和，就是计算所有点到相应簇中心的距离均值，k值越大，误差项平方和(SEE)越小，我们就是要求出随着k值的变化SSE的变化规律，找到SSE减幅最小的k值，或者看SEE曲线变化一阶导数变化最大的地方对应的K值。
+4、在模型训练的过程中，遇到了一些情况如何收敛loss的？ loss曲线在整体趋势为下降时，如果出现起伏，也就是一上一下开始震荡，如下图所示，为了减少这种起伏状态，可以增加batch_size来缩小综合梯度方向摆动范围。
+当解决完上述情况，当loss整体趋于平缓时，但是还有起伏，如下图所示，可以降低学习率进一步收敛。
+如果起伏不可观时，可以提前终止训练防止过拟合。
+5、 如何提高目标检测模型的置信度，提高map？ 概念梳理：
+map：mean average precision 即所有类别AP的平均值。
+TP：True Positive，与目标框(ground truth)的IOU &gt; 0.5的检测框数量；
+FP：False Positive，与目标框(ground truth)的IOU &lt; 0.5的检测框数量;
+Precision：所有预测正确的框与所有预测出来的框的比例，这里所有预测出来的框即经过置信度阈值筛选后出来的框。
+Recall：所有预测正确的框与所有真实框（ground truth）的比例。
+具体解决方法：
+调小score_threshold，在验证阶段调小score_threshold，可以快速将map提升，但是实际上模型的预测结果和置信度还是很低；调小batch_size，同时增大学习率，batch_size小了，即每次学习到的内容数量少，但是理解得比较深刻，总的花费时间也变久了，最终模型训练的结果也较好，map变高；调高nms阶段的score_threshold，表示只预测超过该概率的预测结果，可以提高map,可以慢慢调，从0.01调到0.05，再0.1；选择合适的优化器； 6、目标检测正负样本不均衡怎么解决？ 重加权：可以修改损失函数前面的权重来解决，经典的损失函数focal loss 就是这样，比如YOLOv3中，对于检测到的目标权重系数给的是5，对于非目标权重系数给的是0.5。重采样：少样本过采样，但容易过拟合，无法学习到更加鲁棒的特征；多样本欠采样，但容易丢失主要信息，欠拟合；数据合成：生成和少样本相似的新数据，对任意选取的少类样本用k近邻选取其相似样本，通过对样本线性插值得到新样本； 7、卷积核的大小，如何选取？ 最常用的是3∗3大小的卷积核，两个3∗3卷积核和一个5∗5卷积核的感受野相同；
+感受野概念 神经网络中神经元看到的输入图像区域，在卷积神经网络的计算中，相当于特征图中某个元素受输入图像某个区域的影响，因为经过层层卷积得到最终的特征图，在之前卷积核扫过的输入图像的区域。
+具体做法 用两个33的卷积核代替一个55的卷积核，可以减少了参数量和计算量，加快了模型训练。与此同时由于卷积核的增加，模型的非线性表达能力大大增强。
+两个33卷积核参数量计算：2（33&#43;1）=20
+一个55卷积核参数量计算：5*5&#43;1=26
+计算量如何计算，涉及到得到的特征图大小，在参数量基础上乘特征图宽高。
+8、有哪些方法可以提高CNN的泛化能力？ 采集更多的数据，数据的上限决定算法的上限；优化数据分布，均衡各种类别的数据；对数据集进行数据增强；选用合适的损失函数；选择合适的优化器；设计合理的网络结构；运用好权重初始化；引入dropout，以一定的概率失活神经元，简化了网络结构；权值正则化，在损失函数后面加一些惩罚项，如l1或者l2范数。 9、围绕BN层问的一些问题 由来 神经网络在做非线性变换之前的输入值随着网络深度的加深，其特征层的分布会逐渐发生偏移，一般整体分布会逐渐往非线性激活函数取值区间的上下限两侧偏移，最终导致反向传播时低层神经网络出现梯度消失的问题，这就是训练深层神经网络收敛越来越慢的本质原因。
+原理 BN的作用就是通过一定的正则化的手段，将每一个神经元的响应值进行标准化，所谓标准化就是把每层神经网络任意神经元的输入值分布强行拉回到均值为0方差为1 的标准正态分布，这样就避免了因为激活函数导致的梯度弥散的问题。
+训练和测试阶段的不同 训练阶段：在训练阶段，BN层是对每个batch的训练数据进行标准化，即用到每一批数据的均值和方差，在把标准化后的分布值乘以γ加上β，每一个神经元训练一组γ、β，这两组参数均是训练阶段需要学习的参数；
+测试阶段：测试阶段的话，因为只输入一个测试样本，没有batch的概念，均值、方差还有γ。β、都用整个数据集训练后的。
+注意点 BN的本质是利用优化学习来不断改变方差和均值，在CNN中，BN的处理是以特征图为单位进行处理的，而不是以维度，这是和LN，也就是LayerNorm区别的地方；" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d9841d6b5516348aad98d16a946f5de2/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-24T14:49:10+08:00" />
+<meta property="article:modified_time" content="2024-01-24T14:49:10+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">2022算法岗秋招面试总结——CV基础（一）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>2022秋招已经结束，这是我从去年8月份投简历以来，面试被问到的一些问题做了总结，方便自己以后回顾，现将一部分分享给大家，后面想起来继续更新，如有问题，还请纠正。</p> 
+<p><img src="https://images2.imgbox.com/36/9c/9lufDkHg_o.jpg" alt="在这里插入图片描述"><br> </p> 
+<div class="toc"> 
+ <h4>CV基础——深度学习</h4> 
+ <ul><li><a href="#1YOLOv4YOLOv3_4" rel="nofollow">1、YOLOv4相对于YOLOv3做了哪些改进？</a></li><li><a href="#2NMS_12" rel="nofollow">2、目标检测中的NMS，介绍一下？</a></li><li><a href="#3Kmeans_18" rel="nofollow">3、关于K-means算法，讲讲？</a></li><li><a href="#4loss_29" rel="nofollow">4、在模型训练的过程中，遇到了一些情况如何收敛loss的？</a></li><li><a href="#5_map_37" rel="nofollow">5、 如何提高目标检测模型的置信度，提高map？</a></li><li><a href="#6_50" rel="nofollow">6、目标检测正负样本不均衡怎么解决？</a></li><li><a href="#7_55" rel="nofollow">7、卷积核的大小，如何选取？</a></li><li><ul><li><ul><li><a href="#_57" rel="nofollow">感受野概念</a></li><li><a href="#_59" rel="nofollow">具体做法</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#8CNN_64" rel="nofollow">8、有哪些方法可以提高CNN的泛化能力？</a></li><li><a href="#9BN_74" rel="nofollow">9、围绕BN层问的一些问题</a></li><li><ul><li><ul><li><a href="#_75" rel="nofollow">由来</a></li><li><a href="#_77" rel="nofollow">原理</a></li><li><a href="#_79" rel="nofollow">训练和测试阶段的不同</a></li><li><a href="#_82" rel="nofollow">注意点</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#10_85" rel="nofollow">10、深度学习炼丹有哪些可以调的超参数？</a></li><li><a href="#11Focal_Loss_94" rel="nofollow">11、Focal Loss的作用？</a></li><li><a href="#12_97" rel="nofollow">12、目标检测中如何解决遮挡问题？</a></li><li><a href="#13_102" rel="nofollow">13、算法开发阶段涉及到加速，具体讲讲？</a></li><li><a href="#14pytorchnnmodulennfunctional_107" rel="nofollow">14、pytorch中nn.module和nn.functional的区别？</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="1YOLOv4YOLOv3_4"></a>1、YOLOv4相对于YOLOv3做了哪些改进？</h2> 
+<ul><li>输入端：主要是训练时对输入的改进，主要包括Mosaic数据增强、标签平滑、SAT自对抗训练；</li><li>BackBone主干网络：将各种新的方式结合起来，包括：CSPDarknet53、Mish激活函数；</li><li>Neck：目标检测网络在BackBone后面添加的一些层，比如Yolov4中的SPP模块、FPN+PAN结构；</li><li>Prediction：输出层的锚框机制和Yolov3相同，主要改进的是训练时的损失函数CIOU_Loss，以及预测框筛选的nms变为DIOU_nms;</li><li>损失函数组成：回归框的预测误差、分类误差、置信度误差；</li></ul> 
+<h2><a id="2NMS_12"></a>2、目标检测中的NMS，介绍一下？</h2> 
+<p>NMS就是非极大值抑制，具体算法流程如下：</p> 
+<ul><li>设定一个阈值，将低于该阈值的预测框进行剔除；</li><li>将所有框的按照得分进行排序，选中最高分及其对应的框；</li><li>遍历其余的框，如果和当前最高分框的重叠面积(IOU)大于一定阈值，我们就将框删除。（删除是因为超过设定阈值，认为两个框的里面的物体属于同一个类别，比如都属于狗这个类别。）</li><li>从未处理的框中继续选一个得分最高的，重复上述过程，找到所有被保留下来的框。如果有很多框的话，说明检测场景中有多个类别。</li></ul> 
+<h2><a id="3Kmeans_18"></a>3、关于K-means算法，讲讲？</h2> 
+<p><strong>算法思想：</strong><br> 根据给定的n个数据对象的数据集，构建k个划分聚类的方法，每个划分聚类即为一个簇。该方法将数据划分为n个簇，每个簇至少有一个数据对象，每个数据对象必须属于而且只能属于一个簇，同时要满足同一簇中的数据对象相似度高，不同簇中的数据对象相似度较小，聚类相似度是利用各簇中对象的均值来进行计算的。</p> 
+<p><strong>操作流程：</strong></p> 
+<ul><li>首先，如果已经知道要分为2类，随机选取样本空间的2个数据点作为起始点，计算其余的点分别到2个起始点的距离，接着将距离最近的点归为一类；</li><li>接着，将分好的两个类别中，找到对应的质心，计算其余点到两个质心的距离，按照距离远近进行分类，距离最近的归为一类；</li><li>最后，重复上述操作，直到分出来的类，与上一次的结果一致，分类结束。</li></ul> 
+<p>**K值的确定：**Kmeans聚类的评估方法是看误差项平方和，就是计算所有点到相应簇中心的距离均值，k值越大，误差项平方和(SEE)越小，我们就是要求出随着k值的变化SSE的变化规律，找到SSE减幅最小的k值，或者看SEE曲线变化一阶导数变化最大的地方对应的K值。</p> 
+<h2><a id="4loss_29"></a>4、在模型训练的过程中，遇到了一些情况如何收敛loss的？</h2> 
+<ul><li> <p>loss曲线在整体趋势为下降时，如果出现起伏，也就是一上一下开始震荡，如下图所示，为了减少这种起伏状态，可以增加batch_size来缩小综合梯度方向摆动范围。<br> <img src="https://images2.imgbox.com/98/17/oYYjWTpj_o.png" alt="在这里插入图片描述"></p> </li><li> <p>当解决完上述情况，当loss整体趋于平缓时，但是还有起伏，如下图所示，可以降低学习率进一步收敛。<br> <img src="https://images2.imgbox.com/52/e2/ya8Q7ZZh_o.png" alt="在这里插入图片描述"></p> </li><li> <p>如果起伏不可观时，可以提前终止训练防止过拟合。</p> </li></ul> 
+<h2><a id="5_map_37"></a>5、 如何提高目标检测模型的置信度，提高map？</h2> 
+<p><strong>概念梳理：</strong><br> map：mean average precision 即所有类别AP的平均值。<br> TP：True Positive，与目标框(ground truth)的IOU &gt; 0.5的检测框数量；<br> FP：False Positive，与目标框(ground truth)的IOU &lt; 0.5的检测框数量;<br> Precision：所有预测正确的框与所有预测出来的框的比例，这里所有预测出来的框即经过置信度阈值筛选后出来的框。<br> Recall：所有预测正确的框与所有真实框（ground truth）的比例。</p> 
+<p><strong>具体解决方法：</strong></p> 
+<ul><li>调小score_threshold，在验证阶段调小score_threshold，可以快速将map提升，但是实际上模型的预测结果和置信度还是很低；</li><li>调小batch_size，同时增大学习率，batch_size小了，即每次学习到的内容数量少，但是理解得比较深刻，总的花费时间也变久了，最终模型训练的结果也较好，map变高；</li><li>调高nms阶段的score_threshold，表示只预测超过该概率的预测结果，可以提高map,可以慢慢调，从0.01调到0.05，再0.1；</li><li>选择合适的优化器；</li></ul> 
+<h2><a id="6_50"></a>6、目标检测正负样本不均衡怎么解决？</h2> 
+<ul><li>重加权：可以修改损失函数前面的权重来解决，经典的损失函数focal loss 就是这样，比如YOLOv3中，对于检测到的目标权重系数给的是5，对于非目标权重系数给的是0.5。</li><li>重采样：少样本过采样，但容易过拟合，无法学习到更加鲁棒的特征；多样本欠采样，但容易丢失主要信息，欠拟合；</li><li>数据合成：生成和少样本相似的新数据，对任意选取的少类样本用k近邻选取其相似样本，通过对样本线性插值得到新样本；</li></ul> 
+<h2><a id="7_55"></a>7、卷积核的大小，如何选取？</h2> 
+<p>最常用的是3∗3大小的卷积核，两个3∗3卷积核和一个5∗5卷积核的感受野相同；</p> 
+<h4><a id="_57"></a>感受野概念</h4> 
+<p>神经网络中神经元看到的输入图像区域，在卷积神经网络的计算中，相当于特征图中某个元素受输入图像某个区域的影响，因为经过层层卷积得到最终的特征图，在之前卷积核扫过的输入图像的区域。</p> 
+<h4><a id="_59"></a>具体做法</h4> 
+<p>用两个3<em>3的卷积核代替一个5</em>5的卷积核，可以减少了参数量和计算量，加快了模型训练。与此同时由于卷积核的增加，模型的非线性表达能力大大增强。<br> 两个3<em>3卷积核参数量计算：2</em>（3<em>3+1）=20<br> 一个5</em>5卷积核参数量计算：5*5+1=26<br> 计算量如何计算，涉及到得到的特征图大小，在参数量基础上乘特征图宽高。</p> 
+<h2><a id="8CNN_64"></a>8、有哪些方法可以提高CNN的泛化能力？</h2> 
+<ol><li>采集更多的数据，数据的上限决定算法的上限；</li><li>优化数据分布，均衡各种类别的数据；</li><li>对数据集进行数据增强；</li><li>选用合适的损失函数；</li><li>选择合适的优化器；</li><li>设计合理的网络结构；</li><li>运用好权重初始化；</li><li>引入dropout，以一定的概率失活神经元，简化了网络结构；</li><li>权值正则化，在损失函数后面加一些惩罚项，如l1或者l2范数。</li></ol> 
+<h2><a id="9BN_74"></a>9、围绕BN层问的一些问题</h2> 
+<h4><a id="_75"></a>由来</h4> 
+<p>神经网络在做非线性变换之前的输入值随着网络深度的加深，其特征层的分布会逐渐发生偏移，一般整体分布会逐渐往非线性激活函数取值区间的上下限两侧偏移，最终导致反向传播时低层神经网络出现梯度消失的问题，这就是训练深层神经网络收敛越来越慢的本质原因。</p> 
+<h4><a id="_77"></a>原理</h4> 
+<p>BN的作用就是通过一定的正则化的手段，将每一个神经元的响应值进行标准化，所谓标准化就是把每层神经网络任意神经元的输入值分布强行拉回到均值为0方差为1 的标准正态分布，这样就避免了因为激活函数导致的梯度弥散的问题。</p> 
+<h4><a id="_79"></a>训练和测试阶段的不同</h4> 
+<p><strong>训练阶段</strong>：在训练阶段，BN层是对每个batch的训练数据进行标准化，即用到每一批数据的均值和方差，在把标准化后的分布值乘以γ加上β，每一个神经元训练一组γ、β，这两组参数均是训练阶段需要学习的参数；<br> <strong>测试阶段</strong>：测试阶段的话，因为只输入一个测试样本，没有batch的概念，均值、方差还有γ。β、都用整个数据集训练后的。</p> 
+<h4><a id="_82"></a>注意点</h4> 
+<p>BN的本质是利用优化学习来不断改变方差和均值，在CNN中，BN的处理是以特征图为单位进行处理的，而不是以维度，这是和LN，也就是LayerNorm区别的地方；<br> 还有用了BN后就不需要用dropout了，一般在全连接的时候用dropout。</p> 
+<h2><a id="10_85"></a>10、深度学习炼丹有哪些可以调的超参数？</h2> 
+<ol><li>输入图像预处理，可以修改输入图像尺寸或者数据Normalization;</li><li>batch_size：通常选2的次方，比如256或者512，因为内存使用最优时方便网络并行化；</li><li>优化器：建议选用Adam或者RMSprop;</li><li>学习率：开始阶段学习率不能太低，太低的话就不收敛了，可以一个一个尝试，从0.1，然后0.08…慢慢试；</li><li>损失函数：根据具体什么任务选择合适的损失函数；</li><li>激活函数：尽量避免使用会引起梯度消失或者梯度爆炸的，可以使用ReLu、LeakyReLu、Mish等激活函数；</li><li>Epoch；</li><li>权重初始化；</li></ol> 
+<h2><a id="11Focal_Loss_94"></a>11、Focal Loss的作用？</h2> 
+<p>即插即用，为了解决分类问题中类别不均衡。分类难度差异的一个损失函数。<br> 其原理、由来、公式推导这里不介绍了，网上都有。</p> 
+<h2><a id="12_97"></a>12、目标检测中如何解决遮挡问题？</h2> 
+<ol><li>使用旷视提出的Reploss损失函数；</li><li>增加样本数量；</li><li>设置NMS的IOU阈值，阈值过高，造成误检，一个物体可能包含多个预测结果阈值过低，造成漏检，多个物体对应一个预测结果；</li><li>增加损失函数后面的惩罚项。</li></ol> 
+<h2><a id="13_102"></a>13、算法开发阶段涉及到加速，具体讲讲？</h2> 
+<ol><li>将原始卷积核分解成两个较小的卷积核，比如一个5×5的卷积可以分解成2个3×3的，减少了参数量，在网络的任意层都可以使用；</li><li>使用轻量型的网络，比如Mobilenet深度可分离卷机或者shuffleNet来改进backbone主干网络；</li><li>训练完成后剪掉网络中不必要的部分，比如注意力头剪枝、权重大小剪枝、全连接层剪枝；</li><li>参数共享，利用结构化矩阵货聚类等方法将网络全部参数映射到少量数据上，对于全连接层，参数共享作用较大；</li></ol> 
+<h2><a id="14pytorchnnmodulennfunctional_107"></a>14、pytorch中nn.module和nn.functional的区别？</h2> 
+<p>这两个都是pytorch中比较常用的两个模块，区别在于：</p> 
+<ol><li>nn.Module中实现的layer是一个特殊的类，继承了nn.Module可以自动提取可学习的参数，比如Conv2D、Linear等，pytorch都封装好了该函数，可以自动提取可学习的参数，并且内部已经实现好了forward()函数；</li><li>nn.functional实现的layer是一个函数，可以直接调用，不需要实例化，其函数内部是没有可以学习的参数的，比如ReLu、MaxPool2d等<br> <strong>注意点：</strong>，有特例，nn.Dropout，最好使用nn.Module，虽然它没有可学习的参数，但是他在训练和推理阶段不同。如果使用nn.Module来实现，这时就可以使用model.train()和model.eval()来区分。</li></ol>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/46ebf2274b428bb9ecf5db4045d61f49/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Node.js中fs模块</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/53b84367fa82a6a454d885dee8893f51/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">K8S图像化工具rancher</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

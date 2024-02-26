@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>构建风控评分卡模型介绍（WOE/KS/ROC) - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="构建风控评分卡模型介绍（WOE/KS/ROC)" />
+<meta property="og:description" content="完整代码请关注公众号回复“评分卡”获得。
+有酒有风 什么是评分卡（信贷场景中）
+以分数的形式来衡量风险几率的一种手段对未来一段时间内违约/逾期/失联概率的预测通常评分越高越安全根据使用场景分为反欺诈评分卡、申请评分卡、行为评分卡、催收评分卡 为什么要开发评分卡
+风险控制的一个环节，根据已有数据提供逾期概率指标参考 评分卡的特性
+稳定性预测能力等价于逾期概率 评分卡开发的常用模型
+逻辑回归决策树 基于逻辑回归的评分卡理论依据
+一个事件发生的几率（Odds），是指该事件发生的概率与该事件不发生概率的比值。若一个客户违约概率为p，则其正常的概率为1-p，由此可得：
+此时，客户违约的概率p可以表示为: 评分卡表达式为： 其中A、B为常数。由于log函数在(0→&#43;∞)单调递增，所以当用户违约几率Odds越大时，Score评分越低。
+通过给定 （1）某特定Odds时的Score值S0； （2）该特定Odds值翻倍时Score增加值PD0; 通过给定值S0与PD0带入评分卡表达式，可求得A、B。 通过以上分析，求该用户评分Score的问题则转化为求用户违约对数几率log(Odds)的问题。 依照二元逻辑回归构造预测函数 其中hθ(x)表示结果取1的概率。 推倒可得该事件的对数几率log(Odds)如下： 可以发现：在逻辑斯蒂回归模型中，输出Y=1的对数几率是输入条件x的线性函数。 回到信贷业务中 目标：寻找最理想的参数估计θ使得模型预测的概率相对已有样本最准确。 方法：损失函数最小化求得θ 逻辑回归的损失函数为对数损失函数（具体可由极大似然估计推倒）： 1.检验异常样本
+根据对具体业务的理解和认识去除一些异常极端的数据。例如在对网页浏览量的分析，可能需要去除爬虫用户的浏览数据。
+2.缺省字段的处理
+数据样本的某些特征字段可能有缺省值，需根据缺省值多少与特征类型区分处理
+缺省值很多时直接舍弃。作为特征加入的话，可能反倒带入噪声，影响最后的结果。非连续特征缺省量适中时，将Nan作为一个新类别加入至特征中连续特征缺省量适中时，考虑给定一个step(比如age，我们可以考虑每隔2/3岁为一个步长)，然后把它离散化，之后把NaN作为一个type加到属性类目中缺省值很少时利用填充的办法进行处理。例如用均值、中位数、众数填充，模型填充等变量筛选 单变量:归一化，离散化，缺失值处理
+多变量：降维，相关系数，卡方检验，信息增益。决策树等。
+这里讲一种行业经常用的基于IV值进行筛选的方式。
+首先引入概念和公式。
+IV的全称是Information Value，中文意思是信息价值，或者信息量。
+求IV值得先求woe值，这里又引入woe的概念。
+WOE的全称是“Weight of Evidence”，即证据权重。
+首先把变量分组，然后对于每个组i，对于第i组有：
+其中 是第i组坏客户数量（bad）， 是整体坏客户数量。同理，G就是good，好客户的意思。
+woe反映的是在自变量每个分组下违约用户对正常用户占比和总体中违约用户对正常用户占比之间的差异；从而可以直观的认为woe蕴含了自变量取值对于目标变量（违约概率）的影响
+而IV值得公式如下：
+我们可以看到IV值其实是woe值加权求和。这个加权主要是消除掉各分组中数量差异带来的误差。
+比如如果只用woe的绝对值求和，如果一些分组中，A组数量很小，B组数量很大（显然这样的分组不合理），这是B的woe值就很小，A组很大，求和的woe也不会小，显然这样不合理。比如：
+最后我们可以根据每个变量VI值的大小排序去筛选变量。VI越大的越要保留。
+变量处理 变量离散化：
+评分卡模型用的是logistics，基本上都需要变量离散化后，效果才比较好。
+离散化一般有几种方式：合并和切割。
+合并：先把变量分为N份，然后两两合并，看是否满足停止合并条件。
+切割：先把变量一分为二，看切割前后是否满足某个条件，满足则再切割。
+而所谓的条件，一般有两种，卡方检验，信息增益。
+关于这两种方法已经有很多介绍，不在赘述，大家可自行查阅相关资料。 模型优化 KS检验
+KS检验主要是验证模型对违约对象的区分能力，通常是在模型预测全体信用样本的信用评分后，将样本按违约率与非违约率分成两部分，然后用KS统计量来检验两组样本信用评分是否具有显著性差异。
+横轴是总体累积率，纵轴是各样本累积率
+蓝色是坏客户的占比，红色是好客户的占比，两者都会随着横轴总体累积率的变化而变。但两者差距最大时，为KS值。
+如在60%的时候KS值取得最大，此时将模型里面算出的P值（odds）排序,往下取60%时的P值，将60时的P值作为新的阈值，效果往往会有所提升。
+模型检验
+1.KS值图
+上面说过，此处不再叙述。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/2f7e30606c614c9c07eaf97b013c401b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2018-03-26T15:52:03+08:00" />
+<meta property="article:modified_time" content="2018-03-26T15:52:03+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">构建风控评分卡模型介绍（WOE/KS/ROC)</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>完整代码请关注公众号回复“<strong>评分卡</strong>”获得。</p> 
+<div style="text-align:center;"> 
+ <figure class="image"> 
+  <img alt="" height="258" src="https://images2.imgbox.com/4c/43/Omgi5p9p_o.jpg" width="258"> 
+  <figcaption>
+    有酒有风 
+  </figcaption> 
+ </figure> 
+</div> 
+<p><span style="color:#000000;">什么是评分卡（信贷场景中）</span></p> 
+<ol><li><span style="color:#000000;">以分数的形式来衡量风险几率的一种手段</span></li><li><span style="color:#000000;">对未来一段时间内违约/逾期/失联概率的预测</span></li><li><span style="color:#000000;">通常评分越高越安全</span></li><li><span style="color:#000000;">根据使用场景分为反欺诈评分卡、申请评分卡、行为评分卡、催收评分卡</span></li></ol> 
+<p><span style="color:#000000;">为什么要开发评分卡</span></p> 
+<ul><li><span style="color:#000000;">风险控制的一个环节，根据已有数据提供逾期概率指标参考</span></li></ul> 
+<p><span style="color:#000000;">评分卡的特性</span></p> 
+<ul><li><span style="color:#000000;">稳定性</span></li><li><span style="color:#000000;">预测能力</span></li><li><span style="color:#000000;">等价于逾期概率</span></li></ul> 
+<p><span style="color:#000000;">评分卡开发的常用模型</span></p> 
+<ul><li><span style="color:#000000;">逻辑回归</span></li><li><span style="color:#000000;">决策树</span></li></ul> 
+<p><strong><span style="color:#000000;">基于逻辑回归的评分卡理论依据</span></strong></p> 
+<ul><li> <p><span style="color:#000000;">一个事件发生的几率（Odds），是指该事件发生的概率与该事件不发生概率的比值。若一个客户违约概率为p，则其正常的概率为1-p，由此可得：</span></p> <p><img alt="" class="has" src="https://images2.imgbox.com/52/2d/yAIN59fc_o.png"></p> <span style="color:#000000;">此时，客户违约的概率p可以表示为: </span> <p><img alt="" class="has" src="https://images2.imgbox.com/36/ef/PtMw0Ejr_o.png"></p> <span style="color:#000000;">评分卡表达式为：</span><span style="color:#454545;"> </span> <p><img alt="" class="has" src="https://images2.imgbox.com/10/d8/qKputuUk_o.png"></p> <br><span style="color:#000000;">其中A、B为常数。由于log函数在(0→+∞)单调递增，所以当用户违约几率Odds越大时，Score评分越低。<br> 通过给定 <br> （1）某特定Odds时的Score值S0； <br> （2）该特定Odds值翻倍时Score增加值PD0; <br> 通过给定值S0与PD0带入评分卡表达式，可求得A、B。 <br> 通过以上分析，求该用户评分Score的问题则转化为求用户违约对数几率log(Odds)的问题。 <br> 依照二元逻辑回归构造预测函数 </span> <p><img alt="" class="has" src="https://images2.imgbox.com/82/20/4upCevtF_o.png"></p> <br><span style="color:#000000;">其中hθ(x)表示结果取1的概率。 <br> 推倒可得该事件的对数几率log(Odds)如下： </span> <p><img alt="" class="has" src="https://images2.imgbox.com/41/2a/GPkzfhXT_o.png"></p> <br><span style="color:#000000;">可以发现：在逻辑斯蒂回归模型中，输出Y=1的对数几率是输入条件x的线性函数。 </span> <p><img alt="" class="has" src="https://images2.imgbox.com/44/8a/f7pYYJEz_o.png"></p> <span style="color:#000000;">回到信贷业务中 <br> 目标：寻找最理想的参数估计θ使得模型预测的概率相对已有样本最准确。 <br> 方法：损失函数最小化求得θ <br> 逻辑回归的损失函数为对数损失函数（具体可由极大似然估计推倒）： </span> <p><img alt="" class="has" src="https://images2.imgbox.com/fe/5e/sbf3Uvtr_o.png"></p> <p><span style="color:#000000;">1.检验异常样本</span></p> <p><span style="color:#000000;">根据对具体业务的理解和认识去除一些异常极端的数据。例如在对网页浏览量的分析，可能需要去除爬虫用户的浏览数据。</span></p> <p><span style="color:#000000;">2.缺省字段的处理</span></p> <p><span style="color:#000000;">数据样本的某些特征字段可能有缺省值，需根据缺省值多少与特征类型区分处理</span></p> 
+  <ul><li><span style="color:#000000;">缺省值很多时直接舍弃。作为特征加入的话，可能反倒带入噪声，影响最后的结果。</span></li><li><span style="color:#000000;">非连续特征缺省量适中时，将Nan作为一个新类别加入至特征中</span></li><li><span style="color:#000000;">连续特征缺省量适中时，考虑给定一个step(比如age，我们可以考虑每隔2/3岁为一个步长)，然后把它离散化，之后把NaN作为一个type加到属性类目中</span></li><li><span style="color:#000000;">缺省值很少时利用填充的办法进行处理。例如用均值、中位数、众数填充，模型填充等</span></li></ul><h3><span style="color:#000000;">变量筛选</span></h3> <p><span style="color:#000000;">单变量:归一化，离散化，缺失值处理</span></p> <p><span style="color:#000000;">多变量：降维，相关系数，卡方检验，信息增益。决策树等。</span></p> <p><span style="color:#000000;">这里讲一种行业经常用的基于IV值进行筛选的方式。</span></p> <p><span style="color:#000000;">首先引入概念和公式。</span></p> <p><span style="color:#000000;">IV的全称是Information Value，中文意思是信息价值，或者信息量。</span></p> <p><span style="color:#000000;">求IV值得先求woe值，这里又引入woe的概念。</span></p> <p><span style="color:#000000;">WOE的全称是“Weight of Evidence”，即证据权重。</span></p> <p><span style="color:#000000;">首先把变量分组，然后对于每个组i，对于第i组有：</span></p> <img alt="" class="has" src="https://images2.imgbox.com/b3/8d/j5LAHBgv_o.png"><p>其中 是第i组坏客户数量（bad）， 是整体坏客户数量。同理，G就是good，好客户的意思。</p> </li><li> <p><img alt="" class="has" src="https://images2.imgbox.com/3a/88/na8yEG1A_o.png"></p> <p>woe反映的是在自变量每个分组下违约用户对正常用户占比和总体中违约用户对正常用户占比之间的差异；从而可以直观的认为woe蕴含了自变量取值对于目标变量（违约概率）的影响</p> <p>而IV值得公式如下：</p> <img alt="" class="has" src="https://images2.imgbox.com/8d/ee/qijd4thl_o.png"></li><li> <p>我们可以看到IV值其实是woe值加权求和。这个加权主要是消除掉各分组中数量差异带来的误差。</p> <p>比如如果只用woe的绝对值求和，如果一些分组中，A组数量很小，B组数量很大（显然这样的分组不合理），这是B的woe值就很小，A组很大，求和的woe也不会小，显然这样不合理。比如：</p> <img alt="" class="has" src="https://images2.imgbox.com/ba/8d/Q6FUubJa_o.png"><p>最后我们可以根据每个变量VI值的大小排序去筛选变量。VI越大的越要保留。</p> <h3>变量处理</h3> <p>变量离散化：</p> <p>评分卡模型用的是logistics，基本上都需要变量离散化后，效果才比较好。</p> <p>离散化一般有几种方式：合并和切割。</p> <p>合并：先把变量分为N份，然后两两合并，看是否满足停止合并条件。</p> <p>切割：先把变量一分为二，看切割前后是否满足某个条件，满足则再切割。</p> <p> </p> <p>而所谓的条件，一般有两种，卡方检验，信息增益。</p> <span style="color:#000000;">关于这两种方法已经有很多介绍，不在赘述，大家可自行查阅相关资料。</span></li><li> <h3>模型优化</h3> <p>KS检验</p> </li><li> <p>KS检验主要是验证模型对违约对象的区分能力，通常是在模型预测全体信用样本的信用评分后，将样本按违约率与非违约率分成两部分，然后用KS统计量来检验两组样本信用评分是否具有显著性差异。</p> </li><li> <p><img alt="" class="has" src="https://images2.imgbox.com/40/aa/bsFhoIgc_o.png"></p> <p>横轴是总体累积率，纵轴是各样本累积率</p> <p>蓝色是坏客户的占比，红色是好客户的占比，两者都会随着横轴总体累积率的变化而变。但两者差距最大时，为KS值。</p> <p>如在60%的时候KS值取得最大，此时将模型里面算出的P值（odds）排序,往下取60%时的P值，将60时的P值作为新的阈值，效果往往会有所提升。</p> </li><li> <p><strong><span style="color:#000000;">模型检验</span></strong></p> </li><li> <p>1.KS值图</p> <p>上面说过，此处不再叙述。</p> <p>2.ROC曲线</p> <p>召唤经典级交叉矩阵</p> <img alt="" class="has" src="https://images2.imgbox.com/88/67/aKjShIHp_o.png"><p>（1）True Positive Rate，敏感度，召回率计算公式为TPR=TP/(TP+FN)</p> <p>（2）False Positive Rate，简称为FPR，计算公式为FPR=FP/(FP+TN)</p> <p>（3）Precision=TP/(TP+FP)，或2TP/((TP+FN)+(TP+FP))。</p> <p>（4）真负类率（True Negative Rate，TNR），也称为specificity,计算公式为TNR=<em>TN</em>/ (<em>FP</em>+ <em>TN</em>) = 1 - <em>FPR</em>。</p> </li><li> <p><span style="color:#000000;">ROC曲线及AUC系数主要用来检验模型对客户进行正确排序的能力。ROC曲线描述了在一定累计好客户比例下的累计坏客户的比例，模型的分别能力越强，ROC曲线越往左上角靠近。AUC系数表示ROC曲线下方的面积。AUC系数越高，模型的风险区分能力越强。</span></p> </li><li>  <p>3.Lift曲线</p> <img alt="" class="has" src="https://images2.imgbox.com/53/52/3UFqTpoA_o.png"><p> </p> <p>Lift=命中率/真实中正例的比例</p> <p>横坐标Depth为预测成正例的比例</p> <p>在模型中，随着改变阈值p，命中率会随之改变，lift曲线中横坐标就是改变阈值p下正比例的变化，纵坐标是lift提升度。比如命中率是80%，原来好坏比是1.1，那样就提高了1.6。</p> <p>一般来说，在depth为1前，lift越大于1越好。</p> </li><li> <p><span style="color:#000000;">总结</span></p> </li><li> <p>在实际建模中需要重复特征工程、变量离散化、KS检验等步骤，不断优化以达到更优效果。</p> </li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/72eb5b411a18d0e0a853cfbadc919287/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">《坦克世界》7周年活动，自动准点秒坦克</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/532bbac002797a64345702a0b37cfbf2/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">微信小程序一秒学会制作table表格</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>基于小波变换的图像融合（附加视频融合）代码 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="基于小波变换的图像融合（附加视频融合）代码" />
+<meta property="og:description" content="基于小波变换的图像融合python版（红外和可见光） 一、小波变换二、图像融合1、采用对比度拉伸，完成红外图像增强2、采用Surf特征点匹配，完成图像配准3、采用HSV通道小波变换，完成图像融合4、总的代码5、融合效果 上图 三、视频融合四、总结 一、小波变换 小波分析是一个比较难的分支，用户采用小波变换，可以实现图像压缩，振动信号的分解与重构等，因此在实际工程上应用较广泛。小波分析与Fourier变换相比，小波变换是空间域和频率域的局部变换，因而能有效地从信号中提取信息。小波变换通过伸缩和平移等基本运算，实现对信号的多尺度分解与重构，从而很大程度上解决了Fourier变换带来的很多难题。
+小波分析作一个新的数学分支，它是泛函分析、Fourier分析、数值分析的完美结晶；小波分析也是一种“时间—尺度”分析和多分辨分析的新技术，它在信号分析、语音合成、图像压缩与识别、大气与海洋波分析等方面的研究，都有广泛的应用。
+二、图像融合 1、采用对比度拉伸，完成红外图像增强 # 裁剪线性RGB对比度拉伸：（去掉2%百分位以下的数，去掉98%百分位以上的数，上下百分位数一般相同，并设置输出上下限） def truncated_linear_stretch(image, truncated_value=2, maxout=255, min_out=0): def gray_process(gray, maxout=maxout, minout=min_out): truncated_down = np.percentile(gray, truncated_value) truncated_up = np.percentile(gray, 100 - truncated_value) gray_new = ((maxout - minout) / (truncated_up - truncated_down)) * gray gray_new[gray_new &lt; minout] = minout gray_new[gray_new &gt; maxout] = maxout return np.uint8(gray_new) (b, g, r) = cv2.split(image) b = gray_process(b) g = gray_process(g) r = gray_process(r) result = cv2." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b286bd2be8e155b0e50ef95385784960/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-08T17:12:24+08:00" />
+<meta property="article:modified_time" content="2024-01-08T17:12:24+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">基于小波变换的图像融合（附加视频融合）代码</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p><img src="https://images2.imgbox.com/ab/e8/BwTHQD3s_o.jpg" alt="在这里插入图片描述"></p> 
+<p></p> 
+<div class="toc"> 
+ <h4>基于小波变换的图像融合python版（红外和可见光）</h4> 
+ <ul><li><a href="#_3" rel="nofollow">一、小波变换</a></li><li><a href="#_6" rel="nofollow">二、图像融合</a></li><li><ul><li><a href="#1_7" rel="nofollow">1、采用对比度拉伸，完成红外图像增强</a></li><li><a href="#2Surf_26" rel="nofollow">2、采用Surf特征点匹配，完成图像配准</a></li><li><a href="#3HSV_57" rel="nofollow">3、采用HSV通道小波变换，完成图像融合</a></li><li><a href="#4_108" rel="nofollow">4、总的代码</a></li><li><a href="#5__252" rel="nofollow">5、融合效果 上图</a></li></ul> 
+  </li><li><a href="#_261" rel="nofollow">三、视频融合</a></li><li><a href="#_322" rel="nofollow">四、总结</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="_3"></a>一、小波变换</h2> 
+<p>小波分析是一个比较难的分支，用户采用小波变换，可以实现图像压缩，振动信号的分解与重构等，因此在实际工程上应用较广泛。小波分析与Fourier变换相比，小波变换是空间域和频率域的局部变换，因而能有效地从信号中提取信息。小波变换通过伸缩和平移等基本运算，实现对信号的多尺度分解与重构，从而很大程度上解决了Fourier变换带来的很多难题。<br> 小波分析作一个新的数学分支，它是泛函分析、Fourier分析、数值分析的完美结晶；小波分析也是一种“时间—尺度”分析和多分辨分析的新技术，它在信号分析、语音合成、图像压缩与识别、大气与海洋波分析等方面的研究，都有广泛的应用。</p> 
+<h2><a id="_6"></a>二、图像融合</h2> 
+<h3><a id="1_7"></a>1、采用对比度拉伸，完成红外图像增强</h3> 
+<pre><code class="prism language-python"><span class="token comment"># 裁剪线性RGB对比度拉伸：（去掉2%百分位以下的数，去掉98%百分位以上的数，上下百分位数一般相同，并设置输出上下限）</span>
+<span class="token keyword">def</span> <span class="token function">truncated_linear_stretch</span><span class="token punctuation">(</span>image<span class="token punctuation">,</span> truncated_value<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">,</span> maxout<span class="token operator">=</span><span class="token number">255</span><span class="token punctuation">,</span> min_out<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">def</span> <span class="token function">gray_process</span><span class="token punctuation">(</span>gray<span class="token punctuation">,</span> maxout<span class="token operator">=</span>maxout<span class="token punctuation">,</span> minout<span class="token operator">=</span>min_out<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        truncated_down <span class="token operator">=</span> np<span class="token punctuation">.</span>percentile<span class="token punctuation">(</span>gray<span class="token punctuation">,</span> truncated_value<span class="token punctuation">)</span>
+        truncated_up <span class="token operator">=</span> np<span class="token punctuation">.</span>percentile<span class="token punctuation">(</span>gray<span class="token punctuation">,</span> <span class="token number">100</span> <span class="token operator">-</span> truncated_value<span class="token punctuation">)</span>
+        gray_new <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>maxout <span class="token operator">-</span> minout<span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token punctuation">(</span>truncated_up <span class="token operator">-</span> truncated_down<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">*</span> gray
+        gray_new<span class="token punctuation">[</span>gray_new <span class="token operator">&lt;</span> minout<span class="token punctuation">]</span> <span class="token operator">=</span> minout
+        gray_new<span class="token punctuation">[</span>gray_new <span class="token operator">&gt;</span> maxout<span class="token punctuation">]</span> <span class="token operator">=</span> maxout
+        <span class="token keyword">return</span> np<span class="token punctuation">.</span>uint8<span class="token punctuation">(</span>gray_new<span class="token punctuation">)</span>
+    <span class="token punctuation">(</span>b<span class="token punctuation">,</span> g<span class="token punctuation">,</span> r<span class="token punctuation">)</span> <span class="token operator">=</span> cv2<span class="token punctuation">.</span>split<span class="token punctuation">(</span>image<span class="token punctuation">)</span>
+    b <span class="token operator">=</span> gray_process<span class="token punctuation">(</span>b<span class="token punctuation">)</span>
+    g <span class="token operator">=</span> gray_process<span class="token punctuation">(</span>g<span class="token punctuation">)</span>
+    r <span class="token operator">=</span> gray_process<span class="token punctuation">(</span>r<span class="token punctuation">)</span>
+    result <span class="token operator">=</span> cv2<span class="token punctuation">.</span>merge<span class="token punctuation">(</span><span class="token punctuation">(</span>b<span class="token punctuation">,</span> g<span class="token punctuation">,</span> r<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token comment"># 合并每一个通道</span>
+    <span class="token keyword">return</span> result
+</code></pre> 
+<h3><a id="2Surf_26"></a>2、采用Surf特征点匹配，完成图像配准</h3> 
+<pre><code class="prism language-python"><span class="token comment"># RGB图片配准函数，采用白天的可见光与红外灰度图，计算两者Surf共同特征点，之间的仿射矩阵。</span>
+<span class="token keyword">def</span> <span class="token function">Images_matching</span><span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> img_target<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    img_base<span class="token operator">=</span>cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2GRAY<span class="token punctuation">)</span>
+    img_target<span class="token operator">=</span>cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_target<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2GRAY<span class="token punctuation">)</span>
+    hessian <span class="token operator">=</span> <span class="token number">400</span>
+    <span class="token comment"># 初始化surf算子</span>
+    surf <span class="token operator">=</span> cv2<span class="token punctuation">.</span>xfeatures2d<span class="token punctuation">.</span>SURF_create<span class="token punctuation">(</span>hessian<span class="token punctuation">)</span>
+    <span class="token comment"># surf = cv2.xfeatures2d_SURF.create(hessian)</span>
+    <span class="token comment"># surf = cv2.SIFT_create(hessian)</span>
+    <span class="token comment"># 使用surf算子计算特征点和特征点周围的特征向量</span>
+    kp1<span class="token punctuation">,</span> des1 <span class="token operator">=</span> surf<span class="token punctuation">.</span>detectAndCompute<span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> <span class="token boolean">None</span><span class="token punctuation">)</span>  <span class="token comment"># 1136    1136, 64</span>
+    kp2<span class="token punctuation">,</span> des2 <span class="token operator">=</span> surf<span class="token punctuation">.</span>detectAndCompute<span class="token punctuation">(</span>img_target<span class="token punctuation">,</span> <span class="token boolean">None</span><span class="token punctuation">)</span>
+    <span class="token comment"># 进行KNN特征匹配</span>
+    FLANN_INDEX_KDTREE <span class="token operator">=</span> <span class="token number">0</span>  <span class="token comment"># 建立FLANN匹配器的参数</span>
+    indexParams <span class="token operator">=</span> <span class="token builtin">dict</span><span class="token punctuation">(</span>algorithm<span class="token operator">=</span>FLANN_INDEX_KDTREE<span class="token punctuation">,</span> trees<span class="token operator">=</span><span class="token number">5</span><span class="token punctuation">)</span>  <span class="token comment"># 配置索引，密度树的数量为5</span>
+    searchParams <span class="token operator">=</span> <span class="token builtin">dict</span><span class="token punctuation">(</span>checks<span class="token operator">=</span><span class="token number">50</span><span class="token punctuation">)</span>  <span class="token comment"># 指定递归次数</span>
+    flann <span class="token operator">=</span> cv2<span class="token punctuation">.</span>FlannBasedMatcher<span class="token punctuation">(</span>indexParams<span class="token punctuation">,</span> searchParams<span class="token punctuation">)</span>  <span class="token comment"># 建立匹配器</span>
+    matches <span class="token operator">=</span> flann<span class="token punctuation">.</span>knnMatch<span class="token punctuation">(</span>des1<span class="token punctuation">,</span> des2<span class="token punctuation">,</span> k<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">)</span>  <span class="token comment"># 得出匹配的关键点  list: 1136</span>
+    good <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+    <span class="token comment"># 提取优秀的特征点</span>
+    <span class="token keyword">for</span> m<span class="token punctuation">,</span> n <span class="token keyword">in</span> matches<span class="token punctuation">:</span>
+        <span class="token keyword">if</span> m<span class="token punctuation">.</span>distance <span class="token operator">&lt;</span> <span class="token number">0.7</span> <span class="token operator">*</span> n<span class="token punctuation">.</span>distance<span class="token punctuation">:</span>  <span class="token comment"># 如果第一个邻近距离比第二个邻近距离的0.7倍小，则保留</span>
+            good<span class="token punctuation">.</span>append<span class="token punctuation">(</span>m<span class="token punctuation">)</span>   <span class="token comment"># 134</span>
+    src_pts <span class="token operator">=</span> np<span class="token punctuation">.</span>array<span class="token punctuation">(</span><span class="token punctuation">[</span>kp1<span class="token punctuation">[</span>m<span class="token punctuation">.</span>queryIdx<span class="token punctuation">]</span><span class="token punctuation">.</span>pt <span class="token keyword">for</span> m <span class="token keyword">in</span> good<span class="token punctuation">]</span><span class="token punctuation">)</span>  <span class="token comment"># 查询图像的特征描述子索引  # 134, 2</span>
+    dst_pts <span class="token operator">=</span> np<span class="token punctuation">.</span>array<span class="token punctuation">(</span><span class="token punctuation">[</span>kp2<span class="token punctuation">[</span>m<span class="token punctuation">.</span>trainIdx<span class="token punctuation">]</span><span class="token punctuation">.</span>pt <span class="token keyword">for</span> m <span class="token keyword">in</span> good<span class="token punctuation">]</span><span class="token punctuation">)</span>  <span class="token comment"># 训练(模板)图像的特征描述子索引</span>
+    H <span class="token operator">=</span> cv2<span class="token punctuation">.</span>findHomography<span class="token punctuation">(</span>dst_pts<span class="token punctuation">,</span> src_pts<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>RANSAC<span class="token punctuation">)</span>  <span class="token comment"># 生成变换矩阵  H[0]: 3, 3  H[1]: 134, 1</span>
+    <span class="token keyword">return</span> H<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+</code></pre> 
+<h3><a id="3HSV_57"></a>3、采用HSV通道小波变换，完成图像融合</h3> 
+<pre><code class="prism language-python"><span class="token comment"># YUV通道小波变换RGB融合，低频均值高频最大值</span>
+<span class="token keyword">def</span> <span class="token function">Images_fusion</span><span class="token punctuation">(</span>img_base<span class="token punctuation">,</span>img_target<span class="token punctuation">)</span><span class="token punctuation">:</span>          <span class="token comment"># 可见光，配准后的红外光</span>
+    <span class="token comment"># 按照不同的融合方式，计算通道融合</span>
+    <span class="token keyword">def</span> <span class="token function">fuseCoeff</span><span class="token punctuation">(</span>cooef1<span class="token punctuation">,</span> cooef2<span class="token punctuation">,</span> method<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>method <span class="token operator">==</span> <span class="token string">'mean'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            cooef <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token builtin">abs</span><span class="token punctuation">(</span>cooef1<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token builtin">abs</span><span class="token punctuation">(</span>cooef2<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token number">2</span>  <span class="token comment"># abs 绝对值</span>
+            <span class="token comment"># cooef=0.5*cooef1+1.5*cooef2</span>
+        <span class="token keyword">elif</span> <span class="token punctuation">(</span>method <span class="token operator">==</span> <span class="token string">'min'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            cooef <span class="token operator">=</span> np<span class="token punctuation">.</span>minimum<span class="token punctuation">(</span>cooef1<span class="token punctuation">,</span> cooef2<span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> <span class="token punctuation">(</span>method <span class="token operator">==</span> <span class="token string">'max'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            cooef <span class="token operator">=</span> np<span class="token punctuation">.</span>maximum<span class="token punctuation">(</span><span class="token builtin">abs</span><span class="token punctuation">(</span>cooef1<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token builtin">abs</span><span class="token punctuation">(</span>cooef2<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> cooef
+    <span class="token comment"># HSV的小波融合过程</span>
+    LOW_METHOD <span class="token operator">=</span> <span class="token string">'mean'</span>
+    HIGH_METHOD <span class="token operator">=</span> <span class="token string">'max'</span>
+    YUVimg_base <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2YUV<span class="token punctuation">)</span>  <span class="token comment"># 可见光转换为HSV</span>
+    <span class="token comment"># cv2.imwrite("D:/VS/vsprj/cuda/cudawavetest/2.jpg", YUVimg_base)</span>
+    grayimg_target <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_target<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2GRAY<span class="token punctuation">)</span>  <span class="token comment">#红外灰度化</span>
+    <span class="token comment"># cv2.imwrite("D:/VS/vsprj/cuda/cudawavetest/1.jpg",grayimg_target)</span>
+    Yimg_base <span class="token operator">=</span> YUVimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">]</span>  <span class="token comment"># 1024，1024</span>
+    wavelet <span class="token operator">=</span> <span class="token string">'haar'</span>
+    cooef_base <span class="token operator">=</span> pywt<span class="token punctuation">.</span>wavedec2<span class="token punctuation">(</span>Yimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">,</span> wavelet<span class="token punctuation">,</span> level<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>  <span class="token comment"># base灰度图的小波展开  512, 512    3</span>
+    start <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    cooef_target <span class="token operator">=</span> pywt<span class="token punctuation">.</span>wavedec2<span class="token punctuation">(</span>grayimg_target<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">,</span> wavelet<span class="token punctuation">,</span> level<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>  <span class="token comment"># target灰度图的小波展开   512, 512    3</span>
+    end <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-</span>start
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"小波展开:{}"</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>end<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    fusedCooef <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+    <span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token builtin">len</span><span class="token punctuation">(</span>cooef_base<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            fusedCooef<span class="token punctuation">.</span>append<span class="token punctuation">(</span>fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> LOW_METHOD<span class="token punctuation">)</span><span class="token punctuation">)</span>  <span class="token comment"># 低频部分取均值</span>
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            <span class="token comment"># 高频部分取最大值</span>
+            c1 <span class="token operator">=</span> fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> HIGH_METHOD<span class="token punctuation">)</span>
+            c2 <span class="token operator">=</span> fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> HIGH_METHOD<span class="token punctuation">)</span>
+            c3 <span class="token operator">=</span> fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">,</span> HIGH_METHOD<span class="token punctuation">)</span>
+            fusedCooef<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token punctuation">(</span>c1<span class="token punctuation">,</span> c2<span class="token punctuation">,</span> c3<span class="token punctuation">)</span><span class="token punctuation">)</span>  <span class="token comment"># 高频合并</span>
+    tempfusedImage <span class="token operator">=</span> pywt<span class="token punctuation">.</span>waverec2<span class="token punctuation">(</span>fusedCooef<span class="token punctuation">,</span> wavelet<span class="token punctuation">)</span>  <span class="token comment"># 小波逆变换</span>
+    fusedImage <span class="token operator">=</span> np<span class="token punctuation">.</span>multiply<span class="token punctuation">(</span>np<span class="token punctuation">.</span>divide<span class="token punctuation">(</span>tempfusedImage <span class="token operator">-</span> np<span class="token punctuation">.</span><span class="token builtin">min</span><span class="token punctuation">(</span>tempfusedImage<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span>np<span class="token punctuation">.</span><span class="token builtin">max</span><span class="token punctuation">(</span>tempfusedImage<span class="token punctuation">)</span> <span class="token operator">-</span>\
+                            np<span class="token punctuation">.</span><span class="token builtin">min</span><span class="token punctuation">(</span>tempfusedImage<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">255</span><span class="token punctuation">)</span>  <span class="token comment"># 逆变换后归一至（0，255）</span>
+    start <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    fusedImage <span class="token operator">=</span> fusedImage<span class="token punctuation">.</span>astype<span class="token punctuation">(</span>np<span class="token punctuation">.</span>uint8<span class="token punctuation">)</span>
+    Yimg_new <span class="token operator">=</span> fusedImage
+    fusedYUV <span class="token operator">=</span> cv2<span class="token punctuation">.</span>merge<span class="token punctuation">(</span><span class="token punctuation">[</span>Yimg_new<span class="token punctuation">,</span> YUVimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> YUVimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">)</span>  <span class="token comment"># 用小波变换替换V通道</span>
+    end <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> start
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"图像重建:{}"</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>end<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    fusedBGR <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>fusedYUV<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_YUV2BGR<span class="token punctuation">)</span>  <span class="token comment"># 融合后的HSV转为BGR</span>
+    <span class="token keyword">return</span> fusedBGR
+</code></pre> 
+<h3><a id="4_108"></a>4、总的代码</h3> 
+<pre><code class="prism language-python"><span class="token keyword">import</span> cv2
+<span class="token keyword">import</span> numpy <span class="token keyword">as</span> np
+<span class="token keyword">import</span> pywt <span class="token comment">#引入小波模块</span>
+<span class="token keyword">import</span> time
+<span class="token keyword">from</span> PIL <span class="token keyword">import</span> Image
+
+<span class="token comment"># 裁剪线性RGB对比度拉伸：（去掉2%百分位以下的数，去掉98%百分位以上的数，上下百分位数一般相同，并设置输出上下限）</span>
+<span class="token keyword">def</span> <span class="token function">truncated_linear_stretch</span><span class="token punctuation">(</span>image<span class="token punctuation">,</span> truncated_value<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">,</span> maxout<span class="token operator">=</span><span class="token number">255</span><span class="token punctuation">,</span> min_out<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">def</span> <span class="token function">gray_process</span><span class="token punctuation">(</span>gray<span class="token punctuation">,</span> maxout<span class="token operator">=</span>maxout<span class="token punctuation">,</span> minout<span class="token operator">=</span>min_out<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        truncated_down <span class="token operator">=</span> np<span class="token punctuation">.</span>percentile<span class="token punctuation">(</span>gray<span class="token punctuation">,</span> truncated_value<span class="token punctuation">)</span>
+        truncated_up <span class="token operator">=</span> np<span class="token punctuation">.</span>percentile<span class="token punctuation">(</span>gray<span class="token punctuation">,</span> <span class="token number">100</span> <span class="token operator">-</span> truncated_value<span class="token punctuation">)</span>
+        gray_new <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>maxout <span class="token operator">-</span> minout<span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token punctuation">(</span>truncated_up <span class="token operator">-</span> truncated_down<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">*</span> gray
+        gray_new<span class="token punctuation">[</span>gray_new <span class="token operator">&lt;</span> minout<span class="token punctuation">]</span> <span class="token operator">=</span> minout
+        gray_new<span class="token punctuation">[</span>gray_new <span class="token operator">&gt;</span> maxout<span class="token punctuation">]</span> <span class="token operator">=</span> maxout
+        <span class="token keyword">return</span> np<span class="token punctuation">.</span>uint8<span class="token punctuation">(</span>gray_new<span class="token punctuation">)</span>
+    <span class="token punctuation">(</span>b<span class="token punctuation">,</span> g<span class="token punctuation">,</span> r<span class="token punctuation">)</span> <span class="token operator">=</span> cv2<span class="token punctuation">.</span>split<span class="token punctuation">(</span>image<span class="token punctuation">)</span>
+    b <span class="token operator">=</span> gray_process<span class="token punctuation">(</span>b<span class="token punctuation">)</span>
+    g <span class="token operator">=</span> gray_process<span class="token punctuation">(</span>g<span class="token punctuation">)</span>
+    r <span class="token operator">=</span> gray_process<span class="token punctuation">(</span>r<span class="token punctuation">)</span>
+    result <span class="token operator">=</span> cv2<span class="token punctuation">.</span>merge<span class="token punctuation">(</span><span class="token punctuation">(</span>b<span class="token punctuation">,</span> g<span class="token punctuation">,</span> r<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token comment"># 合并每一个通道</span>
+    <span class="token keyword">return</span> result
+
+<span class="token comment"># RGB图片配准函数，采用白天的可见光与红外灰度图，计算两者Surf共同特征点，之间的仿射矩阵。</span>
+<span class="token keyword">def</span> <span class="token function">Images_matching</span><span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> img_target<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    img_base<span class="token operator">=</span>cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2GRAY<span class="token punctuation">)</span>
+    img_target<span class="token operator">=</span>cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_target<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2GRAY<span class="token punctuation">)</span>
+    hessian <span class="token operator">=</span> <span class="token number">400</span>
+    <span class="token comment"># 初始化surf算子</span>
+    surf <span class="token operator">=</span> cv2<span class="token punctuation">.</span>xfeatures2d<span class="token punctuation">.</span>SURF_create<span class="token punctuation">(</span>hessian<span class="token punctuation">)</span>
+    <span class="token comment"># surf = cv2.xfeatures2d_SURF.create(hessian)</span>
+    <span class="token comment"># surf = cv2.SIFT_create(hessian)</span>
+    <span class="token comment"># 使用surf算子计算特征点和特征点周围的特征向量</span>
+    kp1<span class="token punctuation">,</span> des1 <span class="token operator">=</span> surf<span class="token punctuation">.</span>detectAndCompute<span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> <span class="token boolean">None</span><span class="token punctuation">)</span>  <span class="token comment"># 1136    1136, 64</span>
+    kp2<span class="token punctuation">,</span> des2 <span class="token operator">=</span> surf<span class="token punctuation">.</span>detectAndCompute<span class="token punctuation">(</span>img_target<span class="token punctuation">,</span> <span class="token boolean">None</span><span class="token punctuation">)</span>
+    <span class="token comment"># 进行KNN特征匹配</span>
+    FLANN_INDEX_KDTREE <span class="token operator">=</span> <span class="token number">0</span>  <span class="token comment"># 建立FLANN匹配器的参数</span>
+    indexParams <span class="token operator">=</span> <span class="token builtin">dict</span><span class="token punctuation">(</span>algorithm<span class="token operator">=</span>FLANN_INDEX_KDTREE<span class="token punctuation">,</span> trees<span class="token operator">=</span><span class="token number">5</span><span class="token punctuation">)</span>  <span class="token comment"># 配置索引，密度树的数量为5</span>
+    searchParams <span class="token operator">=</span> <span class="token builtin">dict</span><span class="token punctuation">(</span>checks<span class="token operator">=</span><span class="token number">50</span><span class="token punctuation">)</span>  <span class="token comment"># 指定递归次数</span>
+    flann <span class="token operator">=</span> cv2<span class="token punctuation">.</span>FlannBasedMatcher<span class="token punctuation">(</span>indexParams<span class="token punctuation">,</span> searchParams<span class="token punctuation">)</span>  <span class="token comment"># 建立匹配器</span>
+    matches <span class="token operator">=</span> flann<span class="token punctuation">.</span>knnMatch<span class="token punctuation">(</span>des1<span class="token punctuation">,</span> des2<span class="token punctuation">,</span> k<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">)</span>  <span class="token comment"># 得出匹配的关键点  list: 1136</span>
+    good <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+    <span class="token comment"># 提取优秀的特征点</span>
+    <span class="token keyword">for</span> m<span class="token punctuation">,</span> n <span class="token keyword">in</span> matches<span class="token punctuation">:</span>
+        <span class="token keyword">if</span> m<span class="token punctuation">.</span>distance <span class="token operator">&lt;</span> <span class="token number">0.7</span> <span class="token operator">*</span> n<span class="token punctuation">.</span>distance<span class="token punctuation">:</span>  <span class="token comment"># 如果第一个邻近距离比第二个邻近距离的0.7倍小，则保留</span>
+            good<span class="token punctuation">.</span>append<span class="token punctuation">(</span>m<span class="token punctuation">)</span>   <span class="token comment"># 134</span>
+    src_pts <span class="token operator">=</span> np<span class="token punctuation">.</span>array<span class="token punctuation">(</span><span class="token punctuation">[</span>kp1<span class="token punctuation">[</span>m<span class="token punctuation">.</span>queryIdx<span class="token punctuation">]</span><span class="token punctuation">.</span>pt <span class="token keyword">for</span> m <span class="token keyword">in</span> good<span class="token punctuation">]</span><span class="token punctuation">)</span>  <span class="token comment"># 查询图像的特征描述子索引  # 134, 2</span>
+    dst_pts <span class="token operator">=</span> np<span class="token punctuation">.</span>array<span class="token punctuation">(</span><span class="token punctuation">[</span>kp2<span class="token punctuation">[</span>m<span class="token punctuation">.</span>trainIdx<span class="token punctuation">]</span><span class="token punctuation">.</span>pt <span class="token keyword">for</span> m <span class="token keyword">in</span> good<span class="token punctuation">]</span><span class="token punctuation">)</span>  <span class="token comment"># 训练(模板)图像的特征描述子索引</span>
+    H <span class="token operator">=</span> cv2<span class="token punctuation">.</span>findHomography<span class="token punctuation">(</span>dst_pts<span class="token punctuation">,</span> src_pts<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>RANSAC<span class="token punctuation">)</span>  <span class="token comment"># 生成变换矩阵  H[0]: 3, 3  H[1]: 134, 1</span>
+    <span class="token keyword">return</span> H<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+
+<span class="token comment"># YUV通道小波变换RGB融合，低频均值高频最大值</span>
+<span class="token keyword">def</span> <span class="token function">Images_fusion</span><span class="token punctuation">(</span>img_base<span class="token punctuation">,</span>img_target<span class="token punctuation">)</span><span class="token punctuation">:</span>          <span class="token comment"># 可见光，配准后的红外光</span>
+    <span class="token comment"># 按照不同的融合方式，计算通道融合</span>
+    <span class="token keyword">def</span> <span class="token function">fuseCoeff</span><span class="token punctuation">(</span>cooef1<span class="token punctuation">,</span> cooef2<span class="token punctuation">,</span> method<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>method <span class="token operator">==</span> <span class="token string">'mean'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            cooef <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token builtin">abs</span><span class="token punctuation">(</span>cooef1<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token builtin">abs</span><span class="token punctuation">(</span>cooef2<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token number">2</span>  <span class="token comment"># abs 绝对值</span>
+            <span class="token comment"># cooef=0.5*cooef1+1.5*cooef2</span>
+        <span class="token keyword">elif</span> <span class="token punctuation">(</span>method <span class="token operator">==</span> <span class="token string">'min'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            cooef <span class="token operator">=</span> np<span class="token punctuation">.</span>minimum<span class="token punctuation">(</span>cooef1<span class="token punctuation">,</span> cooef2<span class="token punctuation">)</span>
+        <span class="token keyword">elif</span> <span class="token punctuation">(</span>method <span class="token operator">==</span> <span class="token string">'max'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            cooef <span class="token operator">=</span> np<span class="token punctuation">.</span>maximum<span class="token punctuation">(</span><span class="token builtin">abs</span><span class="token punctuation">(</span>cooef1<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token builtin">abs</span><span class="token punctuation">(</span>cooef2<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> cooef
+    <span class="token comment"># HSV的小波融合过程</span>
+    LOW_METHOD <span class="token operator">=</span> <span class="token string">'mean'</span>
+    HIGH_METHOD <span class="token operator">=</span> <span class="token string">'max'</span>
+    YUVimg_base <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_base<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2YUV<span class="token punctuation">)</span>  <span class="token comment"># 可见光转换为HSV</span>
+    <span class="token comment"># cv2.imwrite("D:/VS/vsprj/cuda/cudawavetest/2.jpg", YUVimg_base)</span>
+    grayimg_target <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>img_target<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2GRAY<span class="token punctuation">)</span>  <span class="token comment">#红外灰度化</span>
+    <span class="token comment"># cv2.imwrite("D:/VS/vsprj/cuda/cudawavetest/1.jpg",grayimg_target)</span>
+    Yimg_base <span class="token operator">=</span> YUVimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">]</span>  <span class="token comment"># 1024，1024</span>
+    wavelet <span class="token operator">=</span> <span class="token string">'haar'</span>
+    cooef_base <span class="token operator">=</span> pywt<span class="token punctuation">.</span>wavedec2<span class="token punctuation">(</span>Yimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">,</span> wavelet<span class="token punctuation">,</span> level<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>  <span class="token comment"># base灰度图的小波展开  512, 512    3</span>
+    start <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    cooef_target <span class="token operator">=</span> pywt<span class="token punctuation">.</span>wavedec2<span class="token punctuation">(</span>grayimg_target<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">,</span> wavelet<span class="token punctuation">,</span> level<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>  <span class="token comment"># target灰度图的小波展开   512, 512    3</span>
+    end <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-</span>start
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"小波展开:{}"</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>end<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    fusedCooef <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+    <span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token builtin">len</span><span class="token punctuation">(</span>cooef_base<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            fusedCooef<span class="token punctuation">.</span>append<span class="token punctuation">(</span>fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> LOW_METHOD<span class="token punctuation">)</span><span class="token punctuation">)</span>  <span class="token comment"># 低频部分取均值</span>
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            <span class="token comment"># 高频部分取最大值</span>
+            c1 <span class="token operator">=</span> fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> HIGH_METHOD<span class="token punctuation">)</span>
+            c2 <span class="token operator">=</span> fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> HIGH_METHOD<span class="token punctuation">)</span>
+            c3 <span class="token operator">=</span> fuseCoeff<span class="token punctuation">(</span>cooef_base<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">,</span> cooef_target<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">,</span> HIGH_METHOD<span class="token punctuation">)</span>
+            fusedCooef<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token punctuation">(</span>c1<span class="token punctuation">,</span> c2<span class="token punctuation">,</span> c3<span class="token punctuation">)</span><span class="token punctuation">)</span>  <span class="token comment"># 高频合并</span>
+    tempfusedImage <span class="token operator">=</span> pywt<span class="token punctuation">.</span>waverec2<span class="token punctuation">(</span>fusedCooef<span class="token punctuation">,</span> wavelet<span class="token punctuation">)</span>  <span class="token comment"># 小波逆变换</span>
+    fusedImage <span class="token operator">=</span> np<span class="token punctuation">.</span>multiply<span class="token punctuation">(</span>np<span class="token punctuation">.</span>divide<span class="token punctuation">(</span>tempfusedImage <span class="token operator">-</span> np<span class="token punctuation">.</span><span class="token builtin">min</span><span class="token punctuation">(</span>tempfusedImage<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span>np<span class="token punctuation">.</span><span class="token builtin">max</span><span class="token punctuation">(</span>tempfusedImage<span class="token punctuation">)</span> <span class="token operator">-</span>\
+                            np<span class="token punctuation">.</span><span class="token builtin">min</span><span class="token punctuation">(</span>tempfusedImage<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">255</span><span class="token punctuation">)</span>  <span class="token comment"># 逆变换后归一至（0，255）</span>
+    start <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    fusedImage <span class="token operator">=</span> fusedImage<span class="token punctuation">.</span>astype<span class="token punctuation">(</span>np<span class="token punctuation">.</span>uint8<span class="token punctuation">)</span>
+    Yimg_new <span class="token operator">=</span> fusedImage
+    fusedYUV <span class="token operator">=</span> cv2<span class="token punctuation">.</span>merge<span class="token punctuation">(</span><span class="token punctuation">[</span>Yimg_new<span class="token punctuation">,</span> YUVimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> YUVimg_base<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">)</span>  <span class="token comment"># 用小波变换替换V通道</span>
+    end <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> start
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"图像重建:{}"</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>end<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    fusedBGR <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>fusedYUV<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_YUV2BGR<span class="token punctuation">)</span>  <span class="token comment"># 融合后的HSV转为BGR</span>
+    <span class="token keyword">return</span> fusedBGR
+<span class="token comment">#</span>
+<span class="token keyword">def</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    matchimg_di <span class="token operator">=</span> cv2<span class="token punctuation">.</span>imread<span class="token punctuation">(</span><span class="token string">'images/oripics/basic_day_infrared.jpg'</span><span class="token punctuation">)</span>  <span class="token comment"># 1080, 1920, 3</span>
+    matchimg_dv <span class="token operator">=</span> cv2<span class="token punctuation">.</span>imread<span class="token punctuation">(</span><span class="token string">'images/oripics/basic_day_visual.jpg'</span><span class="token punctuation">)</span>
+    <span class="token comment"># matchimg_di = cv2.imread('left_2020_11_30-15_15_31.jpg')  # 1080, 1920, 3</span>
+    <span class="token comment"># matchimg_dv = cv2.imread('right_2020_11_30-15_15_31.jpg')</span>
+    <span class="token comment"># 1080, 1920, 3</span>
+    orimg_nv<span class="token operator">=</span>matchimg_dv
+    orimg_ni<span class="token operator">=</span>matchimg_di
+    <span class="token comment"># orimg_nv = cv2.imread('images/oripics/night_visual_40m.jpg')</span>
+    <span class="token comment"># orimg_ni = cv2.imread('images/oripics/night_infrared_40m.jpg')</span>
+    <span class="token comment"># orimg_nv = cv2.imread('images/oripics/left_2020_11_30-20_06_54.jpg')</span>
+    <span class="token comment"># orimg_ni = cv2.imread('images/oripics/right_2020_11_30-20_06_54.jpg')</span>
+    <span class="token comment"># orimg_nv = cv2.imread('images/oripics/left_2020_11_30-20_08_09.jpg')</span>
+    <span class="token comment"># orimg_ni = cv2.imread('images/oripics/right_2020_11_30-20_08_09.jpg')</span>
+    orimg_nv <span class="token operator">=</span> cv2<span class="token punctuation">.</span>imread<span class="token punctuation">(</span><span class="token string">'images/oripics/left_video_2020_11_30-20_09_32_73.jpg'</span><span class="token punctuation">)</span>  <span class="token comment"># 1024, 1024, 3</span>
+    orimg_ni <span class="token operator">=</span> cv2<span class="token punctuation">.</span>imread<span class="token punctuation">(</span><span class="token string">'images/oripics/right_video_2020_11_30-20_09_32_73.jpg'</span><span class="token punctuation">)</span>  <span class="token comment"># 1024, 1024, 3</span>
+
+    <span class="token comment">#用白天图像进行配准</span>
+    <span class="token comment"># enhance_matchimg_di = truncated_linear_stretch(matchimg_di)# 配准模板红外图像RGB增强</span>
+    h<span class="token punctuation">,</span> w <span class="token operator">=</span> orimg_nv<span class="token punctuation">.</span>shape<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token number">2</span><span class="token punctuation">]</span>   <span class="token comment"># 1024 1024</span>
+    H <span class="token operator">=</span> Images_matching<span class="token punctuation">(</span>matchimg_dv<span class="token punctuation">,</span> matchimg_di<span class="token punctuation">)</span>   <span class="token comment"># (3, 3)</span>
+
+    <span class="token comment"># enhance_orimg_ni=truncated_linear_stretch(orimg_ni) # 需融合红外图像RGB增强</span>
+    matched_ni <span class="token operator">=</span> cv2<span class="token punctuation">.</span>warpPerspective<span class="token punctuation">(</span>orimg_ni<span class="token punctuation">,</span> H<span class="token punctuation">,</span> <span class="token punctuation">(</span>w<span class="token punctuation">,</span> h<span class="token punctuation">)</span><span class="token punctuation">)</span>
+    cv2<span class="token punctuation">.</span>imwrite<span class="token punctuation">(</span><span class="token string">"./1.jpg"</span><span class="token punctuation">,</span>matched_ni<span class="token punctuation">)</span><span class="token comment"># 红外图像按照仿射矩阵配准 1024, 1024, 3</span>
+    start <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    fusion <span class="token operator">=</span> Images_fusion<span class="token punctuation">(</span>orimg_nv<span class="token punctuation">,</span> matched_ni<span class="token punctuation">)</span>
+    cv2<span class="token punctuation">.</span>imwrite<span class="token punctuation">(</span><span class="token string">"./2.jpg"</span><span class="token punctuation">,</span>fusion<span class="token punctuation">)</span>
+    end <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-</span>start
+    <span class="token keyword">print</span><span class="token punctuation">(</span>end<span class="token punctuation">)</span>
+    <span class="token comment"># enhance=truncated_linear_stretch(fusion)#融合图像RGB增强</span>
+
+    <span class="token comment"># cv2.imshow('0', cv2.resize(orimg_nv, (600, 400)))</span>
+    <span class="token comment"># cv2.imshow('1', cv2.resize(orimg_ni, (600, 400)))</span>
+    cv2<span class="token punctuation">.</span>imshow<span class="token punctuation">(</span><span class="token string">'2'</span><span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>resize<span class="token punctuation">(</span>fusion<span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token number">1200</span><span class="token punctuation">,</span> <span class="token number">800</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    cv2<span class="token punctuation">.</span>waitKey<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span>
+
+    <span class="token comment"># name_fusionfile='YUV_04.jpg'</span>
+    <span class="token comment"># path_fusionfile='images/fusion/'+name_fusionfile</span>
+    <span class="token comment"># cv2.imwrite(path_fusionfile, fusion)</span>
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">'__main__'</span><span class="token punctuation">:</span>
+    main<span class="token punctuation">(</span><span class="token punctuation">)</span>    
+</code></pre> 
+<h3><a id="5__252"></a>5、融合效果 上图</h3> 
+<p>红外：<br> <img src="https://images2.imgbox.com/7c/c1/3BbvRAAs_o.jpg" alt="在这里插入图片描述"><br> 可见光：<br> <img src="https://images2.imgbox.com/6b/49/ivUp0ppu_o.jpg" alt="在这里插入图片描述"></p> 
+<p>融合后，效果一般，但是将就看吧，熟悉一下融合过程。<img src="https://images2.imgbox.com/2b/4a/Rog6VLwB_o.jpg" alt="在这里插入图片描述"></p> 
+<h2><a id="_261"></a>三、视频融合</h2> 
+<p>一个可见光摄像头，一个红外摄像头，就可以实现实时夜间车外图像融合啦</p> 
+<pre><code class="prism language-python">video_path_infrared <span class="token operator">=</span> <span class="token string">"../videos/ir/video_2020_11_30-20_05_30.avi"</span>
+    video_path_visible <span class="token operator">=</span> <span class="token string">"../videos/vi/video_2020_11_30-20_05_30.avi"</span>
+    video_save_path <span class="token operator">=</span> <span class="token string">"../videos/out.avi"</span>
+    video_fps <span class="token operator">=</span> <span class="token number">25</span>
+
+    <span class="token comment"># matchimg_di = cv2.imread('images/oripics/basic_day_infrared.jpg')  # 1080, 1920, 3</span>
+    <span class="token comment"># matchimg_dv = cv2.imread('images/oripics/basic_day_visual.jpg')</span>
+    matchimg_di <span class="token operator">=</span> cv2<span class="token punctuation">.</span>imread<span class="token punctuation">(</span><span class="token string">'left_2020_11_30-15_15_31.jpg'</span><span class="token punctuation">)</span>  <span class="token comment"># 1080, 1920, 3</span>
+    matchimg_dv <span class="token operator">=</span> cv2<span class="token punctuation">.</span>imread<span class="token punctuation">(</span><span class="token string">'right_2020_11_30-15_15_31.jpg'</span><span class="token punctuation">)</span>
+    H <span class="token operator">=</span> Images_matching<span class="token punctuation">(</span>matchimg_dv<span class="token punctuation">,</span> matchimg_di<span class="token punctuation">)</span>
+
+    capture_in <span class="token operator">=</span> cv2<span class="token punctuation">.</span>VideoCapture<span class="token punctuation">(</span>video_path_infrared<span class="token punctuation">)</span>
+    capture_vi <span class="token operator">=</span> cv2<span class="token punctuation">.</span>VideoCapture<span class="token punctuation">(</span>video_path_visible<span class="token punctuation">)</span>
+    <span class="token keyword">if</span> video_save_path <span class="token operator">!=</span> <span class="token string">""</span><span class="token punctuation">:</span>
+        fourcc <span class="token operator">=</span> cv2<span class="token punctuation">.</span>VideoWriter_fourcc<span class="token punctuation">(</span><span class="token operator">*</span><span class="token string">'XVID'</span><span class="token punctuation">)</span>
+        size <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token builtin">int</span><span class="token punctuation">(</span>capture_vi<span class="token punctuation">.</span>get<span class="token punctuation">(</span>cv2<span class="token punctuation">.</span>CAP_PROP_FRAME_WIDTH<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token builtin">int</span><span class="token punctuation">(</span>capture_vi<span class="token punctuation">.</span>get<span class="token punctuation">(</span>cv2<span class="token punctuation">.</span>CAP_PROP_FRAME_HEIGHT<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        out <span class="token operator">=</span> cv2<span class="token punctuation">.</span>VideoWriter<span class="token punctuation">(</span>video_save_path<span class="token punctuation">,</span> fourcc<span class="token punctuation">,</span> video_fps<span class="token punctuation">,</span> size<span class="token punctuation">)</span>
+
+    fps <span class="token operator">=</span> <span class="token number">0.0</span>
+    <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        t1 <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token comment"># 读取某一帧</span>
+        ref1<span class="token punctuation">,</span> frame1 <span class="token operator">=</span> capture_in<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        ref2<span class="token punctuation">,</span> frame2 <span class="token operator">=</span> capture_vi<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token comment"># 格式转变，BGRtoRGB</span>
+        frame1 <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>frame1<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2RGB<span class="token punctuation">)</span>
+        frame2 <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>frame2<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_BGR2RGB<span class="token punctuation">)</span>
+        <span class="token comment"># 转变成Image</span>
+        <span class="token comment"># frame1 = Image.fromarray(np.uint8(frame1))</span>
+        <span class="token comment"># frame2 = Image.fromarray(np.uint8(frame2))</span>
+        h<span class="token punctuation">,</span> w <span class="token operator">=</span> frame1<span class="token punctuation">.</span>shape<span class="token punctuation">[</span><span class="token punctuation">:</span><span class="token number">2</span><span class="token punctuation">]</span>
+        matched_ni <span class="token operator">=</span> cv2<span class="token punctuation">.</span>warpPerspective<span class="token punctuation">(</span>frame2<span class="token punctuation">,</span> H<span class="token punctuation">,</span> <span class="token punctuation">(</span>w<span class="token punctuation">,</span> h<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        cv2<span class="token punctuation">.</span>imwrite<span class="token punctuation">(</span><span class="token string">"./1.jpg"</span><span class="token punctuation">,</span> matched_ni<span class="token punctuation">)</span>
+        <span class="token comment"># 进行检测</span>
+        fusion <span class="token operator">=</span> Images_fusion<span class="token punctuation">(</span>frame1<span class="token punctuation">,</span> matched_ni<span class="token punctuation">)</span>
+        fusion <span class="token operator">=</span> np<span class="token punctuation">.</span>array<span class="token punctuation">(</span>fusion<span class="token punctuation">)</span>
+        end <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> t1
+        <span class="token comment"># RGBtoBGR满足opencv显示格式</span>
+        frame <span class="token operator">=</span> cv2<span class="token punctuation">.</span>cvtColor<span class="token punctuation">(</span>fusion<span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>COLOR_RGB2BGR<span class="token punctuation">)</span>
+
+        fps <span class="token operator">=</span> <span class="token punctuation">(</span>fps <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token number">1.</span> <span class="token operator">/</span> end <span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token number">2</span>
+        <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"fps= %.2f"</span> <span class="token operator">%</span> <span class="token punctuation">(</span>fps<span class="token punctuation">)</span><span class="token punctuation">)</span>
+        frame <span class="token operator">=</span> cv2<span class="token punctuation">.</span>putText<span class="token punctuation">(</span>frame<span class="token punctuation">,</span> <span class="token string">"fps= %.2f"</span> <span class="token operator">%</span> <span class="token punctuation">(</span>fps<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">40</span><span class="token punctuation">)</span><span class="token punctuation">,</span> cv2<span class="token punctuation">.</span>FONT_HERSHEY_SIMPLEX<span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">255</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">)</span>
+
+        cv2<span class="token punctuation">.</span>imshow<span class="token punctuation">(</span><span class="token string">"video"</span><span class="token punctuation">,</span> frame<span class="token punctuation">)</span>
+        c <span class="token operator">=</span> cv2<span class="token punctuation">.</span>waitKey<span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">&amp;</span> <span class="token number">0xff</span>
+        <span class="token keyword">if</span> video_save_path <span class="token operator">!=</span> <span class="token string">""</span><span class="token punctuation">:</span>
+            out<span class="token punctuation">.</span>write<span class="token punctuation">(</span>frame<span class="token punctuation">)</span>
+
+        <span class="token keyword">if</span> c <span class="token operator">==</span> <span class="token number">27</span><span class="token punctuation">:</span>
+            capture<span class="token punctuation">.</span>release<span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">break</span>
+    capture<span class="token punctuation">.</span>release<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    out<span class="token punctuation">.</span>release<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    cv2<span class="token punctuation">.</span>destroyAllWindows<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>一定选对配准图片，不然会出现鬼影</p> 
+<h2><a id="_322"></a>四、总结</h2> 
+<p>这个方法试出来视频融合的时候如何加速，大家如果有什么好方法，多教教我！</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0f077ee5dc01ab3517176bae9064b88b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">大数据OLAP引擎发展原因及特性分析</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/cfc7a2914ad52fe2cd0285e5ad65ad60/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">获取地理地图坐标的网址</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

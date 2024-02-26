@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>基于Netty和SpringBoot实现一个轻量级RPC框架-Client端请求响应同步化处理 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="基于Netty和SpringBoot实现一个轻量级RPC框架-Client端请求响应同步化处理" />
+<meta property="og:description" content="前提 前置文章：
+《基于Netty和SpringBoot实现一个轻量级RPC框架-协议篇》《基于Netty和SpringBoot实现一个轻量级RPC框架-Server篇》《基于Netty和SpringBoot实现一个轻量级RPC框架-Client篇》 前一篇文章简单介绍了通过动态代理完成了Client端契约接口调用转换为发送RPC协议请求的功能。这篇文章主要解决一个遗留的技术难题：请求-响应同步化处理。
+需要的依赖如下：
+JDK1.8&#43;Netty:4.1.44.FinalSpringBoot:2.2.2.RELEASE 简单分析Netty请求-响应的处理流程 图中已经忽略了编码解码器和其他入站出站处理器，不同颜色的线程代表完全不相同的线程，不同线程之间的处理逻辑是完全异步，也就是Netty IO线程（n-l-g-1）接收到Server端的消息并且解析完成的时候，用户调用线程（u-t-1）无法感知到解析完毕的消息包，那么这里要做的事情就是让用户调用线程（u-t-1）获取到Netty IO线程（n-l-g-1）接收并且解析完成的消息包。
+这里可以用一个简单的例子来说明模拟Client端调用线程等待Netty IO线程的处理结果再同步返回的过程。
+@Slf4j public class NettyThreadSyncTest { @ToString private static class ResponseFuture { private final long beginTimestamp = System.currentTimeMillis(); @Getter private final long timeoutMilliseconds; @Getter private final String requestId; @Setter @Getter private volatile boolean sendRequestSucceed = false; @Setter @Getter private volatile Throwable cause; @Getter private volatile Object response; private final CountDownLatch latch = new CountDownLatch(1); public ResponseFuture(String requestId, long timeoutMilliseconds) { this." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/57c9446f676102dd64c529ae6e9164ea/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-01-18T14:58:44+08:00" />
+<meta property="article:modified_time" content="2020-01-18T14:58:44+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">基于Netty和SpringBoot实现一个轻量级RPC框架-Client端请求响应同步化处理</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>前提</h3> 
+<p>前置文章：</p> 
+<ul><li><a href="http://www.throwable.club/2020/01/12/netty-custom-rpc-framework-protocol" rel="nofollow">《基于Netty和SpringBoot实现一个轻量级RPC框架-协议篇》</a></li><li><a href="http://www.throwable.club/2020/01/15/netty-custom-rpc-framework-server" rel="nofollow">《基于Netty和SpringBoot实现一个轻量级RPC框架-Server篇》</a></li><li><a href="http://www.throwable.club/2020/01/16/netty-custom-rpc-framework-client" rel="nofollow">《基于Netty和SpringBoot实现一个轻量级RPC框架-Client篇》</a></li></ul> 
+<p>前一篇文章简单介绍了通过动态代理完成了<code>Client</code>端契约接口调用转换为发送<code>RPC</code>协议请求的功能。这篇文章主要解决一个遗留的技术难题：请求-响应同步化处理。</p> 
+<p>需要的依赖如下：</p> 
+<ul><li><code>JDK1.8+</code></li><li><code>Netty:4.1.44.Final</code></li><li><code>SpringBoot:2.2.2.RELEASE</code></li></ul> 
+ 
+<h3><a id="Netty_18"></a>简单分析Netty请求-响应的处理流程</h3> 
+<p><img src="https://images2.imgbox.com/c9/e3/jvi3gXst_o.png" alt="在这里插入图片描述"></p> 
+<p>图中已经忽略了编码解码器和其他入站出站处理器，不同颜色的线程代表完全不相同的线程，不同线程之间的处理逻辑是完全异步，也就是<code>Netty IO</code>线程（<code>n-l-g-1</code>）接收到<code>Server</code>端的消息并且解析完成的时候，用户调用线程（<code>u-t-1</code>）无法感知到解析完毕的消息包，那么这里要做的事情就是让用户调用线程（<code>u-t-1</code>）获取到<code>Netty IO</code>线程（<code>n-l-g-1</code>）接收并且解析完成的消息包。</p> 
+<p>这里可以用一个简单的例子来说明模拟<code>Client</code>端调用线程等待<code>Netty IO</code>线程的处理结果再同步返回的过程。</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Slf4j</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">NettyThreadSyncTest</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@ToString</span>
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">class</span> <span class="token class-name">ResponseFuture</span> <span class="token punctuation">{<!-- --></span>
+
+        <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token keyword">long</span> beginTimestamp <span class="token operator">=</span> System<span class="token punctuation">.</span><span class="token function">currentTimeMillis</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token annotation punctuation">@Getter</span>
+        <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token keyword">long</span> timeoutMilliseconds<span class="token punctuation">;</span>
+        <span class="token annotation punctuation">@Getter</span>
+        <span class="token keyword">private</span> <span class="token keyword">final</span> String requestId<span class="token punctuation">;</span>
+        <span class="token annotation punctuation">@Setter</span>
+        <span class="token annotation punctuation">@Getter</span>
+        <span class="token keyword">private</span> <span class="token keyword">volatile</span> <span class="token keyword">boolean</span> sendRequestSucceed <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+        <span class="token annotation punctuation">@Setter</span>
+        <span class="token annotation punctuation">@Getter</span>
+        <span class="token keyword">private</span> <span class="token keyword">volatile</span> Throwable cause<span class="token punctuation">;</span>
+        <span class="token annotation punctuation">@Getter</span>
+        <span class="token keyword">private</span> <span class="token keyword">volatile</span> Object response<span class="token punctuation">;</span>
+
+        <span class="token keyword">private</span> <span class="token keyword">final</span> CountDownLatch latch <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">CountDownLatch</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token keyword">public</span> <span class="token function">ResponseFuture</span><span class="token punctuation">(</span>String requestId<span class="token punctuation">,</span> <span class="token keyword">long</span> timeoutMilliseconds<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>requestId <span class="token operator">=</span> requestId<span class="token punctuation">;</span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>timeoutMilliseconds <span class="token operator">=</span> timeoutMilliseconds<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">timeout</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> System<span class="token punctuation">.</span><span class="token function">currentTimeMillis</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> beginTimestamp <span class="token operator">&gt;</span> timeoutMilliseconds<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token keyword">public</span> Object <span class="token function">waitResponse</span><span class="token punctuation">(</span><span class="token keyword">final</span> <span class="token keyword">long</span> timeoutMilliseconds<span class="token punctuation">)</span> <span class="token keyword">throws</span> InterruptedException <span class="token punctuation">{<!-- --></span>
+            latch<span class="token punctuation">.</span><span class="token function">await</span><span class="token punctuation">(</span>timeoutMilliseconds<span class="token punctuation">,</span> TimeUnit<span class="token punctuation">.</span>MILLISECONDS<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span> response<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">putResponse</span><span class="token punctuation">(</span>Object response<span class="token punctuation">)</span> <span class="token keyword">throws</span> InterruptedException <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>response <span class="token operator">=</span> response<span class="token punctuation">;</span>
+            latch<span class="token punctuation">.</span><span class="token function">countDown</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">static</span> ExecutorService REQUEST_THREAD<span class="token punctuation">;</span>
+    <span class="token keyword">static</span> ExecutorService NETTY_IO_THREAD<span class="token punctuation">;</span>
+    <span class="token keyword">static</span> Callable<span class="token generics function"><span class="token punctuation">&lt;</span>Object<span class="token punctuation">&gt;</span></span> REQUEST_TASK<span class="token punctuation">;</span>
+    <span class="token keyword">static</span> Runnable RESPONSE_TASK<span class="token punctuation">;</span>
+
+    <span class="token keyword">static</span> String <span class="token function">processBusiness</span><span class="token punctuation">(</span>String name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> String<span class="token punctuation">.</span><span class="token function">format</span><span class="token punctuation">(</span><span class="token string">"%s say hello!"</span><span class="token punctuation">,</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">final</span> Map<span class="token operator">&lt;</span>String <span class="token comment">/* request id */</span><span class="token punctuation">,</span> ResponseFuture<span class="token operator">&gt;</span> RESPONSE_FUTURE_TABLE <span class="token operator">=</span> Maps<span class="token punctuation">.</span><span class="token function">newConcurrentMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@BeforeClass</span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">beforeClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">throws</span> Exception <span class="token punctuation">{<!-- --></span>
+        String requestId <span class="token operator">=</span> UUID<span class="token punctuation">.</span><span class="token function">randomUUID</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        String requestContent <span class="token operator">=</span> <span class="token string">"throwable"</span><span class="token punctuation">;</span>
+        REQUEST_TASK <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token comment">// 3秒没有得到响应认为超时</span>
+                ResponseFuture responseFuture <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ResponseFuture</span><span class="token punctuation">(</span>requestId<span class="token punctuation">,</span> <span class="token number">3000</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                RESPONSE_FUTURE_TABLE<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span>requestId<span class="token punctuation">,</span> responseFuture<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token comment">// 这里忽略发送请求的操作,只打印日志和模拟耗时1秒</span>
+                Thread<span class="token punctuation">.</span><span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"发送请求成功,请求ID:{},请求内容:{}"</span><span class="token punctuation">,</span> requestId<span class="token punctuation">,</span> requestContent<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token comment">// 更新标记属性</span>
+                responseFuture<span class="token punctuation">.</span><span class="token function">setSendRequestSucceed</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token comment">// 剩余2秒等待时间 - 这里只是粗略计算</span>
+                <span class="token keyword">return</span> responseFuture<span class="token punctuation">.</span><span class="token function">waitResponse</span><span class="token punctuation">(</span><span class="token number">3000</span> <span class="token operator">-</span> <span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"发送请求失败,请求ID:{},请求内容:{}"</span><span class="token punctuation">,</span> requestId<span class="token punctuation">,</span> requestContent<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">RuntimeException</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span><span class="token punctuation">;</span>
+        RESPONSE_TASK <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+            String responseContent <span class="token operator">=</span> <span class="token function">processBusiness</span><span class="token punctuation">(</span>requestContent<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+                ResponseFuture responseFuture <span class="token operator">=</span> RESPONSE_FUTURE_TABLE<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>requestId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span>null <span class="token operator">!=</span> responseFuture<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    log<span class="token punctuation">.</span><span class="token function">warn</span><span class="token punctuation">(</span><span class="token string">"处理响应成功,请求ID:{},响应内容:{}"</span><span class="token punctuation">,</span> requestId<span class="token punctuation">,</span> responseContent<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    responseFuture<span class="token punctuation">.</span><span class="token function">putResponse</span><span class="token punctuation">(</span>responseContent<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+                    log<span class="token punctuation">.</span><span class="token function">warn</span><span class="token punctuation">(</span><span class="token string">"请求ID[{}]对应的ResponseFuture不存在,忽略处理"</span><span class="token punctuation">,</span> requestId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"处理响应失败,请求ID:{},响应内容:{}"</span><span class="token punctuation">,</span> requestId<span class="token punctuation">,</span> responseContent<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">RuntimeException</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span><span class="token punctuation">;</span>
+        REQUEST_THREAD <span class="token operator">=</span> Executors<span class="token punctuation">.</span><span class="token function">newSingleThreadExecutor</span><span class="token punctuation">(</span>runnable <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+            Thread thread <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Thread</span><span class="token punctuation">(</span>runnable<span class="token punctuation">,</span> <span class="token string">"REQUEST_THREAD"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            thread<span class="token punctuation">.</span><span class="token function">setDaemon</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span> thread<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        NETTY_IO_THREAD <span class="token operator">=</span> Executors<span class="token punctuation">.</span><span class="token function">newSingleThreadExecutor</span><span class="token punctuation">(</span>runnable <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+            Thread thread <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Thread</span><span class="token punctuation">(</span>runnable<span class="token punctuation">,</span> <span class="token string">"NETTY_IO_THREAD"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            thread<span class="token punctuation">.</span><span class="token function">setDaemon</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span> thread<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">testProcessSync</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">throws</span> Exception <span class="token punctuation">{<!-- --></span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"异步提交请求处理任务......"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        Future<span class="token generics function"><span class="token punctuation">&lt;</span>Object<span class="token punctuation">&gt;</span></span> future <span class="token operator">=</span> REQUEST_THREAD<span class="token punctuation">.</span><span class="token function">submit</span><span class="token punctuation">(</span>REQUEST_TASK<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">// 模拟请求耗时</span>
+        Thread<span class="token punctuation">.</span><span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1500</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"异步提交响应处理任务......"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        NETTY_IO_THREAD<span class="token punctuation">.</span><span class="token function">execute</span><span class="token punctuation">(</span>RESPONSE_TASK<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">// 这里可以设置超时</span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"同步获取请求结果:{}"</span><span class="token punctuation">,</span> future<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        Thread<span class="token punctuation">.</span><span class="token function">sleep</span><span class="token punctuation">(</span>Long<span class="token punctuation">.</span>MAX_VALUE<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>执行<code>testProcessSync()</code>方法，控制台输出如下：</p> 
+<pre><code class="prism language-shell">2020-01-18 13:17:07 <span class="token punctuation">[</span>main<span class="token punctuation">]</span> INFO  c.t.client.NettyThreadSyncTest - 异步提交请求处理任务<span class="token punctuation">..</span><span class="token punctuation">..</span><span class="token punctuation">..</span>
+2020-01-18 13:17:08 <span class="token punctuation">[</span>REQUEST_THREAD<span class="token punctuation">]</span> INFO  c.t.client.NettyThreadSyncTest - 发送请求成功,请求ID:71f47e27-c17c-458d-b271-4e74fad33a7b,请求内容:throwable
+2020-01-18 13:17:09 <span class="token punctuation">[</span>main<span class="token punctuation">]</span> INFO  c.t.client.NettyThreadSyncTest - 异步提交响应处理任务<span class="token punctuation">..</span><span class="token punctuation">..</span><span class="token punctuation">..</span>
+2020-01-18 13:17:09 <span class="token punctuation">[</span>NETTY_IO_THREAD<span class="token punctuation">]</span> WARN  c.t.client.NettyThreadSyncTest - 处理响应成功,请求ID:71f47e27-c17c-458d-b271-4e74fad33a7b,响应内容:throwable say hello<span class="token operator">!</span>
+2020-01-18 13:17:09 <span class="token punctuation">[</span>main<span class="token punctuation">]</span> INFO  c.t.client.NettyThreadSyncTest - 同步获取请求结果:throwable say hello<span class="token operator">!</span>
+</code></pre> 
+<p>上面这个例子里面的线程同步处理主要参考主流的<code>Netty</code>框架客户端部分的实现逻辑：<code>RocketMQ</code>（具体是<code>NettyRemotingClient</code>类）以及<code>Redisson</code>（具体是<code>RedisExecutor</code>类），它们就是用这种方式使得异步线程处理转化为同步处理。</p> 
+<h3><a id="Client_154"></a>Client端请求响应同步化处理</h3> 
+<p>按照前面的例子，首先新增一个<code>ResponseFuture</code>用于承载已发送但未响应的请求：</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@ToString</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">ResponseFuture</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token keyword">long</span> beginTimestamp <span class="token operator">=</span> System<span class="token punctuation">.</span><span class="token function">currentTimeMillis</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token annotation punctuation">@Getter</span>
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token keyword">long</span> timeoutMilliseconds<span class="token punctuation">;</span>
+    <span class="token annotation punctuation">@Getter</span>
+    <span class="token keyword">private</span> <span class="token keyword">final</span> String requestId<span class="token punctuation">;</span>
+    <span class="token annotation punctuation">@Setter</span>
+    <span class="token annotation punctuation">@Getter</span>
+    <span class="token keyword">private</span> <span class="token keyword">volatile</span> <span class="token keyword">boolean</span> sendRequestSucceed <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token annotation punctuation">@Setter</span>
+    <span class="token annotation punctuation">@Getter</span>
+    <span class="token keyword">private</span> <span class="token keyword">volatile</span> Throwable cause<span class="token punctuation">;</span>
+    <span class="token annotation punctuation">@Getter</span>
+    <span class="token keyword">private</span> <span class="token keyword">volatile</span> ResponseMessagePacket response<span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> CountDownLatch latch <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">CountDownLatch</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">public</span> <span class="token function">ResponseFuture</span><span class="token punctuation">(</span>String requestId<span class="token punctuation">,</span> <span class="token keyword">long</span> timeoutMilliseconds<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>requestId <span class="token operator">=</span> requestId<span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>timeoutMilliseconds <span class="token operator">=</span> timeoutMilliseconds<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">timeout</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> System<span class="token punctuation">.</span><span class="token function">currentTimeMillis</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> beginTimestamp <span class="token operator">&gt;</span> timeoutMilliseconds<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> ResponseMessagePacket <span class="token function">waitResponse</span><span class="token punctuation">(</span><span class="token keyword">final</span> <span class="token keyword">long</span> timeoutMilliseconds<span class="token punctuation">)</span> <span class="token keyword">throws</span> InterruptedException <span class="token punctuation">{<!-- --></span>
+        latch<span class="token punctuation">.</span><span class="token function">await</span><span class="token punctuation">(</span>timeoutMilliseconds<span class="token punctuation">,</span> TimeUnit<span class="token punctuation">.</span>MILLISECONDS<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> response<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">putResponse</span><span class="token punctuation">(</span>ResponseMessagePacket response<span class="token punctuation">)</span> <span class="token keyword">throws</span> InterruptedException <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>response <span class="token operator">=</span> response<span class="token punctuation">;</span>
+        latch<span class="token punctuation">.</span><span class="token function">countDown</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>接着需要新增一个<code>HashMap</code>去缓存这些返送成功但是未得到响应处理的<code>ResponseFuture</code>：</p> 
+<pre><code class="prism language-java">Map<span class="token operator">&lt;</span>String <span class="token comment">/* request id */</span><span class="token punctuation">,</span> ResponseFuture<span class="token operator">&gt;</span> RESPONSE_FUTURE_TABLE <span class="token operator">=</span> Maps<span class="token punctuation">.</span><span class="token function">newConcurrentMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>这里的<code>KEY</code>选用<code>requestId</code>，而<code>requestId</code>之前已经定义为<code>UUID</code>，确保每个请求不会重复。为了简单起见，目前所有的逻辑都编写在契约代理工厂<code>ContractProxyFactory</code>，添加下面的功能：</p> 
+<ul><li>添加一个同步发送方法<code>sendRequestSync()</code>处理消息包的发送和同步响应，<code>RequestMessagePacket</code>转换为调用代理目标方法返回值类型的逻辑暂时也编写在此方法中。</li><li>添加一个核心线程数量为逻辑核心数量 * 2的线程池用于处理请求。</li><li>添加一个单线程的调度线程池用于定时清理那些过期的<code>ResponseFuture</code>，清理方法为<code>scanResponseFutureTable()</code>。</li></ul> 
+<p>修改后的<code>ContractProxyFactory</code>如下：</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Slf4j</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">ContractProxyFactory</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">final</span> RequestArgumentExtractor EXTRACTOR <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">DefaultRequestArgumentExtractor</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">final</span> ConcurrentMap<span class="token operator">&lt;</span>Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token punctuation">,</span> Object<span class="token operator">&gt;</span> CACHE <span class="token operator">=</span> Maps<span class="token punctuation">.</span><span class="token function">newConcurrentMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">static</span> <span class="token keyword">final</span> ConcurrentMap<span class="token operator">&lt;</span>String <span class="token comment">/* request id */</span><span class="token punctuation">,</span> ResponseFuture<span class="token operator">&gt;</span> RESPONSE_FUTURE_TABLE <span class="token operator">=</span> Maps<span class="token punctuation">.</span><span class="token function">newConcurrentMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token comment">// 定义请求的最大超时时间为3秒</span>
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">final</span> <span class="token keyword">long</span> REQUEST_TIMEOUT_MS <span class="token operator">=</span> <span class="token number">3000</span><span class="token punctuation">;</span>
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">final</span> ExecutorService EXECUTOR<span class="token punctuation">;</span>
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">final</span> ScheduledExecutorService CLIENT_HOUSE_KEEPER<span class="token punctuation">;</span>
+    <span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">final</span> Serializer SERIALIZER <span class="token operator">=</span> FastJsonSerializer<span class="token punctuation">.</span>X<span class="token punctuation">;</span>
+
+
+    <span class="token annotation punctuation">@SuppressWarnings</span><span class="token punctuation">(</span><span class="token string">"unchecked"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token generics function"><span class="token punctuation">&lt;</span>T<span class="token punctuation">&gt;</span></span> T <span class="token function">ofProxy</span><span class="token punctuation">(</span>Class<span class="token generics function"><span class="token punctuation">&lt;</span>T<span class="token punctuation">&gt;</span></span> interfaceKlass<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// 缓存契约接口的代理类实例</span>
+        <span class="token keyword">return</span> <span class="token punctuation">(</span>T<span class="token punctuation">)</span> CACHE<span class="token punctuation">.</span><span class="token function">computeIfAbsent</span><span class="token punctuation">(</span>interfaceKlass<span class="token punctuation">,</span> x <span class="token operator">-</span><span class="token operator">&gt;</span>
+                Proxy<span class="token punctuation">.</span><span class="token function">newProxyInstance</span><span class="token punctuation">(</span>interfaceKlass<span class="token punctuation">.</span><span class="token function">getClassLoader</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token keyword">new</span> <span class="token class-name">Class</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">{<!-- --></span>interfaceKlass<span class="token punctuation">}</span><span class="token punctuation">,</span> <span class="token punctuation">(</span>target<span class="token punctuation">,</span> method<span class="token punctuation">,</span> args<span class="token punctuation">)</span> <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+                    RequestArgumentExtractInput input <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">RequestArgumentExtractInput</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    input<span class="token punctuation">.</span><span class="token function">setInterfaceKlass</span><span class="token punctuation">(</span>interfaceKlass<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    input<span class="token punctuation">.</span><span class="token function">setMethod</span><span class="token punctuation">(</span>method<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    RequestArgumentExtractOutput output <span class="token operator">=</span> EXTRACTOR<span class="token punctuation">.</span><span class="token function">extract</span><span class="token punctuation">(</span>input<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    <span class="token comment">// 封装请求参数</span>
+                    RequestMessagePacket packet <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">RequestMessagePacket</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setMagicNumber</span><span class="token punctuation">(</span>ProtocolConstant<span class="token punctuation">.</span>MAGIC_NUMBER<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setVersion</span><span class="token punctuation">(</span>ProtocolConstant<span class="token punctuation">.</span>VERSION<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setSerialNumber</span><span class="token punctuation">(</span>SerialNumberUtils<span class="token punctuation">.</span>X<span class="token punctuation">.</span><span class="token function">generateSerialNumber</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setMessageType</span><span class="token punctuation">(</span>MessageType<span class="token punctuation">.</span>REQUEST<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setInterfaceName</span><span class="token punctuation">(</span>output<span class="token punctuation">.</span><span class="token function">getInterfaceName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setMethodName</span><span class="token punctuation">(</span>output<span class="token punctuation">.</span><span class="token function">getMethodName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setMethodArgumentSignatures</span><span class="token punctuation">(</span>output<span class="token punctuation">.</span><span class="token function">getMethodArgumentSignatures</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">toArray</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">String</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    packet<span class="token punctuation">.</span><span class="token function">setMethodArguments</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    Channel channel <span class="token operator">=</span> ClientChannelHolder<span class="token punctuation">.</span>CHANNEL_REFERENCE<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    <span class="token keyword">return</span> <span class="token function">sendRequestSync</span><span class="token punctuation">(</span>channel<span class="token punctuation">,</span> packet<span class="token punctuation">,</span> method<span class="token punctuation">.</span><span class="token function">getReturnType</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 同步发送请求
+     *
+     * @param channel channel
+     * @param packet  packet
+     * @return Object
+     */</span>
+    <span class="token keyword">static</span> Object <span class="token function">sendRequestSync</span><span class="token punctuation">(</span>Channel channel<span class="token punctuation">,</span> RequestMessagePacket packet<span class="token punctuation">,</span> Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span> returnType<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">long</span> beginTimestamp <span class="token operator">=</span> System<span class="token punctuation">.</span><span class="token function">currentTimeMillis</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        ResponseFuture responseFuture <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ResponseFuture</span><span class="token punctuation">(</span>packet<span class="token punctuation">.</span><span class="token function">getSerialNumber</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> REQUEST_TIMEOUT_MS<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        RESPONSE_FUTURE_TABLE<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span>packet<span class="token punctuation">.</span><span class="token function">getSerialNumber</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> responseFuture<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token comment">// 获取到承载响应Packet的Future</span>
+            Future<span class="token generics function"><span class="token punctuation">&lt;</span>ResponseMessagePacket<span class="token punctuation">&gt;</span></span> packetFuture <span class="token operator">=</span> EXECUTOR<span class="token punctuation">.</span><span class="token function">submit</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+                channel<span class="token punctuation">.</span><span class="token function">writeAndFlush</span><span class="token punctuation">(</span>packet<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">addListener</span><span class="token punctuation">(</span><span class="token punctuation">(</span>ChannelFutureListener<span class="token punctuation">)</span>
+                        future <span class="token operator">-</span><span class="token operator">&gt;</span> responseFuture<span class="token punctuation">.</span><span class="token function">setSendRequestSucceed</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">return</span> responseFuture<span class="token punctuation">.</span><span class="token function">waitResponse</span><span class="token punctuation">(</span>REQUEST_TIMEOUT_MS <span class="token operator">-</span> <span class="token punctuation">(</span>System<span class="token punctuation">.</span><span class="token function">currentTimeMillis</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> beginTimestamp<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            ResponseMessagePacket responsePacket <span class="token operator">=</span> packetFuture<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>
+                    REQUEST_TIMEOUT_MS <span class="token operator">-</span> <span class="token punctuation">(</span>System<span class="token punctuation">.</span><span class="token function">currentTimeMillis</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> beginTimestamp<span class="token punctuation">)</span><span class="token punctuation">,</span> TimeUnit<span class="token punctuation">.</span>MILLISECONDS<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>null <span class="token operator">==</span> responsePacket<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token comment">// 超时导致响应包获取失败</span>
+                <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">SendRequestException</span><span class="token punctuation">(</span>String<span class="token punctuation">.</span><span class="token function">format</span><span class="token punctuation">(</span><span class="token string">"ResponseMessagePacket获取超时,请求ID:%s"</span><span class="token punctuation">,</span> packet<span class="token punctuation">.</span><span class="token function">getSerialNumber</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+                ByteBuf payload <span class="token operator">=</span> <span class="token punctuation">(</span>ByteBuf<span class="token punctuation">)</span> responsePacket<span class="token punctuation">.</span><span class="token function">getPayload</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">byte</span><span class="token punctuation">[</span><span class="token punctuation">]</span> bytes <span class="token operator">=</span> ByteBufferUtils<span class="token punctuation">.</span>X<span class="token punctuation">.</span><span class="token function">readBytes</span><span class="token punctuation">(</span>payload<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">return</span> SERIALIZER<span class="token punctuation">.</span><span class="token function">decode</span><span class="token punctuation">(</span>bytes<span class="token punctuation">,</span> returnType<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token string">"同步发送请求异常,请求包:{}"</span><span class="token punctuation">,</span> JSON<span class="token punctuation">.</span><span class="token function">toJSONString</span><span class="token punctuation">(</span>packet<span class="token punctuation">)</span><span class="token punctuation">,</span> e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>e <span class="token keyword">instanceof</span> <span class="token class-name">RuntimeException</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">throw</span> <span class="token punctuation">(</span>RuntimeException<span class="token punctuation">)</span> e<span class="token punctuation">;</span>
+            <span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">SendRequestException</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">scanResponseFutureTable</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"开始执行ResponseFutureTable清理任务......"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        Iterator<span class="token operator">&lt;</span>Map<span class="token punctuation">.</span>Entry<span class="token generics function"><span class="token punctuation">&lt;</span>String<span class="token punctuation">,</span> ResponseFuture<span class="token punctuation">&gt;</span></span><span class="token operator">&gt;</span> iterator <span class="token operator">=</span> RESPONSE_FUTURE_TABLE<span class="token punctuation">.</span><span class="token function">entrySet</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">iterator</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">while</span> <span class="token punctuation">(</span>iterator<span class="token punctuation">.</span><span class="token function">hasNext</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            Map<span class="token punctuation">.</span>Entry<span class="token generics function"><span class="token punctuation">&lt;</span>String<span class="token punctuation">,</span> ResponseFuture<span class="token punctuation">&gt;</span></span> entry <span class="token operator">=</span> iterator<span class="token punctuation">.</span><span class="token function">next</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            ResponseFuture responseFuture <span class="token operator">=</span> entry<span class="token punctuation">.</span><span class="token function">getValue</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>responseFuture<span class="token punctuation">.</span><span class="token function">timeout</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                iterator<span class="token punctuation">.</span><span class="token function">remove</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                log<span class="token punctuation">.</span><span class="token function">warn</span><span class="token punctuation">(</span><span class="token string">"移除过期的请求ResponseFuture,请求ID:{}"</span><span class="token punctuation">,</span> entry<span class="token punctuation">.</span><span class="token function">getKey</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"执行ResponseFutureTable清理任务结束......"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">static</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">int</span> n <span class="token operator">=</span> Runtime<span class="token punctuation">.</span><span class="token function">getRuntime</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">availableProcessors</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        EXECUTOR <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ThreadPoolExecutor</span><span class="token punctuation">(</span>n <span class="token operator">*</span> <span class="token number">2</span><span class="token punctuation">,</span> n <span class="token operator">*</span> <span class="token number">2</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> TimeUnit<span class="token punctuation">.</span>SECONDS<span class="token punctuation">,</span>
+                <span class="token keyword">new</span> <span class="token class-name">ArrayBlockingQueue</span><span class="token operator">&lt;</span><span class="token operator">&gt;</span><span class="token punctuation">(</span><span class="token number">50</span><span class="token punctuation">)</span><span class="token punctuation">,</span> runnable <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+            Thread thread <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Thread</span><span class="token punctuation">(</span>runnable<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            thread<span class="token punctuation">.</span><span class="token function">setDaemon</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            thread<span class="token punctuation">.</span><span class="token function">setName</span><span class="token punctuation">(</span><span class="token string">"CLIENT_REQUEST_EXECUTOR"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span> thread<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        CLIENT_HOUSE_KEEPER <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ScheduledThreadPoolExecutor</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> runnable <span class="token operator">-</span><span class="token operator">&gt;</span> <span class="token punctuation">{<!-- --></span>
+            Thread thread <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Thread</span><span class="token punctuation">(</span>runnable<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            thread<span class="token punctuation">.</span><span class="token function">setDaemon</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            thread<span class="token punctuation">.</span><span class="token function">setName</span><span class="token punctuation">(</span><span class="token string">"CLIENT_HOUSE_KEEPER"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span> thread<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        CLIENT_HOUSE_KEEPER<span class="token punctuation">.</span><span class="token function">scheduleWithFixedDelay</span><span class="token punctuation">(</span>ContractProxyFactory<span class="token operator">:</span><span class="token operator">:</span>scanResponseFutureTable<span class="token punctuation">,</span> <span class="token number">5</span><span class="token punctuation">,</span> <span class="token number">5</span><span class="token punctuation">,</span> TimeUnit<span class="token punctuation">.</span>SECONDS<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>接着添加一个客户端入站处理器，用于通过<code>reuqestId</code>匹配目标<code>ResponseFuture</code>实例，同时设置<code>ResponseFuture</code>实例中的<code>response</code>属性为响应包，同时释放闭锁：</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Slf4j</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">ClientHandler</span> <span class="token keyword">extends</span> <span class="token class-name">SimpleChannelInboundHandler</span><span class="token generics function"><span class="token punctuation">&lt;</span>ResponseMessagePacket<span class="token punctuation">&gt;</span></span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">protected</span> <span class="token keyword">void</span> <span class="token function">channelRead0</span><span class="token punctuation">(</span>ChannelHandlerContext ctx<span class="token punctuation">,</span> ResponseMessagePacket packet<span class="token punctuation">)</span> <span class="token keyword">throws</span> Exception <span class="token punctuation">{<!-- --></span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"接收到响应包,内容:{}"</span><span class="token punctuation">,</span> JSON<span class="token punctuation">.</span><span class="token function">toJSONString</span><span class="token punctuation">(</span>packet<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        ResponseFuture responseFuture <span class="token operator">=</span> ContractProxyFactory<span class="token punctuation">.</span>RESPONSE_FUTURE_TABLE<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>packet<span class="token punctuation">.</span><span class="token function">getSerialNumber</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>null <span class="token operator">!=</span> responseFuture<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            responseFuture<span class="token punctuation">.</span><span class="token function">putResponse</span><span class="token punctuation">(</span>packet<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">warn</span><span class="token punctuation">(</span><span class="token string">"接收响应包查询ResponseFuture不存在,请求ID:{}"</span><span class="token punctuation">,</span> packet<span class="token punctuation">.</span><span class="token function">getSerialNumber</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>最后，客户端启动类<code>ClientApplication</code>中添加<code>ClientHandler</code>到<code>Netty</code>的处理器流水线中即可：</p> 
+<pre><code class="prism language-java">bootstrap<span class="token punctuation">.</span><span class="token function">handler</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">ChannelInitializer</span><span class="token generics function"><span class="token punctuation">&lt;</span>SocketChannel<span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">protected</span> <span class="token keyword">void</span> <span class="token function">initChannel</span><span class="token punctuation">(</span>SocketChannel ch<span class="token punctuation">)</span> <span class="token keyword">throws</span> Exception <span class="token punctuation">{<!-- --></span>
+        ch<span class="token punctuation">.</span><span class="token function">pipeline</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">addLast</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">LengthFieldBasedFrameDecoder</span><span class="token punctuation">(</span><span class="token number">1024</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">4</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        ch<span class="token punctuation">.</span><span class="token function">pipeline</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">addLast</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">LengthFieldPrepender</span><span class="token punctuation">(</span><span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        ch<span class="token punctuation">.</span><span class="token function">pipeline</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">addLast</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">LoggingHandler</span><span class="token punctuation">(</span>LogLevel<span class="token punctuation">.</span>DEBUG<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        ch<span class="token punctuation">.</span><span class="token function">pipeline</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">addLast</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">RequestMessagePacketEncoder</span><span class="token punctuation">(</span>FastJsonSerializer<span class="token punctuation">.</span>X<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        ch<span class="token punctuation">.</span><span class="token function">pipeline</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">addLast</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">ResponseMessagePacketDecoder</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        ch<span class="token punctuation">.</span><span class="token function">pipeline</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">addLast</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">ClientHandler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>先运行之前- <a href="http://www.throwable.club/2020/01/15/netty-custom-rpc-framework-server" rel="nofollow">《基于Netty和SpringBoot实现一个轻量级RPC框架-Server篇》</a>中编写好的<code>ServerApplication</code>，再启动<code>ClientApplication</code>，日志输出如下：</p> 
+<pre><code class="prism language-shell">// 服务端
+2020-01-18 14:32:59 <span class="token punctuation">[</span>nioEventLoopGroup-3-2<span class="token punctuation">]</span> INFO  club.throwable.server.ServerHandler - 服务端接收到:RequestMessagePacket<span class="token punctuation">(</span>interfaceName<span class="token operator">=</span>club.throwable.contract.HelloService, methodName<span class="token operator">=</span>sayHello, methodArgumentSignatures<span class="token operator">=</span><span class="token punctuation">[</span>java.lang.String<span class="token punctuation">]</span>, methodArguments<span class="token operator">=</span><span class="token punctuation">[</span>PooledUnsafeDirectByteBuf<span class="token punctuation">(</span>ridx: 0, widx: 11, cap: 11/144<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+2020-01-18 14:32:59 <span class="token punctuation">[</span>nioEventLoopGroup-3-2<span class="token punctuation">]</span> INFO  club.throwable.server.ServerHandler - 查找目标实现方法成功,目标类:club.throwable.server.contract.DefaultHelloService,宿主类:club.throwable.server.contract.DefaultHelloService,宿主方法:sayHello
+2020-01-18 14:32:59 <span class="token punctuation">[</span>nioEventLoopGroup-3-2<span class="token punctuation">]</span> INFO  club.throwable.server.ServerHandler - 服务端输出:<span class="token punctuation">{<!-- --></span><span class="token string">"attachments"</span>:<span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span>,<span class="token string">"errorCode"</span>:200,<span class="token string">"magicNumber"</span>:10086,<span class="token string">"message"</span><span class="token keyword">:</span><span class="token string">"Success"</span>,<span class="token string">"messageType"</span><span class="token keyword">:</span><span class="token string">"RESPONSE"</span>,<span class="token string">"payload"</span><span class="token keyword">:</span><span class="token string">"\"throwable say hello!\""</span>,<span class="token string">"serialNumber"</span><span class="token keyword">:</span><span class="token string">"21d131d26fc74f91b4691e0207826b90"</span>,<span class="token string">"version"</span>:1<span class="token punctuation">}</span>
+
+// 客户端
+2020-01-18 14:32:59 <span class="token punctuation">[</span>nioEventLoopGroup-2-1<span class="token punctuation">]</span> INFO  club.throwable.client.ClientHandler - 接收到响应包,内容:<span class="token punctuation">{<!-- --></span><span class="token string">"attachments"</span>:<span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span>,<span class="token string">"errorCode"</span>:200,<span class="token string">"magicNumber"</span>:10086,<span class="token string">"message"</span><span class="token keyword">:</span><span class="token string">"Success"</span>,<span class="token string">"messageType"</span><span class="token keyword">:</span><span class="token string">"RESPONSE"</span>,<span class="token string">"payload"</span>:<span class="token punctuation">{<!-- --></span><span class="token string">"contiguous"</span>:true,<span class="token string">"direct"</span>:true,<span class="token string">"readOnly"</span>:false,<span class="token string">"readable"</span>:true,<span class="token string">"writable"</span>:false<span class="token punctuation">}</span>,<span class="token string">"serialNumber"</span><span class="token keyword">:</span><span class="token string">"21d131d26fc74f91b4691e0207826b90"</span>,<span class="token string">"version"</span>:1<span class="token punctuation">}</span>
+2020-01-18 14:32:59 <span class="token punctuation">[</span>main<span class="token punctuation">]</span> INFO  c.throwable.client.ClientApplication - HelloService<span class="token punctuation">[</span>throwable<span class="token punctuation">]</span>调用结果:<span class="token string">"throwable say hello!"</span>
+2020-01-18 14:33:04 <span class="token punctuation">[</span>CLIENT_HOUSE_KEEPER<span class="token punctuation">]</span> INFO  c.t.client.ContractProxyFactory - 开始执行ResponseFutureTable清理任务<span class="token punctuation">..</span><span class="token punctuation">..</span><span class="token punctuation">..</span>
+2020-01-18 14:33:04 <span class="token punctuation">[</span>CLIENT_HOUSE_KEEPER<span class="token punctuation">]</span> WARN  c.t.client.ContractProxyFactory - 移除过期的请求ResponseFuture,请求ID:21d131d26fc74f91b4691e0207826b90
+</code></pre> 
+<p>可见异步线程模型已经被改造为同步化，现在可以通过契约接口通过<code>RPC</code>同步调用服务端。</p> 
+<h3><a id="_376"></a>小结</h3> 
+<p><code>Client</code>端的请求-响应同步化处理基本改造完毕，到此为止，一个<code>RPC</code>框架大致已经完成，接下来会对<code>Client</code>端和<code>Server</code>端进行一些改造，让契约相关组件托管到<code>IOC</code>容器，实现契约接口自动注入等等功能。</p> 
+<p><code>Demo</code>项目地址：</p> 
+<ul><li><a href="https://github.com/zjcscut/netty-tutorials/tree/master/ch0-custom-rpc-protocol">ch0-custom-rpc-protocol</a></li></ul> 
+<p>（本文完e-a-20200118 c-2-d）</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/87c2f6ef32c1039a3787f86a56449585/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">vim 跳转到指定行</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f0113d9bd9e797ae2181fb27e7739644/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">深入Nodejs模块fs - 文件系统操作</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

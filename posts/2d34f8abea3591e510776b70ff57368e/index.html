@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>进程状态与孤儿进程 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="进程状态与孤儿进程" />
+<meta property="og:description" content="目录 🙊 进程的理解 🙊🙊 进程状态 🙊💖 进程状态介绍💖 阻塞和挂起的概念💖 如何理解等待的过程💖 挂起 🙊 Linux 进程状态 🙊💖 进程状态介绍💖 进程的 R 状态💖 进程运行状态验证💖 进程的 S(休眠) 状态💖 进程的 D(不可中断休眠) 状态💖 进程的 T(暂停) 状态💖 进程的 X(死亡) 状态 和 Z(僵尸)状态 🙊 孤儿进程 🙊 🙊 进程的理解 🙊 进程 = 内核数据结构 &#43; 自己的代码和数据。
+操作系统会新增或者退出进程，在操作系统的一个时间段内存在很多进程，这些进程都由操作系统进行管理，管理的方式就是先描述再组织，操作系统为了管理进程会创建内核数据结构，然后将内核数据结构定义出来的进程对象用特定的方式进行管理。
+一般在 windows 中双击程序、在 linux 中 ./ 运行程序都算是运行了一个进程。双击或者 ./ 就会将可执行的二进制文件加载到内存，冯诺依曼体系规定，把软件或自己编写的代码和数据加载到内存后才可以被操作系统调度运行，操作系统会管理这些进程。
+进程就是内核数据结构 &#43; 该进程对应的代码和数据。操作系统为了管理进程，就需要从进程中提取进程相关的属性集合，构建出对应的数据结构对象加上从外设中加载进来的该进程匹配的代码和数据。
+操作系统对进程的管理并不是对加载到内存中的二进制文件进行管理，而是抽象出进程的数据结构，这个数据结构是一个结构体，包含了进程的内部属性，结构体也可以指向进程加载到内存中所对应的代码和数据。
+以后提到进程只关心一个进程所创建的内核数据结构，而它的代码和数据在哪里并不重要。
+将所有加载到内存的进程创建出来特定的描述进程的数据结构结构体对象，叫做该进程的进程控制块，简称 PCB，linux 中叫做 task_struct，在内核中 task_struct 就是一个结构体，当加载一个进程的时候，操作系统就会用 task_struct 结构体定义出来一个对象，这个对象含有进程的属性，和加载到内存中的代码和数据的位置。
+如果进程太多，操作系统会以链表等数据结构对这些进程进行管理。对进程做管理就变成了对链表的增删查改，这就是对进程的理解。
+🙊 进程状态 🙊 💖 进程状态介绍 为了弄明白正在运行的进程是什么意思，我们需要知道进程的不同状态。一个进程可以有几个状态（在 Linux 内核里，进程有时候也叫做任务）。下面的状态在 kernel 源代码里定义：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/2d34f8abea3591e510776b70ff57368e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-02-26T10:44:14+08:00" />
+<meta property="article:modified_time" content="2023-02-26T10:44:14+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">进程状态与孤儿进程</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>目录</h4> 
+ <ul><li><a href="#___1" rel="nofollow">🙊 进程的理解 🙊</a></li><li><a href="#___18" rel="nofollow">🙊 进程状态 🙊</a></li><li><ul><li><a href="#__19" rel="nofollow">💖 进程状态介绍</a></li><li><a href="#__52" rel="nofollow">💖 阻塞和挂起的概念</a></li><li><a href="#__65" rel="nofollow">💖 如何理解等待的过程</a></li><li><a href="#__88" rel="nofollow">💖 挂起</a></li></ul> 
+  </li><li><a href="#_Linux___101" rel="nofollow">🙊 Linux 进程状态 🙊</a></li><li><ul><li><a href="#__102" rel="nofollow">💖 进程状态介绍</a></li><li><a href="#__R__133" rel="nofollow">💖 进程的 R 状态</a></li><li><a href="#__140" rel="nofollow">💖 进程运行状态验证</a></li><li><a href="#__S__186" rel="nofollow">💖 进程的 S(休眠) 状态</a></li><li><a href="#__D__208" rel="nofollow">💖 进程的 D(不可中断休眠) 状态</a></li><li><a href="#__T__210" rel="nofollow">💖 进程的 T(暂停) 状态</a></li><li><a href="#__X___Z_244" rel="nofollow">💖 进程的 X(死亡) 状态 和 Z(僵尸)状态</a></li></ul> 
+  </li><li><a href="#___271" rel="nofollow">🙊 孤儿进程 🙊</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="___1"></a>🙊 进程的理解 🙊</h2> 
+<blockquote> 
+ <p><strong>进程</strong> = <strong>内核数据结构</strong> + <strong>自己的代码和数据</strong>。<br> <br> 操作系统会新增或者退出进程，在操作系统的一个时间段内存在很多进程，这些进程都由操作系统进行管理，管理的方式就是先描述再组织，操作系统为了管理进程会创建内核数据结构，然后将内核数据结构定义出来的进程对象用特定的方式进行管理。<br> <br> 一般在 <strong>windows</strong> 中双击程序、在 <strong>linux</strong> 中 <strong>./</strong> 运行程序都算是运行了一个进程。双击或者 <strong>./</strong> 就会将可执行的二进制文件加载到内存，冯诺依曼体系规定，把软件或自己编写的代码和数据加载到内存后才可以被操作系统调度运行，操作系统会管理这些进程。<br> <br> 进程就是<strong>内核数据结构</strong> + <strong>该进程对应的代码和数据</strong>。操作系统为了管理进程，就需要从进程中提取进程相关的属性集合，构建出对应的数据结构对象加上从外设中加载进来的该进程匹配的代码和数据。<br> <br> 操作系统对进程的管理并不是对加载到内存中的二进制文件进行管理，而是抽象出进程的数据结构，这个数据结构是一个结构体，包含了进程的内部属性，结构体也可以指向进程加载到内存中所对应的代码和数据。<br> <br> 以后提到进程只关心一个进程所创建的内核数据结构，而它的代码和数据在哪里并不重要。<br> <br> 将所有加载到内存的进程创建出来特定的描述进程的数据结构结构体对象，叫做该进程的<strong>进程控制块</strong>，简称 <strong>PCB</strong>，<strong>linux</strong> 中叫做 <strong>task_struct</strong>，在内核中 <strong>task_struct</strong> 就是一个<strong>结构体</strong>，当加载一个进程的时候，操作系统就会用 <strong>task_struct</strong> 结构体定义出来一个对象，这个对象含有进程的属性，和加载到内存中的代码和数据的位置。<br> <br> 如果进程太多，操作系统会以链表等数据结构对这些进程进行管理。对进程做管理就变成了对链表的增删查改，这就是对进程的理解。</p> 
+</blockquote> 
+<h2><a id="___18"></a>🙊 进程状态 🙊</h2> 
+<h3><a id="__19"></a>💖 进程状态介绍</h3> 
+<blockquote> 
+ <p>为了弄明白正在运行的进程是什么意思，我们需要知道进程的不同状态。一个进程可以有几个状态（在 <strong>Linux</strong> 内核里，进程有时候也叫做任务）。下面的状态在 <strong>kernel</strong> 源代码里定义：</p> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token comment">/*
+* The task state array is a strange "bitmap" of
+* reasons to sleep. Thus "running" is zero, and
+* you can test for combinations of others with
+* simple bit tests.
+*/</span>
+<span class="token keyword">static</span> <span class="token keyword">const</span> <span class="token keyword">char</span> <span class="token operator">*</span> <span class="token keyword">const</span> task_state_array<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+<span class="token string">"R (running)"</span><span class="token punctuation">,</span> <span class="token comment">/* 0 */</span>
+<span class="token string">"S (sleeping)"</span><span class="token punctuation">,</span> <span class="token comment">/* 1 */</span>
+<span class="token string">"D (disk sleep)"</span><span class="token punctuation">,</span> <span class="token comment">/* 2 */</span>
+<span class="token string">"T (stopped)"</span><span class="token punctuation">,</span> <span class="token comment">/* 4 */</span>
+<span class="token string">"t (tracing stop)"</span><span class="token punctuation">,</span> <span class="token comment">/* 8 */</span>
+<span class="token string">"X (dead)"</span><span class="token punctuation">,</span> <span class="token comment">/* 16 */</span>
+<span class="token string">"Z (zombie)"</span><span class="token punctuation">,</span> <span class="token comment">/* 32 */</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<blockquote> 
+ <p>一般进程在运行的时候，是否在一直运行呢？<br> <br> <strong>答：</strong> 程序不是在 <strong>cpu</strong> 中一直运行的，是一个进程都在 <strong>cpu</strong> 中运行一段时间，然后操作系统再将这个进程从 <strong>cpu</strong> 卸掉，再将另一个进程放入 <strong>cpu</strong>，周而复始重复这个工作，直到所有进程都运行完。<br> <br> 这种方式叫基于进程切换的<strong>分时操作系统</strong>。说直接点就是让每个进程都运行一点，通过切换的方式在同一时间段内让所有进程都得以推进。<br> <br> 因为 cpu 运行速度极快，人们的感官完全感受不到这种快速切换的时间差，所以在我们看来特定的时间段内好像多个进程同时被运行。<br> <br> 那么操作系统通过何种方式进行这样的切换呢？<br> <br> 这就需要<strong>进程状态</strong>来控制，每个进程都都会有不同的状态，操作系统通过进程的各种状态来决定进程调度与否。</p> 
+</blockquote> 
+<h3><a id="__52"></a>💖 阻塞和挂起的概念</h3> 
+<blockquote> 
+ <p><strong>阻塞：</strong> 进程因为等待某种条件就绪，而导致不推进的一种状态。<br> <br> 当我们自己写一个程序并编译完成运行，程序被加载到内存变成进程，但是这个进程始终没有被 <strong>cpu</strong> 执行。<strong>windows</strong> 下启动很多软件后发现电脑非常卡顿，因为操作系统在用 <strong>cpu</strong> 调度的时候，正在调度的进程在运行，没有被调度的进程就卡住。<br> <br> 所谓的阻塞就是进程卡住了，这种阻塞或进程卡顿一定是在等待某种资源。<br> 比如下载一个软件的时候突然断网或者下载速度为 0 的时候，进程就卡住了，此时这个进程在等待网络资源。<br> <br> <strong>总结：</strong><br> <br> 1、进程要通过等待的方式，等具体的资源被其他进程使用完成后再被自己使用。<br> <br> 2、阻塞是进程等待某种资源就绪的过程。</p> 
+</blockquote> 
+<h3><a id="__65"></a>💖 如何理解等待的过程</h3> 
+<blockquote> 
+ <p>在操作系统层面如何理解进程等待某种资源的就绪？<br> <br> 操作系统是一款管理软硬件资源的软件，管理的本质就是<strong>先描述</strong>、<strong>再组织</strong>，操作系统要管理硬件资源如磁盘、显卡、网卡等设备，就要先描述、再组织，先将这些硬件设备描述起来，再将这些设备用链表的形式组织起来。这样操作系统对设备的管理就变成了对链表的增删查改。<br> 操作系统内可以存在大量的进程，而且通过先描述、再组织的方式对这些进程进行管理。如一个进程被 cpu 运行时需要等待网卡支持。<br> <br> <img src="https://images2.imgbox.com/4a/bc/Jerp18qm_o.png" alt="在这里插入图片描述"><br> <strong>cpu</strong> 不再调度此进程，进程阻塞等待网络资源。<br> <br> <img src="https://images2.imgbox.com/6b/b7/I6apLO3T_o.png" alt="在这里插入图片描述"><br> 此时进程的 <strong>task_struct</strong> 链接到描述网卡结构体指针后，等待网卡响应。<br> <br> <img src="https://images2.imgbox.com/58/cc/baSMW3j5_o.png" alt="在这里插入图片描述"> <br> 因为对应的资源也需要被管理，所有的外设都被操作系统通过先描述再组织抽象成了特定的数据结构，比如进程的起始地址、维护一个队列等。当进程被调度的时候，就是通过描述进程的结构体对象 <strong>task_struct</strong> 找到进程的代码和数据去运行<br> <br> 如果发现代码中有些资源没有就绪，只需要将进程控制块从 <strong>cpu</strong> 某些特定的队列中拿出来放到等待资源处进行排队，就叫该进程在等待某种资源。<br> <br> 如果该进程被连接到外设或某种资源的 <strong>task_struct</strong> ，不会被 <strong>cpu</strong> 调度，此时就是进程阻塞。<br> <br> <strong>注：</strong> 队列里面放的不是进程的代码和数据，而是描述进程的 <strong>task_struct</strong> 结构体对象放在队列里。<br> <br> <strong>总结：</strong> 阻塞就是不被操作系统调度，一定是因为当前进程需要等待某种资源就绪，即进程的 <strong>task_struct</strong> 结构体需要在某种被操作系统管理的资源下排队。</p> 
+</blockquote> 
+<h3><a id="__88"></a>💖 挂起</h3> 
+<blockquote> 
+ <p>进程被调度的时候，需要等待某种资源的响应，等待过程中进程不再被 <strong>cpu</strong> 调度，需要链接到设备的 <strong>task_struct</strong> 队列中等待响应，这个过程叫做进程的阻塞。<br> <br> <img src="https://images2.imgbox.com/6c/c6/WPiHO8LA_o.png" alt="在这里插入图片描述"><br> 而当某一时刻内存资源紧张，操作系统将不被调度，进程的代码和数据放入磁盘中。<br> <br> <img src="https://images2.imgbox.com/18/d5/SY3zlDBX_o.png" alt="在这里插入图片描述"><br> 当进程等待的资源就绪时，<strong>cpu</strong> 再次调度进程前将代码和数据放入内存，再将进程放入 cpu 中运行。<br> <br> <img src="https://images2.imgbox.com/b9/17/8yanUhqq_o.png" alt="在这里插入图片描述"><br> 将进程的代码和数据由操作系统放入到磁盘，就叫做进程的挂起。</p> 
+</blockquote> 
+<h2><a id="_Linux___101"></a>🙊 Linux 进程状态 🙊</h2> 
+<h3><a id="__102"></a>💖 进程状态介绍</h3> 
+<blockquote> 
+ <p><strong>task_struct</strong> 是一个结构体，其内部会包含各种属性，其中就包括进程状态。<br> 所谓的状态在操作系统的 <strong>task_struct</strong> 中的伪代码如下：</p> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token keyword">struct</span> <span class="token class-name">task_struct</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//一个进程</span>
+	<span class="token keyword">int</span> status<span class="token punctuation">;</span>
+	<span class="token comment">//进程的其他属性</span>
+	<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<blockquote> 
+ <p>所谓的进程状态就是用一个数组表示，如 <strong>0</strong> 表示 <strong>running</strong>，<strong>1</strong> 表示 <strong>sleeping</strong>。各字母代表的进程状态如下：</p> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token comment">/*
+* The task state array is a strange "bitmap" of
+* reasons to sleep. Thus "running" is zero, and
+* you can test for combinations of others with
+* simple bit tests.
+*/</span>
+<span class="token keyword">static</span> <span class="token keyword">const</span> <span class="token keyword">char</span> <span class="token operator">*</span> <span class="token keyword">const</span> task_state_array<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+<span class="token string">"R (running)"</span><span class="token punctuation">,</span> <span class="token comment">/* 0 */</span>
+<span class="token string">"S (sleeping)"</span><span class="token punctuation">,</span> <span class="token comment">/* 1 */</span>
+<span class="token string">"D (disk sleep)"</span><span class="token punctuation">,</span> <span class="token comment">/* 2 */</span>
+<span class="token string">"T (stopped)"</span><span class="token punctuation">,</span> <span class="token comment">/* 4 */</span>
+<span class="token string">"t (tracing stop)"</span><span class="token punctuation">,</span> <span class="token comment">/* 8 */</span>
+<span class="token string">"X (dead)"</span><span class="token punctuation">,</span> <span class="token comment">/* 16 */</span>
+<span class="token string">"Z (zombie)"</span><span class="token punctuation">,</span> <span class="token comment">/* 32 */</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<h3><a id="__R__133"></a>💖 进程的 R 状态</h3> 
+<blockquote> 
+ <p>当一个进程被加载运行时的状态就是 <strong>R</strong> 状态。那么进程只要是 <strong>R</strong> 状态，就一定在 <strong>cpu</strong> 运行吗？<br> <br> 一个进程在 <strong>R</strong> 状态，并不代表一定在 <strong>cpu</strong> 运行，系统里可能存在很多进程都在 <strong>R</strong> 状态，但是可能只有一部分正在运行，所以进程一定在调度运行时维护一个运行队列。不同的进程对应自己的 <strong>task_struct</strong>，这些运行的进程都会在运行队列中，<strong>cpu</strong> 在调度进程的时候，只需在运行队列中挑选指定的进程运行就可以了。<br> <br> <img src="https://images2.imgbox.com/34/34/R6M3WmQD_o.png" alt="在这里插入图片描述"><br> 进程是什么状态也看进程在哪里排队。一个进程在 <strong>cpu</strong> 的运行队列排队，就是 <strong>R</strong> 状态，在其他设备排队，就是<strong>阻塞</strong>状态。</p> 
+</blockquote> 
+<h3><a id="__140"></a>💖 进程运行状态验证</h3> 
+<blockquote> 
+ <p>接下来我们写一段代码：</p> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span><span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token function">whhile</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"我是否在运行呢？"</span>\n<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<blockquote> 
+ <p>将程序运行并执行查看指令 <strong>ps axj | head -n1 &amp;&amp; ps ajx | grep mytest | grep -v grep</strong>。<br> <br> <img src="https://images2.imgbox.com/79/70/RwOZY5Nw_o.png" alt="在这里插入图片描述"><br> 可以看到当前 <strong>mytest</strong> 的 <strong>STAT</strong> 状态为 <strong>S+</strong>，并不是 <strong>R</strong> 状态。<br> 将代码做出以下修改：</p> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span><span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token function">whhile</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<blockquote> 
+ <p>再次将程序运行并查看。<br> <br> <img src="https://images2.imgbox.com/69/de/tT1wjdYq_o.png" alt="在这里插入图片描述"><br> 发现此时进程的状态为 <strong>R</strong> 状态。因为 <strong>printf</strong> 为打印函数，需要频繁访问显示器设备打印消息。当进行频繁打印的时候，外设可能没有就绪，此时当前进程并不在 <strong>cpu</strong> 中排队而是在外设中排队等待外设就绪。当外设就绪才将信息打印到外设。<br> <br> 刚刚的 <strong>S</strong> 休眠状态是阻塞状态中的一种，当前进程并没有真的一直在 <strong>cpu</strong> 的运行队列中等，而是在等待显示器资源。<br> <br> <strong>cpu</strong> 比外设的速度快，不允许进程在 <strong>cpu</strong> 中等待外设，因为在等待外设的时间内，<strong>cpu</strong> 可以执行成千上万行代码，所以需要将其放入到外设的队列中等待。<br> 而 <strong>while</strong> 循环是在不断地执行循环体里的内容，执行的时候由于代码只有 <strong>printf</strong> 一行，一瞬间就执行完毕，而 <strong>printf</strong> 需要等待，即将进程从 <strong>cpu</strong> 运行队列放入外设的队列进行等待，相对执行较慢，在用 <strong>ps</strong> 命令查看的时候，可能很多次才能出现一个 <strong>R</strong> 状态，大多数只能查看到 <strong>S</strong> 状态。<br> <br> 为什么注释掉就变成了 <strong>R</strong>？<br> <br> 因为注释掉以后，就没有任何的访问资源的代码，只有 <strong>while</strong> 循环判断，而 <strong>while</strong> 只是单纯的计算代码，在整个进程调度的生命周期中，只会用 <strong>cpu</strong> 资源。<br> <br> 进程在 <strong>R</strong> 状态并不直接代表进程正在运行，而是该进程在运行队列中排队，这个队列由操作系统维护。由于操作系统在内存中，所以此运行队列也在内存中。</p> 
+</blockquote> 
+<h3><a id="__S__186"></a>💖 进程的 S(休眠) 状态</h3> 
+<p><strong>S</strong> 状态是可休眠状态，本质就是一种阻塞状态，看如下代码：</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span><span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">while</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">int</span> a <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token function">scanf</span><span class="token punctuation">(</span><span class="token operator">%</span>d<span class="token punctuation">,</span><span class="token operator">&amp;</span>a<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%d\n"</span>a<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<blockquote> 
+ <p>将程序运行并查看进程状态如下：<br> <br> <img src="https://images2.imgbox.com/dd/71/U0UQVHjG_o.png" alt="在这里插入图片描述"><br> 可以看到此时进程的状态是 <strong>S</strong> 状态，当前进程就没有被 <strong>cpu</strong> 调度，因为此时进程被 <strong>scanf</strong> 阻塞等待输入，进程等待的资源并没有就绪。所以此时进程没有在运行队列中等待，而是等待键盘有数据后将当前进程 <strong>pcb</strong> 放入到运行队列中被调度。<br> <br> 所以此种情况 <strong>S</strong> 状态在等待键盘资源。比如输入 <strong>10</strong>，按回车键时键盘设备就绪，就绪后进程就会放入到运行队列中，<strong>cpu</strong> 调度进程执行 <strong>scanf</strong> 的代码从键盘中读取数据。</p> 
+</blockquote> 
+<h3><a id="__D__208"></a>💖 进程的 D(不可中断休眠) 状态</h3> 
+<blockquote> 
+ <p><strong>D</strong> 状态也是一种阻塞休眠状态，在这个状态的进程通常会等待 <strong>IO</strong> 的结束。<strong>Linux</strong> 中如果一个进程处在 <strong>D</strong> 状态，该进程无法被杀死，即使是操作系统也不行。</p> 
+</blockquote> 
+<h3><a id="__T__210"></a>💖 进程的 T(暂停) 状态</h3> 
+<blockquote> 
+ <p><strong>T</strong> 停止状态（<strong>stopped</strong>）： 可以通过发送 <strong>SIGSTOP</strong> 信号给进程来停止（<strong>T</strong>）进程。这个被暂停的进程可以通过发送 <strong>SIGCONT</strong> 信号让进程继续运行。如写一段代码：</p> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span>    </span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span>    </span>
+                                                                                           
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>    
+<span class="token punctuation">{<!-- --></span>    
+  <span class="token keyword">int</span> count <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>    
+  <span class="token keyword">while</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>    
+  <span class="token punctuation">{<!-- --></span>    
+   <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"我在运行吗？？？%d\n"</span><span class="token punctuation">,</span>count<span class="token operator">++</span><span class="token punctuation">)</span><span class="token punctuation">;</span>    
+   <span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>      	
+  <span class="token punctuation">}</span>                                                                                      
+  <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>                                                 
+<span class="token punctuation">}</span>         
+</code></pre> 
+<blockquote> 
+ <p>如果想让进程暂停，可以使用 <strong>kill</strong> 命令向指定的进程发送暂停信号。将代码运行并查看进程状态，使用 <strong>kill -19 30603</strong> 暂停进程。<br> <br> <img src="https://images2.imgbox.com/ac/a6/DBOLmtYA_o.png" alt="在这里插入图片描述"><br> 此时查看进程状态，发现此进程由 <strong>S+</strong> 状态变成了 <strong>T</strong> 状态，表示当前进程处于<strong>暂停状态</strong>。<br> <br> <img src="https://images2.imgbox.com/52/23/wB2XfWCy_o.png" alt="在这里插入图片描述"><br> 此时再输入 <strong>kill</strong> + <strong>18</strong> + <strong>PID</strong>，就可以继续运行。<br> <br> <img src="https://images2.imgbox.com/6d/93/6LcW769F_o.png" alt="在这里插入图片描述"><br> 此时会发现 <strong>ctrl + c</strong> 无法退出进程。<br> <br> <img src="https://images2.imgbox.com/14/25/UxKYDIEY_o.png" alt="在这里插入图片描述"><br> 因为进程状态带 <strong>+</strong> 是代表进程在前台运行，如果没有 <strong>+</strong> ，代表程序在后台运行，此时可以使用 <strong>kill -9 PID</strong> 指令结束进程。<br> <br> <img src="https://images2.imgbox.com/4e/99/zbMXJoLf_o.png" alt="在这里插入图片描述">进程如果在前台运行，就可以使用 <strong>CTRL c</strong> 来结束，使用 <strong>kill</strong> 命令可以结束任何进程。查状态的时候带 <strong>+</strong> 的代表在前台运行，不带 <strong>+</strong> 的就代表在后台运行。</p> 
+</blockquote> 
+<h3><a id="__X___Z_244"></a>💖 进程的 X(死亡) 状态 和 Z(僵尸)状态</h3> 
+<blockquote> 
+ <p><strong>X</strong> 状态只是一个返回状态，不会在任务列表里看到这个状态。<br> <br> 为什么创建进程？<br> <br> 因为要让进程帮我们完成某些任务，我们有时会关心任务是否完成的结果。这个结果通过<strong>退出码</strong>拿到。下面介绍一下什么是<strong>退出码</strong>：<br> <br> 当写一个 <strong>c</strong> 代码的时候，<strong>main</strong> 函数的返回值为 <strong>int</strong>，这个返回值叫做进程<strong>退出码</strong>，可以根据退出码判断程序执行结果是否正确。<br> <br> 如果一个进程退出了，立刻就 <strong>X</strong> 状态，父进程有没有机会拿到退出结果？<br> <br> Linux 当进程退出的时候，一般程序不会立即彻底退出，而是维持一个 <strong>Z</strong>(僵尸) 状态，方便操作系统后续读取该子进程退出的结果。<br> <br> <img src="https://images2.imgbox.com/3d/39/9Qsivebw_o.png" alt="在这里插入图片描述"><br> 使用命令查看进程，可以看到两个进程是父子关系，父进程的父进程是 <strong>bash</strong>。如果此时子进程先退出，就会进入到 <strong>Z</strong> 状态。<br> <br> <img src="https://images2.imgbox.com/0e/99/MIkaDiwO_o.png" alt="在这里插入图片描述"><br> 僵尸进程并不会立即释放。维护僵尸进程的意义就是父进程会读取到子进程退出的信息。<br> <br> <strong>危害：</strong><br> <br> 进程的退出状态必须被维持下去，因为他要告诉父进程，你交给我的任务，我办的怎么样了。父进程如果一直不读取，子进程就一直处于 <strong>Z</strong> 状态。<br> <br> 维护退出状态本身就是要用数据维护，也属于进程基本信息，所以保存在<strong>task_struct</strong> ( <strong>PCB</strong> ) 中，换句话说，<strong>Z</strong> 状态一直不退出，<strong>PCB</strong> 一直都要维护。<br> <br> 一个父进程创建了很多子进程，就是不回收，就会造成内存资源的浪费。因为数据结构对象本身就要占用内存，想想 <strong>C</strong> 中定义一个结构体变量（对象），是要在内存的某个位置进行开辟空间！</p> 
+</blockquote> 
+<h2><a id="___271"></a>🙊 孤儿进程 🙊</h2> 
+<blockquote> 
+ <p>如果父子两个进程中的父进程先退出，会出现什么现象呢？看以下代码：</p> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span>                                                     </span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span>                                                    </span>
+                                                                       
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>                                                             
+<span class="token punctuation">{<!-- --></span>                                                                      
+  pid_t id <span class="token operator">=</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>                                                   
+  <span class="token keyword">if</span><span class="token punctuation">(</span>id <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>                                                          
+  <span class="token punctuation">{<!-- --></span>                                                                    
+    <span class="token comment">//子进程                                                           </span>
+    <span class="token keyword">while</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>                                                           
+    <span class="token punctuation">{<!-- --></span>                                                                  
+      <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"我是子进程，我在运行，pid：%d，ppid：%d\n"</span><span class="token punctuation">,</span><span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token function">getppid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>    
+      <span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>                                                        
+    <span class="token punctuation">}</span>                                                                  
+  <span class="token punctuation">}</span>                                                                    
+  <span class="token keyword">if</span><span class="token punctuation">(</span>id <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">)</span>                                                           
+  <span class="token punctuation">{<!-- --></span>                                                                    
+    <span class="token comment">//父进程                                                           </span>
+    <span class="token keyword">int</span> cnt <span class="token operator">=</span> <span class="token number">10</span><span class="token punctuation">;</span>                                                      
+    <span class="token keyword">while</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>                                                           
+    <span class="token punctuation">{<!-- --></span>                                                                  
+    <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"我是父进程，我在运行，pid：%d，ppid：%d\n"</span><span class="token punctuation">,</span><span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token function">getppid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>    
+    <span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>                                                          
+    <span class="token keyword">if</span><span class="token punctuation">(</span>cnt<span class="token operator">--</span> <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">)</span>                                                     
+      <span class="token keyword">break</span><span class="token punctuation">;</span>                                                                               
+    <span class="token punctuation">}</span>                                                                
+  <span class="token punctuation">}</span>                                                                  
+  <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>                                                     
+<span class="token punctuation">}</span>             
+</code></pre> 
+<blockquote> 
+ <p>使用 <strong>ps ajx | grep mytest</strong> 过滤当前进程<br> <br> <strong>ps ajx | grep mytest | grep -v grep</strong> 不显示 <strong>grep</strong> 本身<br> <br> 使用 <strong>while :; do ps ajx | grep mytest | grep -v grep; sleep 1;echo “-----------”; done</strong> 进行周而复始运行。<br> <br> <img src="https://images2.imgbox.com/55/2d/zS1e3aid_o.png" alt="在这里插入图片描述"><br> 使用 <strong>while :; do ps ajx | head -1 &amp;&amp; ps axj | grep mytest | grep -v grep; sleep 1;echo “-----------”; done</strong> 显示进程属性链。<br> <br> <img src="https://images2.imgbox.com/15/c2/WgUTUvKI_o.png" alt="在这里插入图片描述"><br> 此时运行进程<br> <br> <img src="https://images2.imgbox.com/ae/c7/TLMhgesi_o.png" alt="在这里插入图片描述"><br> <br> <strong>10s</strong> 后父进程退出<br> <br> <img src="https://images2.imgbox.com/78/ea/FNuR4KIZ_o.png" alt="在这里插入图片描述"><br> 但是根据前面讲到的，父进程退出后应该处于僵尸状态，但是为什么这里没有看到父进程的僵尸状态？<br> <br> 父进程也有自己的父进程 <strong>bash</strong>，父进程退出的时候，<strong>bash</strong> 会自动回收退出父进程的僵尸状态。而父进程退出后，子进程的 <strong>PPID</strong> 变成了 <strong>1</strong>。<br> <br> 父进程退出，子进程会被操作系统领养 (通过让 <strong>1</strong> 号进程成为新的父进程)，被领养的进程叫做<strong>孤儿进程</strong>。<br> <br> 为什么操作系统要领养子进程呢？<br> 如果操作系统不领养孤儿进程，将来孤儿进程退出后，就无法对其回收。</p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/c03523b4d9193770214643c54ab98607/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">详解cors跨域</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f4091a00f74eabbc98384e2201027846/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">备份Linux系统（通用）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

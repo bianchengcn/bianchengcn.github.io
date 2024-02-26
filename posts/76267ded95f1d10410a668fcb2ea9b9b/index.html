@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>全面分析Vision Transformer如何work的、优势（从低层原理角度） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="全面分析Vision Transformer如何work的、优势（从低层原理角度）" />
+<meta property="og:description" content="论文链接：https://arxiv.org/abs/2202.06709
+代码链接：https://github.com/xxxnell/how-do-vits-work
+读论文有感，总结一下，
+经典好文，因为面试被问到Transformer在CV领域大放光彩，跟卷积比，他的优势具体在哪儿，为什么在大数据集上表现很好。
+摘要：
+近来一段时间，有关视觉ViT的工作层出不穷，目前计算机视觉社区大多将ViT的成功归结于多头自注意力技术（MSA）。此外很多工作对MSA工作原理的分析停留在其具有弱归纳偏置（weak inductive bias）和长距离依赖捕捉（long-range dependency）的能力。
+&amp; 所谓归纳偏置，其实是性质或者属性的意思，比如说卷积，他在视觉任务上非常成功，依赖于它本身内置的两个归纳偏置：权重共享和局部相关，可以高效的去学习，自身具有的功能，不需要再去学习，所以模型从更少的数据上就能表现得很好，但是当存在大量数据时，这些归纳偏置可能会限制模型；而Transformer具有弱归纳偏置，说明在小数据集下是存在限制的，所以就需要大数据集去学习，性能往往优于CNN。 本文是一篇刚刚被ICLR2022接受的文章，对视觉Transformer的低层原理进行了全面分析，具体总结了MSA和ViT的三大特性：
+1、MSA提高了网络的精度，但是这种改善主要归因于训练数据的特异性（data specificity），而不是长距离依赖性；
+2、MSA与卷积Conv呈现两种不同的操作形式，MSA是低通滤波器，而Conv是高通滤波器。二者是共为互补的；
+3、MSA在模型特征融合阶段扮演了非常重要的角色，基于此，作者提出了一种新网络AlterNet，将每个stage末尾的Conv块替换成了MSA。AlterNet在大中小型数据集上的性能表现都超过了单纯的CNN模型和ViT模型。
+一、引言 从CNN的角度来看，MSA可以看成是一种特殊的卷积变换，它作用在整个feature map上，具有大尺寸的核参数，因此MSA应该具有卷积操作的基础能力。但是MSA的长距离依赖建模能力对于模型预测性能的提升，本文作者提出了反对意见，作者认为给予模型适当的距离约束可以帮助模型学习更鲁棒的表示。因此作者针对卷积和Transformer提出三个核心问题：
+1、我们需要MSA中的哪些属性来更好的优化网络，MSA的长期依赖建模到底对模型优化起到了怎样的作用？
+2、MSA的操作与Conv有何不同？
+3、如何协调使用MSA和Conv才能更好的发挥它们各自的优势？
+二、分析 问题一：我们需要MSA中的哪些属性来更好的优化网络，MSA的长期依赖建模到底对模型优化起到了怎样的作用？
+MSA的本质是广义空间平滑操作，其本身的弱归纳偏置会扰乱神经网络的训练。MSA的一个关键特性是数据特异性，而不是长距离依赖。MSA之所以能提升模型的整体性能，是因为它使损失平面变得扁平化，这有助于ViT的训练。下图展示了ViT和ResNet损失函数的平面示意图，如图所示，损失平面越平坦，模型的性能和泛化能力越好。
+但是另一方面，MSA允许模型在接触数据时使用负Hessian特征值，这意味着MSA的损失函数是非凸的，这种这种非凸性在一般情况下会干扰神经网络的优化。这一说法也可以通过上图（c）进行证实，图（c）提供了模型训练阶段的Top-5 Hessian特征值密度，batchsize为16，可以看出，ViT具有非常多的负Hessian特征值，而ResNet只有少数，这种损失优化情况会扰乱网络的优化，尤其是在训练的早期阶段。但是在数据量非常大的情况下，这个缺陷会消失，图（a）通过使用滤波器归一化方法可视化得到的损失函数平面，表明ViT的平面相比ResNet更加平坦，这种趋势在边界区域更加明显。同样，在图（b）中展示着ResNet遵循不规则的优化轨迹，而ViT逐渐沿着平滑的轨迹收敛到最优值，这也说明了为什么ViT在大数据集上表现的比CNN好。
+&amp; Hessian矩阵：它的特征值就是形容其在该点附近特征向量方向的凹凸性，特征值越大，凸性越强。你可以把函数想想成一个小山坡，陡的那面是特征值大的方向，平缓的是特征值小的方向。而凸性和优化方法的收敛速度有关，比如梯度下降。如果正定Hessian矩阵的特征值都差不多，那么梯度下降的收敛速度越快，反之如果其特征值相差很大，那么收敛速度越慢。 问题二：MSA与Conv有何不同？
+论文中说MSA和Conv的操作基本上呈现相反的效应，其中MSA是低通滤波器，而Conv是高通滤波器，MSA在空间上平滑了具有更高自注意力值的特征图区域，因此，其倾向于减少高频信号。为了支持这一论点，作者对MSA和Conv的特征图进行了傅立叶分析，结果如下图所示：
+其中图（a）的相对对数幅度表明，ViT倾向于减少高频信号，而ResNet会放大。图（b）展示了基于频率计算得到的随机噪声对模型准确率的影响程度，可以看到ResNet非常容易受到高频噪声的影响，而ViT对高频噪声具有一定的鲁棒性，因此将二者结合可以有效提升整体性能。
+此外，作者还分析了二者在特征融合方面的差异，作者认为MSA操作可以有效的对不同层次的特征进行聚合，但是Conv不能。这是因为MSA具有平均化特征图的操作，这会减少特征图点之间的方差，进而对特征图进行集成，为了证明这一论点，作者做实验对ResNet和ViT的特征图的方差进行计算，实验结果如下图所示：
+从图中可以看出，MSA倾向于减少方差，相反，ResNet中的Conv和ViT中的MLP会增大方差。此外作者还观察到了两个特征图的方差演化模式：
+1、随着网络层数的深入，方差会先在每个层中累积，随着深度的增加而增大；
+2、在ResNet中，特征图方差在每个stage结束时达到峰值，因此可以通过在ResNet每个阶段的末尾插入一个MSA来提高ResNet的特征聚合能力。
+这一点很重要，在后期模型改进的时候可以参考这一点，涨点明显哦！
+问题三：如何协调使用MSA和Conv才能更好的发挥它们各自的优势？
+作者在问题二中认为MSA可以和卷积互补，，因此在问题三中，作者提出了一种设计规范来将MSA和Conv进行组合，称为AlterNet，下图展示了AlterNet与其他两种组合形式的对比。
+作者假设MSA放置在网络stage结束的位置可以显著提升性能，而不是放置在整个模型的末尾。
+作者提出的MSA和Conv交替模式的设计规范如下：
+1、在baseline CNN模型的末尾使用MSA替换Conv块；
+2、如果添加的MSA块不能提高预测性能，就将之前stage末尾的Conv块继续替换为MSA块；
+3、越在后stage的MSA块，给定的head参数和隐藏层维度应该越大。
+在原ResNet-50结构基础上做了改进，第2个stage上第4个卷积块替换成MSA模块，第3个stage上最后一个卷积块替换成MSA模块，第4个stage上最后一个卷积块后添加一个MSA模块。
+下图展示了改进后的ResNet-50模型与它基线模型在CIFAR-100的准确性和鲁棒性，由于CIFAR是一个小型数据集，因此CNN模型由于ViT模型，但是本文改进的模型在小数据集上的性能也优于CNN，这表明MSA操作可以对Conv操作进行补充和增强。
+三、总结 MSA操作不仅仅是广义的Conv操作，它还起到补充原有的Conv的广义空间平滑功能，除此之外，MSA通过集成特征图和平滑损失平面来帮助神经网络学习更加鲁棒的特征表示。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/76267ded95f1d10410a668fcb2ea9b9b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-10-12T17:51:56+08:00" />
+<meta property="article:modified_time" content="2023-10-12T17:51:56+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">全面分析Vision Transformer如何work的、优势（从低层原理角度）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p><img src="https://images2.imgbox.com/2a/a4/qZP0eZhW_o.png" alt="">论文链接：https://arxiv.org/abs/2202.06709<br> 代码链接：https://github.com/xxxnell/how-do-vits-work<br> <strong>读论文有感，总结一下</strong>，<br> <strong>经典好文，因为面试被问到Transformer在CV领域大放光彩，跟卷积比，他的优势具体在哪儿，为什么在大数据集上表现很好。</strong><br> <img src="https://images2.imgbox.com/5d/0a/E0XPEori_o.png" alt="在这里插入图片描述"><strong>摘要：</strong><br> 近来一段时间，有关视觉ViT的工作层出不穷，目前计算机视觉社区大多将ViT的成功归结于多头自注意力技术（MSA）。此外很多工作对MSA工作原理的分析停留在其具有弱归纳偏置（weak inductive bias）和长距离依赖捕捉（long-range dependency）的能力。</p> 
+<h4><a id="_TransformerCNN_7"></a>&amp; 所谓<strong>归纳偏置</strong>，其实是性质或者属性的意思，比如说卷积，他在视觉任务上非常成功，依赖于它本身内置的两个归纳偏置：权重共享和局部相关，可以高效的去学习，自身具有的功能，不需要再去学习，所以模型从更少的数据上就能表现得很好，但是当存在大量数据时，这些归纳偏置可能会限制模型；而Transformer具有弱归纳偏置，说明在小数据集下是存在限制的，所以就需要大数据集去学习，性能往往优于CNN。</h4> 
+<p>本文是一篇刚刚被ICLR2022接受的文章，对视觉Transformer的低层原理进行了全面分析，具体总结了MSA和ViT的三大特性：<br> <strong>1、MSA提高了网络的精度，但是这种改善主要归因于训练数据的特异性（data specificity），而不是长距离依赖性；<br> 2、MSA与卷积Conv呈现两种不同的操作形式，MSA是低通滤波器，而Conv是高通滤波器。二者是共为互补的；<br> 3、MSA在模型特征融合阶段扮演了非常重要的角色，基于此，作者提出了一种新网络AlterNet，将每个stage末尾的Conv块替换成了MSA。AlterNet在大中小型数据集上的性能表现都超过了单纯的CNN模型和ViT模型。</strong></p> 
+<h2><a id="_14"></a><strong>一、引言</strong></h2> 
+<p>从CNN的角度来看，MSA可以看成是一种特殊的卷积变换，它作用在整个feature map上，具有大尺寸的核参数，因此MSA应该具有卷积操作的基础能力。<strong>但是MSA的长距离依赖建模能力对于模型预测性能的提升，本文作者提出了反对意见，作者认为给予模型适当的距离约束可以帮助模型学习更鲁棒的表示</strong>。因此作者针对卷积和Transformer提出三个核心问题：</p> 
+<p>1、我们需要MSA中的哪些属性来更好的优化网络，MSA的长期依赖建模到底对模型优化起到了怎样的作用？<br> 2、MSA的操作与Conv有何不同？<br> 3、如何协调使用MSA和Conv才能更好的发挥它们各自的优势？</p> 
+<h2><a id="_21"></a><strong>二、分析</strong></h2> 
+<p><strong>问题一：我们需要MSA中的哪些属性来更好的优化网络，MSA的长期依赖建模到底对模型优化起到了怎样的作用？</strong></p> 
+<p>MSA的本质是<strong>广义空间平滑操作，其本身的弱归纳偏置会扰乱神经网络的训练</strong>。MSA的一个关键特性是数据特异性，而不是长距离依赖。MSA之所以能提升模型的整体性能，是因为它使<strong>损失平面变得扁平化，这有助于ViT的训练</strong>。下图展示了ViT和ResNet损失函数的平面示意图，如图所示，损失平面越平坦，模型的性能和泛化能力越好。</p> 
+<p><img src="https://images2.imgbox.com/8c/10/rTm0aTmK_o.png" alt="在这里插入图片描述"><br> 但是另一方面，MSA允许模型在接触数据时使用<strong>负Hessian特征值</strong>，这意味着MSA的损失函数是非凸的，这种这种非凸性在一般情况下会干扰神经网络的优化。这一说法也可以通过上图（c）进行证实，图（c）提供了模型训练阶段的Top-5 Hessian特征值密度，batchsize为16，可以看出，ViT具有非常多的负Hessian特征值，而ResNet只有少数，这种损失优化情况会扰乱网络的优化，尤其是在训练的早期阶段。但是在<strong>数据量非常大的情况下，这个缺陷会消失</strong>，图（a）通过使用滤波器归一化方法可视化得到的损失函数平面，表明ViT的平面相比ResNet更加平坦，这种趋势在边界区域更加明显。同样，在图（b）中展示着ResNet遵循不规则的优化轨迹，而ViT逐渐沿着平滑的轨迹收敛到最优值，这也说明了为什么ViT在大数据集上表现的比CNN好。</p> 
+<h4><a id="_HessianHessian_31"></a>&amp; Hessian矩阵：它的特征值就是形容其在该点附近特征向量方向的凹凸性，特征值越大，凸性越强。你可以把函数想想成一个小山坡，陡的那面是特征值大的方向，平缓的是特征值小的方向。而凸性和优化方法的收敛速度有关，比如梯度下降。如果正定Hessian矩阵的特征值都差不多，那么梯度下降的收敛速度越快，反之如果其特征值相差很大，那么收敛速度越慢。</h4> 
+<p><strong>问题二：MSA与Conv有何不同？</strong></p> 
+<p>论文中说MSA和Conv的操作基本上呈现相反的效应，其中<strong>MSA是低通滤波器，而Conv是高通滤波器，MSA在空间上平滑了具有更高自注意力值的特征图区域</strong>，因此，其倾向于减少高频信号。为了支持这一论点，作者对MSA和Conv的特征图进行了傅立叶分析，结果如下图所示：<br> <img src="https://images2.imgbox.com/13/d1/G85unABf_o.png" alt="在这里插入图片描述">其中图（a）的相对对数幅度表明，<strong>ViT倾向于减少高频信号，而ResNet会放大</strong>。图（b）展示了基于频率计算得到的随机噪声对模型准确率的影响程度，可以看到ResNet非常容易受到高频噪声的影响，而ViT对高频噪声具有一定的鲁棒性，因此将二者结合可以有效提升整体性能。</p> 
+<p>此外，作者还分析了二者在特征融合方面的差异，作者认为MSA操作可以有效的对不同层次的特征进行聚合，但是Conv不能。这是因为MSA具有平均化特征图的操作，这会减少特征图点之间的方差，进而对特征图进行集成，为了证明这一论点，作者做实验对ResNet和ViT的特征图的方差进行计算，实验结果如下图所示：<br> <img src="https://images2.imgbox.com/96/7a/H86B7lon_o.png" alt="在这里插入图片描述">从图中可以看出，MSA倾向于减少方差，相反，ResNet中的Conv和ViT中的MLP会增大方差。此外作者还观察到了两个特征图的方差演化模式：</p> 
+<p><strong>1、<strong>随着网络层数的深入，方差会先在每个层中累积，随着深度的增加而增大</strong>；</strong><br> <strong>2、在ResNet中，特征图方差在每个stage结束时达到峰值，因此可以通过在ResNet每个阶段的末尾插入一个MSA来提高ResNet的特征聚合能力。</strong><br> 这一点很重要，在后期模型改进的时候可以参考这一点，涨点明显哦！</p> 
+<p><strong>问题三：如何协调使用MSA和Conv才能更好的发挥它们各自的优势？</strong></p> 
+<p>作者在问题二中认为MSA可以和卷积互补，，因此在问题三中，作者提出了一种设计规范来将MSA和Conv进行组合，称为AlterNet，下图展示了AlterNet与其他两种组合形式的对比。</p> 
+<p><img src="https://images2.imgbox.com/8a/e4/k7kSIroU_o.png" alt="在这里插入图片描述"></p> 
+<p>作者假设MSA放置在网络stage结束的位置可以显著提升性能，而不是放置在整个模型的末尾。<br> 作者提出的MSA和Conv交替模式的设计规范如下：</p> 
+<p><strong>1、在baseline CNN模型的末尾使用MSA替换Conv块；<br> 2、如果添加的MSA块不能提高预测性能，就将之前stage末尾的Conv块继续替换为MSA块；<br> 3、越在后stage的MSA块，给定的head参数和隐藏层维度应该越大。</strong><br> <img src="https://images2.imgbox.com/9c/45/YH3QwU5h_o.png" alt="在这里插入图片描述">在原ResNet-50结构基础上做了改进，第2个stage上第4个卷积块替换成MSA模块，第3个stage上最后一个卷积块替换成MSA模块，第4个stage上最后一个卷积块后添加一个MSA模块。</p> 
+<p>下图展示了改进后的ResNet-50模型与它基线模型在CIFAR-100的准确性和鲁棒性，由于CIFAR是一个小型数据集，因此CNN模型由于ViT模型，但是本文改进的模型在小数据集上的性能也优于CNN，这表明MSA操作可以对Conv操作进行补充和增强。<br> <img src="https://images2.imgbox.com/71/99/UdJNPRHO_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="_61"></a>三、总结</h2> 
+<p>MSA操作不仅仅是广义的Conv操作，它还起到补充原有的Conv的广义空间平滑功能，除此之外，MSA通过集成特征图和平滑损失平面来帮助神经网络学习更加鲁棒的特征表示。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/3732df0cfdc27e1da9a5b57f943b06d2/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">matlab绘制尖角colorbar</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/2854d59b8e8fc1bcc7d0cdc534be2b58/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">学生英语题python代码解片段，给出单词，按字母表顺序列出字母顺序</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

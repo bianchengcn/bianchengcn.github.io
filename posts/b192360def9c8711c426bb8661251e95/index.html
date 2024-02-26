@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>netty4  服务端同步客户端返回的结果 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="netty4  服务端同步客户端返回的结果" />
+<meta property="og:description" content="netty是一个异步通信框架，在有的时候我们想使用服务端向客户端发送消息，服务端同步等待客户端返回结果然进行下一步的业务逻辑操作。那要怎么做才能同步获取客户端返回的数据呢？这里我用到了JDK中的闭锁等待 CountDownLatch，接下来看看代码如何实现：
+服务端：
+package com.example.demo.server; import com.example.demo.cache.ChannelMap; import com.example.demo.model.Result; import io.netty.bootstrap.ServerBootstrap; import io.netty.channel.Channel; import io.netty.channel.ChannelFuture; import io.netty.channel.ChannelOption; import io.netty.channel.EventLoopGroup; import io.netty.channel.nio.NioEventLoopGroup; import io.netty.channel.socket.nio.NioServerSocketChannel; import java.util.concurrent.CountDownLatch; import java.util.concurrent.TimeUnit; import java.util.concurrent.locks.Lock; import lombok.extern.slf4j.Slf4j; /** * @ClassName: NettyServer * @Author: huangzf * @Date: 2018/9/25 15:40 * @Description: */ @Slf4j public class NettyServer { private NettyServerChannelInitializer serverChannelInitializer = null; private int port = 8000; public void bind() throws Exception { //配置服务端的NIO线程组 EventLoopGroup bossGroup = new NioEventLoopGroup(); EventLoopGroup workerGroup = new NioEventLoopGroup(); try { serverChannelInitializer = new NettyServerChannelInitializer(); ServerBootstrap b = new ServerBootstrap(); b." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b192360def9c8711c426bb8661251e95/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2018-10-11T16:05:30+08:00" />
+<meta property="article:modified_time" content="2018-10-11T16:05:30+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">netty4  服务端同步客户端返回的结果</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p> netty是一个异步通信框架，在有的时候我们想使用服务端向客户端发送消息，服务端同步等待客户端返回结果然进行下一步的业务逻辑操作。那要怎么做才能同步获取客户端返回的数据呢？这里我用到了JDK中的闭锁等待 CountDownLatch，接下来看看代码如何实现：</p> 
+<p>服务端：</p> 
+<pre class="has"><code class="language-java">package com.example.demo.server;
+
+import com.example.demo.cache.ChannelMap;
+import com.example.demo.model.Result;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * @ClassName: NettyServer
+ * @Author: huangzf
+ * @Date: 2018/9/25 15:40
+ * @Description:
+ */
+@Slf4j
+public class NettyServer {
+
+    private NettyServerChannelInitializer serverChannelInitializer = null;
+
+    private int port = 8000;
+
+
+    public void bind() throws Exception {
+        //配置服务端的NIO线程组
+        EventLoopGroup bossGroup = new NioEventLoopGroup();
+        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        try {
+            serverChannelInitializer = new NettyServerChannelInitializer();
+            ServerBootstrap b = new ServerBootstrap();
+            b.group(bossGroup, workerGroup)
+                .channel(NioServerSocketChannel.class)
+                //保持长连接
+                .childOption(ChannelOption.SO_KEEPALIVE,true)
+                .option(ChannelOption.SO_BACKLOG, 1024)
+                .childHandler(serverChannelInitializer);
+
+            //绑定端口，同步等待成功
+            ChannelFuture f = b.bind(port).sync();
+
+
+            //等待服务器监听端口关闭
+            f.channel().closeFuture().sync();
+        } finally {
+            //释放线程池资源
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+        }
+    }
+
+    public Result write(Object obj, String tenantId ,String uniId) throws Exception {
+        // 获取锁
+        Lock lock = ChannelMap.getChannelLock(tenantId);
+        try {
+            Channel channel = ChannelMap.getChannel(tenantId);
+            if(channel != null){
+                lock.lock();
+                if(channel.isOpen()){
+                    // 设置同步
+                    CountDownLatch latch = new CountDownLatch(1);
+                    NettyServerHandler nettyServerHandler = (NettyServerHandler) channel.pipeline().get("handler");
+                    nettyServerHandler.resetSync(latch,1);
+                    nettyServerHandler.setUnidId(uniId);
+                    channel.writeAndFlush(obj );
+                    //同步返回结果
+                    if (latch.await(60,TimeUnit.SECONDS)){
+                        // printerServerHandler.setTimeout(0);
+                        return nettyServerHandler.getResult();
+                    }
+                    //如果超时，将超时标志设置为1
+                    //printerServerHandler.setTimeout(1);
+                    log.error("请求超时60s");
+                    return new Result(2,"请求超时",null);
+                }else{
+                    return new Result(0,"客户端已关闭!",null);
+                }
+            }
+
+        }catch (Exception e){
+            e.printStackTrace();
+            return new Result(0,"服务出错!",null);
+
+        }finally {
+            if (lock != null){
+                lock.unlock();
+            }
+        }
+        return new Result(0,"客户端没有连接!",null);
+    }
+
+    public static void main(String[] args) throws Exception {
+       new  NettyServer().bind();
+    }
+
+}
+</code></pre> 
+<p>代码中write方法是业务代码调用服务端向客户端发送信息的统一入口，这里用了Lock是为了防止并发操作影响数据返回的问题，这里每个客户端通道分配一个锁。latch.await(60,TimeUnit.SECONDS) 是为了阻塞程序，等待客户端返回结果，如果60s内没有返回结果则释放锁并返回请求超时。</p> 
+<p>服务端NettyServerChannelInitializer 的实现</p> 
+<pre class="has"><code class="language-java">package com.example.demo.server;
+
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.codec.serialization.ClassResolvers;
+import io.netty.handler.codec.serialization.ObjectDecoder;
+import io.netty.handler.codec.serialization.ObjectEncoder;
+import io.netty.handler.timeout.IdleStateHandler;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * @ClassName: NettyServerChannelInitializer
+ * @Author: huangzf
+ * @Date: 2018/9/25 15:43
+ * @Description:
+ */
+public class NettyServerChannelInitializer extends ChannelInitializer&lt;SocketChannel&gt; {
+
+    private NettyServerHandler handler ;
+
+
+
+    @Override
+    protected void initChannel(SocketChannel socketChannel) throws Exception {
+        ChannelPipeline pipeline = socketChannel.pipeline();
+        pipeline.addLast("decoder", new ObjectDecoder(Integer.MAX_VALUE,ClassResolvers
+            .weakCachingConcurrentResolver(this.getClass().getClassLoader())));
+        pipeline.addLast("encoder", new ObjectEncoder());
+        pipeline.addLast(new IdleStateHandler(40,0,0,TimeUnit.SECONDS));
+        //服务器的逻辑
+        handler = new NettyServerHandler();
+        pipeline.addLast("handler", handler);
+    }
+}
+</code></pre> 
+<p>这里使用了对象进行数据传输，避免了客户端重新解析组装对象的麻烦</p> 
+<pre class="has"><code class="language-java">package com.example.demo.server;
+
+import com.example.demo.cache.ChannelMap;
+import com.example.demo.model.Result;
+import com.example.demo.model.Tenant;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.ReentrantLock;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * @ClassName: NettyServerHandler
+ * @Author: huangzf
+ * @Date: 2018/9/25 15:44
+ * @Description:
+ */
+@Slf4j
+public class NettyServerHandler extends SimpleChannelInboundHandler {
+
+    private CountDownLatch latch;
+
+    /**
+     * 消息的唯一ID
+     */
+    private String unidId = "";
+    /**
+     * 同步标志
+     */
+    private int rec;
+    /**
+     * 客户端返回的结果
+     */
+    private Result result;
+    /**
+     * 心跳丢失次数
+     */
+    private int counter = 0;
+
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+        System.out.println("Client say : " + msg.toString());
+        if(msg instanceof Tenant){
+            ChannelMap.setChannel(((Tenant) msg).getTenantId(),ctx.channel());
+            ChannelMap.setChannelLock(((Tenant) msg).getTenantId(),new ReentrantLock());
+        }
+
+        counter = 0;
+        if(rec == 1  &amp;&amp; msg instanceof Result){
+            Result re = (Result) msg;
+            //校验返回的信息是否是同一个信息
+            if (unidId.equals(re.getUniId())){
+                latch.countDown();//消息返回完毕，释放同步锁，具体业务需要判断指令是否匹配
+                rec = 0;
+                result = re;
+            }
+
+        }
+
+
+    }
+
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        log.info("RemoteAddress : " + ctx.channel().remoteAddress().toString()+ " active !");
+        super.channelActive(ctx);
+    }
+
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if (evt instanceof IdleStateEvent) {
+            IdleStateEvent event = (IdleStateEvent) evt;
+            if (event.state().equals(IdleState.READER_IDLE)){
+                // 空闲40s之后触发 (心跳包丢失)
+                if (counter &gt;= 3) {
+                    // 连续丢失3个心跳包 (断开连接)
+                    ctx.channel().close().sync();
+                    log.error("已与"+ctx.channel().remoteAddress()+"断开连接");
+                    System.out.println("已与"+ctx.channel().remoteAddress()+"断开连接");
+                } else {
+                    counter++;
+                    log.debug(ctx.channel().remoteAddress() + "丢失了第 " + counter + " 个心跳包");
+                    System.out.println("丢失了第 " + counter + " 个心跳包");
+                }
+            }
+
+        }
+    }
+
+    public void resetSync(CountDownLatch latch, int rec) {
+        this.latch = latch;
+        this.rec = rec;
+    }
+
+    public void setUnidId(String s){
+        this.unidId = s;
+    }
+
+    public Result getResult() {
+        return result;
+    }
+}
+</code></pre> 
+<p>在channelRead0方法中 如果读取到的信息是Tenant （客户端刚连接上发送的消息）就为该客户端关联一个唯一标志和分配一个锁Lock（用于并发操作）</p> 
+<p>如果读取到的信息是Result（客户端响服务端的消息）就判断其是否是同一个消息（服务端发送的消息中带有该消息的唯一id，客户端返回时也要带上该id），如果是就latch.countDown() 释放同步锁，这样就可以使得服务端同步得到客户端返回的消息了。</p> 
+<p> </p> 
+<p>详情与客户端代码请移步码云：</p> 
+<p><a href="https://gitee.com/hzf1993/nettydemo/tree/master/sync-netty" rel="nofollow">https://gitee.com/hzf1993/nettydemo/tree/master/sync-netty</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/b028f354f3015697f663a974b0e389e4/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">运算符重载的正确用法</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/34e4d386187314e848525d2d945ea022/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">LeetCode--下一个更大的元素（四种解法,最详细的解法！！！）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

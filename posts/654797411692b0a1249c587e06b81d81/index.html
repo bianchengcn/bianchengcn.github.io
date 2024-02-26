@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Linux驱动（驱动程序开发、驱动框架代码编译和测试） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Linux驱动（驱动程序开发、驱动框架代码编译和测试）" />
+<meta property="og:description" content="目录
+什么是驱动：
+设备分类：
+驱动认知：
+字符设备驱动工作原理
+字符设备、字符设备驱动与用户空间访问该设备的程序三者之间的关系
+驱动程序开发步骤
+基于驱动框架的代码开发
+驱动模块代码编译和测试
+加载内核驱动
+什么是驱动： 驱动就是对底层硬件设备的操作进行封装，并向上层提供函数接口。
+设备分类： linux系统将设备分为3类：字符设备、块设备、网络设备。
+字符设备：指只能一个字节一个字节读写的设备，不能随机读取设备内存中的某一数据，读取数据需要按照先后顺序。字符设备是面向流的设备，常见的字符设备有鼠标、键盘、串口、控制台和LED设备等。块设备： 指可以从设备的任意位置读取一定长度数据的设备。块设备包括硬盘、磁盘、U盘和SD卡等。网络设备： 网络设备可以是一个硬件设备,如网卡; 但也可以是一个纯粹的软件设备, 比如回环接口(lo).一个网络接口负责发送和接收数据报文。 驱动认知： 先看一张图，图中描述了流程，有助了解驱动。
+用户态：
+是指用户编写程序、运行程序的层面，用户态在开发时需要C的基础和C库，C库讲到文件，进程，进程间通信，线程，网络，界面（GTk）。C库（是linux标准库一定有）：就是Clibary，提供了程序支配内核干活的接口，调用的open，read，write，fork，pthread，socket由此处封装实现，由写的应用程序调用，C库中的各种API调用的是内核态，支配内核干活。 内核态：
+用户要使用某个硬件设备时，需要内核态的设备驱动程序,进而驱动硬件干活，就比如之前文章里面所提到的wiringPi库，就是提供了用户操控硬件设备的接口，在没有wiringPi库时就需要自己实现wiringPi库的功能，就是自己写设备驱动程序。这样当我们拿到另一种类型的板子时，同样也可以完成开发。在linux中一切皆文件，各种的文件和设备（比如：鼠标、键盘、屏幕、flash、内存、网卡、如下图所示：）都是文件，那既然是文件了，就可以使用文件操作函数来操作这些设备。有一个问题，open、read等这些文件操作函数是如何知道打开的文件是哪一种硬件设备呢？①在open函数里面输入对应的文件名，进而操控对应的设备。②通过设备号（主设备号和次设备号）。除此之外我们还要了解这些驱动程序的位置，和如何实现这些驱动程序，每一种硬件设备对应不同的驱动（这些驱动有我们自己来实现）。Linux的设备管理是和文件系统紧密结合的，各种设备都以文件的形式存放在/dev目录下，称为设备文件。应用程序可以打开、关闭和读写这些设备文件，完成对设备的操作，就像操作普通的数据文件一样。为了管理这些设备，系统为设备编了号，每个设备号又分为主设备号和次设备号（如下图所示：）。主设备号用来区分不同种类的设备，而次设备号用来区分同一类型的多个设备。对于常用设备，Linux有约定俗成的编号，如硬盘的主设备号是3。 一个字符设备或者块设备都有一个主设备号和次设备号。主设备号和次设备号统称为设备号。主设备号用来表示一个特定的驱动程序。次设备号用来表示使用该驱动程序的各设备。例如一个嵌入式系统，有两个LED指示灯，LED灯需要独立的打开或者关闭。那么，可以写一个LED灯的字符设备驱动程序，可以将其主设备号注册成5号设备，次设备号分别为1和2。这里，次设备号就分别表示两个LED灯。 驱动链表：管理所有设备的驱动，添加或查找， 添加是发生在我们编写完驱动程序，加载到内核。查找是在调用驱动程序，由应用层用户空间去查找使用open函数。驱动插入链表的顺序由设备号检索，就是说主设备号和次设备号除了能区分不同种类的设备和不同类型的设备，还能起到将驱动程序加载到链表的某个位置，在下面介绍的驱动代码的开发无非就是添加驱动（添加设备号、设备名和设备驱动函数）和调用驱动。综上所述：如果想要打开dev下面的pin4引脚，过程是：用户态调用open（“/de/pin4”,O_RDWR）,对于内核来说，上层调用open函数会触发一个软中断（系统调用专用，中断号是0x80，0x80代表发生了一个系统调用），系统进入内核态，并走到system_call，可以认为这个就是此软中断的中断服务程序入口，然后通过传递过来的系统调用号来决定调用相应的系统调用服务程序（在这里是调用VFS中的sys_open）。sys_open会在内核的驱动链表里面根据设备名和设备号查找到相关的驱动函数（每一个驱动函数是一个节点），驱动函数里面有通过寄存器操控IO口的代码，进而可以控制IO口实现相关功能。system_call函数是怎么找到详细的系统调用服务例程的呢？ 通过系统调用号查找系统调用表sys_call_table！软中断指令INT 0x80运行时，系统调用号会被放入 eax 寄存器中，system_call函数能够读取eax寄存器获取，然后将其乘以4，生成偏移地址，然后以sys_call_table为基址。基址加上偏移地址，就能够得到详细的系统调用服务例程的地址了！然后就到了系统调用服务例程了。 补充：
+每个系统调用都对应一个系统调用号，而系统调用号就对应内核中的相应处理函数。
+所有系统调用都是通过中断0x80来触发的。
+使用系统调用时，通过eax 寄存器将系统调用号传递到内核，系统调用的入参通过ebx、ecx……依次传递到内核
+和函数一样，系统调用的返回值保存在eax中，所有要从eax中取出
+字符设备驱动工作原理 字符设备驱动工作原理在linux的世界里一切皆文件，所有的硬件设备操作到应用层都会被抽象成文件的操作。我们知道如果应用层要访问硬件设备，它必定要调用到硬件对应的驱动程序。Linux内核有那么多驱动程序，应用怎么才能精确的调用到底层的驱动程序呢？
+补充：
+在Linux文件系统中，每个文件都用一个 struct inode结构体来描述，这个结构体记录了这个文件的所有信息，例如文件类型，访问权限等。
+在linux操作系统中，每个驱动程序在应用层的/dev目录或者其他如/sys目录下都会有一个文件与之对应。
+在linux操作系统中, 每个驱动程序都有一个设备号。
+在linux操作系统中，每打开一次文件，Linux操作系统会在VFS层分配一个struct file结构体来描述打开的文件。
+(1) 当open函数打开设备文件时，可以根据设备文件对应的struct inode结构体描述的信息，可以知道接下来要操作的设备类型（字符设备还是块设备），还会分配一个struct file结构体。
+(2) 根据struct inode结构体里面记录的设备号，可以找到对应的驱动程序。这里以字符设备为例。在Linux操作系统中每个字符设备都有一个struct cdev结构体。此结构体描述了字符设备所有信息，其中最重要的一项就是字符设备的操作函数接口。
+(3) 找到struct cdev结构体后，linux内核就会将struct cdev结构体所在的内存空间首地址记录在struct inode结构体i_cdev成员中，将struct cdev结构体中的记录的函数操作接口地址记录在struct file结构体的f_ops成员中。
+(4) 任务完成，VFS层会给应用返回一个文件描述符（fd）。这个fd是和struct file结构体对应的。接下来上层应用程序就可以通过fd找到struct file，然后在struct file找到操作字符设备的函数接口file_operation了。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/654797411692b0a1249c587e06b81d81/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-09-19T20:47:33+08:00" />
+<meta property="article:modified_time" content="2022-09-19T20:47:33+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Linux驱动（驱动程序开发、驱动框架代码编译和测试）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="-toc" style="margin-left:80px;"></p> 
+<p id="%E4%BB%80%E4%B9%88%E6%98%AF%E9%A9%B1%E5%8A%A8%EF%BC%9A-toc" style="margin-left:80px;"><a href="#%E4%BB%80%E4%B9%88%E6%98%AF%E9%A9%B1%E5%8A%A8%EF%BC%9A" rel="nofollow">什么是驱动：</a></p> 
+<p id="%E8%AE%BE%E5%A4%87%E5%88%86%E7%B1%BB%EF%BC%9A-toc" style="margin-left:80px;"><a href="#%E8%AE%BE%E5%A4%87%E5%88%86%E7%B1%BB%EF%BC%9A" rel="nofollow">设备分类：</a></p> 
+<p id="%E9%A9%B1%E5%8A%A8%E8%AE%A4%E7%9F%A5%EF%BC%9A-toc" style="margin-left:80px;"><a href="#%E9%A9%B1%E5%8A%A8%E8%AE%A4%E7%9F%A5%EF%BC%9A" rel="nofollow">驱动认知：</a></p> 
+<p id="%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E9%A9%B1%E5%8A%A8%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86-toc" style="margin-left:80px;"><a href="#%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E9%A9%B1%E5%8A%A8%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86" rel="nofollow">字符设备驱动工作原理</a></p> 
+<p id="%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E3%80%81%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E9%A9%B1%E5%8A%A8%E4%B8%8E%E7%94%A8%E6%88%B7%E7%A9%BA%E9%97%B4%E8%AE%BF%E9%97%AE%E8%AF%A5%E8%AE%BE%E5%A4%87%E7%9A%84%E7%A8%8B%E5%BA%8F%E4%B8%89%E8%80%85%E4%B9%8B%E9%97%B4%E7%9A%84%E5%85%B3%E7%B3%BB-toc" style="margin-left:80px;"><a href="#%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E3%80%81%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E9%A9%B1%E5%8A%A8%E4%B8%8E%E7%94%A8%E6%88%B7%E7%A9%BA%E9%97%B4%E8%AE%BF%E9%97%AE%E8%AF%A5%E8%AE%BE%E5%A4%87%E7%9A%84%E7%A8%8B%E5%BA%8F%E4%B8%89%E8%80%85%E4%B9%8B%E9%97%B4%E7%9A%84%E5%85%B3%E7%B3%BB" rel="nofollow">字符设备、字符设备驱动与用户空间访问该设备的程序三者之间的关系</a></p> 
+<p id="%E9%A9%B1%E5%8A%A8%E7%A8%8B%E5%BA%8F%E5%BC%80%E5%8F%91%E6%AD%A5%E9%AA%A4-toc" style="margin-left:80px;"><a href="#%E9%A9%B1%E5%8A%A8%E7%A8%8B%E5%BA%8F%E5%BC%80%E5%8F%91%E6%AD%A5%E9%AA%A4" rel="nofollow">驱动程序开发步骤</a></p> 
+<p id="%E5%9F%BA%E4%BA%8E%E9%A9%B1%E5%8A%A8%E6%A1%86%E6%9E%B6%E7%9A%84%E4%BB%A3%E7%A0%81%E5%BC%80%E5%8F%91-toc" style="margin-left:80px;"><a href="#%E5%9F%BA%E4%BA%8E%E9%A9%B1%E5%8A%A8%E6%A1%86%E6%9E%B6%E7%9A%84%E4%BB%A3%E7%A0%81%E5%BC%80%E5%8F%91" rel="nofollow">基于驱动框架的代码开发</a></p> 
+<p id="%E9%A9%B1%E5%8A%A8%E6%A8%A1%E5%9D%97%E4%BB%A3%E7%A0%81%E7%BC%96%E8%AF%91%E5%92%8C%E6%B5%8B%E8%AF%95-toc" style="margin-left:80px;"><a href="#%E9%A9%B1%E5%8A%A8%E6%A8%A1%E5%9D%97%E4%BB%A3%E7%A0%81%E7%BC%96%E8%AF%91%E5%92%8C%E6%B5%8B%E8%AF%95" rel="nofollow">驱动模块代码编译和测试</a></p> 
+<p id="%C2%A0%E5%8A%A0%E8%BD%BD%E5%86%85%E6%A0%B8%E9%A9%B1%E5%8A%A8-toc" style="margin-left:80px;"><a href="#%C2%A0%E5%8A%A0%E8%BD%BD%E5%86%85%E6%A0%B8%E9%A9%B1%E5%8A%A8" rel="nofollow">加载内核驱动</a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h4 id="%E4%BB%80%E4%B9%88%E6%98%AF%E9%A9%B1%E5%8A%A8%EF%BC%9A">什么是驱动：</h4> 
+<p>驱动就是对底层硬件设备的操作进行封装，并向上层提供函数接口。</p> 
+<h4 id="%E8%AE%BE%E5%A4%87%E5%88%86%E7%B1%BB%EF%BC%9A">设备分类：</h4> 
+<p>linux系统将设备分为3类：字符设备、块设备、网络设备。</p> 
+<ol><li>字符设备：指只能一个字节一个字节读写的设备，不能随机读取设备内存中的某一数据，读取数据需要按照先后顺序。字符设备是面向流的设备，常见的字符设备有鼠标、键盘、串口、控制台和LED设备等。</li><li>块设备： 指可以从设备的任意位置读取一定长度数据的设备。块设备包括硬盘、磁盘、U盘和SD卡等。</li><li>网络设备： 网络设备可以是一个硬件设备,如网卡; 但也可以是一个纯粹的软件设备, 比如回环接口(lo).一个网络接口负责发送和接收数据报文。</li></ol> 
+<h4 id="%E9%A9%B1%E5%8A%A8%E8%AE%A4%E7%9F%A5%EF%BC%9A">驱动认知：</h4> 
+<p>先看一张图，图中描述了流程，有助了解驱动。<br><img alt="" src="https://images2.imgbox.com/63/74/6Q1qiIkV_o.png"></p> 
+<p></p> 
+<p><strong>用户态</strong>：</p> 
+<ul><li>是指用户编写程序、运行程序的层面，用户态在开发时需要C的基础和C库，C库讲到文件，进程，进程间通信，线程，网络，界面（GTk）。C库（是linux标准库一定有）：就是Clibary，提供了程序支配内核干活的接口，调用的open，read，write，fork，pthread，socket由此处封装实现，由写的应用程序调用，C库中的各种API调用的是内核态，支配内核干活。</li></ul> 
+<p><strong>内核态：</strong></p> 
+<ul><li>用户要使用某个硬件设备时，需要内核态的设备驱动程序,进而驱动硬件干活，就比如之前文章里面所提到的wiringPi库，就是提供了用户操控硬件设备的接口，在没有wiringPi库时就需要自己实现wiringPi库的功能，就是自己写设备驱动程序。这样当我们拿到另一种类型的板子时，同样也可以完成开发。</li><li>在linux中一切皆文件，各种的文件和设备（比如：鼠标、键盘、屏幕、flash、内存、网卡、如下图所示：）都是文件，那既然是文件了，就可以使用文件操作函数来操作这些设备。有一个问题，open、read等这些文件操作函数是如何知道打开的文件是哪一种硬件设备呢？①在open函数里面输入对应的文件名，进而操控对应的设备。②通过设备号（主设备号和次设备号）。除此之外我们还要了解这些驱动程序的位置，和如何实现这些驱动程序，每一种硬件设备对应不同的驱动（这些驱动有我们自己来实现）。</li><li>Linux的设备管理是和文件系统紧密结合的，各种设备都以文件的形式存放在/dev目录下，称为设备文件。应用程序可以打开、关闭和读写这些设备文件，完成对设备的操作，就像操作普通的数据文件一样。为了管理这些设备，系统为设备编了号，每个设备号又分为主设备号和次设备号（如下图所示：）。主设备号用来区分不同种类的设备，而次设备号用来区分同一类型的多个设备。对于常用设备，Linux有约定俗成的编号，如硬盘的主设备号是3。 一个字符设备或者块设备都有一个主设备号和次设备号。主设备号和次设备号统称为设备号。主设备号用来表示一个特定的驱动程序。次设备号用来表示使用该驱动程序的各设备。例如一个嵌入式系统，有两个LED指示灯，LED灯需要独立的打开或者关闭。那么，可以写一个LED灯的字符设备驱动程序，可以将其主设备号注册成5号设备，次设备号分别为1和2。这里，次设备号就分别表示两个LED灯。</li></ul> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/92/2a/C0mtwfOJ_o.png"></p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/4e/4a/8GaSJddN_o.png"></p> 
+<ul><li><strong>驱动链表</strong>：管理所有设备的驱动，添加或查找， 添加是发生在我们编写完驱动程序，加载到内核。查找是在调用驱动程序，由应用层用户空间去查找使用open函数。驱动插入链表的顺序由设备号检索，就是说主设备号和次设备号除了能区分不同种类的设备和不同类型的设备，还能起到将驱动程序加载到链表的某个位置，在下面介绍的驱动代码的开发无非就是添加驱动（添加设备号、设备名和设备驱动函数）和调用驱动。</li><li>综上所述：如果想要打开dev下面的pin4引脚，过程是：用户态调用open（“/de/pin4”,O_RDWR）,对于内核来说，上层调用open函数会触发一个软中断（系统调用专用，中断号是0x80，0x80代表发生了一个系统调用），系统进入内核态，并走到system_call，可以认为这个就是此软中断的中断服务程序入口，然后通过传递过来的系统调用号来决定调用相应的系统调用服务程序（在这里是调用VFS中的sys_open）。sys_open会在内核的驱动链表里面根据设备名和设备号查找到相关的驱动函数（每一个驱动函数是一个节点），驱动函数里面有通过寄存器操控IO口的代码，进而可以控制IO口实现相关功能。</li><li>system_call函数是怎么找到详细的系统调用服务例程的呢？ 通过系统调用号查找系统调用表sys_call_table！软中断指令INT 0x80运行时，系统调用号会被放入 eax 寄存器中，system_call函数能够读取eax寄存器获取，然后将其乘以4，生成偏移地址，然后以sys_call_table为基址。基址加上偏移地址，就能够得到详细的系统调用服务例程的地址了！然后就到了系统调用服务例程了。</li></ul> 
+<p> 补充：</p> 
+<blockquote> 
+ <ol><li> <p>每个系统调用都对应一个系统调用号，而系统调用号就对应内核中的相应处理函数。</p> </li><li> <p>所有系统调用都是通过中断0x80来触发的。</p> </li><li> <p>使用系统调用时，通过eax 寄存器将系统调用号传递到内核，系统调用的入参通过ebx、ecx……依次传递到内核</p> </li><li> <p>和函数一样，系统调用的返回值保存在eax中，所有要从eax中取出</p> </li></ol> 
+</blockquote> 
+<h4 id="%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E9%A9%B1%E5%8A%A8%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86">字符设备驱动工作原理</h4> 
+<p>字符设备驱动工作原理在linux的世界里一切皆文件，所有的硬件设备操作到应用层都会被抽象成文件的操作。我们知道如果应用层要访问硬件设备，它必定要调用到硬件对应的驱动程序。Linux内核有那么多驱动程序，应用怎么才能精确的调用到底层的驱动程序呢？</p> 
+<blockquote> 
+ <p><strong>补充：</strong></p> 
+ <ul><li> <p>在Linux文件系统中，每个文件都用一个 <strong><code>struct inode</code></strong>结构体来描述，这个结构体记录了这个文件的所有信息，例如文件类型，访问权限等。</p> </li><li> <p>在linux操作系统中，每个驱动程序在应用层的<code>/dev</code>目录或者其他如<code>/sys</code>目录下都会有一个文件与之对应。</p> </li><li> <p>在linux操作系统中, 每个驱动程序都有一个设备号。</p> </li><li> <p>在linux操作系统中，每打开一次文件，Linux操作系统会在VFS层分配一个<code>struct file</code>结构体来描述打开的文件。</p> </li></ul> 
+</blockquote> 
+<p></p> 
+<p>(1) 当open函数打开设备文件时，可以根据设备文件对应的struct inode结构体描述的信息，可以知道接下来要操作的设备类型（字符设备还是块设备），还会分配一个struct file结构体。</p> 
+<p>(2) 根据struct inode结构体里面记录的设备号，可以找到对应的驱动程序。这里以字符设备为例。在Linux操作系统中每个字符设备都有一个struct cdev结构体。此结构体描述了字符设备所有信息，其中最重要的一项就是字符设备的操作函数接口。</p> 
+<p>(3) 找到struct cdev结构体后，linux内核就会将struct cdev结构体所在的内存空间首地址记录在struct inode结构体i_cdev成员中，将struct cdev结构体中的记录的函数操作接口地址记录在struct file结构体的f_ops成员中。</p> 
+<p>(4) 任务完成，VFS层会给应用返回一个文件描述符（fd）。这个fd是和struct file结构体对应的。接下来上层应用程序就可以通过fd找到struct file，然后在struct file找到操作字符设备的函数接口file_operation了。</p> 
+<p>其中，cdev_init和cdev_add在驱动程序的入口函数中就已经被调用，分别完成字符设备与file_operation函数操作接口的绑定，和将字符驱动注册到内核的工作。</p> 
+<h4 id="%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E3%80%81%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E9%A9%B1%E5%8A%A8%E4%B8%8E%E7%94%A8%E6%88%B7%E7%A9%BA%E9%97%B4%E8%AE%BF%E9%97%AE%E8%AF%A5%E8%AE%BE%E5%A4%87%E7%9A%84%E7%A8%8B%E5%BA%8F%E4%B8%89%E8%80%85%E4%B9%8B%E9%97%B4%E7%9A%84%E5%85%B3%E7%B3%BB"><strong>字符设备、字符设备驱动与用户空间访问该设备的程序三者之间的关系</strong></h4> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/93/d4/FoJJF6yR_o.png"></p> 
+<p>如图，在Linux内核中使用cdev结构体来描述字符设备，通过其成员dev_t来定义设备号（分为主、次设备号）以确定字符设备的唯一性。通过其成员file_operations来定义字符设备驱动提供给VFS的接口函数，如常见的open()、read()、write()等。</p> 
+<p>在Linux字符设备驱动中，模块加载函数通过register_chrdev_region( ) 或alloc_chrdev_region( )来静态或者动态获取设备号，通过cdev_init( )建立cdev与file_operations之间的连接，通过cdev_add( )向系统添加一个cdev以完成注册。模块卸载函数通过cdev_del( )来注销cdev，通过unregister_chrdev_region( )来释放设备号。</p> 
+<p>用户空间访问该设备的程序通过Linux系统调用，如open( )、read( )、write( )，来“调用”file_operations来定义字符设备驱动提供给VFS的接口函数。</p> 
+<h4 id="%E9%A9%B1%E5%8A%A8%E7%A8%8B%E5%BA%8F%E5%BC%80%E5%8F%91%E6%AD%A5%E9%AA%A4">驱动程序开发步骤</h4> 
+<p>Linux 内核就是由各种驱动组成的，内核源码中有大约 85%是各种驱动程序的代码。内核中驱动程序种类齐全，可以在同类驱动的基础上进行修改以符合具体单板。</p> 
+<p>编写驱动程序的难点并不是硬件的具体操作，而是弄清楚现有驱动程序的框架，在这个框架中加入这个硬件。</p> 
+<p>一般来说，编写一个 linux 设备驱动程序的大致流程如下：</p> 
+<ul><li>查看原理图、数据手册，了解设备的操作方法；</li><li>在内核中找到相近的驱动程序，以它为模板进行开发，有时候需要从零开始；</li><li>实现驱动程序的初始化：比如向内核注册这个驱动程序，这样应用程序传入文件名时，内核才能找到相应的驱动程序；</li><li>设计所要实现的操作，比如 open、close、read、write 等函数；</li><li>实现中断服务(中断并不是每个设备驱动所必须的)；</li><li>编译该驱动程序到内核中，或者用 insmod 命令加载；</li><li>测试驱动程序；</li></ul> 
+<p>下面就以一个简单的字符设备驱动框架代码来进行驱动程序的开发、编译等。</p> 
+<h4 id="%E5%9F%BA%E4%BA%8E%E9%A9%B1%E5%8A%A8%E6%A1%86%E6%9E%B6%E7%9A%84%E4%BB%A3%E7%A0%81%E5%BC%80%E5%8F%91">基于驱动框架的代码开发</h4> 
+<p><strong>上层调用代码</strong></p> 
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+ 
+void main()
+{
+        int fd,data;
+        fd = open("/dev/pin4",O_RDWR);
+        if(fd&lt;0){
+                printf("open fail\n");
+                perror("reson:");
+        }
+        else{
+                printf("open success\n");
+        }
+        fd=write(fd,'1',1);
+}
+</code></pre> 
+<p><strong>驱动框架代码</strong></p> 
+<pre><code>#include &lt;linux/fs.h&gt;		 //file_operations声明
+#include &lt;linux/module.h&gt;    //module_init  module_exit声明
+#include &lt;linux/init.h&gt;      //__init  __exit 宏定义声明
+#include &lt;linux/device.h&gt;	 //class  devise声明
+#include &lt;linux/uaccess.h&gt;   //copy_from_user 的头文件
+#include &lt;linux/types.h&gt;     //设备号  dev_t 类型声明
+#include &lt;asm/io.h&gt;          //ioremap iounmap的头文件
+
+static struct class *pin4_class;  
+static struct device *pin4_class_dev;
+
+static dev_t devno;                //设备号
+static int major = 231;  		   //主设备号
+static int minor = 0;			   //次设备号
+static char *module_name = "pin4";   //模块名
+
+//led_open函数
+static int pin4_open(struct inode *inode,struct file *file)
+{
+    printk("pin4_open\n");  //内核的打印函数和printf类似
+      
+    return 0;
+}
+
+//led_write函数
+static ssize_t pin4_write(struct file *file,const char __user *buf,size_t count, loff_t *ppos)
+{
+	printk("pin4_write\n");
+	
+	return 0;
+}
+
+static struct file_operations pin4_fops = {
+    .owner = THIS_MODULE,
+    .open  = pin4_open,
+    .write = pin4_write,
+};
+
+int __init pin4_drv_init(void)   //真实驱动入口
+{
+    int ret;
+    devno = MKDEV(major, minor);  //创建设备号
+    ret   = register_chrdev(major, module_name, &amp;pin4_fops);  //注册驱动  告诉内核，把这个驱动加入到内核驱动的链表中
+
+    pin4_class=class_create(THIS_MODULE, "myfirstdemo");		//用代码在dev自动生成设备
+    pin4_class_dev =device_create(pin4_class, NULL, devno, NULL, module_name);  //创建设备文件
+    
+    return 0;
+}
+
+void __exit pin4_drv_exit(void)
+{
+    device_destroy(pin4_class, devno);
+    class_destroy(pin4_class);
+    unregister_chrdev(major, module_name);  //卸载驱动
+
+}
+
+module_init(pin4_drv_init);  //入口，内核加载该驱动（insmod）的时候，这个宏被使用
+module_exit(pin4_drv_exit);
+MODULE_LICENSE("GPL v2");
+
+</code></pre> 
+<p>上面说过驱动开发的重点难点在于读懂框架代码，在里面进行设备的添加和修改，下面就来了解一下这个框架逻辑。</p> 
+<p><strong>驱动框架设计流程</strong></p> 
+<blockquote> 
+ <p> 1. 确定主设备号<br>  2. 定义结构体   类型 file_operations<br>  3. 实现对应的 drv_open/drv_read/drv_write 等函数，填入 file_operations 结构体<br>  4. 实现驱动入口：安装驱动程序时，就会去调用这个入口函数，执行工作：                       ① 把 file_operations 结构体告诉内核：注册驱动程序register_chrdev.<br>  ② 创建类class_create.<br>  ③ 创建设备device_create.<br>  5. 实现出口：卸载驱动程序时，就会去调用这个出口函数，执行工作：                           ① 把 file_operations 结构体从内核注销：unregister_chrdev.<br>  ② 销毁类class_create.<br>  ③ 销毁设备结点device_destroy.<br>  6. 其他完善：GPL协议、入口加载</p> 
+</blockquote> 
+<p><strong>1、确定主设备、变量定义</strong></p> 
+<pre><code>static struct class *pin4_class;  
+static struct device *pin4_class_dev;
+
+static dev_t devno;                //设备号
+static int major = 231;  		   //主设备号
+static int minor = 0;			   //次设备号
+static char *module_name = "pin4";   //模块名</code></pre> 
+<p><strong>2、定义file_operations结构体，加载到内核驱动链表中</strong></p> 
+<p>这是Linux内核中的<strong>file_operations</strong>  结构体</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/7b/a0/K7SBR1VE_o.png"></p> 
+<p>根据上层调用函数定义结构体成员</p> 
+<pre><code>static struct file_operations pin4_fops = {
+    .owner = THIS_MODULE,
+    .open  = pin4_open,
+    .write = pin4_write,
+    .read  = pin4_read,
+};
+		
+
+</code></pre> 
+<p><strong>3、实现结构体成员pin4_read等函数</strong></p> 
+<pre><code>static int pin4_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+    printk("pin4_read\n");
+    
+    return 0;
+}
+
+//led_open函数
+static int pin4_open(struct inode *inode,struct file *file)
+{
+    printk("pin4_open\n");  //内核的打印函数和printf类似
+      
+    return 0;
+}
+
+//led_write函数
+static ssize_t pin4_write(struct file *file,const char __user *buf,size_t count, loff_t *ppos)
+{
+	printk("pin4_write\n");
+	
+	return 0;
+}
+</code></pre> 
+<p><strong>4、驱动入口</strong></p> 
+<pre><code>int __init pin4_drv_init(void)   //真实驱动入口
+{
+    int ret;
+    devno = MKDEV(major, minor);  //创建设备号
+    ret   = register_chrdev(major, module_name, &amp;pin4_fops);  //注册驱动  告诉内核，把这个驱动加入到内核驱动的链表中
+
+    pin4_class=class_create(THIS_MODULE, "myfirstdemo");//由代码在dev自动生成设备
+    pin4_class_dev =device_create(pin4_class, NULL, devno, NULL, module_name);  //创建设备文件
+    
+    return 0;
+}</code></pre> 
+<p>其中pin4_class=class_create(THIS_MODULE, "myfirstdemo");//由代码在dev自动生成设备，除此之外还可以手动生成设备，在dev目录下 sudo mknod +设备名字 +设备类型（c表示字符设备驱动） +主设备号+次设备号。</p> 
+<p><strong>5、出口</strong></p> 
+<pre><code>void __exit pin4_drv_exit(void)
+{
+    device_destroy(pin4_class, devno);
+    class_destroy(pin4_class);
+    unregister_chrdev(major, module_name);  //卸载驱动
+
+}</code></pre> 
+<p><strong>6、GPI协议，入口加载，出口加载</strong></p> 
+<pre><code>module_init(pin4_drv_init);  //入口，内核加载该驱动（insmod）的时候，这个宏被使用
+module_exit(pin4_drv_exit);
+MODULE_LICENSE("GPL v2");</code></pre> 
+<h4 id="%E9%A9%B1%E5%8A%A8%E6%A8%A1%E5%9D%97%E4%BB%A3%E7%A0%81%E7%BC%96%E8%AF%91%E5%92%8C%E6%B5%8B%E8%AF%95">驱动模块代码编译和测试</h4> 
+<p><strong>编译阶段</strong></p> 
+<p><strong>驱动模块代码编译（模块的编译需要配置过的内核源码，编译、连接后生成的内核模块后缀为<code>.ko</code>，编译过程首先会到内核源码目录下，读取顶层的Makefile文件，然后再返回模块源码所在目录。）</strong></p> 
+<pre><code class="hljs">#include &lt;linux/fs.h&gt;            //file_operations声明
+#include &lt;linux/module.h&gt;    //module_init  module_exit声明
+#include &lt;linux/init.h&gt;      //__init  __exit 宏定义声明
+#include &lt;linux/device.h&gt;        //class  devise声明
+#include &lt;linux/uaccess.h&gt;   //copy_from_user 的头文件
+#include &lt;linux/types.h&gt;     //设备号  dev_t 类型声明
+#include &lt;asm/io.h&gt;          //ioremap iounmap的头文件
+
+static struct class *pin4_class;
+static struct device *pin4_class_dev;
+
+static dev_t devno;                //设备号
+static int major = 231;                    //主设备号
+static int minor = 0;                      //次设备号
+static char *module_name = "pin4";   //模块名
+
+static int pin4_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+    printk("pin4_read\n");
+
+    return 0;
+}
+//led_open函数
+static int pin4_open(struct inode *inode,struct file *file)
+{
+    printk("pin4_open\n");  //内核的打印函数和printf类似
+
+    return 0;
+}
+
+//led_write函数
+static ssize_t pin4_write(struct file *file,const char __user *buf,size_t count, loff_t *ppos)
+{
+        printk("pin4_write\n");
+
+        return 0;
+}
+
+static struct file_operations pin4_fops = {
+    .owner = THIS_MODULE,
+    .open  = pin4_open,
+    .write = pin4_write,
+    .read  = pin4_read,
+};
+
+int __init pin4_drv_init(void)   //真实驱动入口
+{
+    int ret;
+    devno = MKDEV(major, minor);  //创建设备号
+    ret   = register_chrdev(major, module_name, &amp;pin4_fops);  //注册驱动  告诉内
+核，把这个驱动加入到内核驱动的链表中
+
+    pin4_class=class_create(THIS_MODULE, "myfirstdemo");                //用代码
+在dev自动生成设备
+ return 0;
+}
+
+void __exit pin4_drv_exit(void)
+{
+    device_destroy(pin4_class, devno);
+    class_destroy(pin4_class);
+    unregister_chrdev(major, module_name);  //卸载驱动
+}
+
+module_init(pin4_drv_init);  //入口，内核加载该驱动（insmod）的时候，这个宏被使&gt;用
+module_exit(pin4_drv_exit);
+MODULE_LICENSE("GPL v2");
+
+
+
+</code></pre> 
+<p>将该驱动代码拷贝到   linux-rpi-4.14.y/drivers/char   目录下 文件中（也可选择设备目录下其它文件）</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/51/13/dOtBZwjc_o.png"></p> 
+<p><strong>修改该文件夹下Makefile（驱动代码放到哪个目录，就修改该目录下的Makefile），</strong>将上面的代码编译生成模块，文件内容如下图所示：（-y表示编译进内核，-m表示生成驱动模块，CONFIG_表示是根据config生成的），所以只需要将<code>obj-m += pin4drive.o</code>添加到Makefile中即可。</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/7f/90/haXR2DgM_o.png"></p> 
+<p><strong>回到linux-rpi-4.14.y/编译驱动文件</strong></p> 
+<p>使用指令：<code>ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- KERNEL=kernel7 make modules</code>进行编译生成驱动模块。</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/f6/8c/SZ4CBv7H_o.png"></p> 
+<p>编译生成驱动模块会生成以下几个文件：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/6f/19/5FBCfY3P_o.png"></p> 
+<p>.o的文件是object文件，.ko是kernel object，与.o的区别在于其多了一些sections,比如.modinfo。.modinfo section是由kernel source里的modpost工具生成的，包括MODULE_AUTHOR, MODULE_DESCRIPTION, MODULE_LICENSE, device ID table以及模块依赖关系等等。 depmod 工具根据.modinfo section生成modules.dep, modules.*map等文件，以便modprobe更方便的加载模块。<br> 编译过程中，经历了这样的步骤：先进入Linux内核所在的目录，并编译出pin4drive.o文件，运行MODPOST会生成临时的pin4drive.mod.c文件，而后根据此文件编译出pin4drive.mod.o，之后连接pin4drive.o和pin4drive.mod.o文件得到模块目标文件pin4drive.ko，最后离开Linux内核所在的目录。</p> 
+<p>将生成的<code>.ko</code>文件发送给树莓派：<code>scp pin4drive.ko pi@192.168.1.106:/home/pi</code></p> 
+<p>将<strong>pin4test.c (上层调用代码)</strong> 进行 <strong>交叉编译</strong>后发送给树莓派，就可以看到pi目录下存在发送过来的<code>.ko文件</code>和<code>pin4test</code>这两个文件，</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/3c/39/A8wV8LhQ_o.png"><img alt="" src="https://images2.imgbox.com/08/34/Vr5NpWXE_o.png"></p> 
+<h4 id="%C2%A0%E5%8A%A0%E8%BD%BD%E5%86%85%E6%A0%B8%E9%A9%B1%E5%8A%A8"> 加载内核驱动</h4> 
+<pre><code class="hljs">sudo insmod pin4drive.ko</code></pre> 
+<p>加载内核驱动（相当于通过insmod调用了module_init这个宏，然后将整个结构体加载到驱动链表中） 加载完成后就可以在<code>dev</code>下面看到名字为<code>pin4</code>的设备驱动（这个和驱动代码里面static char *module_name="pin4"; //模块名这行代码有关），设备号也和代码里面相关。</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/90/0a/tpRuPrwh_o.png"></p> 
+<p> <code>lsmod</code>查看系统的驱动模块，执行上层代码，赋予权限</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/90/8b/pyQnkJSy_o.png"></p> 
+<p> 查看内核打印的信息，</p> 
+<pre><code class="hljs">dmesg |grep pin4</code></pre> 
+<p>如下图所示：表示驱动调用成功</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/e6/65/aXAV7PhI_o.png"></p> 
+<p> 在装完驱动后可以使用指令：<code>sudo rmmod +驱动名（不需要写ko）</code>将驱动卸载。</p> 
+<p><span style="color:#fe2c24;"><strong>调用流程：</strong></span></p> 
+<p>我们上层空间的open去查找dev下的驱动（文件名），文件名背后包含了驱动的主设备号和次设备号，此时用户open触发一个系统调用，系统调用经过vfs（虚拟文件系统），vfs根据文件名背后的设备号去调用sys_open去判断，找到内核中驱动链表的驱动位置，再去调用驱动里面自己的dev_open函数</p> 
+<p><strong>为什么生成驱动模块需要在虚拟机上生成？树莓派不行吗？</strong></p> 
+<p>生成驱动模块需要编译环境（linux源码并且编译，需要下载和系统版本相同的Linux内核源代码），也可以在<a href="https://so.csdn.net/so/search?q=%E6%A0%91%E8%8E%93%E6%B4%BE&amp;spm=1001.2101.3001.7020" title="树莓派">树莓派</a>上面编译，但在树莓派里编译，效率会很低，要非常久。这篇文章有讲<a href="https://www.jianshu.com/p/7bed02398105" rel="nofollow" title="树莓派驱动的本地编译">树莓派驱动的本地编译</a>。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/3809dc0f75572f200272513087c35375/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">LeetCode：每日一题【第七周】</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/23853cc0e05c00ad8acbe60fdf93feb3/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">1. JAVA全栈知识体系--- Java基础</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

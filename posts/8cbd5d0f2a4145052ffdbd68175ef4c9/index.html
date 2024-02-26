@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>图像连通域分析（Two-Pass &amp; DFS ） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="图像连通域分析（Two-Pass &amp; DFS ）" />
+<meta property="og:description" content="参考博客：http://blog.csdn.net/icvpr/article/details/10259577#reply two-pass法原文中的代码有错误，添加了并查集数据结构后得以解决。 DFS方法无误。 本文代码的作用是，寻找图片中的所以连通域，并保留面积最大的连通域，其他区域删除。
+#include &lt;iostream&gt; #include &lt;opencv2\highgui\highgui.hpp&gt; #include &lt;opencv2\core\core.hpp&gt; #include &lt;opencv2\imgproc\imgproc.hpp&gt; #include &lt;map&gt; #include &lt;stack&gt; #include &lt;string&gt; #include &lt;list&gt; #include &lt;stdio.h&gt; #include &lt;time.h&gt; using namespace std; using namespace cv; void myFillSeedFill(const Mat&amp; _binImg, Mat&amp; _labelImg) { if(_binImg.empty() || _binImg.type() != CV_8UC1) { return; } _labelImg.release(); _binImg.convertTo(_labelImg, CV_32SC1); int label = 1; int rows = _binImg.rows; int cols = _binImg.cols; vector&lt;pair&lt;int, int&gt;&gt; area; int maxLabel = 0; int maxLabelNum = 0; for(int i = 0; i &lt; rows; &#43;&#43;i) { int * p = _labelImg." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/8cbd5d0f2a4145052ffdbd68175ef4c9/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2017-12-01T20:30:13+08:00" />
+<meta property="article:modified_time" content="2017-12-01T20:30:13+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">图像连通域分析（Two-Pass &amp; DFS ）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>参考博客：<a href="http://blog.csdn.net/icvpr/article/details/10259577#reply">http://blog.csdn.net/icvpr/article/details/10259577#reply</a> <br> two-pass法原文中的代码有错误，添加了并查集数据结构后得以解决。 <br> DFS方法无误。 <br> 本文代码的作用是，寻找图片中的所以连通域，并保留面积最大的连通域，其他区域删除。</p> 
+<pre class="prettyprint"><code class=" hljs cpp"><span class="hljs-preprocessor">#include &lt;iostream&gt;  </span>
+<span class="hljs-preprocessor">#include &lt;opencv2\highgui\highgui.hpp&gt;  </span>
+<span class="hljs-preprocessor">#include &lt;opencv2\core\core.hpp&gt;  </span>
+<span class="hljs-preprocessor">#include &lt;opencv2\imgproc\imgproc.hpp&gt;  </span>
+<span class="hljs-preprocessor">#include &lt;map&gt;  </span>
+<span class="hljs-preprocessor">#include &lt;stack&gt;</span>
+<span class="hljs-preprocessor">#include &lt;string&gt;  </span>
+<span class="hljs-preprocessor">#include &lt;list&gt;    </span>
+<span class="hljs-preprocessor">#include &lt;stdio.h&gt;</span>
+<span class="hljs-preprocessor">#include &lt;time.h&gt;</span>
+
+
+<span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+<span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> cv; 
+
+<span class="hljs-keyword">void</span> myFillSeedFill(<span class="hljs-keyword">const</span> Mat&amp; _binImg, Mat&amp; _labelImg) {
+    <span class="hljs-keyword">if</span>(_binImg.empty() || _binImg.type() != CV_8UC1) {
+        <span class="hljs-keyword">return</span>;
+    }
+
+    _labelImg.release();
+    _binImg.convertTo(_labelImg, CV_32SC1);
+
+    <span class="hljs-keyword">int</span> label = <span class="hljs-number">1</span>;
+    <span class="hljs-keyword">int</span> rows = _binImg.rows;
+    <span class="hljs-keyword">int</span> cols = _binImg.cols;
+
+    <span class="hljs-stl_container"><span class="hljs-built_in">vector</span>&lt;pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt;</span>&gt; area;
+    <span class="hljs-keyword">int</span> maxLabel = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">int</span> maxLabelNum = <span class="hljs-number">0</span>;
+
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; rows; ++i) {
+        <span class="hljs-keyword">int</span> * p = _labelImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(i);
+        <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> j = <span class="hljs-number">0</span>; j &lt; cols; ++j) {
+            <span class="hljs-keyword">if</span>(p[j] == <span class="hljs-number">1</span>) {
+                <span class="hljs-stl_container"><span class="hljs-built_in">stack</span>&lt;pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt;</span>&gt; s;
+                s.push(pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt;(i, j));
+                ++label;
+                <span class="hljs-keyword">int</span> curLabelNum = <span class="hljs-number">0</span>;
+                <span class="hljs-keyword">while</span>(!s.empty()) {
+                    pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt; curPix = s.top();
+                    <span class="hljs-keyword">int</span> curX = curPix.first;
+                    <span class="hljs-keyword">int</span> curY = curPix.second;
+
+                    <span class="hljs-keyword">int</span> * curxptr = _labelImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(curX);
+                    curxptr[curY] = label;
+
+                    <span class="hljs-comment">//_labelImg.at&lt;int&gt;(curX, curY) = label;</span>
+                    ++curLabelNum;
+                    s.pop();
+
+
+                    <span class="hljs-keyword">if</span>(curX-<span class="hljs-number">1</span> &gt;= <span class="hljs-number">0</span>) {
+                        <span class="hljs-keyword">int</span> * prexptr = _labelImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(curX-<span class="hljs-number">1</span>);
+                        <span class="hljs-keyword">if</span>(prexptr[curY] == <span class="hljs-number">1</span>) {
+                            s.push(pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt;(curX-<span class="hljs-number">1</span>, curY));
+                        }
+                    }
+                    <span class="hljs-keyword">if</span>(curY-<span class="hljs-number">1</span> &gt;= <span class="hljs-number">0</span>) {
+                        <span class="hljs-comment">//int * prexptr = _labelImg.ptr&lt;int&gt;(curX-1);</span>
+                        <span class="hljs-keyword">if</span>(curxptr[curY-<span class="hljs-number">1</span>] == <span class="hljs-number">1</span>) {
+                            s.push(pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt;(curX, curY-<span class="hljs-number">1</span>));
+                        }
+                    }
+                    <span class="hljs-keyword">if</span>(curX+<span class="hljs-number">1</span> &lt; rows) {
+                        <span class="hljs-keyword">int</span> * latexptr = _labelImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(curX+<span class="hljs-number">1</span>);
+                        <span class="hljs-keyword">if</span>(latexptr[curY] == <span class="hljs-number">1</span>) {
+                            s.push(pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt;(curX+<span class="hljs-number">1</span>, curY));
+                        }
+                    }
+                    <span class="hljs-keyword">if</span>(curY+<span class="hljs-number">1</span> &lt; cols) {
+                        <span class="hljs-comment">//int * prexptr = _labelImg.ptr&lt;int&gt;(curX-1);</span>
+                        <span class="hljs-keyword">if</span>(curxptr[curY+<span class="hljs-number">1</span>] == <span class="hljs-number">1</span>) {
+                            s.push(pair&lt;<span class="hljs-keyword">int</span>, <span class="hljs-keyword">int</span>&gt;(curX, curY+<span class="hljs-number">1</span>));
+                        }
+                    }
+                }
+                <span class="hljs-keyword">if</span>(curLabelNum &gt; maxLabelNum) {
+                    maxLabelNum = curLabelNum;
+                    maxLabel = label;
+                }
+            }
+        }
+    }
+
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; rows; ++i) {
+        <span class="hljs-keyword">int</span> * p = _labelImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(i);
+        <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> j = <span class="hljs-number">0</span>; j &lt; cols; ++j) {
+            <span class="hljs-keyword">if</span>(p[j] == maxLabel) {
+                p[j] = <span class="hljs-number">255</span>;
+            }
+            <span class="hljs-keyword">else</span> {
+                p[j] = <span class="hljs-number">0</span>;
+            }
+        }
+    }
+
+    <span class="hljs-comment">//总耗时： 0.5秒</span>
+}
+
+
+<span class="hljs-keyword">int</span> father[<span class="hljs-number">100000</span>];
+<span class="hljs-stl_container"><span class="hljs-built_in">vector</span>&lt;<span class="hljs-keyword">int</span>&gt;</span> labelCnt(<span class="hljs-number">1000</span>, <span class="hljs-number">0</span>);
+
+<span class="hljs-keyword">void</span> make() {
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">100000</span>; ++i) {
+        father[i] = i;
+    }
+}
+
+<span class="hljs-keyword">int</span> Find_Set(<span class="hljs-keyword">int</span> x) {
+    <span class="hljs-keyword">if</span>(x != father[x]) {
+        father[x] = Find_Set(father[x]);
+    }
+    <span class="hljs-keyword">return</span> father[x];
+}
+
+<span class="hljs-keyword">void</span> Union(<span class="hljs-keyword">int</span> x, <span class="hljs-keyword">int</span> y) {
+    <span class="hljs-keyword">int</span> fx = Find_Set(x);
+    <span class="hljs-keyword">int</span> fy = Find_Set(y);
+    <span class="hljs-keyword">if</span>(fx == fy) {
+        <span class="hljs-keyword">return</span>;
+    }
+    father[fy] = fx;
+}
+
+<span class="hljs-keyword">void</span> icvprCcaByTwoPass(<span class="hljs-keyword">const</span> cv::Mat&amp; _binImg, cv::Mat&amp; _lableImg)  
+{  
+    <span class="hljs-comment">// connected component analysis (4-component)  </span>
+    <span class="hljs-comment">// use two-pass algorithm  </span>
+    <span class="hljs-comment">// 1. first pass: label each foreground pixel with a label  </span>
+    <span class="hljs-comment">// 2. second pass: visit each labeled pixel and merge neighbor labels  </span>
+    <span class="hljs-comment">//   </span>
+    <span class="hljs-comment">// foreground pixel: _binImg(x,y) = 1  </span>
+    <span class="hljs-comment">// background pixel: _binImg(x,y) = 0  </span>
+
+
+    <span class="hljs-keyword">if</span> (_binImg.empty() ||  
+        _binImg.type() != CV_8UC1)  
+    {  
+        <span class="hljs-keyword">return</span> ;  
+    }  
+
+    <span class="hljs-comment">// 1. first pass  </span>
+
+    _lableImg.release() ;  
+    _binImg.convertTo(_lableImg, CV_32SC1) ;  
+
+    <span class="hljs-keyword">int</span> label = <span class="hljs-number">1</span> ;  <span class="hljs-comment">// start by 2  </span>
+    <span class="hljs-built_in">std</span>::<span class="hljs-stl_container"><span class="hljs-built_in">vector</span>&lt;<span class="hljs-keyword">int</span>&gt;</span> labelSet;  
+    labelSet.push_back(<span class="hljs-number">0</span>) ;   <span class="hljs-comment">// background: 0  </span>
+    labelSet.push_back(<span class="hljs-number">1</span>) ;   <span class="hljs-comment">// foreground: 1  </span>
+
+    <span class="hljs-keyword">int</span> rows = _binImg.rows;  
+    <span class="hljs-keyword">int</span> cols = _binImg.cols;
+    <span class="hljs-keyword">int</span>* data_firstRows = _lableImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(<span class="hljs-number">0</span>);
+    <span class="hljs-keyword">if</span>(data_firstRows[<span class="hljs-number">0</span>] == <span class="hljs-number">1</span>) {
+        data_firstRows[<span class="hljs-number">0</span>] = ++label;
+        labelSet.push_back(label);
+    }
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> j = <span class="hljs-number">1</span>; j &lt; cols; ++j) {  <span class="hljs-comment">//第一行初始化label</span>
+        <span class="hljs-keyword">if</span>(data_firstRows[j] == <span class="hljs-number">1</span>) {
+            <span class="hljs-keyword">if</span>(data_firstRows[j-<span class="hljs-number">1</span>] &gt; <span class="hljs-number">0</span>) {
+                data_firstRows[j] == data_firstRows[j-<span class="hljs-number">1</span>];
+            } <span class="hljs-keyword">else</span> {
+                data_firstRows[j] = ++label;
+                labelSet.push_back(label);
+            }
+        }
+    }
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> j = <span class="hljs-number">1</span>; j &lt; rows; ++j) {   <span class="hljs-comment">//第一列初始化label</span>
+        <span class="hljs-keyword">if</span>(_lableImg.at&lt;<span class="hljs-keyword">int</span>&gt;(j, <span class="hljs-number">0</span>) == <span class="hljs-number">1</span>) {
+            <span class="hljs-keyword">if</span>(_lableImg.at&lt;<span class="hljs-keyword">int</span>&gt;(j-<span class="hljs-number">1</span>, <span class="hljs-number">0</span>) &gt; <span class="hljs-number">0</span>) {
+                _lableImg.at&lt;<span class="hljs-keyword">int</span>&gt;(j, <span class="hljs-number">0</span>) = _lableImg.at&lt;<span class="hljs-keyword">int</span>&gt;(j-<span class="hljs-number">1</span>, <span class="hljs-number">0</span>);
+            } <span class="hljs-keyword">else</span> {
+                _lableImg.at&lt;<span class="hljs-keyword">int</span>&gt;(j, <span class="hljs-number">0</span>) = ++label;
+                labelSet.push_back(label);
+            }
+        }
+    }
+    <span class="hljs-comment">//label = 1;</span>
+    make();
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">1</span>; i &lt; rows; i++)  
+    {  
+        <span class="hljs-keyword">int</span>* data_preRow = _lableImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(i-<span class="hljs-number">1</span>) ;  
+        <span class="hljs-keyword">int</span>* data_curRow = _lableImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(i) ;  
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> j = <span class="hljs-number">1</span>; j &lt; cols; j++)  
+        {  
+            <span class="hljs-keyword">if</span> (data_curRow[j] == <span class="hljs-number">1</span>)  
+            {  
+                <span class="hljs-built_in">std</span>::<span class="hljs-stl_container"><span class="hljs-built_in">vector</span>&lt;<span class="hljs-keyword">int</span>&gt;</span> neighborLabels;  
+                neighborLabels.reserve(<span class="hljs-number">2</span>);  
+                <span class="hljs-keyword">int</span> leftPixel = data_curRow[j-<span class="hljs-number">1</span>];  
+                <span class="hljs-keyword">int</span> upPixel = data_preRow[j];  
+                <span class="hljs-keyword">if</span> ( leftPixel &gt; <span class="hljs-number">1</span>)  
+                {  
+                    neighborLabels.push_back(leftPixel) ;  
+                }  
+                <span class="hljs-keyword">if</span> (upPixel &gt; <span class="hljs-number">1</span>)  
+                {  
+                    neighborLabels.push_back(upPixel) ;  
+                }  
+
+                <span class="hljs-keyword">if</span> (neighborLabels.empty())  
+                {  
+                    labelSet.push_back(++label) ;  <span class="hljs-comment">// assign to a new label  </span>
+                    data_curRow[j] = label ;  
+                    labelSet[label] = label ;  
+                }  
+                <span class="hljs-keyword">else</span>  
+                {  
+                    <span class="hljs-built_in">std</span>::sort(neighborLabels.begin(), neighborLabels.end());  
+                    <span class="hljs-keyword">int</span> smallestLabel = neighborLabels[<span class="hljs-number">0</span>];    
+                    data_curRow[j] = smallestLabel;  
+
+                    <span class="hljs-keyword">for</span>(size_t k = <span class="hljs-number">1</span>; k &lt; neighborLabels.size(); k++) {
+                        <span class="hljs-keyword">int</span> tmpLabel = neighborLabels[k];
+
+                        Union(tmpLabel, smallestLabel);
+                        Union(smallestLabel, tmpLabel);
+                    }
+
+                }                 
+            }  
+        }  
+    }  
+
+
+    <span class="hljs-comment">// 2. second pass  </span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; rows; i++)  
+    {  
+        <span class="hljs-keyword">int</span>* data = _lableImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(i) ;  
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> j = <span class="hljs-number">0</span>; j &lt; cols; j++)  
+        {  
+            data[j] = Find_Set(data[j]);
+            <span class="hljs-keyword">if</span>(data[j] != <span class="hljs-number">0</span>) {
+                labelCnt[data[j]]++;
+            }
+        }  
+    }
+    <span class="hljs-stl_container"><span class="hljs-built_in">vector</span>&lt;<span class="hljs-keyword">int</span>&gt;</span>::iterator maxLabel = max_element(labelCnt.begin(), labelCnt.end());
+    <span class="hljs-built_in">cout</span> &lt;&lt; *maxLabel &lt;&lt; endl;
+    <span class="hljs-keyword">int</span> maxL = distance(labelCnt.begin(), maxLabel);
+    <span class="hljs-built_in">cout</span> &lt;&lt; maxL &lt;&lt; endl;
+
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; rows; i++) {  
+        <span class="hljs-keyword">int</span>* data = _lableImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(i) ;  
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> j = <span class="hljs-number">0</span>; j &lt; cols; j++) {
+            <span class="hljs-keyword">if</span>(data[j] == maxL) {
+                data[j] = <span class="hljs-number">255</span>;
+            } <span class="hljs-keyword">else</span> {
+                data[j] = <span class="hljs-number">0</span>;
+            }
+        }
+    }
+
+}
+
+
+cv::Scalar icvprGetRandomColor()  
+{  
+    uchar r = <span class="hljs-number">255</span> * (rand()/(<span class="hljs-number">1.0</span> + RAND_MAX));  
+    uchar g = <span class="hljs-number">255</span> * (rand()/(<span class="hljs-number">1.0</span> + RAND_MAX));  
+    uchar b = <span class="hljs-number">255</span> * (rand()/(<span class="hljs-number">1.0</span> + RAND_MAX));  
+    <span class="hljs-keyword">return</span> cv::Scalar(b,g,r) ;  
+}  
+
+
+<span class="hljs-keyword">void</span> icvprLabelColor(<span class="hljs-keyword">const</span> cv::Mat&amp; _labelImg, cv::Mat&amp; _colorLabelImg)   
+{  
+    <span class="hljs-keyword">if</span> (_labelImg.empty() ||  
+        _labelImg.type() != CV_32SC1)  
+    {  
+        <span class="hljs-keyword">return</span> ;  
+    }  
+
+    <span class="hljs-built_in">std</span>::<span class="hljs-stl_container"><span class="hljs-built_in">map</span>&lt;<span class="hljs-keyword">int</span>, cv::Scalar&gt;</span> colors ;  
+
+    <span class="hljs-keyword">int</span> rows = _labelImg.rows ;  
+    <span class="hljs-keyword">int</span> cols = _labelImg.cols ;  
+
+    _colorLabelImg.release() ;  
+    _colorLabelImg.create(rows, cols, CV_8UC3) ;  
+    _colorLabelImg = cv::Scalar::all(<span class="hljs-number">0</span>) ;  
+
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; rows; i++)  
+    {  
+        <span class="hljs-keyword">const</span> <span class="hljs-keyword">int</span>* data_src = (<span class="hljs-keyword">int</span>*)_labelImg.ptr&lt;<span class="hljs-keyword">int</span>&gt;(i) ;  
+        uchar* data_dst = _colorLabelImg.ptr&lt;uchar&gt;(i) ;  
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> j = <span class="hljs-number">0</span>; j &lt; cols; j++)  
+        {  
+            <span class="hljs-keyword">int</span> pixelValue = data_src[j] ;  
+            <span class="hljs-keyword">if</span> (pixelValue &gt; <span class="hljs-number">1</span>)  
+            {  
+                <span class="hljs-keyword">if</span> (colors.count(pixelValue) &lt;= <span class="hljs-number">0</span>)  
+                {  
+                    colors[pixelValue] = icvprGetRandomColor() ;  
+                }  
+                cv::Scalar color = colors[pixelValue] ;  
+                *data_dst++   = color[<span class="hljs-number">0</span>] ;  
+                *data_dst++ = color[<span class="hljs-number">1</span>] ;  
+                *data_dst++ = color[<span class="hljs-number">2</span>] ;  
+            }  
+            <span class="hljs-keyword">else</span>  
+            {  
+                data_dst++ ;  
+                data_dst++ ;  
+                data_dst++ ;  
+            }  
+        }  
+    }  
+}  
+
+<span class="hljs-keyword">int</span> main()  
+{  
+    time_t t_start, t_end;
+   <span class="hljs-comment">/* Mat img, res;  */</span>
+    Mat binImage = imread(<span class="hljs-string">"segmentationMask_bad.jpg"</span>,<span class="hljs-number">0</span>);    <span class="hljs-comment">//将读入的彩色图像直接以灰度图像读入</span>
+    <span class="hljs-comment">//Mat binImage = imread("liantongyu.jpg",0);   //小图，在递归调用中可用，图太大则只能使用TwoPass方法</span>
+    <span class="hljs-comment">//Mat binImage = imread("connect2.jpg",0);  </span>
+    Mat showimg;
+
+
+    showimg.release() ;  
+    binImage.convertTo(showimg, CV_8UC1) ;  
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; showimg.rows; ++i) {
+        uchar * p = showimg.ptr&lt;uchar&gt;(i);
+        <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> j = <span class="hljs-number">0</span>; j &lt; showimg.cols; ++j) {
+            <span class="hljs-keyword">if</span>(p[j] &gt; <span class="hljs-number">50</span>)
+                p[j] = <span class="hljs-number">225</span>;
+            <span class="hljs-keyword">else</span>
+                p[j] = <span class="hljs-number">0</span>;
+        }
+    }
+
+    cv::imshow(<span class="hljs-string">"showing"</span>, showimg);
+
+    <span class="hljs-comment">//cv::Mat binImage = cv::imread("../icvpr.com.jpg", 0) ;  </span>
+    <span class="hljs-comment">//cv::threshold(binImage, binImage, 50, 1, CV_THRESH_BINARY_INV) ;  </span>
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; binImage.rows; ++i) {
+        uchar * p = binImage.ptr&lt;uchar&gt;(i);
+        <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> j = <span class="hljs-number">0</span>; j &lt; binImage.cols; ++j) {
+            <span class="hljs-keyword">if</span>(p[j] &gt; <span class="hljs-number">50</span>)
+                p[j] = <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">else</span>
+                p[j] = <span class="hljs-number">0</span>;
+        }
+    }
+
+
+    <span class="hljs-comment">// connected component labeling  </span>
+    cv::Mat labelImg ;  
+
+    t_start = clock();
+    <span class="hljs-comment">//icvprCcaByTwoPass(binImage, labelImg) ;         // cost 0.184s</span>
+    myFillSeedFill(binImage, labelImg);             <span class="hljs-comment">// cost 0.526s</span>
+
+
+    t_end = clock();
+    <span class="hljs-keyword">double</span> duration = (<span class="hljs-keyword">double</span>)(t_end - t_start) / CLOCKS_PER_SEC;
+    <span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"cost "</span> &lt;&lt; duration &lt;&lt; <span class="hljs-string">" s"</span> &lt;&lt; endl;
+
+
+
+    <span class="hljs-comment">// show result  </span>
+    cv::Mat grayImg ;  
+    <span class="hljs-comment">//labelImg *= 10 ;  </span>
+    labelImg.convertTo(grayImg, CV_8UC1) ;  
+    cv::imshow(<span class="hljs-string">"labelImg"</span>, grayImg) ;  
+
+    cv::Mat colorLabelImg ;  
+    icvprLabelColor(labelImg, colorLabelImg) ;  
+    cv::imshow(<span class="hljs-string">"colorImg"</span>, colorLabelImg) ;  
+    cv::waitKey(<span class="hljs-number">0</span>) ;  
+
+    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span> ;  
+}</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/ece4b597c8ac2e50d414817338594133/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">结构体指针作函数的参数</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/8d94d06aa6c12d91a1b5057aabefdc5e/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">西门子plc s7-200 读取plc内部时间的方法详解</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

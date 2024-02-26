@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>如何正确地计算神经网络模型的推理时间【含代码，以pytorch为例】 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="如何正确地计算神经网络模型的推理时间【含代码，以pytorch为例】" />
+<meta property="og:description" content="文章目录 前言原理异步执行GPU预热解决方法 代码参考资料 前言 无论是做学术还是做工程项目，实际推理时间(inference time)总是我们衡量一个模型好坏的重要参照指标。目前已经也有很多博客在介绍如何计算一个神经网络模型的推理时间，但是写得都比较&#34;粗糙&#34;，在看了一些国内外的博客后，对这个问题有了一些总结性的经验，故写下这篇博客。
+原理 某些博客直接将python程序的测速方式用到神经网络模型的测速中来（使用time.time计时），这忽略了深度学习问题的特殊性（在GPU上进行推理）。直接使用这种方式进行测速会忽略两个关键问题，导致测出来的速度不准：① 异步执行；② GPU预热。
+下文中，我们先介绍不同的问题以及其原理，然后提出解决办法。
+异步执行 在深度学习模型推理过程中，我们通常会将模型部署在GPU上，运行过程会涉及到cpu与gpu两种不同设备，而目前深度学习基本都是采用异步执行的方式（具体来说，就是在GPU调用某个函数时，它会在指定的设备上进行排队，不会占用其他的设备资源，从而完成并行计算）。
+图片来自参考链接[1]
+这种机制能够加快模型的推理速度，但这会使得计算推理时间变得麻烦，因为通常python程序使用time进行计时，这是在CPU端运行的，有可能存在GPU端的程序还没有运行完，但这边已经停止这一轮次的计时了，导致最终得到的结果不准确。
+GPU预热 目前的GPU设备在不同的状态下会启用不同的工作模式，如果一台GPU在未使用的情况下，会处于低功耗状态（会关闭许多硬件，包括内存子系统、内部子系统、计算核等）。
+如果此时将模型部署在上面并进行推理时，会触发GPU的一系列初始化，这会浪费较多的时间在GPU预热阶段，导致时间测量不准确。计算出来的推理速度也无法反映真正使用场景下的速度(持续模式)。
+解决方法 为了解决异步执行的问题，使用pytorch自带的torch.cuda.synchronize()，它会将异步模式转换成同步模式，只有在当前轮次的GPU推理完成之后才停止计时，并且使用torch.cuda.Event来跟踪GPU程序并进行更新；
+torch.cuda.Event和torch.cuda.synchronize()的官方文档说明
+为了解决GPU预热的问题，我们可以在进行实际测量前运行一些示例，完成GPU的预热。
+代码 完整测速代码如下所示，以torchvision自带的resnet101为例。
+import torch from torchvision.models.resnet import resnet101 iterations = 300 # 重复计算的轮次 model = resnet101() device = torch.device(&#34;cuda:0&#34;) model.to(device) random_input = torch.randn(1, 3, 224, 224).to(device) starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True) # GPU预热 for _ in range(50): _ = model(random_input) # 测速 times = torch.zeros(iterations) # 存储每轮iteration的时间 with torch." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/10e93a3238f2fdb4d48a2a01aaa95bf7/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-06-05T22:34:25+08:00" />
+<meta property="article:modified_time" content="2022-06-05T22:34:25+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">如何正确地计算神经网络模型的推理时间【含代码，以pytorch为例】</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atelier-sulphurpool-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><a href="#_1" rel="nofollow">前言</a></li><li><a href="#_3" rel="nofollow">原理</a></li><li><ul><li><a href="#_7" rel="nofollow">异步执行</a></li><li><a href="#GPU_15" rel="nofollow">GPU预热</a></li><li><a href="#_20" rel="nofollow">解决方法</a></li></ul> 
+   </li><li><a href="#_26" rel="nofollow">代码</a></li><li><a href="#_62" rel="nofollow">参考资料</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h3><a id="_1"></a>前言</h3> 
+<p>无论是做学术还是做工程项目，实际推理时间(<code>inference time</code>)总是我们衡量一个模型好坏的重要参照指标。目前已经也有很多博客在介绍如何计算一个神经网络模型的推理时间，但是写得都比较"粗糙"，在看了一些国内外的博客后，对这个问题有了一些总结性的经验，故写下这篇博客。</p> 
+<h3><a id="_3"></a>原理</h3> 
+<p>某些博客直接将python程序的测速方式用到神经网络模型的测速中来（使用<code>time.time</code>计时），这忽略了深度学习问题的特殊性（在GPU上进行推理）。直接使用这种方式进行测速会忽略两个关键问题，导致测出来的速度不准：① 异步执行；② GPU预热。</p> 
+<p>下文中，我们先介绍不同的问题以及其原理，然后提出解决办法。</p> 
+<h4><a id="_7"></a>异步执行</h4> 
+<p>在深度学习模型推理过程中，我们通常会将模型部署在GPU上，运行过程会涉及到<code>cpu</code>与<code>gpu</code>两种不同设备，而目前深度学习基本都是采用<strong>异步执行</strong>的方式（具体来说，就是在GPU调用某个函数时，它会在指定的设备上进行排队，不会占用其他的设备资源，从而完成并行计算）。</p> 
+<p><img src="https://images2.imgbox.com/61/34/OHQ6AApx_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>图片来自参考链接[1]</p> 
+</blockquote> 
+<p>这种机制能够加快模型的推理速度，但这会使得计算推理时间变得麻烦，因为通常python程序使用<code>time</code>进行计时，这是在CPU端运行的，有可能存在GPU端的程序还没有运行完，但这边已经停止这一轮次的计时了，导致最终得到的结果不准确。</p> 
+<h4><a id="GPU_15"></a>GPU预热</h4> 
+<p>目前的GPU设备在不同的状态下会启用不同的工作模式，如果一台GPU在未使用的情况下，会处于低功耗状态（会关闭许多硬件，包括内存子系统、内部子系统、计算核等）。</p> 
+<p>如果此时将模型部署在上面并进行推理时，会触发GPU的一系列初始化，这会<strong>浪费较多的时间在GPU预热阶段</strong>，导致时间测量不准确。计算出来的推理速度也无法反映真正使用场景下的速度(持续模式)。</p> 
+<h4><a id="_20"></a>解决方法</h4> 
+<p>为了解决异步执行的问题，使用pytorch自带的<code>torch.cuda.synchronize()</code>，它会将异步模式转换成同步模式，只有在当前轮次的GPU推理完成之后才停止计时，并且使用<code>torch.cuda.Event</code>来跟踪GPU程序并进行更新；</p> 
+<blockquote> 
+ <p><a href="https://pytorch.org/docs/stable/generated/torch.cuda.Event.html" rel="nofollow">torch.cuda.Event</a>和torch.cuda.synchronize()的官方文档说明</p> 
+</blockquote> 
+<p>为了解决GPU预热的问题，我们可以在进行实际测量前运行一些示例，完成GPU的预热。</p> 
+<h3><a id="_26"></a>代码</h3> 
+<p>完整测速代码如下所示，以torchvision自带的resnet101为例。</p> 
+<pre><code class="prism language-python"><span class="token keyword">import</span> torch
+<span class="token keyword">from</span> torchvision<span class="token punctuation">.</span>models<span class="token punctuation">.</span>resnet <span class="token keyword">import</span> resnet101
+
+iterations <span class="token operator">=</span> <span class="token number">300</span>   <span class="token comment"># 重复计算的轮次</span>
+
+model <span class="token operator">=</span> resnet101<span class="token punctuation">(</span><span class="token punctuation">)</span>
+device <span class="token operator">=</span> torch<span class="token punctuation">.</span>device<span class="token punctuation">(</span><span class="token string">"cuda:0"</span><span class="token punctuation">)</span>
+model<span class="token punctuation">.</span>to<span class="token punctuation">(</span>device<span class="token punctuation">)</span>
+
+random_input <span class="token operator">=</span> torch<span class="token punctuation">.</span>randn<span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">,</span> <span class="token number">224</span><span class="token punctuation">,</span> <span class="token number">224</span><span class="token punctuation">)</span><span class="token punctuation">.</span>to<span class="token punctuation">(</span>device<span class="token punctuation">)</span>
+starter<span class="token punctuation">,</span> ender <span class="token operator">=</span> torch<span class="token punctuation">.</span>cuda<span class="token punctuation">.</span>Event<span class="token punctuation">(</span>enable_timing<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">,</span> torch<span class="token punctuation">.</span>cuda<span class="token punctuation">.</span>Event<span class="token punctuation">(</span>enable_timing<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+
+<span class="token comment"># GPU预热</span>
+<span class="token keyword">for</span> _ <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token number">50</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    _ <span class="token operator">=</span> model<span class="token punctuation">(</span>random_input<span class="token punctuation">)</span>
+
+<span class="token comment"># 测速</span>
+times <span class="token operator">=</span> torch<span class="token punctuation">.</span>zeros<span class="token punctuation">(</span>iterations<span class="token punctuation">)</span>     <span class="token comment"># 存储每轮iteration的时间</span>
+<span class="token keyword">with</span> torch<span class="token punctuation">.</span>no_grad<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">for</span> <span class="token builtin">iter</span> <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span>iterations<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        starter<span class="token punctuation">.</span>record<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        _ <span class="token operator">=</span> model<span class="token punctuation">(</span>random_input<span class="token punctuation">)</span>
+        ender<span class="token punctuation">.</span>record<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token comment"># 同步GPU时间</span>
+        torch<span class="token punctuation">.</span>cuda<span class="token punctuation">.</span>synchronize<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        curr_time <span class="token operator">=</span> starter<span class="token punctuation">.</span>elapsed_time<span class="token punctuation">(</span>ender<span class="token punctuation">)</span> <span class="token comment"># 计算时间</span>
+        times<span class="token punctuation">[</span><span class="token builtin">iter</span><span class="token punctuation">]</span> <span class="token operator">=</span> curr_time
+        <span class="token comment"># print(curr_time)</span>
+
+mean_time <span class="token operator">=</span> times<span class="token punctuation">.</span>mean<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>item<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"Inference time: {:.6f}, FPS: {} "</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>mean_time<span class="token punctuation">,</span> <span class="token number">1000</span><span class="token operator">/</span>mean_time<span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+</code></pre> 
+<h3><a id="_62"></a>参考资料</h3> 
+<p>[1] <a href="https://towardsdatascience.com/the-correct-way-to-measure-inference-time-of-deep-neural-networks-304a54e5187f" rel="nofollow">The Correct Way to Measure Inference Time of Deep Neural Networks</a><br> [2] <a href="https://zhuanlan.zhihu.com/p/460524015" rel="nofollow">如何正确测量 PyTorch 模型的推理时间</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0ae259da605d9203d5fe2e06adeb93b1/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">AMBA5 AXI和ACE协议技术规范中文版-第A4章 事务属性</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/7c7c7c45cd3a5a8f9a54ec23d80d38db/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">TypeScript 学习笔记</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

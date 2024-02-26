@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Centos7 防火墙配置详解（非常详细！） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Centos7 防火墙配置详解（非常详细！）" />
+<meta property="og:description" content="Centos7 防火墙配置详解（非常详细） 一. zone的概念1.1 预定义的zone1.2 将interface和source划分到某个zone1.3 zone配置文件 二. Service的概念2.1 service配置文件2.2 service相关的指令 三. ipset的概念四. direct.xml Centos7中使用firewalld来作为防火墙，其底层调用的命令仍然是iptables等命令，但是在配置上发生了较大的变化。 Centos7中有两个位置存放了firewall的配置文件，一个是/etc/firewalld，一个是/usr/lib/firewalld，前者是用户配置目录，后者是系统配置目录。/usr/lib/firewalld目录中存放的是firewalld提供的一些默认和备份的配置文件，一般不随意改变，/etc/firewalld目录下才是用户配置的真正生效的配置文件，只有在/etc/firewalld目录不存在或该目录下不存在配置文件的情况下/usr/lib/firewalld目录下的配置文件才会生效。
+一. zone的概念 zone定义了防火墙对某个连接、网口（interface）或源地址的信任等级，我们可以把他理解为防火墙对不同的连接（connection）、网口（interface）或源地址（source address）划分到不同的zone当中，而不同的zone定义了不同的规则，因此防火墙可以针对不同的连接、网口（interface）或源地址做出不同的行为。例如，我们将10.12.18.201这个地址划分到zone1中，将10.12.18.202这个地址划分到zone2中，然后zone1中定义的规则为：允许访问3306端口，其余的端口都拒绝访问；zone2中定义的规则为：拒绝访问3306端口，其余的端口都允许访问。那么10.12.18.201就仅能访问本机的3306端口，10.12.18.202就仅不能访问本机的3306端口。每个zone的防火墙规则是通过/etc/firewalld/zones目录下的xml配置文件来配置的。
+zone和connection、interface、source address之间是一对多的关系，即一个connection、interface或source address仅能划分到一个zone中，而一个zone中可以包含多个connection、interface或source address。
+1.1 预定义的zone Centos7中firewalld为用户预定义了9个zone，分别为drop，block，public，external，dmz，work，home，internal，trusted。这9个zone的配置文件在/usr/lib/firewalld/zones目录下，通过查看他们的配置文件可以得知这9个zone的规则是怎么样的。
+drop：任何传入本机的网络数据包都会被丢弃，并且不会回复，只允许本机对外访问其他服务器。
+block：任何传入本机的网络连接请求都会被拒绝，并且会回复一条拒绝访问的消息。
+public：用于本机处于公共网络环境的场景下，仅接受特定的连接请求，如仅接受某些特定的IP的连接请求，或仅对外部开放特定的某些端口。Centos 7 默认的public.xml文件中仅开放用于ssh连接请求的22端口和dhcpv6-client服务的546端口。
+external：与public类似，Centos 7 默认仅开放用于ssh连接请求的22端口。
+dmz：与external一样，Centos 7 默认也是仅开放用于ssh连接请求的22端口。
+work：用于工作网络环境场景下，信任大部分的其他的计算机不会对本机进行攻击。Centos 7 默认开放用于ssh连接请求的22端口，dhcpv6-client服务的546端口，以及IPP协议的631端口。
+home：用于家庭网络环境，信任网络上的其他计算机不会攻击本机。Centos 7默认开放用于ssh连接请求的22端口，dhcpv6-client服务的546端口，IPP协议的631端口，samba服务的137、138端口，mDNS服务的5353端口。
+internal：与home一样，Centos 7默认开放用于ssh连接请求的22端口，dhcpv6-client服务的546端口，IPP协议的631端口，samba服务的137、138端口，mDNS服务的5353端口。
+trusted：所有对本机的网络连接请求都会被接受。
+1.2 将interface和source划分到某个zone 将某个source划分到某个zone的命令如下：
+firewall-cmd [--permanent] [--zone=zone] --add-source=source 例如：
+firewall-cmd --permanent --zone=trusted --add-source=192.168.5.112 这条命令会将192.168.5.112这个网口划分到trusted这个zone，–permanent参数会将该配置写入trusted这个zone的配置文件trusted.xml中，使其永久生效，如果不加–permanent，则只会临时生效，重启防火墙或者调用firewall-cmd --reload重新加载配置文件会使得该项配置失效。
+将某个网口（interface）划分到某个zone的命令如下：
+firewall-cmd [--permanent] [--zone=zone] --add-interface=interface 例如
+firewall-cmd --permanent --zone=block --add-interface=ens33 这条命令会将ens33这个网口划分到block这个zone，这样其他机器访问本机的ens33网口时就会默认走这个zone。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/911af581de49969bfba3e1062a7e165b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-08-18T11:07:19+08:00" />
+<meta property="article:modified_time" content="2022-08-18T11:07:19+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Centos7 防火墙配置详解（非常详细！）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>Centos7 防火墙配置详解（非常详细）</h4> 
+ <ul><li><a href="#_zone_4" rel="nofollow">一. zone的概念</a></li><li><ul><li><a href="#11_zone_8" rel="nofollow">1.1 预定义的zone</a></li><li><a href="#12_interfacesourcezone_20" rel="nofollow">1.2 将interface和source划分到某个zone</a></li><li><a href="#13_zone_68" rel="nofollow">1.3 zone配置文件</a></li></ul> 
+  </li><li><a href="#_Service_102" rel="nofollow">二. Service的概念</a></li><li><ul><li><a href="#21_service_104" rel="nofollow">2.1 service配置文件</a></li><li><a href="#22_service_140" rel="nofollow">2.2 service相关的指令</a></li></ul> 
+  </li><li><a href="#_ipset_154" rel="nofollow">三. ipset的概念</a></li><li><a href="#_directxml_232" rel="nofollow">四. direct.xml</a></li></ul> 
+</div> 
+<br> Centos7中使用firewalld来作为防火墙，其底层调用的命令仍然是iptables等命令，但是在配置上发生了较大的变化。 
+<p></p> 
+<p>Centos7中有两个位置存放了firewall的配置文件，一个是/etc/firewalld，一个是/usr/lib/firewalld，前者是用户配置目录，后者是系统配置目录。/usr/lib/firewalld目录中存放的是firewalld提供的一些默认和备份的配置文件，一般不随意改变，/etc/firewalld目录下才是用户配置的真正生效的配置文件，只有在/etc/firewalld目录不存在或该目录下不存在配置文件的情况下/usr/lib/firewalld目录下的配置文件才会生效。</p> 
+<h2><a id="_zone_4"></a>一. zone的概念</h2> 
+<p>zone定义了防火墙对某个连接、网口（interface）或源地址的信任等级，我们可以把他理解为防火墙对不同的连接（connection）、网口（interface）或源地址（source address）划分到不同的zone当中，而不同的zone定义了不同的规则，因此防火墙可以针对不同的连接、网口（interface）或源地址做出不同的行为。例如，我们将10.12.18.201这个地址划分到zone1中，将10.12.18.202这个地址划分到zone2中，然后zone1中定义的规则为：允许访问3306端口，其余的端口都拒绝访问；zone2中定义的规则为：拒绝访问3306端口，其余的端口都允许访问。那么10.12.18.201就仅能访问本机的3306端口，10.12.18.202就仅不能访问本机的3306端口。每个zone的防火墙规则是通过/etc/firewalld/zones目录下的xml配置文件来配置的。<br> zone和connection、interface、source address之间是一对多的关系，即一个connection、interface或source address仅能划分到一个zone中，而一个zone中可以包含多个connection、interface或source address。</p> 
+<h3><a id="11_zone_8"></a>1.1 预定义的zone</h3> 
+<p>Centos7中firewalld为用户预定义了9个zone，分别为drop，block，public，external，dmz，work，home，internal，trusted。这9个zone的配置文件在/usr/lib/firewalld/zones目录下，通过查看他们的配置文件可以得知这9个zone的规则是怎么样的。<br> <strong>drop</strong>：任何传入本机的网络数据包都会被丢弃，并且不会回复，只允许本机对外访问其他服务器。<br> <strong>block</strong>：任何传入本机的网络连接请求都会被拒绝，并且会回复一条拒绝访问的消息。<br> <strong>public</strong>：用于本机处于公共网络环境的场景下，仅接受特定的连接请求，如仅接受某些特定的IP的连接请求，或仅对外部开放特定的某些端口。Centos 7 默认的public.xml文件中仅开放用于ssh连接请求的22端口和dhcpv6-client服务的546端口。<br> <strong>external</strong>：与public类似，Centos 7 默认仅开放用于ssh连接请求的22端口。<br> <strong>dmz</strong>：与<strong>external</strong>一样，Centos 7 默认也是仅开放用于ssh连接请求的22端口。<br> <strong>work</strong>：用于工作网络环境场景下，信任大部分的其他的计算机不会对本机进行攻击。Centos 7 默认开放用于ssh连接请求的22端口，dhcpv6-client服务的546端口，以及IPP协议的631端口。<br> <strong>home</strong>：用于家庭网络环境，信任网络上的其他计算机不会攻击本机。Centos 7默认开放用于ssh连接请求的22端口，dhcpv6-client服务的546端口，IPP协议的631端口，samba服务的137、138端口，mDNS服务的5353端口。<br> <strong>internal</strong>：与<strong>home</strong>一样，Centos 7默认开放用于ssh连接请求的22端口，dhcpv6-client服务的546端口，IPP协议的631端口，samba服务的137、138端口，mDNS服务的5353端口。<br> <strong>trusted</strong>：所有对本机的网络连接请求都会被接受。</p> 
+<h3><a id="12_interfacesourcezone_20"></a>1.2 将interface和source划分到某个zone</h3> 
+<p>将某个source划分到某个zone的命令如下：</p> 
+<pre><code class="prism language-bash">firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> --add-source<span class="token operator">=</span>source
+</code></pre> 
+<p>例如：</p> 
+<pre><code class="prism language-bash">firewall-cmd --permanent --zone<span class="token operator">=</span>trusted --add-source<span class="token operator">=</span><span class="token number">192.168</span>.5.112
+</code></pre> 
+<p>这条命令会将192.168.5.112这个网口划分到trusted这个zone，–permanent参数会将该配置写入trusted这个zone的配置文件trusted.xml中，使其永久生效，如果不加–permanent，则只会临时生效，重启防火墙或者调用firewall-cmd --reload重新加载配置文件会使得该项配置失效。</p> 
+<p>将某个网口（interface）划分到某个zone的命令如下：</p> 
+<pre><code class="prism language-bash"> firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> --add-interface<span class="token operator">=</span>interface
+</code></pre> 
+<p>例如</p> 
+<pre><code class="prism language-bash"> firewall-cmd --permanent --zone<span class="token operator">=</span>block --add-interface<span class="token operator">=</span>ens33
+</code></pre> 
+<p>这条命令会将ens33这个网口划分到block这个zone，这样其他机器访问本机的ens33网口时就会默认走这个zone。<br> 如果某个连接请求没有划分到任何一个zone，那么就会走默认的zone，Centos7 默认情况下，默认zone为public。可以通过以下命令查看或者修改默认zone。</p> 
+<p>获取默认的zone：</p> 
+<pre><code class="prism language-bash">firewall-cmd --get-default-zone
+</code></pre> 
+<p>修改默认的zone：</p> 
+<pre><code class="prism language-bash">firewall-cmd --permanent --set-default-zone<span class="token operator">=</span><span class="token punctuation">[</span>zone<span class="token punctuation">]</span>
+</code></pre> 
+<p>其他的一些相关的命令：</p> 
+<pre><code class="prism language-bash">列出该zone下绑定了哪些interface：
+firewall-cmd <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> --list-interfaces
+
+将该interface绑定到另一个zone上：
+firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> --change-interface<span class="token operator">=</span>interface
+
+如果该interface之前绑定到了某个zone，则取消绑定，这样就会走默认zone
+firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> --remove-interface<span class="token operator">=</span>interface
+
+与source相关的：
+firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> --remove-source<span class="token operator">=</span>source
+firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> --list-sources
+firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> --add-source<span class="token operator">=</span>source
+</code></pre> 
+<h3><a id="13_zone_68"></a>1.3 zone配置文件</h3> 
+<p>一个zone的xml配置文件的示例如下：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>zone <span class="token assign-left variable">target</span><span class="token operator">=</span><span class="token string">"DEFAULT"</span><span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>short<span class="token operator">&gt;</span>Public<span class="token operator">&lt;</span>/short<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>description<span class="token operator">&gt;</span>For use <span class="token keyword">in</span> public areas. You <span class="token keyword">do</span> not trust the other computers on networks to not harm your computer. Only selected incoming connections are accepted.<span class="token operator">&lt;</span>/description<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"ssh"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"dhcpv6-client"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>port <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"80"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>port <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"8080"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">address</span><span class="token operator">=</span><span class="token string">"192.168.5.112"</span><span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">address</span><span class="token operator">=</span><span class="token string">"10.12.18.0/24"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>rule <span class="token assign-left variable">family</span><span class="token operator">=</span><span class="token string">"ipv4"</span><span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>source <span class="token assign-left variable">address</span><span class="token operator">=</span><span class="token string">"10.12.18.0/24"</span>/<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>port <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"7180-7190"</span>/<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>accept/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>/rule<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/zone<span class="token operator">&gt;</span>
+</code></pre> 
+<p>每个标签的含义：<br> <strong>zone</strong>：给一个zone指定target，</p> 
+<blockquote> 
+ <p>target=“ACCEPT|%%REJECT%%|DROP”</p> 
+</blockquote> 
+<p>可用于接受（ACCEPT）、拒绝（%%REJECT%%）或丢弃（DROP）与任何规则（端口、服务等）都不匹配的每个数据包，即指定该zone的默认的对连接（connection）、网口（interface）或源地址（source address）的行为，如果不指定target，则默认为default，default的行为与REJECT类似。<br> <strong>short</strong>：给该zone指定一个名字。<br> <strong>description</strong>：对该zone的描述<br> <strong>service</strong>：该zone开启的服务（service），service下一小节会讲<br> <strong>port</strong>：该zone打开的端口，protocol属性可以指定协议，通常为tcp或udp，port属性指定端口号<br> <strong>source</strong>：绑定到该zone的source，其效果等同于 <em>firewall-cmd [–permanent] [–zone=zone] --add-source=source</em> 指令<br> <strong>rule</strong>：为该zone添加的富语言规则（rich language rule）。rich language rule的写法可以参照官网<a href="https://firewalld.org/documentation/man-pages/firewalld.richlanguage" rel="nofollow">https://firewalld.org/documentation/man-pages/firewalld.richlanguage</a><br> 上述示例的富语言规则的含义为对10.12.18.X网段的source开放7180至7190所有端口的tcp连接请求。</p> 
+<h2><a id="_Service_102"></a>二. Service的概念</h2> 
+<p>service是预定义的一系列的本机的协议、端口、目标ip等，service可以让我们更加方便的让防火墙限制外部对本机的某些端口的访问。service的配置文件在/etc/firewalld/services或/usr/lib/firewalld/services文件夹下，每个service的配置都是一个xml文件。</p> 
+<h3><a id="21_service_104"></a>2.1 service配置文件</h3> 
+<p>系统在/usr/lib/firewalld/services文件夹下为我们预定义了一些列的service配置文件，我们也可以在/etc/firewalld/services定义自己的service。例如，ftp.xml的内容如下：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>service<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>short<span class="token operator">&gt;</span>FTP<span class="token operator">&lt;</span>/short<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>description<span class="token operator">&gt;</span>FTP is a protocol used <span class="token keyword">for</span> remote <span class="token function">file</span> transfer. If you plan to <span class="token function">make</span> your FTP server publicly available, <span class="token builtin class-name">enable</span> this option. You need the vsftpd package installed <span class="token keyword">for</span> this option to be useful.<span class="token operator">&lt;</span>/description<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>port <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"21"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>module <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"nf_conntrack_ftp"</span>/<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/service<span class="token operator">&gt;</span>
+</code></pre> 
+<p>这样，在某个zone的配置文件中可以引用这个service，例如，在public.xml中引入ftp service：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>zone<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>short<span class="token operator">&gt;</span>Public<span class="token operator">&lt;</span>/short<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>description<span class="token operator">&gt;</span>For use <span class="token keyword">in</span> public areas. You <span class="token keyword">do</span> not trust the other computers on networks to not harm your computer. Only selected incoming connections are accepted.<span class="token operator">&lt;</span>/description<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"dhcpv6-client"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"ssh"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"ftp"</span>/<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/zone<span class="token operator">&gt;</span>
+</code></pre> 
+<p>等价于：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>zone<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>short<span class="token operator">&gt;</span>Public<span class="token operator">&lt;</span>/short<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>description<span class="token operator">&gt;</span>For use <span class="token keyword">in</span> public areas. You <span class="token keyword">do</span> not trust the other computers on networks to not harm your computer. Only selected incoming connections are accepted.<span class="token operator">&lt;</span>/description<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"dhcpv6-client"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"ssh"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>port <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"21"</span>/<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/zone<span class="token operator">&gt;</span>
+</code></pre> 
+<h3><a id="22_service_140"></a>2.2 service相关的指令</h3> 
+<p>打印所有预定义的service（/usr/lib/firewalld/services或/etc/firewalld/services下每个xml配置文件就是一个预定义的service）：</p> 
+<pre><code class="prism language-bash">firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> --get-services
+</code></pre> 
+<p>列出此zone开启的服务列表：</p> 
+<pre><code class="prism language-bash">firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--policy<span class="token operator">=</span>policy<span class="token punctuation">]</span> --list-services
+</code></pre> 
+<p>将一个service添加到一个zone，timeout可以为这个zone设置这个service的生效时间，过了这个生效时间，此service将从该zone中被移除。–timeout参数和–permanent参数是不兼容的</p> 
+<pre><code class="prism language-bash">firewall-cmd <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--zone<span class="token operator">=</span>zone<span class="token punctuation">]</span> <span class="token punctuation">[</span>--permanent<span class="token punctuation">]</span> <span class="token punctuation">[</span>--policy<span class="token operator">=</span>policy<span class="token punctuation">]</span> --add-service<span class="token operator">=</span>service <span class="token punctuation">[</span>--timeout<span class="token operator">=</span>timeval<span class="token punctuation">]</span>
+</code></pre> 
+<h2><a id="_ipset_154"></a>三. ipset的概念</h2> 
+<p>ipset，顾名思义，就是可用于将多个IP或MAC地址分组在一起。通过使用ipset，可以将不同的ip地址进行分组，简化ip地址的管理和zone的配置。ipset的配置文件在/etc/firewalld/ipsets目录下，该目录下一个xml配置文件对应一个ipset。<br> 例如，将以下ip地址组合为一个ipset，配置文件命名为ipset1.xml：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>ipset <span class="token assign-left variable">type</span><span class="token operator">=</span><span class="token string">"hash:net"</span><span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>entry<span class="token operator">&gt;</span><span class="token number">10.12</span>.18.20<span class="token operator"><span class="token file-descriptor important">1</span>&lt;</span>/entry<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>entry<span class="token operator">&gt;</span><span class="token number">192.168</span>.5.20<span class="token operator"><span class="token file-descriptor important">1</span>&lt;</span>/entry<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/ipset<span class="token operator">&gt;</span>
+</code></pre> 
+<p>将以下mac地址组合为一个ipset，配置文件命名为ipset2.xml：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>ipset <span class="token assign-left variable">type</span><span class="token operator">=</span><span class="token string">"hash:mac"</span><span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>entry<span class="token operator">&gt;</span>00:11:22:33:44:5<span class="token operator"><span class="token file-descriptor important">5</span>&lt;</span>/entry<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>entry<span class="token operator">&gt;</span><span class="token number">11</span>:22:33:44:55:6<span class="token operator"><span class="token file-descriptor important">6</span>&lt;</span>/entry<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/ipset<span class="token operator">&gt;</span>
+</code></pre> 
+<p>在public.xml中引用这两个ipset：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>zone<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>short<span class="token operator">&gt;</span>Public<span class="token operator">&lt;</span>/short<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>description<span class="token operator">&gt;</span>For use <span class="token keyword">in</span> public areas. You <span class="token keyword">do</span> not trust the other computers on networks to not harm your computer. Only selected incoming connections are accepted.<span class="token operator">&lt;</span>/description<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">ipset</span><span class="token operator">=</span><span class="token string">"ipset1"</span> /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">ipset</span><span class="token operator">=</span><span class="token string">"ipset2"</span> /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"dhcpv6-client"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"ssh"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>rule <span class="token assign-left variable">family</span><span class="token operator">=</span><span class="token string">"ipv4"</span><span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>source <span class="token assign-left variable">ipset</span><span class="token operator">=</span><span class="token string">"ipset1"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>port <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"3306"</span> <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>accept /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>/rule<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>rule <span class="token assign-left variable">family</span><span class="token operator">=</span><span class="token string">"ipv4"</span><span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>source <span class="token assign-left variable">ipset</span><span class="token operator">=</span><span class="token string">"ipset2"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>port <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"8080"</span> <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>accept /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>/rule<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/zone<span class="token operator">&gt;</span>
+</code></pre> 
+<p>这等同于：</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>?xml <span class="token assign-left variable">version</span><span class="token operator">=</span><span class="token string">"1.0"</span> <span class="token assign-left variable">encoding</span><span class="token operator">=</span><span class="token string">"utf-8"</span>?<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>zone<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>short<span class="token operator">&gt;</span>Public<span class="token operator">&lt;</span>/short<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>description<span class="token operator">&gt;</span>For use <span class="token keyword">in</span> public areas. You <span class="token keyword">do</span> not trust the other computers on networks to not harm your computer. Only selected incoming connections are accepted.<span class="token operator">&lt;</span>/description<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">address</span><span class="token operator">=</span><span class="token string">"10.12.18.201"</span> /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">address</span><span class="token operator">=</span><span class="token string">"192.168.5.201"</span> /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">mac</span><span class="token operator">=</span><span class="token string">"00:11:22:33:44:55"</span> /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>source <span class="token assign-left variable">mac</span><span class="token operator">=</span><span class="token string">"11:22:33:44:55:66"</span> /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"dhcpv6-client"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>service <span class="token assign-left variable">name</span><span class="token operator">=</span><span class="token string">"ssh"</span>/<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>rule <span class="token assign-left variable">family</span><span class="token operator">=</span><span class="token string">"ipv4"</span><span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>source <span class="token assign-left variable">address</span><span class="token operator">=</span><span class="token string">"10.12.18.201"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>port <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"3306"</span> <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>accept /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>/rule<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>rule <span class="token assign-left variable">family</span><span class="token operator">=</span><span class="token string">"ipv4"</span><span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>source <span class="token assign-left variable">address</span><span class="token operator">=</span><span class="token string">"192.168.5.201"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>port <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"3306"</span> <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>accept /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>/rule<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>rule <span class="token assign-left variable">family</span><span class="token operator">=</span><span class="token string">"ipv4"</span><span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>source <span class="token assign-left variable">mac</span><span class="token operator">=</span><span class="token string">"00:11:22:33:44:55"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>port <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"8080"</span> <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>accept /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>/rule<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>rule <span class="token assign-left variable">family</span><span class="token operator">=</span><span class="token string">"ipv4"</span><span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>source <span class="token assign-left variable">mac</span><span class="token operator">=</span><span class="token string">"11:22:33:44:55:66"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>port <span class="token assign-left variable">port</span><span class="token operator">=</span><span class="token string">"8080"</span> <span class="token assign-left variable">protocol</span><span class="token operator">=</span><span class="token string">"tcp"</span> /<span class="token operator">&gt;</span>
+    <span class="token operator">&lt;</span>accept /<span class="token operator">&gt;</span>
+  <span class="token operator">&lt;</span>/rule<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/zone<span class="token operator">&gt;</span>
+</code></pre> 
+<p>显然，采用ipset可以极大简化配置。</p> 
+<h2><a id="_directxml_232"></a>四. direct.xml</h2> 
+<p>除了使用zone来配置防火墙以外，还可以直接为防火墙添加iptables规则，这些规则会放在配置文件/etc/firewalld/direct.xml中。默认情况下，Centos 7没有这个文件，只有当用户为direct interface添加iptables规则时，才会生成这个文件。通过该方法添加的防火墙规则具有最高优先度，也就是说，如果direct.xml中的某条规则与zone的规则冲突时，以direct.xml为准。但firewalld官网并不推荐我们使用direct.xml。</p> 
+<p>给direct interface添加一条防火墙规则的指令如下：</p> 
+<pre><code class="prism language-bash">firewall-cmd --permanent --direct --add-rule ipv4 filter INPUT <span class="token number">1</span> -s <span class="token number">10.48</span>.186.6 -j ACCEPT
+</code></pre> 
+<p>使用direct.xml需要用户本身对iptables的概念有一定基础(tables, chains, commands, parameters, targets)，具体可以参考<a href="https://firewalld.org/documentation/man-pages/firewalld.direct.html" rel="nofollow">https://firewalld.org/documentation/man-pages/firewalld.direct.html</a>。<br> direct interface后续可能会被弃用，被policies代替。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/e51194719ca62e7d4c78ba341affb32b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Idea创建Maven子项目时，加载完后pom.xml里没有parent标签</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/c9ab6255a5c21cacd179a5ac84d9eab2/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Android MediaPlayer IllegalStateException源码分析定位</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

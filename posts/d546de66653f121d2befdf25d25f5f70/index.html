@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>LSTM简介以及数学推导(FULL BPTT) - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="LSTM简介以及数学推导(FULL BPTT)" />
+<meta property="og:description" content="前段时间看了一些关于LSTM方面的论文，一直准备记录一下学习过程的，因为其他事儿，一直拖到了现在，记忆又快模糊了。现在赶紧补上，本文的组织安排是这样的：先介绍rnn的BPTT所存在的问题，然后介绍最初的LSTM结构，在介绍加了遗忘控制门的，然后是加了peephole connections结构的LSTM，都是按照真实提出的时间顺序来写的。本文相当于把各个论文核心部分简要汇集一下而做的笔记，已提供快速的了解。
+一.rnn结构的BPTT学习算法存在的问题 先看一下比较典型的BPTT一个展开的结构，如下图，这里只考虑了部分图，因为其他部分不是这里要讨论的内容。
+对于t时刻的误差信号计算如下：
+这样权值的更新方式如下：
+上面的公式在BPTT中是非常常见的了，那么如果这个误差信号一直往过去传呢，假设任意两个节点u, v他们的关系是下面这样的：
+那么误差传递信号的关系可以写成如下的递归式：
+n表示图中一层神经元的个数，这个递归式的大概含义不难理解，要求t-q时刻误差信号对t时刻误差信号的偏导，就先求出t-q&#43;1时刻对t时刻的，然后把求出来的结果传到t-q时刻，递归停止条件是q = 1时，就是刚开始写的那部分计算公式了。将上面的递归式展开后可以得到：
+论文里面说的是可以通过归纳来证明，我没仔细推敲这里了，把里面连乘展开看容易明白一点：
+整个结果式对T求和的次数是n^(q-1), 即T有n^(q-1)项，那么下面看问题出在哪儿。
+如果|T| &gt; 1, 误差就会随着q的增大而呈指数增长，那么网络的参数更新会引起非常大的震荡。
+如果|T| &lt; 1， 误差就会消失，导致学习无效，一般激活函数用simoid函数，它的倒数最大值是0.25, 权值最大值要小于4才能保证不会小于1。
+误差呈指数增长的现象比较少，误差消失在BPTT中很常见。在原论文中还有更详细的数学分析，但是了解到此个人觉的已经足够理解问题所在了。
+二.最初的LSTM结构 为了克服误差消失的问题，需要做一些限制，先假设仅仅只有一个神经元与自己连接，简图如下：
+根据上面的，t时刻的误差信号计算如下：
+为了使误差不产生变化，可以强制令下式为1：
+根据这个式子，可以得到：
+这表示激活函数是线性的，常常的令fj(x) = x, wjj = 1.0，这样就获得常数误差流了，也叫做CEC。
+但是光是这样是不行的，因为存在输入输出处权值更新的冲突(这里原论文里面的解释我不是很明白)，所以加上了两道控制门，分别是input gate, output gate，来解决这个矛盾，图如下：
+图中增加了两个控制门，所谓控制的意思就是计算cec的输入之前，乘以input gate的输出，计算cec的输出时，将其结果乘以output gate的输出，整个方框叫做block, 中间的小圆圈是CEC, 里面是一条y = x的直线表示该神经元的激活函数是线性的，自连接的权重为1.0
+三.增加forget gate 最初lstm结构的一个缺点就是cec的状态值可能会一直增大下去，增加forget gate后，可以对cec的状态进行控制，它的结构如下图： 这里的相当于自连接权重不再是1.0，而是一个动态的值，这个动态值是forget gate的输出值，它可以控制cec的状态值，在必要时使之为0，即忘记作用，为1时和原来的结构一样。 四.增加Peephole的LSTM结构 上面增加遗忘门一个缺点是当前CEC的状态不能影响到input gate, forget gate在下一时刻的输出，所以增加了Peephole connections。结构如下： 这里的gate的输入部分就多加了一个来源了，forget gate, input gate的输入来源增加了cec前一时刻的输出，output gate的输入来源增加了cec当前时刻的输出，另外计算的顺序也必须保证如下： input gate, forget gate的输入输出cell的输入output gate的输入输出cell的输出(这里也是block的输出) 五." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d546de66653f121d2befdf25d25f5f70/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2015-04-30T09:30:25+08:00" />
+<meta property="article:modified_time" content="2015-04-30T09:30:25+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">LSTM简介以及数学推导(FULL BPTT)</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">前段时间看了一些关于LSTM方面的论文，一直准备记录一下学习过程的，因为其他事儿，一直拖到了现在，记忆又快模糊了。现在赶紧补上，本文的组织安排是这样的：先介绍rnn的BPTT所存在的问题，然后介绍最初的LSTM结构，在介绍加了遗忘控制门的，然后是加了peephole connections结构的LSTM，都是按照真实提出的时间顺序来写的。本文相当于把各个论文核心部分简要汇集一下而做的笔记，已提供快速的了解。</span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span></p> 
+<h2><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">一.rnn结构的BPTT学习算法存在的问题</span></span></h2> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">先看一下比较典型的BPTT一个展开的结构，如下图，这里只考虑了部分图，因为其他部分不是这里要讨论的内容。</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/36/4f/LDSd0xAP_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">对于t时刻的误差信号计算如下：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/f0/98/UVdkXYDd_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">这样权值的更新方式如下：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/6b/bb/QEqCpfR5_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">上面的公式在BPTT中是非常常见的了，那么如果这个误差信号一直往过去传呢，假设任意两个节点u, v他们的关系是下面这样的：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/13/33/ypo37a3p_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">那么误差传递信号的关系可以写成如下的递归式：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/31/a5/BMDWflXr_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">n表示图中一层神经元的个数，这个递归式的大概含义不难理解，要求t-q时刻误差信号对t时刻误差信号的偏导，就先求出t-q+1时刻对t时刻的，然后把求出来的结果传到t-q时刻，递归停止条件是q = 1时，就是刚开始写的那部分计算公式了。将上面的递归式展开后可以得到：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/a7/01/hzMN65hW_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">论文里面说的是可以通过归纳来证明，我没仔细推敲这里了，把里面连乘展开看容易明白一点：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/da/0d/paZhd8w9_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">整个结果式对T求和的次数是n^(q-1), 即T有n^(q-1)项，那么下面看问题出在哪儿。</span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">如果|T| &gt; 1, 误差就会随着q的增大而呈指数增长，那么网络的参数更新会引起非常大的震荡。</span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">如果|T| &lt; 1， 误差就会消失，导致学习无效，一般激活函数用simoid函数，它的倒数最大值是0.25, 权值最大值要小于4才能保证不会小于1。</span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">误差呈指数增长的现象比较少，误差消失在BPTT中很常见。在原论文中还有更详细的数学分析，但是了解到此个人觉的已经足够理解问题所在了。</span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span></p> 
+<h2><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">二.最初的LSTM结构</span></span></h2> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">为了克服误差消失的问题，需要做一些限制，先假设仅仅只有一个神经元与自己连接，简图如下：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/86/d9/UVMaNEOy_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">根据上面的，t时刻的误差信号计算如下：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/28/9e/5qOYbRTz_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">为了使误差不产生变化，可以强制令下式为1：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/e9/bf/ylqBFTd7_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">根据这个式子，可以得到：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/c3/19/AM0AnKli_o.png" alt=""><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">这表示激活函数是线性的，常常的令fj(x) = x, wjj = 1.0，这样就获得常数误差流了，也叫做CEC。</span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">但是光是这样是不行的，因为存在输入输出处权值更新的冲突(这里原论文里面的解释我不是很明白)，所以加上了两道控制门，分别是input gate, output gate，来解决这个矛盾，图如下：</span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/0f/f8/OiMmqsB1_o.png" alt=""><br> </span></span></p> 
+<p style="text-align:center"><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">图中增加了两个控制门，所谓控制的意思就是计算cec的输入之前，乘以input gate的输出，计算cec的输出时，将其结果乘以output gate的输出，整个方框叫做block, 中间的小圆圈是CEC, 里面是一条y = x的直线表示该神经元的激活函数是线性的，自连接的权重为1.0</span></span></p> 
+<p><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span></p> 
+<h2><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">三.增加forget gate</span></span></h2> 
+<div> 
+ <span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span> 
+</div> 
+<div> 
+ <span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">最初lstm结构的一个缺点就是cec的状态值可能会一直增大下去，增加forget gate后，可以对cec的状态进行控制，它的结构如下图：</span></span> 
+</div> 
+<div style="text-align:center"> 
+ <span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><img src="https://images2.imgbox.com/30/5a/0G1WwDHl_o.png" alt=""><br> </span></span> 
+</div> 
+<div style="text-align:center"> 
+ <span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span> 
+</div> 
+<div> 
+ <span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">这里的相当于自连接权重不再是1.0，而是一个动态的值，这个动态值是forget gate的输出值，它可以控制cec的状态值，在必要时使之为0，即忘记作用，为1时和原来的结构一样。</span></span> 
+</div> 
+<div> 
+ <span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span> 
+</div> 
+<h2><span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei">四.增加Peephole的LSTM结构</span></span></h2> 
+<div> 
+ <span style="font-size:16px; line-height:31px"><span style="font-family:Microsoft YaHei"><br> </span></span> 
+</div> 
+<div> 
+ <span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px">上面增加遗忘门一个缺点是当前CEC的状态不能影响到input gate, forget gate在下一时刻的输出，所以增加了Peephole connections。结构如下：</span> 
+</div> 
+<div style="text-align:center"> 
+ <span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px"><img src="https://images2.imgbox.com/72/20/ffFSNAHC_o.png" alt=""><br> </span> 
+</div> 
+<div> 
+ <span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px">这里的gate的输入部分就多加了一个来源了，forget gate, input gate的输入来源增加了cec前一时刻的输出，output gate的输入来源增加了cec当前时刻的输出，另外计算的顺序也必须保证如下：</span> 
+</div> 
+<div> 
+ <ol><li><span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px">input gate, forget gate的输入输出</span></li><li><span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px">cell的输入</span></li><li><span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px">output gate的输入输出</span></li><li><span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px">cell的输出(这里也是block的输出)</span></li></ol> 
+ <div> 
+  <span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px"><br> </span></span> 
+ </div> 
+</div> 
+<h2><span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px">五.一个LSTM的FULL BPTT推导(用误差信号)</span></span></h2> 
+<div> 
+ <span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px">我记得当时看论文公式推导的时候很多地方比较难理解，最后随便谷歌了几下，找到一个写的不错的类似课件的PDF,但是已经不知道出处了，很容易就看懂LSTM的前向计算，误差反传更新了。把其中关于LSTM的部分放上来，首先网络的完整结构图如下：</span></span> 
+</div> 
+<div style="text-align:center"> 
+ <span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px"><img src="https://images2.imgbox.com/89/eb/Q9NLwS9s_o.png" alt=""><br> </span></span> 
+</div> 
+<div> 
+ <span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px"><br> </span></span> 
+</div> 
+<div> 
+ <span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px">这个结构也是rwthlm源码包中LSTM的结构，下面看一下公式的记号：</span></span> 
+</div> 
+<div> 
+ <ul><li><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">wij表示从神经元i到j的连接权重(注意这和很多论文的表示是反着的)</span></li><li><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">神经元的输入用a表示，输出用b表示</span></li><li><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">下标</span><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'"> ι, φ 和 ω分别表示</span><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">input gate, forget gate，</span><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">output gate </span></li><li><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">c下标表示cell，从cell到</span><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'"> input, forget和output gate</span><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">的</span><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">peephole权重分别记做  </span><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">wcι , wcφ and wcω</span></li><li><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">Sc表示cell c的状态</span></li><li><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">控制门的激活函数用f表示，g，h分别表示cell的输入输出激活函数</span></li><li><span style="font-size:16px; line-height:31px; font-family:'Microsoft YaHei'">I表示输入层的神经元的个数，K是输出层的神经元个数，H是隐层cell的个数</span></li></ul> 
+ <div> 
+  <span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px">前向的计算：</span></span> 
+ </div> 
+ <div style="text-align:center"> 
+  <span style="font-family:Microsoft YaHei"><span style="font-size:16px; line-height:31px"><img src="https://images2.imgbox.com/a9/71/0JTvzaId_o.png" alt=""><br> </span></span> 
+ </div> 
+</div> 
+<div> 
+ <span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px">误差反传更新：</span> 
+</div> 
+<div style="text-align:center"> 
+ <span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px"><img src="https://images2.imgbox.com/78/94/VPOLT329_o.png" alt=""><br> </span> 
+</div> 
+<div style="text-align:center"> 
+ <span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px"><img src="https://images2.imgbox.com/18/32/bhXabBfQ_o.png" alt=""><br> </span> 
+</div> 
+<div> 
+ <span style="font-family:'Microsoft YaHei'; font-size:16px; line-height:31px"><br> </span> 
+</div> 
+<div> 
+ <br> 
+</div> 
+<p><br> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/eea3ee5fe7067678fa00fb87c9962581/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">1003.斐波那契数列</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/0066879fe32ba41b67738f6475ff48c0/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">SemEval2015语义评测任务总结</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

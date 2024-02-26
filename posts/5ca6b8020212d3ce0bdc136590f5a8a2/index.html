@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>基于libssh2的ssh远程执行/sftp传输C&#43;&#43;库pssh - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="基于libssh2的ssh远程执行/sftp传输C&#43;&#43;库pssh" />
+<meta property="og:description" content="平时维护一大堆linux服务器，如何无需交互带密码远程执行命令?其实之前也调研过几种方案，比如直接调用plink获取其结果--后来发现这玩意非线程安全，无法多线程使用且bug很多。又比如QT自带的QSSH代码，我搞下来试了一下，一是也是非线程安全，二是这货是非阻塞式调用，门槛比较高，难受的很，所以放弃了，最终选定了libssh2。
+不用脚本纯代码的话，libssh2无疑是一个好的选择。但这个库对新手不是很友好，网络上的例子也都是把官方给的几个例子抄来抄去毫无新意，不但繁琐而且有很多缺点，总结几个如下：
+纯C库，用起来不是那么方便非线程安全，无法线程执行连接/执行没有断线重连功能sftp传输没有上传/下载文件夹的功能sftp传输没有短点续传的功能windows与linux之间sftp传输不支持路径以及文件名含有中文以及空格问题远程执行返回You have mail/You have new mail的问题ssh命令过长偶尔导致\b \b \b..乱码的问题 等一系列问题，实在无法满足我想简单粗暴阻塞式执行命令以及传输文件、目录的需求，于是自己花了几个月封装了一个跨平台pssh库，致力于解决这些问题，主要功能以及更新记录如下:
+增加了带空格的目录以及文件名支持 增加了中文支持 对断点续传上传和下载文件增加速度提示功能 增加了下载文件/上传文件/下载目录/上传目录的断点续传功能 已改造windows上传文件,下载文件,上传目录,下载目录,支持回调函数,目录支持进度 传输相关要从windows下psshsingle考,从linux考来的不对,因为有中文问题 已改造为单线程断线重连，不要卡住，目前实现思路是，send失败后，只重连一次，失败再返回，因为xsh一般都不是只执行一次，多次执行，上一次失败的话，重连一次，这次失败，下一次就会成功本版本是多个channel版本，以后多线程用这个作为模板，原来的套一个pssh太臃肿，每次要写两遍函数 修改了recv处理，兼容centos系和ubuntu系列,ubuntu系列没有[,可连接127.0.0.1 单线程重连版,主要是为了防止线程过多,线程重连如果pssh多的话2倍线程,而且稳定一些 xsh是send失败直接阻塞重连，recv因为有参数返回，所以还是返回值，在xsh里面阻塞重连 xshlastinng是成功尝试多个channel，在循环lastting的时候用statuschannel判断阻塞重连 已经改造了close，xsh和xshlasting都可以closetrue 已经改造了xshlasting，可以做到closetrue后再open依然可以 已经改造了xsh，可以做到closetrue后再open依然可以 解决了深度openssl线程安全问题 增加了获取是否生成core文件功能,增加在/etc/profile增加配置等功能 增加切换目录,获取当前目录,查看远程进程,获取根目录使用比例是否在等常用功能 增加获取远程core文件&#34;Core文件&#34;&lt;&lt;&#34;服务器地址&#34;&lt;&lt;&#34;所属进程&#34;&lt;&lt;&#34;生成时间&#34;的list信息 增加了远程ini模式配置文件的增删改查功能 增加了给/etc/profile添加配置功能,内置判断是否已有配置 增加了close(true)功能,true情况下关闭自动重连,彻底关闭(两种模式); 修复了在高延迟情况下判断远程文件是否存在时间过长的bug(不再用sftp模式获取,使用ssh模式直接ll获取) 增加xshlasting模式自动重连功能,使用另一个xsh一直发送pwd探测,如果断开,则线程自动重连,重连成功后继续返回正确结果 增加了自动重连的功能,如果连接断开,则当时xsh返回错误,线程自动重连,如果下次已经连接上则下次获取正确结果 增加了与服务器连接断开时返回错误的功能,不会一直卡住 阻塞调用,xsh等结果获取完成才返回 增加了上传文件/下载文件/上传目录/下载目录功能 修复了xsh有时会返回You have mail/You have new mail的问题,过滤 修复了xsh有时命令过长会出现结果返回\b\b\b..乱码的问题,过滤 修改了xsh功能,任务错误都字符串返回#fail,包括连接断开 修改了connect,增加了连接超时功能,默认超时时间1秒,原来是20秒太长 增加了同一个ssh close再open功能 测试了多线程功能C&#43;&#43;11线程,线程安全 增加了探测连接的功能.另起一个chanel一直探测,用于判断连接状态,该功能是xshlasting的基础,因为xshlasting不能判断断了,用这个bconnected判断 增加了支持域名功能(为了支持端口映射) 增加两种模式,一种正常获取xsh结果,一种持续获取xshlasting,xshlasting可用于tail -f收集日志到统一服务器增加了xsh获取结果超时10秒返回错误功能对于xsh获取结果失败(原因不限于连接断开,超时等),均返回#fail开头的字符串 主要代码如下：
+/* * 作者:李海龙2021-02-26 */ class pssh { public: pstring strhost; int iport; pstring strpwd; pstring struser; pstring strerr;//最后一次错误描述 pssh(); pssh(pstring host,int port=22,pstring pwd=&#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/5ca6b8020212d3ce0bdc136590f5a8a2/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-02-09T20:59:39+08:00" />
+<meta property="article:modified_time" content="2022-02-09T20:59:39+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">基于libssh2的ssh远程执行/sftp传输C&#43;&#43;库pssh</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>平时维护一大堆linux服务器，如何无需交互带密码远程执行命令?其实之前也调研过几种方案，比如直接调用plink获取其结果--后来发现这玩意非线程安全，无法多线程使用且bug很多。又比如QT自带的QSSH代码，我搞下来试了一下，一是也是非线程安全，二是这货是非阻塞式调用，门槛比较高，难受的很，所以放弃了，最终选定了libssh2。</p> 
+<p>不用脚本纯代码的话，libssh2无疑是一个好的选择。但这个库对新手不是很友好，网络上的例子也都是把官方给的几个例子抄来抄去毫无新意，不但繁琐而且有很多缺点，总结几个如下：</p> 
+<ol><li>纯C库，用起来不是那么方便</li><li>非线程安全，无法线程执行</li><li>连接/执行没有断线重连功能</li><li>sftp传输没有上传/下载文件夹的功能</li><li>sftp传输没有短点续传的功能</li><li>windows与linux之间sftp传输不支持路径以及文件名含有中文以及空格问题</li><li>远程执行返回You have mail/You have new mail的问题</li><li>ssh命令过长偶尔导致\b \b \b..乱码的问题</li></ol> 
+<p>等一系列问题，实在无法满足我想简单粗暴阻塞式执行命令以及传输文件、目录的需求，于是自己花了几个月封装了一个跨平台pssh库，致力于解决这些问题，主要功能以及更新记录如下:</p> 
+<p></p> 
+<ol><li> 增加了带空格的目录以及文件名支持</li><li> 增加了中文支持</li><li> 对断点续传上传和下载文件增加速度提示功能</li><li> <span style="color:#fe2c24;">增加了下载文件/上传文件/下载目录/上传目录的断点续传功能</span></li><li> 已改造windows上传文件,下载文件,上传目录,下载目录,支持回调函数,目录支持进度</li><li> 传输相关要从windows下psshsingle考,从linux考来的不对,因为有中文问题</li><li> <span style="color:#fe2c24;">已改造为单线程断线重连，不要卡住，目前实现思路是，send失败后，只重连一次，失败再返回，因为xsh一般都不是只执行一次，多次执行，上一次失败的话，重连一次，这次失败，下一次就会成功</span></li><li>本版本是多个channel版本，以后多线程用这个作为模板，原来的套一个pssh太臃肿，每次要写两遍函数</li><li> 修改了recv处理，兼容centos系和ubuntu系列,ubuntu系列没有[,可连接127.0.0.1</li><li> 单线程重连版,主要是为了防止线程过多,线程重连如果pssh多的话2倍线程,而且稳定一些</li><li> xsh是send失败直接阻塞重连，recv因为有参数返回，所以还是返回值，在xsh里面阻塞重连</li><li> xshlastinng是成功尝试多个channel，在循环lastting的时候用statuschannel判断阻塞重连</li><li> 已经改造了close，xsh和xshlasting都可以closetrue</li><li> 已经改造了xshlasting，可以做到closetrue后再open依然可以</li><li> 已经改造了xsh，可以做到closetrue后再open依然可以</li><li> 解决了深度openssl线程安全问题</li><li> 增加了获取是否生成core文件功能,增加在/etc/profile增加配置等功能</li><li> 增加切换目录,获取当前目录,查看远程进程,获取根目录使用比例是否在等常用功能</li><li> 增加获取远程core文件"Core文件"&lt;&lt;"服务器地址"&lt;&lt;"所属进程"&lt;&lt;"生成时间"的list信息</li><li> 增加了远程ini模式配置文件的增删改查功能</li><li> 增加了给/etc/profile添加配置功能,内置判断是否已有配置</li><li> 增加了close(true)功能,true情况下关闭自动重连,彻底关闭(两种模式);</li><li>  修复了在高延迟情况下判断远程文件是否存在时间过长的bug(不再用sftp模式获取,使用ssh模式直接ll获取)</li><li> 增加xshlasting模式自动重连功能,使用另一个xsh一直发送pwd探测,如果断开,则线程自动重连,重连成功后继续返回正确结果</li><li> 增加了自动重连的功能,如果连接断开,则当时xsh返回错误,线程自动重连,如果下次已经连接上则下次获取正确结果</li><li> 增加了与服务器连接断开时返回错误的功能,不会一直卡住</li><li> 阻塞调用,xsh等结果获取完成才返回</li><li> 增加了上传文件/下载文件/上传目录/下载目录功能</li><li> 修复了xsh有时会返回You have mail/You have new mail的问题,过滤</li><li> 修复了xsh有时命令过长会出现结果返回\b\b\b..乱码的问题,过滤</li><li> 修改了xsh功能,任务错误都字符串返回#fail,包括连接断开</li><li> 修改了connect,增加了连接超时功能,默认超时时间1秒,原来是20秒太长</li><li> 增加了同一个ssh close再open功能</li><li> 测试了多线程功能C++11线程,线程安全</li><li> 增加了探测连接的功能.另起一个chanel一直探测,用于判断连接状态,该功能是xshlasting的基础,因为xshlasting不能判断断了,用这个bconnected判断</li><li> 增加了支持域名功能(为了支持端口映射)</li><li> 增加两种模式,一种正常获取xsh结果,一种持续获取xshlasting,xshlasting可用于tail -f收集日志到统一服务器</li><li>增加了xsh获取结果超时10秒返回错误功能</li><li>对于xsh获取结果失败(原因不限于连接断开,超时等),均返回#fail开头的字符串</li></ol> 
+<p>主要代码如下：</p> 
+<pre><code class="language-cpp">/*
+ * 作者:李海龙2021-02-26
+*/
+class pssh {
+public:
+    pstring strhost;
+    int iport;
+    pstring strpwd;
+    pstring struser;
+    pstring strerr;//最后一次错误描述
+
+    pssh();
+    pssh(pstring host,int port=22,pstring pwd="scfwq_325",pstring user="root");
+    void init(pstring host,int port=22,pstring pwd="scfwq_325",pstring user="root");
+    virtual ~pssh();
+    int open();//open一次就行，返回结果，不用自动重连，因为后边执行xsh会自动重连
+    int close(bool breal=false);//close(true)停止重连
+    /*
+     * xsh是send和recv的合集,获取top结果用top -b n 1
+     * 获取过程中如果断了，无论是send还是recv会自动重连一次，然后返回失败，如果重连成功，则下次会正确,这样能保证返回失败提示
+     * 如果是主动closetrue则会返回#fail
+    */
+    pstring xsh(pstring cmd,pstring type="data");
+    //send失败一次，自带一次重连,反正失败了也不在乎那几秒了,如果重连成功，重新发送一次命令，如果失败，返回,这样既重连了，也能返回看结果
+    int send(pstring cmd,pstring type="data");
+    //接收有多种状态，返回值，在xsh中统一处理自动重连,带失败自动重连一次,与send一样,有10秒超时
+    int recv(pstring &amp;data,pstring type="data");
+    /* 使用方式
+     * ptrans-&gt;uploadThread(pathFull,this-&gt;strpwdremote,
+     * std::bind(&amp;MainWindow::showstr,this,placeholders::_1));
+     * //停止时用close（true）
+     */
+    //持续结果输出,例如tail -f,过程输出,也可以执行别的命令
+    //停止时用close（true）
+    int xshlasting(pstring cmd, std::function&lt;void(pstring)&gt; fun=funShow);
+    /* 用两个channel实现的，使用方式
+     * ptrans-&gt;uploadThread(pathFull,this-&gt;strpwdremote,
+     * std::bind(&amp;MainWindow::showstr,this,placeholders::_1));
+     */
+    int xshlastingThread(pstring cmd, std::function&lt;void(pstring)&gt; fun=funShow);
+    //判断远程文件是否有key,比如判断core是否启用bHasKeyInRemoteFile("/etc/profile","ulimit");
+    bool bHasKeyInRemoteFileBridge(pstring host,pstring path = "/etc/profile", pstring key = "ulimit");
+    bool ping(pstring host);
+    presult getTimeLastReboot();
+    //"Core文件"&lt;&lt;"服务器地址"&lt;&lt;"所属进程"&lt;&lt;"生成时间"的list
+    pvector&lt;pliststring&gt; getCoreInfo(pstring strpath="/");
+    //判断远程文件是否有key,比如判断core是否启 bHasKeyInRemoteFile("/etc/profile","ulimit");
+    bool bHasKeyInRemoteFile(pstring path = "/etc/profile", pstring key = "ulimit");
+    //获取根目录占用比例
+    presult getUsageRoot();
+    bool cd(pstring path);
+    presult getContentFromRemoteFile(pstring path);
+    pstring getIPRemote();
+    pstring pwd();
+    //从源码目录传过去,改权限,获取结果,已包括断开连接的判断,四个
+    pstring getconf(pstring path, pstring section, pstring key, bool bupload = false);
+    bool delconf(pstring path, pstring section, pstring key, bool bupload = false);
+    bool addconf(pstring path, pstring section, pstring key, pstring val, bool bupload = false);
+    bool setconf(pstring path, pstring section, pstring key, pstring val, bool bupload = false);
+    ppair&lt;int,ptime&gt; getTimeNow();
+    //重命名
+    int mv(pstring strold,pstring strnew);
+    //获取文件大小
+    longlong getFileSize(pstring strPathFull);
+    //获取类型 dir file lnk noaccess,失败返回空用sftp用以提高速度
+    pstring getPathTypeRemote(pstring strPath);
+    //删除文件或目录,支持带空格的
+    int rm(pstring strPathFullRemote);
+    //sftp创建文件 支持带空格
+    int touch(pstring strPathFullRemote);
+    //远程递归创建目录sftp速度快//错误返回小于0,已存在也返回错误 -31表示已存在,但是
+    //根据一般业务情况,改进为,如果有同名目录,返回创建成功,如要判断之前是否已存在,单独用isExsistdir
+    int mkdirp(pstring strPathFullRemote);
+    //远程创建目录sftp速度快//错误返回小于0,已存在也返回错误 -31表示已存在,但是
+    //根据一般业务情况,改进为,如果有同名目录,返回创建成功,如要判断之前是否已存在,单独用isExsistdir
+    int mkdir(pstring strPathFullRemote);
+    //判断有没有上述目录
+    bool isExsistDirRemote(pstring strPathDirRemote);
+    //判断有没有上述文件
+    bool isExsistFileRemote(pstring strPathFullFile);
+    //获取名字和类型
+    pmap&lt;pstring, pstring&gt; getAllInDirRemote(pstring strPathDirRemote);
+    //获取名字,类型和大小,最后修改时间,sftp方式
+    plist&lt;pliststring&gt; getAllWithSizeInDirRemote(pstring strPathDirRemote);
+    //这获取的是全路径
+    void getAllFilesAndPathsRecursionRemote(pstring path, pliststring &amp;lfile, pliststring &amp;ldir);
+    //lnk也要下载,下载后就是原来指向的文件,scp也是这样的,所以会与原来大小不一,但是要与scp一样就行,目前与scp不一样大小查原因
+    int downloadDir(pstring strPathFullLocal,pstring strPathFullRemote,
+                    std::function&lt;void(pliststring)&gt; fun=showProcessDir);
+    //上传libssh2目录慢很多,两分钟,但下载很快,查原因
+    int uploadDir(pstring strPathFullLocal,pstring strPathFullRemote,
+                  std::function&lt;void(pliststring)&gt; fun=showProcessDir);
+
+    //两个都是全路径--经测试windows版的上传超过10秒后有时就不支持内置断点续传,老老实实写seek吧!,断点续传的逻辑已经写好了,llpos=0是从头传
+    int uploadFileOnce(pstring strPathFullLocal,pstring strPathFullRemote,
+                   std::function&lt;void(pliststring)&gt; fun=showProcessFile,
+                   longlong llpos=0);
+    //uploadfile断点续传逻辑已经写好了,但是在centos6.8下sftpappend会失效,可能就像提示一样:APPEND doesn't have any effect on OpenSSH servers
+    //测试在centos7下没问题,但是centos6就不行,所以考虑uploadfile时,断了的话,直接从头开始,因为本来断点续传也是偶发事件,改为断线重传,下载还是断点续传
+    //自动断点续传直到正确传完为止--在centos6.8下有时候断点续传有问题---查原因
+    int uploadFile(pstring strPathFullLocal,pstring strPathFullRemote,
+                   std::function&lt;void(pliststring)&gt; fun=showProcessFile);
+    //两个都是全路径--经测试只有windows版的download过了10秒后不支持断点续传,10秒以内可以,所以要改造,断点续传的逻辑已经写好了,llpos=0是从头传
+    int downloadFileOnce(pstring strPathFullLocal, pstring strPathFullRemote,
+                     std::function&lt;void(pliststring)&gt; fun=showProcessFile,
+                     longlong llpos=0);
+    //自动断点续传直到正确传完为止
+    int downloadFile(pstring strPathFullLocal, pstring strPathFullRemote,
+                         std::function&lt;void(pliststring)&gt; fun=showProcessFile);
+    int showDir(pstring strPathDirRemote);
+    //获取类型 dir file lnk noaccess,失败返回空用xsh速度太慢,200ms
+    pstring getTypePathRemoteUseXsh(pstring strPath);
+    //远程递归创建目录,速度慢,要改成sftp创建目录
+    int mkdirpUseXsh(pstring strPathFullRemote);
+    bool getStatusConnect();
+    friend ostream &amp;operator&lt;&lt;(ostream &amp;os, pssh x) {
+        os &lt;&lt; x.strhost &lt;&lt; ":" &lt;&lt; x.iport &lt;&lt; "@" &lt;&lt; x.struser
+           &lt;&lt; " connect status: " &lt;&lt; x.bConnected;
+        return os;
+    }
+    //下边这两个是为了持续获取搞的
+    void recvLasting(std::function&lt;void(pstring)&gt; fun);
+    LIBSSH2_CHANNEL *pchannelData;
+    LIBSSH2_CHANNEL *pchannelStatus;
+    //新加的
+    bool bConnected;
+private:
+    LIBSSH2_SFTP *sftp_session;
+    pstring strCmdNow;
+    bool bstop;
+    //原来的
+//    int m_socket;
+    ptcp tcp;
+    LIBSSH2_SESSION *psession;
+    bool connect(const char *szIp, int nPort = 22);
+    bool login(const char *szUserName, const char *szPassword);
+    // 返回值表示渠道的序号。如果返回-1，创建失败；
+    LIBSSH2_CHANNEL *createChannel(const char *szChannelTerm = "vanilla");
+    bool write(LIBSSH2_CHANNEL *channel, const char *szData);
+    int waitsocket(int socket_fd, LIBSSH2_SESSION *session);
+};</code></pre> 
+<p>其实我也知道大家对我拙劣的封装并不感兴趣，只关心好不好用，怎么用的问题，下边给大家展示一下：</p> 
+<h2>普通远程执行:</h2> 
+<pre><code>    //初始化 地址 端口 密码 用户名
+    pssh ssh("192.168.133.129",22,"123.asdf","root");
+    //连接linux服务器
+    hlog(ssh.open());
+    //同时做个多线程一直执行pwd命令
+    std::thread([]{
+        pssh ssh2("192.168.133.129",22,"123.asdf","root");
+        hlog(ssh2.open());
+        while(1)
+        {
+            hlog(ssh2.xsh("pwd"));
+            plib::sleep(1000);
+        }
+    }).detach();
+    //获取结果
+    pstring stres=ssh.xsh("ifconfig|grep inet");\
+    //日志打印
+    hlog(stres);
+    stres=ssh.xsh("pwd");
+    hlog(stres);
+    while(1)
+    {
+        plib::sleep(1000);
+    }</code></pre> 
+<p> 结果如下:</p> 
+<p><img alt="" height="1064" src="https://images2.imgbox.com/0e/d1/heIW5Cvr_o.png" width="1053"></p> 
+<h2> 持续远程执行获取(获取tail -f 这种)</h2> 
+<pre><code class="language-cpp"> //同时做个多线程一直往远程服务器/root/test.log下一秒写一次数据,即模拟日渐增长的日志文件
+    std::thread([]{
+        pssh ssh2("192.168.133.129",22,"123.asdf","root");
+        hlog(ssh2.open());
+        //先把原来的删掉
+        hlog(ssh2.xsh("rm -f /root/test.log"));
+        int count=0;
+        while(1)
+        {
+            pstring strcmd="echo '"+plib::toString(count+1)+": qq1415532825'&gt;&gt;/root/test.log";
+            (ssh2.xsh(strcmd));
+            plib::sleep(1000);
+            count++;
+        }
+    }).detach();
+    plib::sleep(1000);
+    //初始化 地址 端口 密码 用户名
+    pssh ssh("192.168.133.129",22,"123.asdf","root");
+    //连接linux服务器
+    hlog(ssh.open());
+    //新线程内持续获取日志,将结果通过回调函数的形式回放到需要的函数内
+    ssh.xshlastingThread("tail -f /root/test.log",funShowInfo);
+    //5秒后关闭持续获取
+    plib::sleep(5000);
+    //close true代表停止自动重连,彻底停止,close false代表服务器异常断开后会断线重连继续获取
+    hlog(ssh.close(true));
+    while(1)
+    {
+        plib::sleep(1000);
+    }</code></pre> 
+<p> <img alt="" height="1101" src="https://images2.imgbox.com/7b/c0/xer52sJk_o.png" width="1163"></p> 
+<p> 关于此种模式，不用说大家也知道可以用来干什么，日志同步啊，日志收集，日志监控啊！甚至都不用部署客户端，简直不要太爽！</p> 
+<h2> sftp文件上传、下载</h2> 
+<pre><code class="language-cpp">        pssh ssh("192.168.133.129",22,"123.asdf","root");
+        hlog(ssh.open());
+        //测试上传下载，顺便把中文也测试了
+
+        hlog(ssh.uploadFile("d:/setups/协和2.17.0.apk","/home/xlfd/"));
+        hlog(ssh.downloadFile("d:/test/协和下载.apk","/home/xlfd/协和2.17.0.apk"));</code></pre> 
+<p>结果如下：</p> 
+<p><img alt="" height="979" src="https://images2.imgbox.com/72/86/IHIaEToS_o.png" width="1102"></p> 
+<h2> sftp目录递归上传、下载</h2> 
+<p>测试目录：</p> 
+<p><img alt="" height="294" src="https://images2.imgbox.com/e2/c3/Ftr6SGGM_o.png" width="767"></p> 
+<p> </p> 
+<pre><code class="language-cpp">        pssh ssh("192.168.133.129",22,"123.asdf","root");
+        hlog(ssh.open());
+        //测试上传下载，顺便把中文也测试了
+
+//        hlog(ssh.uploadFile("d:/setups/协和2.17.0.apk","/home/xlfd/"));
+//        hlog(ssh.downloadFile("d:/test/协和下载.apk","/home/xlfd/协和2.17.0.apk"));
+        hlog(ssh.uploadDir("d:/setups/Debuggers","/root"));
+        hlog(ssh.downloadDir("D:/","/root/Debuggers/"));</code></pre> 
+<p></p> 
+<p>结果如下：<img alt="" height="671" src="https://images2.imgbox.com/96/07/VoIQ104a_o.png" width="976"></p> 
+<p> <img alt="" height="734" src="https://images2.imgbox.com/47/2e/GwMKfUJn_o.png" width="1085"></p> 
+<p>当然以上功能都有断点续传功能，传输功能都带回调函数，方便与QT界面外部调用等集成，以后我会基于该库专门写一个sftp传输工具。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/8a22a292edba2cd21a47d7ee8ac68201/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">本地虚拟机搭建</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/404ff101dcdc837601e26b59a9be161c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【windows软件】terminal软件添加git bash 命令行功能</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

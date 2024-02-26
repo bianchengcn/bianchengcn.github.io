@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>如何nginx-ingress对外提供服务_nginx-ingress原理? - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="如何nginx-ingress对外提供服务_nginx-ingress原理?" />
+<meta property="og:description" content="如何nginx-ingress对外提供服务_nginx-ingress原理? 主机 nginxpod nginx-ingress1、Pod2、ingress 资源3、nginx-ingress对外提供服务4、nginx-ingress工作流程 主机 nginx 一般 nginx 做主机反向代理（网关）有以下配置
+upstream order{ server 192.168.1.10:5001; server 192.168.1.11:5001; } server { listen 80; server_name order.example.com; access_log /var/log/nginx/order.example.com-access.log; error_log /var/log/nginx/order.example.com-error.log; location / { proxy_pass_header Server; proxy_set_header Host $http_host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Scheme $scheme; proxy_pass http://order; } } 其中 192.168.1.10:5001，192.168.1.10:5001 我们把他们称为 Endpoint，就是所谓的具体的服务，比如 order 订单服务。
+pod nginx-ingress nginx-ingress也是一种代理，是一个pod，外部的数据统一经过（必经）这个pod，然后通过该pod内部的nginx方向代理到各各服务（Endpoint）。nginx-ingress是ingress控制器插件的一种，这些插件有很多，比如istio-ingressgateway。
+1、Pod nginx-ingress pod有两个功能，controller 和 nginx：
+controller：和kubernetes api通讯实时更新nginx配置（就是ingress yaml资源了） nginx：正常的反向代理 与主机nginx的区别是，该pod nginx-ingress是运行在pod里。主机在定义反向代理配置文件时，需要监听一个对外开放的端口，比如上边的80端口。那么pod中的nginx端口是如何配置的呢？
+我们在github上找到了nginx-ingress的deployment.yaml
+https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/mandatory.yaml 其中一段
+apiVersion: apps/v1 kind: Deployment metadata: name: nginx-ingress-controller namespace: ingress-nginx labels: app." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9f03b36e7cd30c3d3a4fe2a5a0bacbae/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-11-29T16:48:08+08:00" />
+<meta property="article:modified_time" content="2021-11-29T16:48:08+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">如何nginx-ingress对外提供服务_nginx-ingress原理?</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atelier-sulphurpool-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>如何nginx-ingress对外提供服务_nginx-ingress原理?</h4> 
+ <ul><li><ul><li><ul><li><a href="#_nginx_2" rel="nofollow">主机 nginx</a></li><li><a href="#pod_nginxingress_27" rel="nofollow">pod nginx-ingress</a></li><li><a href="#1Pod_30" rel="nofollow">1、Pod</a></li><li><a href="#2ingress__95" rel="nofollow">2、ingress 资源</a></li><li><a href="#3nginxingress_144" rel="nofollow">3、nginx-ingress对外提供服务</a></li><li><a href="#4nginxingress_152" rel="nofollow">4、nginx-ingress工作流程</a></li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h4><a id="_nginx_2"></a>主机 nginx</h4> 
+<hr> 
+<p>一般 nginx 做主机反向代理（网关）有以下配置</p> 
+<pre><code class="prism language-bash">upstream order<span class="token punctuation">{<!-- --></span>
+    server <span class="token number">192.168</span>.1.10:5001<span class="token punctuation">;</span>
+    server <span class="token number">192.168</span>.1.11:5001<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+server <span class="token punctuation">{<!-- --></span>
+    listen <span class="token number">80</span><span class="token punctuation">;</span>
+    server_name  order.example.com<span class="token punctuation">;</span>
+    access_log     /var/log/nginx/order.example.com-access.log<span class="token punctuation">;</span>
+    error_log     /var/log/nginx/order.example.com-error.log<span class="token punctuation">;</span>
+    location / <span class="token punctuation">{<!-- --></span>
+        proxy_pass_header Server<span class="token punctuation">;</span>
+        proxy_set_header Host <span class="token variable">$http_host</span><span class="token punctuation">;</span>
+        proxy_set_header X-Real-IP <span class="token variable">$remote_addr</span><span class="token punctuation">;</span>
+        proxy_set_header X-Scheme <span class="token variable">$scheme</span><span class="token punctuation">;</span>
+        proxy_pass http://order<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>其中 192.168.1.10:5001，192.168.1.10:5001 我们把他们称为 Endpoint，就是所谓的具体的服务，比如 order 订单服务。</p> 
+<h4><a id="pod_nginxingress_27"></a>pod nginx-ingress</h4> 
+<hr> 
+<p>nginx-ingress也是一种代理，是一个pod，外部的数据统一经过（必经）这个pod，然后通过该pod内部的nginx方向代理到各各服务（Endpoint）。nginx-ingress是ingress控制器插件的一种，这些插件有很多，比如istio-ingressgateway。</p> 
+<h4><a id="1Pod_30"></a>1、Pod</h4> 
+<p>nginx-ingress pod有两个功能，controller 和 nginx：</p> 
+<pre><code class="prism language-bash">controller：和kubernetes api通讯实时更新nginx配置（就是ingress yaml资源了）
+nginx：正常的反向代理
+</code></pre> 
+<p>与主机nginx的区别是，该pod nginx-ingress是运行在pod里。主机在定义反向代理配置文件时，需要监听一个对外开放的端口，比如上边的80端口。那么pod中的nginx端口是如何配置的呢？<br> 我们在github上找到了nginx-ingress的deployment.yaml</p> 
+<pre><code class="prism language-bash">https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/mandatory.yaml
+</code></pre> 
+<p>其中一段</p> 
+<pre><code class="prism language-yaml"><span class="token key atrule">apiVersion</span><span class="token punctuation">:</span> apps/v1
+<span class="token key atrule">kind</span><span class="token punctuation">:</span> Deployment
+<span class="token key atrule">metadata</span><span class="token punctuation">:</span>
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> nginx<span class="token punctuation">-</span>ingress<span class="token punctuation">-</span>controller
+  <span class="token key atrule">namespace</span><span class="token punctuation">:</span> ingress<span class="token punctuation">-</span>nginx
+  <span class="token key atrule">labels</span><span class="token punctuation">:</span>
+    <span class="token key atrule">app.kubernetes.io/name</span><span class="token punctuation">:</span> ingress<span class="token punctuation">-</span>nginx
+    <span class="token key atrule">app.kubernetes.io/part-of</span><span class="token punctuation">:</span> ingress<span class="token punctuation">-</span>nginx
+<span class="token key atrule">spec</span><span class="token punctuation">:</span>
+  <span class="token key atrule">replicas</span><span class="token punctuation">:</span> <span class="token number">1</span>
+  <span class="token key atrule">selector</span><span class="token punctuation">:</span>
+    <span class="token key atrule">matchLabels</span><span class="token punctuation">:</span>
+      <span class="token key atrule">app.kubernetes.io/name</span><span class="token punctuation">:</span> ingress<span class="token punctuation">-</span>nginx
+      <span class="token key atrule">app.kubernetes.io/part-of</span><span class="token punctuation">:</span> ingress<span class="token punctuation">-</span>nginx
+  <span class="token key atrule">template</span><span class="token punctuation">:</span>
+    <span class="token key atrule">metadata</span><span class="token punctuation">:</span>
+      <span class="token key atrule">labels</span><span class="token punctuation">:</span>
+        <span class="token key atrule">app.kubernetes.io/name</span><span class="token punctuation">:</span> ingress<span class="token punctuation">-</span>nginx
+        <span class="token key atrule">app.kubernetes.io/part-of</span><span class="token punctuation">:</span> ingress<span class="token punctuation">-</span>nginx
+      <span class="token key atrule">annotations</span><span class="token punctuation">:</span>
+        <span class="token key atrule">prometheus.io/port</span><span class="token punctuation">:</span> <span class="token string">"10254"</span>
+        <span class="token key atrule">prometheus.io/scrape</span><span class="token punctuation">:</span> <span class="token string">"true"</span>
+    <span class="token key atrule">spec</span><span class="token punctuation">:</span>
+      <span class="token comment"># wait up to five minutes for the drain of connections</span>
+      <span class="token key atrule">terminationGracePeriodSeconds</span><span class="token punctuation">:</span> <span class="token number">300</span>
+      <span class="token key atrule">serviceAccountName</span><span class="token punctuation">:</span> nginx<span class="token punctuation">-</span>ingress<span class="token punctuation">-</span>serviceaccount
+      <span class="token key atrule">containers</span><span class="token punctuation">:</span>
+        <span class="token punctuation">-</span> <span class="token key atrule">name</span><span class="token punctuation">:</span> nginx<span class="token punctuation">-</span>ingress<span class="token punctuation">-</span>controller
+          <span class="token key atrule">image</span><span class="token punctuation">:</span> quay.io/kubernetes<span class="token punctuation">-</span>ingress<span class="token punctuation">-</span>controller/nginx<span class="token punctuation">-</span>ingress<span class="token punctuation">-</span>controller<span class="token punctuation">:</span>0.26.1
+          <span class="token punctuation">...</span>
+          <span class="token punctuation">...</span>
+          <span class="token punctuation">...</span>
+          <span class="token key atrule">ports</span><span class="token punctuation">:</span>
+            <span class="token punctuation">-</span> <span class="token key atrule">name</span><span class="token punctuation">:</span> http
+              <span class="token key atrule">containerPort</span><span class="token punctuation">:</span> <span class="token number">80</span>
+            <span class="token punctuation">-</span> <span class="token key atrule">name</span><span class="token punctuation">:</span> https
+              <span class="token key atrule">containerPort</span><span class="token punctuation">:</span> <span class="token number">443</span>
+
+</code></pre> 
+<p>我们看到</p> 
+<pre><code class="prism language-yaml"><span class="token punctuation">-</span> <span class="token key atrule">name</span><span class="token punctuation">:</span> http
+  <span class="token key atrule">containerPort</span><span class="token punctuation">:</span> <span class="token number">80</span>
+<span class="token punctuation">-</span> <span class="token key atrule">name</span><span class="token punctuation">:</span> https
+  <span class="token key atrule">containerPort</span><span class="token punctuation">:</span> <span class="token number">443</span>
+</code></pre> 
+<p>默认对外监听了两个端口80和443，也就是说，有这两个端口对外就可以web服务了。</p> 
+<h4><a id="2ingress__95"></a>2、ingress 资源</h4> 
+<hr> 
+<p>ingress 资源通过yaml进行管理的，比如以下：</p> 
+<pre><code class="prism language-yaml"><span class="token key atrule">apiVersion</span><span class="token punctuation">:</span> extensions/v1beta1
+<span class="token key atrule">kind</span><span class="token punctuation">:</span> Ingress
+<span class="token key atrule">metadata</span><span class="token punctuation">:</span>
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> order
+<span class="token key atrule">spec</span><span class="token punctuation">:</span> 
+  <span class="token key atrule">rules</span><span class="token punctuation">:</span>
+  <span class="token punctuation">-</span> <span class="token key atrule">host</span><span class="token punctuation">:</span> order.example.com
+    <span class="token key atrule">http</span><span class="token punctuation">:</span>
+      <span class="token key atrule">paths</span><span class="token punctuation">:</span> /
+      <span class="token key atrule">backend</span><span class="token punctuation">:</span> 
+        <span class="token key atrule">serviceName</span><span class="token punctuation">:</span> order
+        <span class="token key atrule">servicePort</span><span class="token punctuation">:</span> <span class="token number">80</span>
+</code></pre> 
+<p>以上我们定义了一个单一规则的ingress，该pod（nginx-ingress）接收到外部所有的请求，将被发送到内部order服务的80端口上。接下来我们看pod（nginx-ingress）如何把ingress资源转化为该pod中的nginx反向代理配置文件</p> 
+<pre><code class="prism language-bash">upstream order<span class="token punctuation">{<!-- --></span>
+    server order:80<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+server <span class="token punctuation">{<!-- --></span>
+    listen <span class="token number">80</span><span class="token punctuation">;</span>
+    server_name  order.example.com<span class="token punctuation">;</span>
+    <span class="token punctuation">..</span>.
+    <span class="token punctuation">..</span>.
+    location / <span class="token punctuation">{<!-- --></span>
+        proxy_pass_header Server<span class="token punctuation">;</span>
+        proxy_set_header Host <span class="token variable">$http_host</span><span class="token punctuation">;</span>
+        proxy_set_header X-Real-IP <span class="token variable">$remote_addr</span><span class="token punctuation">;</span>
+        proxy_set_header X-Scheme <span class="token variable">$scheme</span><span class="token punctuation">;</span>
+        proxy_pass http://order<span class="token punctuation">;</span> <span class="token comment"># 对应ingress 资源 name: order</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>当然ingress如果包含https，那么会转化nginx对应的443端口及证书的配置文件内容，这里就不写了。</p> 
+<p>那么，单一个规则的ingress资源代理多个服务（比如order服务，product服务）或者多个ingress资源文件如何转化为nginx配置？ 猜测，其实就是转化成了多个。</p> 
+<pre><code class="prism language-bash">upstream order<span class="token punctuation">{<!-- --></span>
+    server order:80<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>当然，被转化的nginx配置文件要比这些复杂的多，据说还是用lua脚本写的，灵活如openresty。</p> 
+<h4><a id="3nginxingress_144"></a>3、nginx-ingress对外提供服务</h4> 
+<hr> 
+<p>一般来讲，pod直接对外提供服务就只有两种方式：</p> 
+<ul><li>create一个service，该service暴漏nodePort</li><li>forward 映射</li></ul> 
+<p>我们一般采用第一种。<br> nginx-ingress也是一个pod，所以，为了能使外部通过该pod代理访问，还需要nginx-ingress对外提供一个nodePort的service。这个service这里也不再写了。</p> 
+<h4><a id="4nginxingress_152"></a>4、nginx-ingress工作流程</h4> 
+<hr> 
+<p><img src="https://images2.imgbox.com/e3/14/Pv4T1UlY_o.jpg" alt="在这里插入图片描述"></p> 
+<p>我们可以看到，因为 nginx-ingress 这个pod做了所有service的代理，在高并发情况下将承受巨大压力，我们可以增加多个pod实例。</p> 
+<p><a href="https://www.code404.icu/1447.html" rel="nofollow">CSDN_码404：如何nginx-ingress对外提供服务_nginx-ingress原理?</a><br> https://www.code404.icu/1447.html</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/24d9c6ffdfaeed0063f0ecea5614eddc/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Python网络编程——客户端与服务端简单信息发送与接受</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/106938d3c35eba52b82aee5dc5882252/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Idea创建项目出现的问题</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

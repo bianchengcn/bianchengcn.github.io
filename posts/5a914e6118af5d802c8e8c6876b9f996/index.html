@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>浅谈漏洞思路分享-只有登录框的渗透测试 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="浅谈漏洞思路分享-只有登录框的渗透测试" />
+<meta property="og:description" content="目录 0x00 弱口令0x01 sql注入0x02 暴力破解0x03 验证码绕过0x04 修改响应码0x05 目录扫描0x06 找回密码功能0x07 注册功能0x08 历史漏洞0x09 端口扫描0x10 JS信息泄露总结 前言 在项目中经常会遇到只有一个登录页面的网站，没有账号密码，那么应该如何下手呢？整理一下我的思路，供大家参考。
+0x00 弱口令 网站登录框怎么测？当然是先来一波弱口令，admin、test、admin123、admin888、123456、111111这些都是出现率比较高的，即使是部委级单位这种安全防护超高的系统也会存在弱口令的问题，所以说弱口令绝对是yyds。
+0x01 sql注入 登录框尝试万能密码 1’ or 1=1 –、“or”=&#34;a’=&#39;a 等等，运气好的话就直接登录了，也可以保存登录的包用sqlmap跑一遍，简单有效。
+这也是我挖到的人生中第一个漏洞：
+用户名输入1’ or 1=1 –q，密码留空
+登录成功
+0x02 暴力破解 暴破常用用户名密码，注意观察账号正确和错误时的返回消息。如果返回消息不同，那就是存在用户名枚举漏洞了。掏出我们的神器burpsuite先暴破一波用户名，再用拿到的正确用户名暴力破解密码就很省时间了，需要注意的是有些网站页面显示的。
+暴破得到admin的密码为q1w2e3r4
+0x03 验证码绕过 如果登录有验证码怎么办？一个字：绕。
+1、验证码字段删除或置空；
+2、删除cookie；
+3、万能验证码：1111、0000、8888等等；
+4、burp抓包但不放包，将包发送到Repeater重放几次看看验证码能不能重复使用，大多数时候burp不用一直抓包也是可以绕过的。
+5、如果有短信验证码功能，可以尝试暴力破解短信验证码，达到登录、注册或找回密码等目的，邮件验证码同理。一般情况下4位数的验证码在5分钟内跑完是没问题的。
+还有很多验证码绕过的方法，这里不一一列举，找时间专门出一篇验证码绕过方法的分享文章吧。
+0x04 修改响应码 Burp拦截登录的响应包进行修改，将响应码修改后可能会越权登录被测系统。一般情况下正确的响应码有：0、1、200、true、success。也可以在有正确账号密码的情况下进行登录，直接查看正确的响应包是什么构造，再重新用错误账号进行登录修改响应码。不仅是登录功能，找回密码、注册账号等存在逻辑验证的点都有可能存在此漏洞。
+0x05 目录扫描 用工具扫描目录，这里推荐使用dirsearch。可能会发现网站备份文件、后台地址等等，往往会有意外惊喜，写这篇文章前一天就用dirsearch发现了一个phpmyadmin管理界面，之后通过万能密码进到了数据库，话不多说，展示：
+使用用户名’localhost’@&#39;@”密码为空登录成功
+0x06 找回密码功能 此功能点可能存在的漏洞有任意用户密码重置、短信/邮件轰炸、验证码爆破、验证码绕过、验证码回显、sql注入，逻辑漏洞较多。
+分享一个edu的任意用户密码重置漏洞：
+1、填写未注册的手机号获取验证码，修改密码
+2、burp跑一遍常用测试手机号码，成功修改了账号13333333333的密码
+3、使用新密码qwe123QWE!@#登录13333333333账号成功
+0x07 注册功能 此功能点可能存在的漏洞有任意用户注册等等，和找回密码功能中可能存在的漏洞高度相似。
+0x08 历史漏洞 Shiro反序列化、Struts2系列漏洞、历史爆出的cms漏洞、log4j、中间件漏洞……。
+0x09 端口扫描 Nmap全端口扫描：nmap -sS -A -p 1-65535 ip，扫到ssh、ftp、telnet、数据库等等端口可以尝试进一步利用。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/5a914e6118af5d802c8e8c6876b9f996/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-02-28T17:36:33+08:00" />
+<meta property="article:modified_time" content="2023-02-28T17:36:33+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">浅谈漏洞思路分享-只有登录框的渗透测试</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>目录</h4> 
+ <ul><li><ul><li><ul><li><a href="#0x00__6" rel="nofollow">0x00 弱口令</a></li><li><a href="#0x01_sql_10" rel="nofollow">0x01 sql注入</a></li><li><a href="#0x02__24" rel="nofollow">0x02 暴力破解</a></li><li><a href="#0x03__32" rel="nofollow">0x03 验证码绕过</a></li><li><a href="#0x04__48" rel="nofollow">0x04 修改响应码</a></li><li><a href="#0x05__52" rel="nofollow">0x05 目录扫描</a></li><li><a href="#0x06__63" rel="nofollow">0x06 找回密码功能</a></li><li><a href="#0x07__82" rel="nofollow">0x07 注册功能</a></li><li><a href="#0x08__86" rel="nofollow">0x08 历史漏洞</a></li><li><a href="#0x09__90" rel="nofollow">0x09 端口扫描</a></li><li><a href="#0x10_JS_94" rel="nofollow">0x10 JS信息泄露</a></li><li><a href="#_98" rel="nofollow">总结</a></li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<br> 前言 
+<br> 
+<img src="https://images2.imgbox.com/57/6f/pFMXFeNB_o.png" alt="在这里插入图片描述"> 
+<p></p> 
+<p>在项目中经常会遇到只有一个登录页面的网站，没有账号密码，那么应该如何下手呢？整理一下我的思路，供大家参考。</p> 
+<h4><a id="0x00__6"></a>0x00 弱口令</h4> 
+<p>网站登录框怎么测？当然是先来一波弱口令，admin、test、admin123、admin888、123456、111111这些都是出现率比较高的，即使是部委级单位这种安全防护超高的系统也会存在弱口令的问题，所以说弱口令绝对是yyds。</p> 
+<h4><a id="0x01_sql_10"></a>0x01 sql注入</h4> 
+<p>登录框尝试万能密码 1’ or 1=1 –、“or”="a’='a 等等，运气好的话就直接登录了，也可以保存登录的包用sqlmap跑一遍，简单有效。</p> 
+<p>这也是我挖到的人生中第一个漏洞：</p> 
+<p>用户名输入1’ or 1=1 –q，密码留空<br> <img src="https://images2.imgbox.com/62/18/RBA5tWCi_o.png" alt="图片"></p> 
+<p>登录成功<br> <img src="https://images2.imgbox.com/29/e1/xypHugdA_o.png" alt="图片"></p> 
+<h4><a id="0x02__24"></a>0x02 暴力破解</h4> 
+<p>暴破常用用户名密码，注意观察账号正确和错误时的返回消息。如果返回消息不同，那就是存在用户名枚举漏洞了。掏出我们的神器burpsuite先暴破一波用户名，再用拿到的正确用户名暴力破解密码就很省时间了，需要注意的是有些网站页面显示的。</p> 
+<p>暴破得到admin的密码为q1w2e3r4<br> <img src="https://images2.imgbox.com/99/cb/hKsklWCE_o.png" alt="图片"></p> 
+<h4><a id="0x03__32"></a>0x03 验证码绕过</h4> 
+<p>如果登录有验证码怎么办？一个字：绕。</p> 
+<p>1、验证码字段删除或置空；</p> 
+<p>2、删除cookie；</p> 
+<p>3、万能验证码：1111、0000、8888等等；</p> 
+<p>4、burp抓包但不放包，将包发送到Repeater重放几次看看验证码能不能重复使用，大多数时候burp不用一直抓包也是可以绕过的。</p> 
+<p>5、如果有短信验证码功能，可以尝试暴力破解短信验证码，达到登录、注册或找回密码等目的，邮件验证码同理。一般情况下4位数的验证码在5分钟内跑完是没问题的。</p> 
+<p>还有很多验证码绕过的方法，这里不一一列举，找时间专门出一篇验证码绕过方法的分享文章吧。</p> 
+<h4><a id="0x04__48"></a>0x04 修改响应码</h4> 
+<p>Burp拦截登录的响应包进行修改，将响应码修改后可能会越权登录被测系统。一般情况下正确的响应码有：0、1、200、true、success。也可以在有正确账号密码的情况下进行登录，直接查看正确的响应包是什么构造，再重新用错误账号进行登录修改响应码。不仅是登录功能，找回密码、注册账号等存在逻辑验证的点都有可能存在此漏洞。</p> 
+<h4><a id="0x05__52"></a>0x05 目录扫描</h4> 
+<p>用工具扫描目录，这里推荐使用dirsearch。可能会发现网站备份文件、后台地址等等，往往会有意外惊喜，写这篇文章前一天就用dirsearch发现了一个phpmyadmin管理界面，之后通过万能密码进到了数据库，话不多说，展示：</p> 
+<p>使用用户名’localhost’@'@”密码为空登录成功<br> <img src="https://images2.imgbox.com/6e/d8/eVYta8OF_o.png" alt="图片"></p> 
+<p><img src="https://images2.imgbox.com/ed/05/GxRabNaN_o.png" alt="图片"></p> 
+<h4><a id="0x06__63"></a>0x06 找回密码功能</h4> 
+<p>此功能点可能存在的漏洞有任意用户密码重置、短信/邮件轰炸、验证码爆破、验证码绕过、验证码回显、sql注入，逻辑漏洞较多。</p> 
+<p>分享一个edu的任意用户密码重置漏洞：</p> 
+<p>1、填写未注册的手机号获取验证码，修改密码</p> 
+<p><img src="https://images2.imgbox.com/e5/31/fFkUMFfl_o.png" alt="图片"></p> 
+<p>2、burp跑一遍常用测试手机号码，成功修改了账号13333333333的密码<br> <img src="https://images2.imgbox.com/e4/80/EyBgQO0l_o.png" alt="图片"></p> 
+<p>3、使用新密码qwe123QWE!@#登录13333333333账号成功<br> <img src="https://images2.imgbox.com/89/e4/blhyopu8_o.png" alt="图片"></p> 
+<h4><a id="0x07__82"></a>0x07 注册功能</h4> 
+<p>此功能点可能存在的漏洞有任意用户注册等等，和找回密码功能中可能存在的漏洞高度相似。</p> 
+<h4><a id="0x08__86"></a>0x08 历史漏洞</h4> 
+<p>Shiro反序列化、Struts2系列漏洞、历史爆出的cms漏洞、log4j、中间件漏洞……。</p> 
+<h4><a id="0x09__90"></a>0x09 端口扫描</h4> 
+<p>Nmap全端口扫描：nmap -sS -A -p 1-65535 ip，扫到ssh、ftp、telnet、数据库等等端口可以尝试进一步利用。</p> 
+<h4><a id="0x10_JS_94"></a>0x10 JS信息泄露</h4> 
+<p>F12找一下JS文件，重点查看js中的测试账号、api接口，往往在js文件中可以找到未授权页面，推荐使用URLFinder工具。</p> 
+<h4><a id="_98"></a>总结</h4> 
+<p>虽然只是一个小小的登录框，但是要测的地方还是很多的，在测试时一定要细心，不然可能错过很多漏洞哟。本文所展示漏洞均已提交漏洞平台并修复。</p> 
+<p>感谢各位大佬们关注-不秃头的安全，本账号为新起公众号，后续会坚持更新渗透漏洞思路分享、安全测试、好用工具分享以及挖掘SRC思路等文章，同时会组织不定期抽奖，希望能得到各位的关注与支持。<br> <img src="https://images2.imgbox.com/7e/ff/2OaEatY9_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/6660d3e98865e6a2baab40e423da4a18/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">JNDIExploit使用方法</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1012668facf7a69db3dc3aeca85e3130/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Git 配置：设置用户名（user.name）和 邮箱（user.eamil）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

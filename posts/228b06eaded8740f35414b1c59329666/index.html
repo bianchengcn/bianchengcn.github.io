@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>hive的udtf函数：inline&#43;实现动态分区&#43;小文件处理&#43;杂记 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="hive的udtf函数：inline&#43;实现动态分区&#43;小文件处理&#43;杂记" />
+<meta property="og:description" content="1、inline 函数说明：
+翻译：将结构数组分解为多行。返回一个包含N列的行集（N=结构中顶级元素的数目），数组中每个结构一行。
+场景：源表粒度为 班级，目标表粒度为 班级&#43;老师。
+with t as ( select &#39;class1&#39; as class_id, &#39;物联网工程&#39; as class_name,&#39;Anla&#39; as chinese_teacher,200 as chinese_teacher_donate_amount ,&#39;Satellite&#39; as math_teacher,500 as math_teacher_donate_amount,&#39;Patty&#39; as english_teacher,288 as english_teacher_donate_amount union all select &#39;class2&#39; as class_id, &#39;软件工程&#39; as class_name,&#39;Aron&#39; as chinese_teacher,500 as chinese_teacher_donate_amount ,&#39;Lisa&#39; as math_teacher,300 as math_teacher_donate_amount,&#39;Yoga&#39; as english_teacher,168 as english_teacher_donate_amount ) select t.class_id ,t.class_name ,t_inline.teacher ,t_inline.donate_amount from t lateral view inline(array(struct(chinese_teacher,chinese_teacher_donate_amount), struct(math_teacher,math_teacher_donate_amount), struct(english_teacher,english_teacher_donate_amount) )) t_inline as teacher,donate_amount; 2、动态分区如何实现：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/228b06eaded8740f35414b1c59329666/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-12-31T18:26:07+08:00" />
+<meta property="article:modified_time" content="2020-12-31T18:26:07+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">hive的udtf函数：inline&#43;实现动态分区&#43;小文件处理&#43;杂记</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>1、inline 函数说明：<br> <img src="https://images2.imgbox.com/f5/eb/P37UVdvf_o.png" alt="在这里插入图片描述"><br> 翻译：将结构数组分解为多行。返回一个包含N列的行集（N=结构中顶级元素的数目），数组中每个结构一行。<br> 场景：源表粒度为 班级，目标表粒度为 班级+老师。<br> <img src="https://images2.imgbox.com/b6/e8/ooGpbpsr_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-sql"><span class="token keyword">with</span> t <span class="token keyword">as</span> <span class="token punctuation">(</span>
+    <span class="token keyword">select</span> <span class="token string">'class1'</span> <span class="token keyword">as</span> class_id<span class="token punctuation">,</span> <span class="token string">'物联网工程'</span> <span class="token keyword">as</span> class_name<span class="token punctuation">,</span><span class="token string">'Anla'</span> <span class="token keyword">as</span> chinese_teacher<span class="token punctuation">,</span><span class="token number">200</span> <span class="token keyword">as</span> chinese_teacher_donate_amount
+        <span class="token punctuation">,</span><span class="token string">'Satellite'</span> <span class="token keyword">as</span> math_teacher<span class="token punctuation">,</span><span class="token number">500</span> <span class="token keyword">as</span> math_teacher_donate_amount<span class="token punctuation">,</span><span class="token string">'Patty'</span> <span class="token keyword">as</span> english_teacher<span class="token punctuation">,</span><span class="token number">288</span> <span class="token keyword">as</span> english_teacher_donate_amount
+    <span class="token keyword">union</span> <span class="token keyword">all</span>
+    <span class="token keyword">select</span> <span class="token string">'class2'</span> <span class="token keyword">as</span> class_id<span class="token punctuation">,</span> <span class="token string">'软件工程'</span> <span class="token keyword">as</span> class_name<span class="token punctuation">,</span><span class="token string">'Aron'</span> <span class="token keyword">as</span> chinese_teacher<span class="token punctuation">,</span><span class="token number">500</span> <span class="token keyword">as</span> chinese_teacher_donate_amount
+        <span class="token punctuation">,</span><span class="token string">'Lisa'</span> <span class="token keyword">as</span> math_teacher<span class="token punctuation">,</span><span class="token number">300</span> <span class="token keyword">as</span> math_teacher_donate_amount<span class="token punctuation">,</span><span class="token string">'Yoga'</span> <span class="token keyword">as</span> english_teacher<span class="token punctuation">,</span><span class="token number">168</span> <span class="token keyword">as</span> english_teacher_donate_amount
+<span class="token punctuation">)</span>
+<span class="token keyword">select</span>
+    t<span class="token punctuation">.</span>class_id
+    <span class="token punctuation">,</span>t<span class="token punctuation">.</span>class_name
+    <span class="token punctuation">,</span>t_inline<span class="token punctuation">.</span>teacher
+    <span class="token punctuation">,</span>t_inline<span class="token punctuation">.</span>donate_amount
+<span class="token keyword">from</span> t 
+lateral <span class="token keyword">view</span> inline<span class="token punctuation">(</span>array<span class="token punctuation">(</span>struct<span class="token punctuation">(</span>chinese_teacher<span class="token punctuation">,</span>chinese_teacher_donate_amount<span class="token punctuation">)</span><span class="token punctuation">,</span>
+                        struct<span class="token punctuation">(</span>math_teacher<span class="token punctuation">,</span>math_teacher_donate_amount<span class="token punctuation">)</span><span class="token punctuation">,</span>
+                        struct<span class="token punctuation">(</span>english_teacher<span class="token punctuation">,</span>english_teacher_donate_amount<span class="token punctuation">)</span>
+<span class="token punctuation">)</span><span class="token punctuation">)</span> t_inline <span class="token keyword">as</span> teacher<span class="token punctuation">,</span>donate_amount<span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/cc/eb/mtXuMNqH_o.png" alt="在这里插入图片描述"><br> 2、动态分区如何实现：</p> 
+<pre><code class="prism language-powershell"><span class="token function">set</span> hive<span class="token punctuation">.</span>exec<span class="token punctuation">.</span>dynamic<span class="token punctuation">.</span>partition=true<span class="token punctuation">;</span>
+<span class="token function">set</span> hive<span class="token punctuation">.</span>exec<span class="token punctuation">.</span>dynamic<span class="token punctuation">.</span>partition<span class="token punctuation">.</span>mode=nonstrict<span class="token punctuation">;</span> 
+<span class="token function">set</span> hive<span class="token punctuation">.</span>exec<span class="token punctuation">.</span>max<span class="token punctuation">.</span>dynamic<span class="token punctuation">.</span>partitions=100000<span class="token punctuation">;</span> <span class="token operator">--</span>可选
+<span class="token function">set</span> hive<span class="token punctuation">.</span>exec<span class="token punctuation">.</span>max<span class="token punctuation">.</span>dynamic<span class="token punctuation">.</span>partitions<span class="token punctuation">.</span>pernode=100000<span class="token punctuation">;</span> <span class="token operator">--</span>可选
+insert overwrite table table_name partition<span class="token punctuation">(</span>rand_num<span class="token punctuation">)</span>
+<span class="token function">select</span> field1<span class="token punctuation">,</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">,</span>fieldn<span class="token punctuation">,</span>cast<span class="token punctuation">(</span>cast<span class="token punctuation">(</span>rand<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span> 10 as int<span class="token punctuation">)</span> as string<span class="token punctuation">)</span> as rand_num
+<span class="token keyword">from</span> t 
+</code></pre> 
+<p>这样就实现动态分区了。<br> 注意：<br> 1、distribute by解决的是小文件的问题，而不是实现动态分区，这点很容易混淆。<br> 2、如果分区数超过限定值，会报错：<code>Fatal error occured when node tried to create too many dynamic partitions.</code><br> 报错则考虑是否设置参数： hive.exec.max.dynamic.partitions、hive.exec.max.dynamic.partitions.pernode</p> 
+<p>3、小文件如何处理：<br> 3.1、distribute by</p> 
+<pre><code class="prism language-sql"><span class="token keyword">insert</span> overwrite <span class="token keyword">table</span> table_name <span class="token keyword">partition</span><span class="token punctuation">(</span>statdate<span class="token punctuation">)</span>
+distribute <span class="token keyword">by</span> cast<span class="token punctuation">(</span>rand<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span> <span class="token number">10</span> <span class="token keyword">as</span> <span class="token keyword">int</span><span class="token punctuation">)</span>；
+</code></pre> 
+<p>这种方法会在分区文件夹statdate=‘xxxx’ 下生成至多10个文件夹。<br> 3.2、repartition，常使用在给一个分区插入数据上</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token comment">/*+ repartition(1) */</span>
+</code></pre> 
+<p>4、杂记<br> 4.1、sqoop导出新经验：指定分区导出，分区字段得是 string 类型，不然会报错。<br> 4.2、查询字段小数位长度： <code>length(substring_index(cast(field as string),'.',-1))</code><br> 效果：1.614-&gt;3; 12.8292-&gt;4</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/183d65d095a5329d1766460146f78b8b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">惠普m154a硒鼓芯片清零_打印机硒鼓芯片清零 请问一下硒鼓芯片清零是什么意思...</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/4b198755406b5995e71f44230c8c9a7c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">再次携号转网_三大运营商再次官宣携号转网必须满足以下五大条件, 这两个号段已经暂停转网...</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

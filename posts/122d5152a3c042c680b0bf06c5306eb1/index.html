@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>STM32实战总结：HAL之RTC - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="STM32实战总结：HAL之RTC" />
+<meta property="og:description" content="RTC基础知识参考：
+51单片机内部外设：实时时钟(SPI)_路溪非溪的博客-CSDN博客
+STM32中的RTC 51单片机通常是外置的RTC芯片如DS1302，那么STM32的RTC是什么情况呢？
+STM32芯片自带RTC，因此不须像其他MCU需外接RTC模块。
+先读一读单片机的数据手册。
+实时时钟是一个独立的定时器。RTC模块拥有一组连续计数的计数器，在相应软件配置下，可提供时钟日历的功能。修改计数器的值可以重新设置系统当前的时间和日期。
+RTC模块和时钟配置系统(RCC_BDCR寄存器)处于后备区域，即在系统复位或从待机模式唤醒后，RTC的设置和时间维持不变。 系统复位后，对后备寄存器和RTC的访问被禁止，这是为了防止对后备区域(BKP)的意外写操 作。执行以下操作将使能对后备寄存器和RTC的访问：
+● 设置寄存器RCC_APB1ENR的PWREN和BKPEN位，使能电源和后备接口时钟
+● 设置寄存器PWR_CR的DBP位，使能对后备寄存器和RTC的访问。
+主要特性：
+● 可编程的预分频系数：分频系数高为220。
+● 32位的可编程计数器，可用于较长时间段的测量。
+● 2个分离的时钟：用于APB1接口的PCLK1和RTC时钟(RTC时钟的频率必须小于PCLK1时钟 频率的四分之一以上)。
+● 可以选择以下三种RTC的时钟源：
+● HSE时钟除以128；
+● LSE振荡器时钟；
+● LSI振荡器时钟
+● 2个独立的复位类型：
+● APB1接口由系统复位；
+● RTC核心(预分频器、闹钟、计数器和分频器)只能由后备域复位
+● 3个专门的可屏蔽中断：
+● 1.闹钟中断，用来产生一个软件可编程的闹钟中断。
+● 2.秒中断，用来产生一个可编程的周期性中断信号(长可达1秒)。
+● 3.溢出中断，指示内部可编程计数器溢出并回转为0的状态。
+RTC时钟源：
+三种不同的时钟源可被用来驱动系统时钟(SYSCLK)：
+● HSI振荡器时钟
+● HSE振荡器时钟
+● PLL时钟
+这些设备有以下2种二级时钟源：
+● 40kHz低速内部RC，可以用于驱动独立看门狗和通过程序选择驱动RTC。 RTC用于从停机/待机模式下自动唤醒系统。
+● 32.768kHz低速外部晶体也可用来通过程序选择驱动RTC(RTCCLK)。
+RTC原理框图
+灰色区域为待机时维持供电区域。
+APB1 接口：用来和 APB1 总线相连。
+此单元还包含一组 16 位寄存器，可通过 APB1 总线对其进行读写操作。APB1 接口由 APB1 总线时钟驱动，用来与 APB1 总线连接。通过APB1接口可以访问RTC的相关寄存器（预分频值，计数器值，闹钟值）。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/122d5152a3c042c680b0bf06c5306eb1/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-03-05T21:11:18+08:00" />
+<meta property="article:modified_time" content="2023-03-05T21:11:18+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">STM32实战总结：HAL之RTC</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <blockquote> 
+ <p>RTC基础知识参考：</p> 
+ <p><a href="https://blog.csdn.net/qq_28576837/article/details/125966564?csdn_share_tail=%7B%22type%22%3A%22blog%22%2C%22rType%22%3A%22article%22%2C%22rId%22%3A%22125966564%22%2C%22source%22%3A%22qq_28576837%22%7D&amp;ctrtid=ZU9qL" title="51单片机内部外设：实时时钟(SPI)_路溪非溪的博客-CSDN博客">51单片机内部外设：实时时钟(SPI)_路溪非溪的博客-CSDN博客</a></p> 
+</blockquote> 
+<h2><strong>STM32中的RTC</strong></h2> 
+<blockquote> 
+ <p>51单片机通常是外置的RTC芯片如DS1302，那么STM32的RTC是什么情况呢？</p> 
+ <p>STM32芯片自带RTC，因此不须像其他MCU需外接RTC模块。</p> 
+ <p></p> 
+ <p>先读一读单片机的数据手册。</p> 
+ <p>实时时钟是一个独立的定时器。RTC模块拥有一组连续计数的计数器，在相应软件配置下，可提供时钟日历的功能。修改计数器的值可以重新设置系统当前的时间和日期。</p> 
+ <p>RTC模块和时钟配置系统(RCC_BDCR寄存器)处于后备区域，即在系统复位或从待机模式唤醒后，RTC的设置和时间维持不变。 系统复位后，对后备寄存器和RTC的访问被禁止，这是为了防止对后备区域(BKP)的意外写操 作。执行以下操作将使能对后备寄存器和RTC的访问：</p> 
+ <p>● 设置寄存器RCC_APB1ENR的PWREN和BKPEN位，使能电源和后备接口时钟</p> 
+ <p>● 设置寄存器PWR_CR的DBP位，使能对后备寄存器和RTC的访问。</p> 
+ <p></p> 
+ <p><strong>主要特性：</strong></p> 
+ <p>● 可编程的预分频系数：分频系数高为220。<br> ● 32位的可编程计数器，可用于较长时间段的测量。<br> ● 2个分离的时钟：用于APB1接口的PCLK1和RTC时钟(RTC时钟的频率必须小于PCLK1时钟 频率的四分之一以上)。<br> ● 可以选择以下三种RTC的时钟源：<br>      ● HSE时钟除以128；<br>      ● LSE振荡器时钟；<br>      ● LSI振荡器时钟</p> 
+ <p>● 2个独立的复位类型：<br>      ● APB1接口由系统复位；<br>      ● RTC核心(预分频器、闹钟、计数器和分频器)只能由后备域复位</p> 
+ <p>● 3个专门的可屏蔽中断：<br>      ● 1.闹钟中断，用来产生一个软件可编程的闹钟中断。</p> 
+ <p>     ● 2.秒中断，用来产生一个可编程的周期性中断信号(长可达1秒)。</p> 
+ <p>     ● 3.溢出中断，指示内部可编程计数器溢出并回转为0的状态。</p> 
+ <p></p> 
+ <p><strong>RTC时钟源：</strong><br> 三种不同的时钟源可被用来驱动系统时钟(SYSCLK)：</p> 
+ <p>● HSI振荡器时钟<br> ● HSE振荡器时钟<br> ● PLL时钟</p> 
+ <p>这些设备有以下2种二级时钟源：</p> 
+ <p>● 40kHz低速内部RC，可以用于驱动独立看门狗和通过程序选择驱动RTC。 RTC用于从停机/待机模式下自动唤醒系统。<br> ● 32.768kHz低速外部晶体也可用来通过程序选择驱动RTC(RTCCLK)。</p> 
+ <p></p> 
+ <p><strong>RTC原理框图</strong></p> 
+ <p><img alt="" height="465" src="https://images2.imgbox.com/8c/a5/jWTBdL0U_o.png" width="608"></p> 
+ <p><strong>灰色区域为待机时维持供电区域。</strong></p> 
+ <p></p> 
+ <p><strong>APB1 接口</strong>：用来和 APB1 总线相连。</p> 
+ <p>此单元还包含一组 16 位寄存器，可通过 APB1 总线对其进行读写操作。APB1 接口由 APB1 总线时钟驱动，用来与 APB1 总线连接。通过APB1接口可以访问RTC的相关寄存器（预分频值，计数器值，闹钟值）。</p> 
+ <p></p> 
+ <p><strong>RTC 核心接口</strong>：由一组可编程计数器组成，分成两个主要模块 。</p> 
+ <p>第一个模块是个RTC预分频器。</p> 
+ <p><img alt="在这里插入图片描述" src="https://images2.imgbox.com/1b/21/wl4424L8_o.png"></p> 
+ <p>第二个模块是一个 32 位的可编程计数器 （RTC_CNT）可被初始化为当前的系统时间。</p> 
+ <p><img alt="" height="332" src="https://images2.imgbox.com/61/df/BsSApDVx_o.png" width="198"></p> 
+ <p>一个 32 位的时钟计数器，按秒钟计算，可以记录4294967296秒，约合136年左右，作为一般应用，这已经是足够了的。</p> 
+ <p></p> 
+ <p><strong>RTC具体流程：</strong><br> RTCCLK经过RTC_DIV预分频，RTC_PRL设置预分频系数，然后得到TR_CLK时钟信号，我们一般设置其周期为1s，RTC_CNT计数器计数，假如1970设置为时间起点为0s，通过当前时间的秒数计算得到当前的时间。RTC_ALR是设置闹钟时间，RTC_CNT计数到RTC_ALR就会产生计数中断。</p> 
+ <p>RTC_Second为秒中断，用于刷新时间。<br> RTC_Overflow是溢出中断。<br> RTC Alarm 控制开关机。</p> 
+ <p>断电后这三个中断不起作用。</p> 
+ <p><br><strong>RTC时钟选择</strong><br> 使用HSE分频时钟或者LSI的时候，在主电源VDD掉电的情况下,这两个时钟来源都会受到影响,因此没法保证RTC正常工作。所以RTC一般都时钟低速外部时钟LSE，频率为实时时钟模块中常用的32.768KHz。</p> 
+ <p>为什么其晶振频率是 32.768Khz 呢？因为2的15次方就是32768。在分频15次后就是1Hz，周期为1s。同时这个参数也是工程师总结的，时钟最为准确。</p> 
+ <p>(在主电源VDD有效的情况下(待机)，RTC还可以配置闹钟事件使STM32退出待机模式)</p> 
+ <p><strong>RTC设备因为其独特的运行方式（即掉电依旧运行）使用HSE分频时钟或者LSI的时候，在主电源VDD掉电的情况下，这两个时钟来源都会受到影响，资源消耗太大，小小的纽扣电池根本吃不消。没法保证RTC正常工作.所以RTC一般都时钟低速外部时钟LSE。</strong></p> 
+ <p></p> 
+ <p><strong>RTC复位过程</strong><br> 除了RTC_PRL、RTC_ALR、RTC_CNT和RTC_DIV寄存器外，所有的系统寄存器都由系统复位或电源复位进行异步复位。<br> RTC_PRL、RTC_ALR、RTC_CNT和RTC_DIV寄存器仅能通过备份域复位信号复位。系统复位后，禁止访问后备寄存器和RCT，防止对后卫区域(BKP)的意外写操作。</p> 
+ <p></p> 
+ <p><strong>RTC中断</strong><br> 秒中断：<br> 这里时钟自带一个秒中断，每当计数加一的时候就会触发一次秒中断。注意，这里所说的秒中断并非一定是一秒的时间，它是由RTC时钟源和分频值决定的“秒”的时间，当然也是可以做到1秒钟中断一次。我们通过往秒中断里写更新时间的函数来达到时间同步的效果。</p> 
+ <p></p> 
+ <p><strong>闹钟中断：</strong><br> 闹钟中断就是设置一个预设定的值，计数每自加多少次触发一次闹钟中断。</p> 
+ <p></p> 
+ <p><span style="color:#fe2c24;">另外要注意的是，RTC的后备区域是没有日期寄存器的。所以，在断电重启后，日期不会更新，只有时间是最新的。那么，怎么能获取到最新的日期呢？</span></p> 
+ <p><span style="color:#fe2c24;">第一种办法是使用更高级的单片机，比如F4系列，就自带了日期寄存器。</span></p> 
+ <p><img alt="" height="350" src="https://images2.imgbox.com/38/e9/rFh8RDBV_o.png" width="556"></p> 
+ <p>另外一种办法就是通过计数器来硬算。计算量很大。</p> 
+ <p>实际中可根据情况来选择最适合的方式。</p> 
+</blockquote> 
+<h2>硬件电路</h2> 
+<blockquote> 
+ <p>RTC时钟：</p> 
+ <p><img alt="" height="232" src="https://images2.imgbox.com/d9/96/6hgjg5fD_o.png" width="499"></p> 
+ <p>后备电池模块</p> 
+ <p><img alt="" height="222" src="https://images2.imgbox.com/ae/4c/cxqQHSTd_o.png" width="616"></p> 
+</blockquote> 
+<h2>MX配置</h2> 
+<blockquote> 
+ <p id="1.%E8%AE%BE%E7%BD%AERCC">开启RTC</p> 
+ <p><img alt="" height="380" src="https://images2.imgbox.com/88/35/9i9nXAMX_o.png" width="563"></p> 
+ <p>开启LSE</p> 
+ <p><img alt="" height="202" src="https://images2.imgbox.com/dd/9b/Bb8nPrzr_o.png" width="565"></p> 
+ <p><img alt="" height="226" src="https://images2.imgbox.com/14/0c/KOIneUgW_o.png" width="564"></p> 
+ <p>生成代码即可。</p> 
+ <p>这里不需要中断，包括秒中断、溢出中断、闹钟中断。</p> 
+ <p>其他场景根据需要自行选择。</p> 
+</blockquote> 
+<h2>关于日期无法更新的问题</h2> 
+<blockquote> 
+ <p>F1的RTC中，日期是无法在断电时保持更新的，因为没有日期寄存器。</p> 
+ <p>那么，日期是咋来的？</p> 
+ <p>而且，我在RTC框图中就看到了计数器，那么，年月日时分秒到底是咋来的？</p> 
+ <p>难道要获取计数值后自己硬算吗？</p> 
+ <p>通过查找资料，关于F1的RTC时间实现，进行如下记录。</p> 
+ <p>首先，了解时间戳的概念。</p> 
+ <p>其他领域不太清楚，在计算机领域，时间戳是指格林威治时间1970年01月01日00时00分00秒(北京时间1970年01月01日08时00分00秒)起至现在的总秒数。貌似还有其他的标准起始点，但不管是哪种标准起始点，只要有个标准起始点即可。</p> 
+ <p>通常，计算特定的时间就是根据时间戳来转换的，比如，当时间戳是7200，表示自格林威治时间1970年01月01日00时00分00秒(北京时间1970年01月01日08时00分00秒)起至现在已经过了7200秒，那么此时的时间就是北京时间1970年01月01日10时00分00秒。其他更多的时间戳换算同理。如果需要格式化则处理对应的格式即可。</p> 
+ <p>在STM32中，只有一个32位的计数器，又因为预分频后的周期通常都是1秒，所以计数器里的数，实际上就是一种时间戳。</p> 
+ <p>不像更高级的STM32单片机，比如STM32F4就有专用的时间寄存器和日期寄存器。</p> 
+ <p><img alt="" height="192" src="https://images2.imgbox.com/52/a1/5lcdpAdx_o.png" width="437"></p> 
+ <p>而F1系列只有一个计数器。</p> 
+ <p></p> 
+ <p>按照我的理解，通过时间戳直接计算出年月日和时分秒应该是可以的，不过应该是过程非常复杂，里面涉及到各种闰月闰年，日期28/29等，所以，HAL库中（不知道标准库是不是）是将日历和时间分开来实现的。</p> 
+ <p>首先要知道，计数器里存的是时间戳。在HAL库中，只将时间部分的时间戳存在了计数器寄存器中，而日历部分的时间处理是存在了一个结构体中。</p> 
+ <p>STM32CubeMX生成的HAL库中RTC函数中，HAL_RTC_SetDate 日期设置函数只是将日期保存至hrtc结构体变量中，HAL_RTC_GetDate 日期获取函数也是直接从hrt结构体变量中获取日期数据。这种情况下，系统重启后数据丢失，日期会被重置。</p> 
+ <p>STM32CubeMX生成的HAL库中RTC函数中，HAL_RTC_SetTime 时间设置函数是将时间转换为时间戳保存到计数器中，HAL_RTC_GetTime 时间获取函数则是将计数器的数值转换为时间。计数器在断电后能够依靠外部电池供电继续计时，所以掉电后，时间依然能够正常走时。但是，在时间戳与时间的换算处理中，会自动将时间戳转换为24H内的时间，所以并不能记录所走时长的天数。比如当时间计数值超过了一天，软件处理中会将继续增长的计数值换算成从0开始的时间。</p> 
+ <p></p> 
+ <p>那么，怎么实现日期的更新呢？</p> 
+ <p>对于实现RTC掉电复位后更新日期现在使用比较广的是如下两种方式。</p> 
+ <p>第一种：</p> 
+ <p>使用备份寄存器，把日期信息存储在备份寄存器中，因为RTC模块属于后备区域，所以备份寄存器中的信息在复位后也是维持不变的。在下次上电后读取寄存器数据就可以知道日期了。但这个方式也有一种缺陷，日期虽然写在了备份寄存器中，但是这个部分没有计数，寄存器内的日期也无法进行更新。</p> 
+ <p>第二种：</p> 
+ <p id="2.%E5%B0%86%E6%97%A5%E6%9C%9F%E5%92%8C%E6%97%B6%E9%97%B4%E6%8D%A2%E7%AE%97%E4%B8%BA%E6%97%B6%E9%97%B4%E6%88%B3%E4%BF%9D%E5%AD%98%E5%9C%A8%E8%AE%A1%E6%95%B0%E5%99%A8%E4%B8%AD">就是将日期和时间一起换算为时间戳保存在计数器中。</p> 
+ <p>此时，需要自己写函数来实现日期和时间的设置以及读取，无法再使用HAL库自带的函数。实现过程较为复杂。此处不赘述，需要可自行查阅相关资料。</p> 
+</blockquote> 
+<blockquote> 
+ <p>有些集成的时间芯片，可以直接通过接口读年月日时分秒，那是因为芯片内部已经把计数器的计数值进行了处理。并将年月日的值分别存放在了特定的存储单元，这时直接读取就可以了。 就比如开头链接中讲的DS1302，通过SPI接口去读芯片中的相应寄存器，直接得到年月日时分秒。</p> 
+</blockquote> 
+<h2>相关函数</h2> 
+<blockquote> 
+ <pre><code class="hljs">/* RTC Time and Date functions ************************************************/
+/** @addtogroup RTC_Exported_Functions_Group2
+  * @{
+  */
+HAL_StatusTypeDef HAL_RTC_SetTime(RTC_HandleTypeDef *hrtc, RTC_TimeTypeDef *sTime, uint32_t Format);
+HAL_StatusTypeDef HAL_RTC_GetTime(RTC_HandleTypeDef *hrtc, RTC_TimeTypeDef *sTime, uint32_t Format);
+HAL_StatusTypeDef HAL_RTC_SetDate(RTC_HandleTypeDef *hrtc, RTC_DateTypeDef *sDate, uint32_t Format);
+HAL_StatusTypeDef HAL_RTC_GetDate(RTC_HandleTypeDef *hrtc, RTC_DateTypeDef *sDate, uint32_t Format);
+/**
+  * @}
+  */
+
+/* RTC Alarm functions ********************************************************/
+/** @addtogroup RTC_Exported_Functions_Group3
+  * @{
+  */
+HAL_StatusTypeDef HAL_RTC_SetAlarm(RTC_HandleTypeDef *hrtc, RTC_AlarmTypeDef *sAlarm, uint32_t Format);
+HAL_StatusTypeDef HAL_RTC_SetAlarm_IT(RTC_HandleTypeDef *hrtc, RTC_AlarmTypeDef *sAlarm, uint32_t Format);
+HAL_StatusTypeDef HAL_RTC_DeactivateAlarm(RTC_HandleTypeDef *hrtc, uint32_t Alarm);
+HAL_StatusTypeDef HAL_RTC_GetAlarm(RTC_HandleTypeDef *hrtc, RTC_AlarmTypeDef *sAlarm, uint32_t Alarm, uint32_t Format);
+void              HAL_RTC_AlarmIRQHandler(RTC_HandleTypeDef *hrtc);
+HAL_StatusTypeDef HAL_RTC_PollForAlarmAEvent(RTC_HandleTypeDef *hrtc, uint32_t Timeout);
+void              HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc);
+/**
+  * @}
+  */</code></pre> 
+ <p>数据格式通常有BCD码和二进制码格式，可根据需要选择。</p> 
+ <p>另外，还有可能用到备份区域的读写函数，因为备份区域断电后数据依然保存，所以可以将某些关键信息（比如日历）存入。</p> 
+ <pre><code class="hljs">/** @addtogroup RTCEx_Exported_Functions_Group3
+  * @{
+  */
+void              HAL_RTCEx_BKUPWrite(RTC_HandleTypeDef *hrtc, uint32_t BackupRegister, uint32_t Data);
+uint32_t          HAL_RTCEx_BKUPRead(RTC_HandleTypeDef *hrtc, uint32_t BackupRegister);</code></pre> 
+ <p>里面的参数啥意思？</p> 
+ <p>第二个参数：</p> 
+ <p>第三个参数：要存入的数据</p> 
+</blockquote> 
+<h2>关键代码</h2> 
+<blockquote> 
+ <pre><code>/* Includes ------------------------------------------------------------------*/
+#include "MyApplication.h"
+
+/* Private define-------------------------------------------------------------*/
+
+/* Private variables----------------------------------------------------------*/
+RTC_TimeTypeDef RTC_TimeStruct_CurrentValue; //RTC当前时间
+RTC_DateTypeDef RTC_DateStruct_CurrentValue; //RTC当前日期
+
+uint8_t *Week_Str[7] = 
+{
+	(uint8_t*)"日",
+	(uint8_t*)"一", 
+	(uint8_t*)"二", 
+	(uint8_t*)"三", 
+	(uint8_t*)"四", 
+	(uint8_t*)"五", 
+	(uint8_t*)"六"
+};
+	
+/* Private function prototypes------------------------------------------------*/  
+static void Calendar_Set(void);  //设置日历
+static void Calendar_Get(void);  //获取日历
+static void Calendar_Show(void); //显示日历
+
+static uint8_t Input_RTC_SetValue(uint8_t); //输入RTC设置值
+static void    RTC_Time_Set(void);          //RTC时间设置
+static void    RTC_Date_Set(void);          //RTC日期设置
+
+/* Public variables-----------------------------------------------------------*/
+MyRTC_t MyRTC = 
+{
+	TRUE,
+	
+	&amp;RTC_TimeStruct_CurrentValue,
+	&amp;RTC_DateStruct_CurrentValue,
+	
+	Calendar_Set,
+	Calendar_Get,
+	Calendar_Show
+};
+
+/*
+	* @name   Calendar_Set
+	* @brief  设置日历
+	* @param  None
+	* @retval None      
+*/
+static void Calendar_Set()
+{	
+	//上电复位时，读取RTC备份寄存器1的数据，如果为0x1688，则不需要通过串口重新设置日期与时间
+	if(HAL_RTCEx_BKUPRead(&amp;hrtc,RTC_BKP_DR1) != 0x1688)
+	{
+		printf("^_^^_^开始设置RTC的日期与时间^_^^_^\r\n\r\n");
+		
+		RTC_Date_Set(); //设置日期
+		RTC_Time_Set(); //设置时间
+		
+		HAL_RTCEx_BKUPWrite(&amp;hrtc,RTC_BKP_DR1,0x1688);	
+	}
+	else
+	{
+		printf("^_^^_^RTC的日期与时间已设置！^_^^_^\r\n\r\n");
+		printf("重新设置的方法如下:\r\n");
+		printf("方法一：长按触摸按键2s以上；\r\n");
+		printf("方法二：系统断电，同时拔掉RTC电池。\r\n\r\n");
+	}
+}
+
+/*
+	* @name   Calendar_Get
+	* @brief  显示日历
+	* @param  None
+	* @retval None      
+*/
+static void Calendar_Get()
+{
+	//获取当前时间
+	HAL_RTC_GetTime(&amp;hrtc,MyRTC.pRTC_TimeStruct,RTC_FORMAT_BIN);
+	//获取当前日期
+	HAL_RTC_GetDate(&amp;hrtc,MyRTC.pRTC_DateStruct,RTC_FORMAT_BIN);
+}
+
+/*
+	* @name   Calendar_Show
+	* @brief  显示日历
+	* @param  None
+	* @retval None      
+*/
+static void Calendar_Show()
+{
+	//串口打印日期
+	printf("当前时间为: %02u年%02d月%02d日(星期%s)  ", 2000+MyRTC.pRTC_DateStruct-&gt;Year,MyRTC.pRTC_DateStruct-&gt;Month,MyRTC.pRTC_DateStruct-&gt;Date,Week_Str[MyRTC.pRTC_DateStruct-&gt;WeekDay]);
+	//串口打印时间
+	printf("%02u:%02u:%02u\r\n",MyRTC.pRTC_TimeStruct-&gt;Hours,MyRTC.pRTC_TimeStruct-&gt;Minutes,MyRTC.pRTC_TimeStruct-&gt;Seconds);
+	
+	//数码管显示时间
+	Display.Disp_HEX(Disp_NUM_6,MyRTC.pRTC_TimeStruct-&gt;Hours/10,Disp_DP_OFF);
+	Display.Disp_HEX(Disp_NUM_5,MyRTC.pRTC_TimeStruct-&gt;Hours%10,Disp_DP_ON);
+	
+	Display.Disp_HEX(Disp_NUM_4,MyRTC.pRTC_TimeStruct-&gt;Minutes/10,Disp_DP_OFF);
+	Display.Disp_HEX(Disp_NUM_3,MyRTC.pRTC_TimeStruct-&gt;Minutes%10,Disp_DP_ON);
+	
+	Display.Disp_HEX(Disp_NUM_2,MyRTC.pRTC_TimeStruct-&gt;Seconds/10,Disp_DP_OFF);
+	Display.Disp_HEX(Disp_NUM_1,MyRTC.pRTC_TimeStruct-&gt;Seconds%10,Disp_DP_OFF);
+}
+
+/*
+	* @name   Input_RTC_SetValue
+	* @brief  输入RTC设置值
+	* @param  MAX_Value -&gt; 输入最大值
+	* @retval SetValue  -&gt; 返回输入字符对应的数值     
+*/
+static uint8_t Input_RTC_SetValue(uint8_t MAX_Value)
+{
+	uint8_t SetValue = 0;  //返回值
+	uint8_t Value_Arr[2] = {0};
+	uint8_t Index = 0;
+	
+	//以等待方式从串口接收2个有效字符
+	while(Index &lt; 2)
+	{
+		//等待接收串口数据
+		Value_Arr[Index++] = getchar();
+		//校验字符有效性
+		if((Value_Arr[Index -1] &lt; '0') || (Value_Arr[Index -1] &gt; '9'))
+		{
+			printf("请输入 0 到 9 之间的数字 --&gt;:\n");
+			Index--;
+		}
+	}
+	
+	//接收到的2个字符转化为数值
+	SetValue = (Value_Arr[0] - '0')*10 + (Value_Arr[1] - '0');
+	
+	//校验数值有效行
+	if(SetValue &gt; MAX_Value)
+	{
+		printf("请输入 0 到 %d 之间的数字\n", MAX_Value);
+		SetValue = 0xFF; //SetValue设置为无效数据
+	}
+	
+	//返回数据
+	return SetValue;
+}
+
+/*
+	* @name   RTC_Date_Set
+	* @brief  RTC日期设置
+	* @param  None
+	* @retval None  
+*/
+static void RTC_Date_Set()
+{
+  RTC_DateTypeDef RTC_DateStruct_SetValue;
+	uint8_t SetValue;
+	
+	printf("=========================日期设置==================\n");
+	printf("请输入年份(00-99): 20\n");
+	SetValue = 0xFF;
+	while (SetValue == 0xFF)
+	{
+		SetValue = Input_RTC_SetValue(99);
+	}
+	printf("年份被设置为:  20%02u\n", SetValue);
+	RTC_DateStruct_SetValue.Year = SetValue;
+	
+	printf("请输入月份(01-12):  \n");
+	SetValue = 0xFF;
+	while (SetValue == 0xFF)
+	{
+		SetValue = Input_RTC_SetValue(12);
+		
+		if(SetValue == 0x00)
+		{
+			printf("月份不能设置为0，请重新输入月份：\r\n");
+			SetValue = 0xFF;
+		}
+	}
+	printf("月份被设置为:  %02u\n", SetValue);
+	RTC_DateStruct_SetValue.Month = SetValue;
+	
+	printf("请输入日期(01-31):  \n");
+	SetValue = 0xFF;
+	while (SetValue == 0xFF)
+	{
+		SetValue = Input_RTC_SetValue(31);
+		
+		if(SetValue == 0x00)
+		{
+			printf("日期不能设置为0，请重新输入日期：\r\n");	
+			SetValue = 0xFF;
+		}
+	}
+	printf("日期被设置为:  %02u\r\n", SetValue);
+	RTC_DateStruct_SetValue.Date = SetValue;
+	//设置日期
+	HAL_RTC_SetDate(&amp;hrtc,&amp;RTC_DateStruct_SetValue,RTC_FORMAT_BIN);
+}
+
+/*
+	* @name   RTC_Time_Set
+	* @brief  RTC时间设置
+	* @param  None
+	* @retval None  
+*/
+static void RTC_Time_Set()
+{
+	RTC_TimeTypeDef RTC_TimeStruct_SetValue;
+	uint8_t SetValue;
+	
+	printf("=========================时间设置==================\n");
+	printf("请输入时钟(00-23):  \n");
+	SetValue = 0xFF;
+	while (SetValue == 0xFF)
+	{
+		SetValue = Input_RTC_SetValue(23);
+	}
+	printf("时钟被设置为:  %02u\n", SetValue);
+	RTC_TimeStruct_SetValue.Hours = SetValue;
+	
+	printf("请输入分钟(00-59):  \n");
+	SetValue = 0xFF;
+	while (SetValue == 0xFF)
+	{
+		SetValue = Input_RTC_SetValue(59);
+	}
+	printf("分钟被设置为:  %02u\n", SetValue);
+	RTC_TimeStruct_SetValue.Minutes = SetValue;
+	
+	printf("请输入秒钟(00-59):  \n");
+	SetValue = 0xFF;
+	while (SetValue == 0xFF)
+	{
+		SetValue = Input_RTC_SetValue(59);
+	}
+	printf("秒钟被设置为:  %02u\n", SetValue);
+	RTC_TimeStruct_SetValue.Seconds = SetValue;
+	//设置时间
+	HAL_RTC_SetTime(&amp;hrtc,&amp;RTC_TimeStruct_SetValue,RTC_FORMAT_BIN);
+}
+/********************************************************
+  End Of File
+********************************************************/
+</code></pre> 
+ <p></p> 
+</blockquote> 
+<h2>更直观的代码</h2> 
+<blockquote> 
+ <pre><code class="hljs">void User_Init(void)
+{
+    RTC_TimeTypeDef startTime = {0};
+    startTime.Hours = 0x21U;
+    startTime.Minutes = 0x0U;
+    startTime.Seconds = 0x0U;
+    HAL_RTC_SetTime(&amp;hrtc, &amp;startTime, RTC_FORMAT_BCD);   
+}
+
+void Co_Run(void)
+{      
+    
+    RTC_TimeTypeDef realTime = {0};
+    
+    HAL_RTC_GetTime(&amp;hrtc, &amp;realTime, RTC_FORMAT_BCD);
+    printf("%x:%x:%x",realTime.Hours, realTime.Minutes, realTime.Seconds);
+    printf("\r\n");
+    HAL_Delay(1000);
+}</code></pre> 
+ <p>注意，如果输入是BCD码，就要直接输入BCD码；</p> 
+ <p>输出的时候，直接以十六进制输出，得到的就是BCD码结果。</p> 
+ <p>关于BCD码，具体见：</p> 
+ <p><a href="https://blog.csdn.net/qq_28576837/article/details/125966564?csdn_share_tail=%7B%22type%22%3A%22blog%22%2C%22rType%22%3A%22article%22%2C%22rId%22%3A%22125966564%22%2C%22source%22%3A%22qq_28576837%22%7D&amp;ctrtid=ZU9qL" title="51单片机内部外设：实时时钟(SPI)_spi时钟_路溪非溪的博客-CSDN博客">51单片机内部外设：实时时钟(SPI)_spi时钟_路溪非溪的博客-CSDN博客</a></p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/92bb9cdee9af11229ce0258effcd92e1/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Python爬虫基础—安装第三方模块及使用</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/9bf2703e1a683a1a474b88beb0b4cd49/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Anaconda安装和换源</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

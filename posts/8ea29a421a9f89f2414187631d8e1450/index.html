@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>僵尸进程与孤儿进程，以及如何查看僵尸进程 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="僵尸进程与孤儿进程，以及如何查看僵尸进程" />
+<meta property="og:description" content="转载来自：什么是僵尸进程与孤儿进程_张维鹏的博客-CSDN博客
+1、什么是僵尸进程和孤儿进程：
+在 Unix/Linux 系统中，正常情况下，子进程是通过父进程创建的，且两者的运行是相互独立的，父进程永远无法预测子进程到底什么时候结束。当一个进程调用 exit 命令结束自己的生命时，其实它并没有真正的被销毁，内核只是释放了该进程的所有资源，包括打开的文件、占用的内存等，但是留下一个称为僵尸进程的数据结构，这个结构保留了一定的信息（包括进程号 the process ID，退出状态，运行时间），这些信息直到父进程通过 wait()/waitpid() 来取时才释放。这样设计的目的主要是保证只要父进程想知道子进程结束时的状态信息，就可以得到
+僵尸进程：一个进程使用 fork 创建子进程，如果子进程退出，而父进程并没有调用 wait 或 waitpid 获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中，这种进程称之为僵死进程。
+孤儿进程：一个父进程退出，而它的一个或多个子进程还在运行，那么这些子进程将成为孤儿进程。孤儿进程将被 init 进程(进程号为1)所收养，并由 init 进程对它们完成状态收集工作。
+2、僵尸进程与孤儿进程的问题危害：
+僵尸进程虽然不占有任何内存空间，但如果父进程不调用 wait() / waitpid() 的话，那么保留的信息就不会释放，其进程号就会一直被占用，而系统所能使用的进程号是有限的，如果大量的产生僵死进程，将因为没有可用的进程号而导致系统不能产生新的进程，此即为僵尸进程的危害。
+孤儿进程是没有父进程的进程，孤儿进程这个重任就落到了 init 进程身上，init 进程就好像是一个民政局，专门负责处理孤儿进程的善后工作。每当出现一个孤儿进程的时候，内核就把孤儿进程的父进程设置为 init，而 init 进程会循环地 wait() 它的已经退出的子进程。这样，当一个孤儿进程凄凉地结束了其生命周期的时候，init 进程就会出面处理它的一切善后工作。因此孤儿进程并不会有什么危害。
+如果子进程在 exit() 之后，父进程没有来得及处理，这时用 ps 命令就能看到子进程的状态是“Z”。如果父进程能及时处理，可能用 ps 命令就来不及看到子进程的僵尸状态，但这并不等于子进程不经过僵尸状态。 如果父进程在子进程结束之前退出，则子进程将由 init 接管。init 将会以父进程的身份对僵尸状态的子进程进行处理。
+3、如果解决僵尸进程造成的问题：
+（1）方案一：父进程通过 wait 和 waitpid 等函数等待子进程结束，但这会导致父进程挂起，所以这并不是一个好办法，父进程如果不能和子进程并发执行的话，那我们创建子进程的意义就没有。同时一个 wait 只能解决一个子进程，如果有多个子进程就要用到多个 wait
+（2）方案二：通过信号机制：
+子进程退出时，向父进程发送 SIGCHILD 信号，父进程处理 SIGCHILD 信号，在信号处理函数中调用 wait 进行处理僵尸进程。
+（3）方案三：fork两次：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/8ea29a421a9f89f2414187631d8e1450/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-06-20T10:30:46+08:00" />
+<meta property="article:modified_time" content="2023-06-20T10:30:46+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">僵尸进程与孤儿进程，以及如何查看僵尸进程</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>转载来自：<a href="https://blog.csdn.net/a745233700/article/details/120715371" title="什么是僵尸进程与孤儿进程_张维鹏的博客-CSDN博客">什么是僵尸进程与孤儿进程_张维鹏的博客-CSDN博客</a></p> 
+<p></p> 
+<p>1、什么是僵尸进程和孤儿进程：<br>         在 Unix/Linux 系统中，正常情况下，子进程是通过父进程创建的，且两者的运行是相互独立的，父进程永远无法预测子进程到底什么时候结束。当一个进程调用 exit 命令结束自己的生命时，其实它并没有真正的被销毁，内核只是释放了该进程的所有资源，包括打开的文件、占用的内存等，但是留下一个称为僵尸进程的数据结构，这个结构保留了一定的信息（包括进程号 the process ID，退出状态，运行时间），这些信息直到父进程通过 wait()/waitpid() 来取时才释放。这样设计的目的主要是保证只要父进程想知道子进程结束时的状态信息，就可以得到</p> 
+<p>僵尸进程：一个进程使用 fork 创建子进程，如果子进程退出，而父进程并没有调用 wait 或 waitpid 获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中，这种进程称之为僵死进程。</p> 
+<p>孤儿进程：一个父进程退出，而它的一个或多个子进程还在运行，那么这些子进程将成为孤儿进程。孤儿进程将被 init 进程(进程号为1)所收养，并由 init 进程对它们完成状态收集工作。</p> 
+<p>2、僵尸进程与孤儿进程的问题危害：<br>         僵尸进程虽然不占有任何内存空间，但如果父进程不调用 wait() / waitpid() 的话，那么保留的信息就不会释放，其进程号就会一直被占用，而系统所能使用的进程号是有限的，如果大量的产生僵死进程，将因为没有可用的进程号而导致系统不能产生新的进程，此即为僵尸进程的危害。</p> 
+<p>        孤儿进程是没有父进程的进程，孤儿进程这个重任就落到了 init 进程身上，init 进程就好像是一个民政局，专门负责处理孤儿进程的善后工作。每当出现一个孤儿进程的时候，内核就把孤儿进程的父进程设置为 init，而 init 进程会循环地 wait() 它的已经退出的子进程。这样，当一个孤儿进程凄凉地结束了其生命周期的时候，init 进程就会出面处理它的一切善后工作。因此孤儿进程并不会有什么危害。</p> 
+<p>如果子进程在 exit() 之后，父进程没有来得及处理，这时用 ps 命令就能看到子进程的状态是“Z”。如果父进程能及时处理，可能用 ps 命令就来不及看到子进程的僵尸状态，但这并不等于子进程不经过僵尸状态。 如果父进程在子进程结束之前退出，则子进程将由 init 接管。init 将会以父进程的身份对僵尸状态的子进程进行处理。</p> 
+<p>3、如果解决僵尸进程造成的问题：<br> （1）方案一：父进程通过 wait 和 waitpid 等函数等待子进程结束，但这会导致父进程挂起，所以这并不是一个好办法，父进程如果不能和子进程并发执行的话，那我们创建子进程的意义就没有。同时一个 wait 只能解决一个子进程，如果有多个子进程就要用到多个 wait</p> 
+<p>（2）方案二：通过信号机制：</p> 
+<p>        子进程退出时，向父进程发送 SIGCHILD 信号，父进程处理 SIGCHILD 信号，在信号处理函数中调用 wait 进行处理僵尸进程。</p> 
+<p>（3）方案三：fork两次：</p> 
+<p>        原理是将进程成为孤儿进程，从而其的父进程变为 init 进程，通过 init 进程处理僵尸进程。具体操作为：父进程一次 fork() 后产生一个子进程随后立即执行 wait(NULL) 来等待子进程结束，然后子进程 fork() 后产生孙子进程随后立即exit(0)。这样子进程顺利终止（父进程仅仅给子进程收尸，并不需要子进程的返回值），然后父进程继续执行。这时的孙子进程由于失去了它的父进程（即是父进程的子进程），将被转交给Init进程托管。于是父进程与孙子进程无继承关系了，它们的父进程均为Init，Init进程在其子进程结束时会自动收尸，这样也就不会产生僵死进程了</p> 
+<p>（4）方案四：kill 父进程：</p> 
+<p>        严格地来说，僵死进程并不是问题的根源，罪魁祸首是产生出大量僵死进程的那个父进程。因此，当我们寻求如何消灭系统中大量的僵死进程时，答案就是把产生大量僵死进程的那个元凶枪毙掉（也就是通过 kill 发送 SIGTERM 或者 SIGKILL 信号啦）。枪毙了元凶进程之后，它产生的僵死进程就变成了孤儿进 程，这些孤儿进程会被 init 进程接管，init 进程会 wait() 这些孤儿进程，释放它们占用的系统进程表中的资源，这样，这些已经僵死的孤儿进程就能瞑目而去了。<br> ————————————————<br> 版权声明：本文为CSDN博主「张维鹏」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。<br> 原文链接：https://blog.csdn.net/a745233700/article/details/120715371</p> 
+<p></p> 
+<p>转载来自：<a href="https://blog.csdn.net/qq_38074398/article/details/128234354" title="top 命令_top查看僵尸进程_码畜c的博客-CSDN博客">top 命令_top查看僵尸进程_码畜c的博客-CSDN博客</a></p> 
+<h2>如何查看僵尸进程</h2> 
+<p>使用top命令查看zombie进程</p> 
+<p>截取部分top输出内容<br> top - 17:49:41 up 59 days, 15:53,  2 users,  load average: 0.07, 0.05, 0.05<br> Tasks: 112 total,   1 running, 109 sleeping,   0 stopped,   2 zombie<br> %Cpu(s):  1.5 us,  0.7 sy,  0.0 ni, 97.8 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st<br> KiB Mem :  1881840 total,    80768 free,   873712 used,   927360 buff/cache<br> KiB Swap:        0 total,        0 free,        0 used.   822596 avail Mem</p> 
+<p>  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND<br>  3493 root      20   0  680300  14288   2076 S   0.7  0.8 250:01.91 barad_agent<br>  6493 root      20   0 1033692  36720  18684 S   0.7  2.0  23:03.33 YDService<br>  6816 root      20   0 1157576   6984   3168 S   0.3  0.4   0:29.40 sh<br>     1 root      20   0   51936   3904   2428 S   0.0  0.2  14:00.27 systemd<br>     2 root      20   0       0      0      0 S   0.0  0.0   0:02.17 kthreadd<br><br> 系统资源信息<br> 前5行为系统资源信息，逐行进行解释。</p> 
+<p>1、第一行<br> 17:49:41：系统当前时间<br> up 59 days, 15:53：系统运行时间，本次已运行59天15时53分<br> 2 users：当前登陆用户<br> load average: 0.07, 0.05, 0.05：过去1、5、15分钟的系统平均负荷<br> 如何根据load average判断CPU的负载程度？</p> 
+<p>查看CPU的Processor数量：cat /proc/cpuinfo |grep “cpu core”|wc -l<br> 如果负载值超过核心处理器数量，一般认为是高负载。如：核心处理器数量为4，load average的值在4的左右浮动，就是高负载<br> 如果是Mac系统，可以通过：sysctl -n machdep.cpu.core_count 查看CPU核心数（物理核）进行判断。</p> 
+<p>2、第二行（进程相关）<br> Tasks: 112 total：总进程数<br> 1 running：运行中进程数<br> 109 sleeping：休眠进程数<br> 0 stopped：正在停止的进程数<br> 2 zombie：僵尸进程。不为0，需要进行排查<br> 如何排查僵尸进程？<br> top命令查看是否存有僵尸进程</p> 
+<p>Tasks: 111 total,   1 running, 109 sleeping,   0 stopped,   1 zombie<br> %Cpu(s):  1.8 us,  0.8 sy,  0.0 ni, 97.2 id,  0.2 wa,  0.0 hi,  0.0 si,  0.0 st<br> KiB Mem :  1881840 total,   101172 free,   872336 used,   908332 buff/cache<br> KiB Swap:        0 total,        0 free,        0 used.   823984 avail Mem<br><br> ps &amp; grep命令配合根据进程状态查询出僵尸进程的信息（kill无效时，尝试kill父进程）</p> 
+<p>[root@VM-24-5-centos ~]# ps -A -ostat,ppid,pid,cmd | grep -e '^[Zz]'<br> Z     1968 32070 [python] &lt;defunct&gt;<br> [root@VM-24-5-centos ~]# kill -9 32070<br> [root@VM-24-5-centos ~]# ps -A -ostat,ppid,pid,cmd | grep -e '^[Zz]'<br> Z     1968 32070 [python] &lt;defunct&gt;<br> [root@VM-24-5-centos ~]# kill -9 1968<br> [root@VM-24-5-centos ~]# ps -A -ostat,ppid,pid,cmd | grep -e '^[Zz]'<br> [root@VM-24-5-centos ~]#<br><br> top命令再次检测是否kill成功</p> 
+<p>top - 18:21:30 up 59 days, 16:25,  2 users,  load average: 0.06, 0.07, 0.06<br> Tasks: 110 total,   1 running, 109 sleeping,   0 stopped,   0 zombie<br> %Cpu(s):  0.5 us,  0.5 sy,  0.0 ni, 99.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st<br> KiB Mem :  1881840 total,   132628 free,   840740 used,   908472 buff/cache<br> KiB Swap:        0 total,        0 free,        0 used.   855580 avail Mem<br> 1<br> 3、第三行（CPU占用率相关，如果有多CPU会展示多行，交互式命令1可以查看）<br> 1.5 us：用户空间进程所占CPU百分比<br> 0.7 sy：内核空间进程所占CPU百分比<br> 0.0 ni：用户进程空间内变更过进程优先级的进程占用CPU百分比<br> 97.8 id：空闲CPU百分比<br> 0.0 wa：等待输入/输出的进程的占用CPU百分比<br> 0.0 hi：硬中断占用的CPU百分比<br> 0.0 si：软中断占用的CPU百分比<br> 0.0 st：虚拟机占用CPU百分比。当有虚拟机时，虚拟CPU实际等待CPU的时间百分比<br> 4、第四行（物理内存相关，按m键进入可视化显示）<br> KiB：计量单位，kilo binary bit的缩写，1KiB = 1024B，1Ki = 1024，1K = 1000<br> 1881840 total：总量<br> 80768 free：可使用<br> 873712 used：已使用<br> 927360 buff/cache：已缓存<br> 5、第五行（交换分析相关，按m键进入可视化显示）<br> 进程信息<br>   PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND<br>  3493 root      20   0  680300  14288   2076 S   0.7  0.8 250:01.91 barad_agent<br>  6493 root      20   0 1033692  36720  18684 S   0.7  2.0  23:03.33 YDService<br>  6816 root      20   0 1157576   6984   3168 S   0.3  0.4   0:29.40 sh<br>     1 root      20   0   51936   3904   2428 S   0.0  0.2  14:00.27 systemd<br>     2 root      20   0       0      0      0 S   0.0  0.0   0:02.17 kthreadd<br><br> top命令查询出的进程信息默认根据CPU占用率从高到低排序展示</p> 
+<p>PID：进程ID<br> USER：所属用户的用户名<br> PR：优先级（值越小优先级越高）<br> NI：优先级（值越小优先级越高）<br> VIRT：使用的虚拟内存的大小（单位KB）。VIRT=SWAP+RES，SWAP：（进程使用的虚拟内存中被换出的大小）<br> RES：使用的未被换出的物理内存的大小（单位KB）<br> SHR：共享内存大小（单位KB）<br> S：状态<br> %CPU：占用CPU的百分比<br> %MEM：总共占用内存的百分比<br> TIME+：总共占用的CPU时间<br> COMMAND：产生进程的命令<br> 交互式命令<br> 只列举了部分交互式命令</p> 
+<p>E：更改系统资源信息中的内存单位（KB、MB、GB、TB、PB）<br> e：更改进程信息中的内存单位（KB、MB、GB、TB、PB）<br> 数字1：显示所有cpu情况（默认只展示一条）<br> x：高亮显示根据哪一列熟悉进行排序<br> &lt;/&gt;：修改排序的字段（默认根据CPU）<br> n：输入每次要展示的进程信息行数<br> H：展示线程信息的开关<br> 常用参数（持续补充）<br> -d：top结果的更新速度，单位为秒<br> -n：设定显示top结果的次数，随后自动退出命令<br> -b：批处理模式，不进入交互式模式<br> -p：指定需要展示的进程ID<br> -H：显示线程信息（配合-p参数使用，类似ps命令的-T与H参数）<br> 实际应用（持续补充）<br> 1、查看top中的所有的进程信息</p> 
+<p>交互式中top命令只会展示部分进程信息，如果想要查看所有的进程信息，可以：</p> 
+<p>top -b -n &gt; out.log<br> 1<br> 将一次top的完整结果输出到文件中</p> 
+<p>2、查看进程的线程信息</p> 
+<p>top -H -p {PID}<br> ————————————————<br> 版权声明：本文为CSDN博主「码畜c」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。<br> 原文链接：https://blog.csdn.net/qq_38074398/article/details/128234354</p> 
+<p></p> 
+<h2>如何杀死一个线程</h2> 
+<p>转载来自<a href="https://blog.51cto.com/u_15338614/3571651" rel="nofollow" title="终止线程的四种方法_51CTO博客_终止线程的方法">终止线程的四种方法_51CTO博客_终止线程的方法</a></p> 
+<p>正常运行结束<br> 程序运行结束，线程自动结束。</p> 
+<h4>1.使用退出标志退出线程<br> 一般 run()方法执行完，线程就会正常结束，然而，常常有些线程是伺服线程。它们需要长时间的 运行，只有在外部某些条件满足的情况下，才能关闭这些线程。使用一个变量来控制循环，例如： 最直接的方法就是设一个 boolean 类型的标志，并通过设置这个标志为 true 或 false 来控制 while 循环是否退出，代码示例：</h4> 
+<p>public class ThreadSafe extends Thread {<!-- --><br>  public volatile boolean exit = false; <br>  public void run() { <br>  while (!exit){<!-- --><br>  //do something<br>  }<br>  } <br> }<br><br> 定义了一个退出标志 exit，当 exit 为 true 时，while 循环退出，exit 的默认值为 false.在定义 exit 时，使用了一个 Java 关键字 volatile，这个关键字的目的是使 exit 同步，也就是说在同一时刻只 能由一个线程来修改 exit 的值。</p> 
+<h4>2. Interrupt 方法结束线程<br> 使用 interrupt()方法来中断线程有两种情况：</h4> 
+<h4>1. 线程处于阻塞状态：如使用了 sleep,同步锁的 wait,socket 中的 receiver,accept 等方法时， 会使线程处于阻塞状态。当调用线程的 interrupt()方法时，会抛出 InterruptException 异常。 阻塞中的那个方法抛出这个异常，通过代码捕获该异常，然后 break 跳出循环状态，从而让 我们有机会结束这个线程的执行。通常很多人认为只要调用 interrupt 方法线程就会结束，实 际上是错的， 一定要先捕获 InterruptedException 异常之后通过 break 来跳出循环，才能正 常结束 run 方法。</h4> 
+<h4>2. 线程未处于阻塞状态：使用 isInterrupted()判断线程的中断标志来退出循环。当使用 interrupt()方法时，中断标志就会置 true，和使用自定义的标志来控制循环是一样的道理。</h4> 
+<p>调用interrupt()方法，仅仅只是在线程中打了一个停止的标记，并不是真的停止线程。</p> 
+<p>package com.zoo.lion.modules.test.test.thread.stopThread.two;</p> 
+<p>/**<br>  * @Author: xf<br>  * @Date: 2019/7/26 15:12<br>  * @Version 1.0<br>  */<br> public class MyThread extends Thread {<!-- --></p> 
+<p>    @Override<br>     public void run() {<!-- --><br>         for (int i = 0; i &lt; 500000; i++) {<!-- --><br>             System.out.println("i=" + (i + 1));<br>         }<br>     }<br> }<br><br> package com.zoo.lion.modules.test.test.thread.stopThread.two;</p> 
+<p>import java.util.concurrent.TimeUnit;</p> 
+<p>/**<br>  * @Author: xf<br>  * @Date: 2019/7/26 15:12<br>  * @Version 1.0<br>  */<br> public class Main {<!-- --><br>     public static void main(String[] args) {<!-- --><br>         try {<!-- --><br>             MyThread thread = new MyThread();<br>             thread.start();<br>             TimeUnit.SECONDS.sleep(2);<br>             thread.interrupt();<br>         } catch (InterruptedException e) {<!-- --><br>             System.out.println("main catch");<br>             e.printStackTrace();<br>         }</p> 
+<p>    }<br> }<br><br> 发现500000全部打印完毕，线程并没有停止。</p> 
+<p>1：停止线程（异常法）</p> 
+<p>package com.zoo.lion.modules.test.test.thread.stopThread.two;</p> 
+<p>/**<br>  * @Author: xf<br>  * @Date: 2019/7/26 15:12<br>  * @Version 1.0<br>  */<br> public class MyThread extends Thread {<!-- --></p> 
+<p>    @Override<br>     public void run() {<!-- --><br>         for (int i = 0; i &lt; 500000; i++) {<!-- --><br>             if (interrupted()) {<!-- --><br>                 System.out.println("已经是停止状态了!我要退出了!");<br>                 break;<br>             }<br>             System.out.println("i=" + (i + 1));<br>         }<br>         System.out.println("我被输出，如果此代码是for又继续运行，线程并未停止！");<br>     }<br> }</p> 
+<p>发现控制台打印</p> 
+<p>看得出来线程并没有真正的停止。解决如下</p> 
+<p>package com.zoo.lion.modules.test.test.thread.stopThread.two;</p> 
+<p>/**<br>  * @Author: xf<br>  * @Date: 2019/7/26 15:12<br>  * @Version 1.0<br>  */<br> public class MyThread extends Thread {<!-- --></p> 
+<p>    @Override<br>     public void run() {<!-- --><br>         try {<!-- --><br>             for (int i = 0; i &lt; 500000; i++) {<!-- --><br>                 if (interrupted()) {<!-- --><br>                     System.out.println("已经是停止状态了!我要退出了!");<br>                     throw new InterruptedException();//中断异常<br>                 }<br>                 System.out.println("i=" + (i + 1));<br>             }<br>             System.out.println("我在for下面");<br>         } catch (InterruptedException e) {<!-- --><br>             System.out.println("进MyThread.java类run方法中的catch了！");<br>             e.printStackTrace();<br>         }</p> 
+<p>    }<br> }</p> 
+<p><br> 2：在沉睡中停止线程</p> 
+<p>    @Override<br>     public void run() {<!-- --><br>         try {<!-- --><br>             System.out.println("run begin");<br>             Thread.sleep(200000);<br>             System.out.println("run end");<br>         } catch (InterruptedException e) {<!-- --><br>             System.out.println("在沉睡中被停止!进入catch!"+this.isInterrupted());<br>             e.printStackTrace();<br>         }</p> 
+<p>    }<br><br> stop 方法终止线程（线程不安全）(会释放当前对象持有的锁)<br> 程序中可以直接使用 thread.stop()来强行终止线程，但是 stop 方法是很危险的，就象突然关 闭计算机电源，而不是按正常程序关机一样，可能会产生不可预料的结果，不安全主要是： thread.stop()调用之后，创建子线程的线程就会抛出 ThreadDeatherror 的错误，并且会释放子 线程所持有的所有锁。一般任何进行加锁的代码块，都是为了保护数据的一致性，如果在调thread.stop()后导致了该线程所持有的所有锁的突然释放(不可控制)，那么被保护数据就有可能呈 现不一致性，其他线程在使用这些被破坏的数据时，有可能导致一些很奇怪的应用程序错误。因 此，并不推荐使用 stop 方法来终止线程。<br> -----------------------------------<br> ©著作权归作者所有：来自51CTO博客作者wx611f65369a431的原创作品，请联系作者获取转载授权，否则将追究法律责任<br> 终止线程的四种方法<br> https://blog.51cto.com/u_15338614/3571651</p> 
+<p></p> 
+<p>参考：<a href="https://www.jianshu.com/p/a4e91564d048" rel="nofollow" title=" 如何结束一个线程 - 简书"> 如何结束一个线程 - 简书</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0eb8d6d3b8b2900b731f889b0469b0cb/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Grid 网格响应式布局教程</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/14ce06e19e40900faa54885a1855894f/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">蓝桥杯嵌入式——RTC</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

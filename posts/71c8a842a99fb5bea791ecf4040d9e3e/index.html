@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Qt源码阅读(四) 事件循环 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Qt源码阅读(四) 事件循环" />
+<meta property="og:description" content="事件系统 文章为本人理解，如有理解不到位之处，烦请各位指正。🙋‍♂️
+文章目录 事件系统什么是事件循环？事件是如何产生的？事件是如何处理的？sendEventpostEvent 事件循环是怎么遍历的？事件过滤器夹带私货时间 Qt的事件循环是所有Qt开发者都无法避免的一个重要概念。因此，本篇博客将介绍Qt源码中与事件循环相关的部分，帮助读者更好地理解Qt事件循环的机制。
+在深入源码之前，先抛出几个问题。随后，我们将通过源码，逐一解析，揭开事件循环的面纱。
+事件循环是什么？事件是怎么产生的？事件是如何处理的？ 什么是事件循环？ 在ChatGPT💬上搜索到的概念是：
+在Qt中，事件循环是一种机制，用于处理各种异步事件。事件循环通过一个事件队列来管理和调度事件，当队列中有事件时，事件循环会从队列中依次取出事件并处理，直到队列为空或者事件循环被中断。
+事件的产生可以是用户输入、系统信号、网络请求、定时器等，Qt提供了一系列的事件处理函数和信号槽机制，可以方便地将这些事件与具体的操作相绑定。
+因此，Qt的事件循环机制是Qt应用程序实现异步响应和多线程编程的基础。
+个人理解，Qt的事件循环是通过一个队列来循环处理事件的机制。当队列中有事件时，事件循环会处理事件；如果队列中没有事件，则事件循环会阻塞等待。
+事件是如何产生的？ 事件的产生可以分为两种：
+程序外部产生：指系统产生的事件，例如鼠标按下（MouseButtonPress）、按键按下（KeyPress）等。Qt通过捕捉系统事件，将其封装成自己的QEvent类，再将事件发送出去。
+程序内部产生：指在代码中手动创建一个事件，然后通过sendEvent/postEvent将事件发送到事件循环中。其中，sendEvent是阻塞型的发送方式，会等待事件处理完成后再继续执行；而postEvent是非阻塞型的发送方式，会将事件放入事件队列中，并立即返回。
+事件是如何处理的？ 让我们通过一个流程图简单了解事件从发出到处理的过程。
+在接下来的解析中，我们将通过分析源代码，逐步验证流程图中的每个步骤。请各位读者耐心继续往下阅读😏
+下面我们将通过分析源码，来揭秘为什么sendEvent/postEvent是阻塞和非阻塞的、以及事件的处理流程。
+sendEvent 首先，我们看sendEvent：
+bool QCoreApplication::sendEvent(QObject *receiver, QEvent *event) { // sendEvent是阻塞调用 Q_TRACE(QCoreApplication_sendEvent, receiver, event, event-&gt;type()); if (event) event-&gt;spont = false; return notifyInternal2(receiver, event); } 可以看到，sendEvent是调用了notifyInternal2这个函数
+bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event) { ... // Qt enforces the rule that events can only be sent to objects in // the current thread, so receiver-&gt;d_func()-&gt;threadData is // equivalent to QThreadData::current(), just without the function // call overhead." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/71c8a842a99fb5bea791ecf4040d9e3e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-13T22:37:56+08:00" />
+<meta property="article:modified_time" content="2023-07-13T22:37:56+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Qt源码阅读(四) 事件循环</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="_1"></a>事件系统</h2> 
+<blockquote> 
+ <p>文章为本人理解，如有理解不到位之处，烦请各位指正。🙋‍♂️</p> 
+</blockquote> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_1" rel="nofollow">事件系统</a></li><li><ul><li><a href="#_15" rel="nofollow">什么是事件循环？</a></li><li><a href="#_27" rel="nofollow">事件是如何产生的？</a></li><li><a href="#_35" rel="nofollow">事件是如何处理的？</a></li><li><ul><li><a href="#sendEvent_41" rel="nofollow">sendEvent</a></li><li><a href="#postEvent_143" rel="nofollow">postEvent</a></li></ul> 
+   </li><li><a href="#_211" rel="nofollow">事件循环是怎么遍历的？</a></li><li><a href="#_415" rel="nofollow">事件过滤器</a></li><li><a href="#_499" rel="nofollow">夹带私货时间</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<p>Qt的事件循环是所有Qt开发者都无法避免的一个重要概念。因此，本篇博客将介绍Qt源码中与事件循环相关的部分，帮助读者更好地理解Qt事件循环的机制。</p> 
+<p>在深入源码之前，先抛出几个问题。随后，我们将通过源码，逐一解析，揭开事件循环的面纱。</p> 
+<ol><li>事件循环是什么？</li><li>事件是怎么产生的？</li><li>事件是如何处理的？</li></ol> 
+<h3><a id="_15"></a>什么是事件循环？</h3> 
+<p>在ChatGPT💬上搜索到的概念是：</p> 
+<p>在Qt中，事件循环是一种机制，用于<strong>处理各种异步事件</strong>。事件循环通过一个事件队列来管理和调度事件，<strong>当队列中有事件时，事件循环会从队列中依次取出事件并处理，直到队列为空或者事件循环被中断</strong>。</p> 
+<p>事件的产生可以是用户输入、系统信号、网络请求、定时器等，Qt提供了一系列的事件处理函数和信号槽机制，可以方便地将这些事件与具体的操作相绑定。</p> 
+<p>因此，Qt的事件循环机制是Qt应用程序实现异步响应和多线程编程的基础。</p> 
+<p>个人理解，Qt的事件循环是通过一个队列来循环处理事件的机制。当队列中有事件时，事件循环会处理事件；如果队列中没有事件，则事件循环会阻塞等待。</p> 
+<h3><a id="_27"></a>事件是如何产生的？</h3> 
+<p>事件的产生可以分为两种：</p> 
+<ol><li> <p><strong>程序外部产生</strong>：指系统产生的事件，例如鼠标按下（MouseButtonPress）、按键按下（KeyPress）等。Qt通过捕捉系统事件，将其封装成自己的QEvent类，再将事件发送出去。</p> </li><li> <p><strong>程序内部产生</strong>：指在代码中手动创建一个事件，然后通过<code>sendEvent</code>/<code>postEvent</code>将事件发送到事件循环中。其中，<code>sendEvent</code>是<strong>阻塞型</strong>的发送方式，会<strong>等待事件处理完成后再继续执行</strong>；而<code>postEvent</code>是<strong>非阻塞型</strong>的发送方式，会<strong>将事件放入事件队列中，并立即返回</strong>。</p> </li></ol> 
+<h3><a id="_35"></a>事件是如何处理的？</h3> 
+<p>让我们通过一个流程图简单了解事件从发出到处理的过程。<br>在接下来的解析中，我们将通过分析源代码，逐步验证流程图中的每个步骤。请各位读者耐心继续往下阅读😏<br><img src="https://images2.imgbox.com/65/0b/h6FvGqPI_o.png" alt="事件处理流程.png"></p> 
+<p>下面我们将通过分析源码，来揭秘<strong>为什么</strong><code>sendEvent</code><strong>/</strong><code>postEvent</code><strong>是阻塞和非阻塞的、以及事件的处理流程</strong>。</p> 
+<h4><a id="sendEvent_41"></a>sendEvent</h4> 
+<p>首先，我们看<code>sendEvent</code>：</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">bool</span> <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">sendEvent</span><span class="token punctuation">(</span>QObject <span class="token operator">*</span>receiver<span class="token punctuation">,</span> QEvent <span class="token operator">*</span>event<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token comment">// sendEvent是阻塞调用</span>
+    <span class="token function">Q_TRACE</span><span class="token punctuation">(</span>QCoreApplication_sendEvent<span class="token punctuation">,</span> receiver<span class="token punctuation">,</span> event<span class="token punctuation">,</span> event<span class="token operator">-&gt;</span><span class="token function">type</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>event<span class="token punctuation">)</span>
+        event<span class="token operator">-&gt;</span>spont <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> <span class="token function">notifyInternal2</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>可以看到，<code>sendEvent</code>是调用了<code>notifyInternal2</code>这个函数</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">bool</span> <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">notifyInternal2</span><span class="token punctuation">(</span>QObject <span class="token operator">*</span>receiver<span class="token punctuation">,</span> QEvent <span class="token operator">*</span>event<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+    <span class="token comment">// Qt enforces the rule that events can only be sent to objects in</span>
+    <span class="token comment">// the current thread, so receiver-&gt;d_func()-&gt;threadData is</span>
+    <span class="token comment">// equivalent to QThreadData::current(), just without the function</span>
+    <span class="token comment">// call overhead.</span>
+    <span class="token comment">// 事件只能在同一个线程被send</span>
+    QObjectPrivate <span class="token operator">*</span>d <span class="token operator">=</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    QThreadData <span class="token operator">*</span>threadData <span class="token operator">=</span> d<span class="token operator">-&gt;</span>threadData<span class="token punctuation">;</span>
+    QScopedScopeLevelCounter <span class="token function">scopeLevelCounter</span><span class="token punctuation">(</span>threadData<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>selfRequired<span class="token punctuation">)</span>
+        <span class="token keyword">return</span> <span class="token function">doNotify</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> self<span class="token operator">-&gt;</span><span class="token function">notify</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>进一步跟踪到其<code>doNotify</code>函数</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">static</span> <span class="token keyword">bool</span> <span class="token function">doNotify</span><span class="token punctuation">(</span>QObject <span class="token operator">*</span>receiver<span class="token punctuation">,</span> QEvent <span class="token operator">*</span>event<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>receiver <span class="token operator">==</span> <span class="token keyword">nullptr</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>                        <span class="token comment">// serious error</span>
+        <span class="token function">qWarning</span><span class="token punctuation">(</span><span class="token string">"QCoreApplication::notify: Unexpected null receiver"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifndef</span> <span class="token expression">QT_NO_DEBUG</span></span>
+	<span class="token comment">// 检查接受线程与当前是否同线程</span>
+    <span class="token class-name">QCoreApplicationPrivate</span><span class="token double-colon punctuation">::</span><span class="token function">checkReceiverThread</span><span class="token punctuation">(</span>receiver<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+
+	<span class="token comment">// QWidget类必须用QApplication</span>
+    <span class="token keyword">return</span> receiver<span class="token operator">-&gt;</span><span class="token function">isWidgetType</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">?</span> <span class="token boolean">false</span> <span class="token operator">:</span> <span class="token class-name">QCoreApplicationPrivate</span><span class="token double-colon punctuation">::</span><span class="token function">notify_helper</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>最后到了咱们这次分析的第一个重点——<strong>事件通知</strong>：<code>QCoreApplicationPrivate::notify_helper</code></p> 
+<pre><code class="prism language-cpp"><span class="token keyword">bool</span> <span class="token class-name">QCoreApplicationPrivate</span><span class="token double-colon punctuation">::</span><span class="token function">notify_helper</span><span class="token punctuation">(</span>QObject <span class="token operator">*</span>receiver<span class="token punctuation">,</span> QEvent <span class="token operator">*</span> event<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>通过分析这个函数，我们就可以大致知道事件处理的几个流程：</p> 
+<ol><li>判断<strong>QCoreApplication</strong>有没有安装事件过滤器，有就把信号发送到<strong>QCoreApplication</strong>所安装事件过滤器里，由事件过滤器对事件进行处理。</li></ol> 
+<pre><code class="prism language-cpp"><span class="token comment">// send to all application event filters (only does anything in the main thread)</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span>QCoreApplication<span class="token double-colon punctuation">::</span>self
+    <span class="token operator">&amp;&amp;</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>threadData<span class="token punctuation">.</span><span class="token function">loadRelaxed</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>thread<span class="token punctuation">.</span><span class="token function">loadAcquire</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token function">mainThread</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token operator">&amp;&amp;</span> QCoreApplication<span class="token double-colon punctuation">::</span>self<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span><span class="token function">sendThroughApplicationEventFilters</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    filtered <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> filtered<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol start="2"><li>如果<strong>QCoreApplication</strong>没有<strong>安装事件过滤器或者所安装的事件过滤器不处理</strong>，则判断<strong>事件接受对象有没有安装事件过滤器</strong>，有就将事件发送到事件过滤器去处理。</li></ol> 
+<pre><code class="prism language-cpp"><span class="token comment">// send to all receiver event filters</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">sendThroughObjectEventFilters</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    filtered <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> filtered<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>事件过滤器的具体分析，在后面会分析，现在我们先关注主要的流程。</p> 
+<ol start="3"><li>同样，如果事件过滤器不进行处理，则<strong>直接调用事件接受对象的</strong><code>**event**</code><strong>函数进行处理</strong>。因为是<strong>直接调用的对象的</strong><code>event</code><strong>，所以</strong><code>sendEvent</code><strong>函数是阻塞的</strong>。</li></ol> 
+<pre><code class="prism language-cpp">    <span class="token comment">// deliver the event</span>
+    <span class="token comment">// 直接调用对象的event函数，所以是阻塞的</span>
+    consumed <span class="token operator">=</span> receiver<span class="token operator">-&gt;</span><span class="token function">event</span><span class="token punctuation">(</span>event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> consumed<span class="token punctuation">;</span>
+</code></pre> 
+<br> 
+<h4><a id="postEvent_143"></a>postEvent</h4> 
+<br> 
+<p>在下面的分析过程中，我们将通过对<code>postEvent</code>函数的分析，来解释为<strong>什么这个函数是非阻塞的</strong>。</p> 
+<p>让我们对<code>postEvent</code>函数进行分析，以便解密其工作原理。</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">void</span> <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">postEvent</span><span class="token punctuation">(</span>QObject <span class="token operator">*</span>receiver<span class="token punctuation">,</span> QEvent <span class="token operator">*</span>event<span class="token punctuation">,</span> <span class="token keyword">int</span> priority<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// ...</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol><li><strong>首先判断事件接收对象是否为空</strong></li></ol> 
+<pre><code class="prism language-cpp"><span class="token comment">// 事件的接收者不能为空</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span>receiver <span class="token operator">==</span> <span class="token keyword">nullptr</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token function">qWarning</span><span class="token punctuation">(</span><span class="token string">"QCoreApplication::postEvent: Unexpected null receiver"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">delete</span> event<span class="token punctuation">;</span>
+    <span class="token keyword">return</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol start="2"><li>将事件接收对象所在线程的post事件列表上锁，如果已经被锁了，就把事件删除掉，并返回，防止泄露。</li></ol> 
+<pre><code class="prism language-cpp"><span class="token comment">// 对事件接受对象所在线程的事件处理列表上锁</span>
+<span class="token keyword">auto</span> locker <span class="token operator">=</span> <span class="token class-name">QCoreApplicationPrivate</span><span class="token double-colon punctuation">::</span><span class="token function">lockThreadPostEventList</span><span class="token punctuation">(</span>receiver<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>locker<span class="token punctuation">.</span>threadData<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// posting during destruction? just delete the event to prevent a leak</span>
+    <span class="token keyword">delete</span> event<span class="token punctuation">;</span>
+    <span class="token keyword">return</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol start="3"><li>将一些可以压缩的事件进行压缩，及多个事件压缩成只推送最后的一个事件。<strong>Qt界面的</strong><code>update</code><strong>就是这个操作，为了防止多次刷新导致卡顿，短时间内多次的调用</strong><code>update</code><strong>可能只会刷新一次</strong></li></ol> 
+<pre><code class="prism language-cpp"><span class="token comment">// if this is one of the compressible events, do compression</span>
+<span class="token comment">// 将重复的事件，进行压缩</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span>receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>postedEvents
+    <span class="token operator">&amp;&amp;</span> self <span class="token operator">&amp;&amp;</span> self<span class="token operator">-&gt;</span><span class="token function">compressEvent</span><span class="token punctuation">(</span>event<span class="token punctuation">,</span> receiver<span class="token punctuation">,</span> <span class="token operator">&amp;</span>data<span class="token operator">-&gt;</span>postEventList<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token function">Q_TRACE</span><span class="token punctuation">(</span>QCoreApplication_postEvent_event_compressed<span class="token punctuation">,</span> receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol start="4"><li>将事件插入接收对象<strong>所在线程的post事件列表</strong>中，并唤醒线程的事件调度器，来进行事件的处理。所以<code>postEvent</code>是非阻塞的，<strong>因为其只是把事件插入了线程的事件列表，唤醒事件调度器之后便返回</strong>。</li></ol> 
+<pre><code class="prism language-cpp">    <span class="token comment">// ...</span>
+
+	<span class="token comment">// 将事件加入事件队列</span>
+    data<span class="token operator">-&gt;</span>postEventList<span class="token punctuation">.</span><span class="token function">addEvent</span><span class="token punctuation">(</span><span class="token function">QPostEvent</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">,</span> priority<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    eventDeleter<span class="token punctuation">.</span><span class="token function">take</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    event<span class="token operator">-&gt;</span>posted <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token operator">++</span>receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>postedEvents<span class="token punctuation">;</span>
+    data<span class="token operator">-&gt;</span>canWait <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    locker<span class="token punctuation">.</span><span class="token function">unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token comment">// 唤醒事件分发器</span>
+    QAbstractEventDispatcher<span class="token operator">*</span> dispatcher <span class="token operator">=</span> data<span class="token operator">-&gt;</span>eventDispatcher<span class="token punctuation">.</span><span class="token function">loadAcquire</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>dispatcher<span class="token punctuation">)</span>
+        dispatcher<span class="token operator">-&gt;</span><span class="token function">wakeUp</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<br> 
+<h3><a id="_211"></a>事件循环是怎么遍历的？</h3> 
+<br> 
+<p>在上面的内容中，我们只是通过跟随<code>sendEvent</code>来了解了<strong>事件处理的流程</strong>，但是<code>postEvent</code>将事件插入事件队列中，事件循环又是<strong>如何去循环运转</strong>的呢？</p> 
+<p>让我们从常见的<code>return a.exec()</code>开始，深入源码，详细了解事件循环的运行机制吧😶‍🌫️！</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token keyword">int</span> argc<span class="token punctuation">,</span> <span class="token keyword">char</span> <span class="token operator">*</span>argv<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    QApplication <span class="token function">a</span><span class="token punctuation">(</span>argc<span class="token punctuation">,</span> argv<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    MainWindow w<span class="token punctuation">;</span>
+    w<span class="token punctuation">.</span><span class="token function">show</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> a<span class="token punctuation">.</span><span class="token function">exec</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>上面是一个经典的QtGUI程序的main函数，调用了<code>a.exec()</code></p> 
+<br> 
+<pre><code class="prism language-cpp"><span class="token keyword">int</span> <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">exec</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+    
+    threadData<span class="token operator">-&gt;</span>quitNow <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    QEventLoop eventLoop<span class="token punctuation">;</span>
+    self<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>in_exec <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    self<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>aboutToQuitEmitted <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token keyword">int</span> returnCode <span class="token operator">=</span> eventLoop<span class="token punctuation">.</span><span class="token function">exec</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>而看<code>QApplication::exec</code>的源码，实际上就是<strong>开启了一个事件循环</strong>（<code>QEventLoop</code>）。同样，我们去看<code>QEventLoop::exec</code>的源码，进一步了解<strong>处理事件队列的步骤</strong>是什么。<br> <br></p> 
+<pre><code class="prism language-cpp"><span class="token keyword">int</span> <span class="token class-name">QEventLoop</span><span class="token double-colon punctuation">::</span><span class="token function">exec</span><span class="token punctuation">(</span>ProcessEventsFlags flags<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// ...</span>
+
+    <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token operator">!</span>d<span class="token operator">-&gt;</span>exit<span class="token punctuation">.</span><span class="token function">loadAcquire</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token function">processEvents</span><span class="token punctuation">(</span>flags <span class="token operator">|</span> WaitForMoreEvents <span class="token operator">|</span> EventLoopExec<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    ref<span class="token punctuation">.</span>exceptionCaught <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> d<span class="token operator">-&gt;</span>returnCode<span class="token punctuation">.</span><span class="token function">loadRelaxed</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>上面可以看到，<code>QEvenLoop::exec</code>里，是一个<code>while</code>循环，循环的去调用<code>processEvent</code>，而且设置了<code>WaitForMoreEvents</code>就是说，如果没有事件，就阻塞等待。</p> 
+<br> 
+<pre><code class="prism language-cpp"><span class="token keyword">void</span> <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">processEvents</span><span class="token punctuation">(</span>QEventLoop<span class="token double-colon punctuation">::</span>ProcessEventsFlags flags<span class="token punctuation">,</span> <span class="token keyword">int</span> ms<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    QThreadData <span class="token operator">*</span>data <span class="token operator">=</span> <span class="token class-name">QThreadData</span><span class="token double-colon punctuation">::</span><span class="token function">current</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>data<span class="token operator">-&gt;</span><span class="token function">hasEventDispatcher</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span><span class="token punctuation">;</span>
+    QElapsedTimer start<span class="token punctuation">;</span>
+    start<span class="token punctuation">.</span><span class="token function">start</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">while</span> <span class="token punctuation">(</span>data<span class="token operator">-&gt;</span>eventDispatcher<span class="token punctuation">.</span><span class="token function">loadRelaxed</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span><span class="token function">processEvents</span><span class="token punctuation">(</span>flags <span class="token operator">&amp;</span> <span class="token operator">~</span>QEventLoop<span class="token double-colon punctuation">::</span>WaitForMoreEvents<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>start<span class="token punctuation">.</span><span class="token function">elapsed</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&gt;</span> ms<span class="token punctuation">)</span>
+            <span class="token keyword">break</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>阅读<code>processEvent</code>，其调用了线程的事件调度器<code>QAbstrctEventDispatcher</code>，而这个类是一个抽象基类，根据不同的平台，有不同的实现，我们以windows下(<code>QEventDispatcherWin32</code>)的为例，接着分析事件处理的流程。<br> <br></p> 
+<pre><code class="prism language-cpp"><span class="token keyword">bool</span> <span class="token class-name">QEventDispatcherWin32</span><span class="token double-colon punctuation">::</span><span class="token function">processEvents</span><span class="token punctuation">(</span>QEventLoop<span class="token double-colon punctuation">::</span>ProcessEventsFlags flags<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token function">Q_D</span><span class="token punctuation">(</span>QEventDispatcherWin32<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+
+    <span class="token comment">// To prevent livelocks, send posted events once per iteration.</span>
+    <span class="token comment">// QCoreApplication::sendPostedEvents() takes care about recursions.</span>
+    <span class="token function">sendPostedEvents</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span> <span class="token class-name">QEventDispatcherWin32</span><span class="token double-colon punctuation">::</span><span class="token function">sendPostedEvents</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token function">Q_D</span><span class="token punctuation">(</span>QEventDispatcherWin32<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>d<span class="token operator">-&gt;</span>sendPostedEventsTimerId <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span>
+        <span class="token function">KillTimer</span><span class="token punctuation">(</span>d<span class="token operator">-&gt;</span>internalHwnd<span class="token punctuation">,</span> d<span class="token operator">-&gt;</span>sendPostedEventsTimerId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    d<span class="token operator">-&gt;</span>sendPostedEventsTimerId <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// Allow posting WM_QT_SENDPOSTEDEVENTS message.</span>
+    d<span class="token operator">-&gt;</span>wakeUps<span class="token punctuation">.</span><span class="token function">storeRelaxed</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token class-name">QCoreApplicationPrivate</span><span class="token double-colon punctuation">::</span><span class="token function">sendPostedEvents</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> d<span class="token operator">-&gt;</span>threadData<span class="token punctuation">.</span><span class="token function">loadRelaxed</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>可以看到，事件调度器兜兜转转最终还是调用了<code>QCoreApplication</code>的<code>sendPostEvents</code><br> <br></p> 
+<pre><code class="prism language-cpp"><span class="token keyword">void</span> <span class="token class-name">QCoreApplicationPrivate</span><span class="token double-colon punctuation">::</span><span class="token function">sendPostedEvents</span><span class="token punctuation">(</span>QObject <span class="token operator">*</span>receiver<span class="token punctuation">,</span> <span class="token keyword">int</span> event_type<span class="token punctuation">,</span>
+                                               QThreadData <span class="token operator">*</span>data<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token comment">// ...</span>
+    
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>receiver <span class="token operator">&amp;&amp;</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>threadData <span class="token operator">!=</span> data<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">qWarning</span><span class="token punctuation">(</span><span class="token string">"QCoreApplication::sendPostedEvents: Cannot send "</span>
+                 <span class="token string">"posted events for objects in another thread"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+
+
+    <span class="token keyword">while</span> <span class="token punctuation">(</span>i <span class="token operator">&lt;</span> data<span class="token operator">-&gt;</span>postEventList<span class="token punctuation">.</span><span class="token function">size</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+       <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+
+        <span class="token comment">// first, we diddle the event so that we can deliver</span>
+        <span class="token comment">// it, and that no one will try to touch it later.</span>
+        pe<span class="token punctuation">.</span>event<span class="token operator">-&gt;</span>posted <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+        QEvent <span class="token operator">*</span>e <span class="token operator">=</span> pe<span class="token punctuation">.</span>event<span class="token punctuation">;</span>
+        QObject <span class="token operator">*</span> r <span class="token operator">=</span> pe<span class="token punctuation">.</span>receiver<span class="token punctuation">;</span>
+
+        <span class="token operator">--</span>r<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>postedEvents<span class="token punctuation">;</span>
+        <span class="token function">Q_ASSERT</span><span class="token punctuation">(</span>r<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>postedEvents <span class="token operator">&gt;=</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// next, update the data structure so that we're ready</span>
+        <span class="token comment">// for the next event.</span>
+        <span class="token generic-function"><span class="token function">const_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>QPostEvent <span class="token operator">&amp;</span><span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span>pe<span class="token punctuation">)</span><span class="token punctuation">.</span>event <span class="token operator">=</span> <span class="token keyword">nullptr</span><span class="token punctuation">;</span>
+
+        locker<span class="token punctuation">.</span><span class="token function">unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">const</span> <span class="token keyword">auto</span> relocker <span class="token operator">=</span> <span class="token function">qScopeGuard</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token operator">&amp;</span>locker<span class="token punctuation">]</span> <span class="token punctuation">{<!-- --></span> locker<span class="token punctuation">.</span><span class="token function">lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        QScopedPointer<span class="token operator">&lt;</span>QEvent<span class="token operator">&gt;</span> <span class="token function">event_deleter</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// will delete the event (with the mutex unlocked)</span>
+
+        <span class="token comment">// after all that work, it's time to deliver the event.</span>
+        <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">sendEvent</span><span class="token punctuation">(</span>r<span class="token punctuation">,</span> e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// careful when adding anything below this point - the</span>
+        <span class="token comment">// sendEvent() call might invalidate any invariants this</span>
+        <span class="token comment">// function depends on.</span>
+    <span class="token punctuation">}</span>
+
+    cleanup<span class="token punctuation">.</span>exceptionCaught <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>我们一个一个的分块分析：</p> 
+<ol><li>判断是否在一个线程</li></ol> 
+<pre><code class="prism language-cpp"><span class="token keyword">if</span> <span class="token punctuation">(</span>receiver <span class="token operator">&amp;&amp;</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>threadData <span class="token operator">!=</span> data<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token function">qWarning</span><span class="token punctuation">(</span><span class="token string">"QCoreApplication::sendPostedEvents: Cannot send "</span>
+             <span class="token string">"posted events for objects in another thread"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<br> 
+<ol start="2"><li>将事件发送出去(<code>sendEvent</code>)</li></ol> 
+<pre><code class="prism language-cpp"><span class="token keyword">while</span> <span class="token punctuation">(</span>i <span class="token operator">&lt;</span> data<span class="token operator">-&gt;</span>postEventList<span class="token punctuation">.</span><span class="token function">size</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+       <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+
+        <span class="token comment">// first, we diddle the event so that we can deliver</span>
+        <span class="token comment">// it, and that no one will try to touch it later.</span>
+        pe<span class="token punctuation">.</span>event<span class="token operator">-&gt;</span>posted <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+        QEvent <span class="token operator">*</span>e <span class="token operator">=</span> pe<span class="token punctuation">.</span>event<span class="token punctuation">;</span>
+        QObject <span class="token operator">*</span> r <span class="token operator">=</span> pe<span class="token punctuation">.</span>receiver<span class="token punctuation">;</span>
+
+        <span class="token operator">--</span>r<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>postedEvents<span class="token punctuation">;</span>
+        <span class="token function">Q_ASSERT</span><span class="token punctuation">(</span>r<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>postedEvents <span class="token operator">&gt;=</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// next, update the data structure so that we're ready</span>
+        <span class="token comment">// for the next event.</span>
+        <span class="token generic-function"><span class="token function">const_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>QPostEvent <span class="token operator">&amp;</span><span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span>pe<span class="token punctuation">)</span><span class="token punctuation">.</span>event <span class="token operator">=</span> <span class="token keyword">nullptr</span><span class="token punctuation">;</span>
+
+        locker<span class="token punctuation">.</span><span class="token function">unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">const</span> <span class="token keyword">auto</span> relocker <span class="token operator">=</span> <span class="token function">qScopeGuard</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token operator">&amp;</span>locker<span class="token punctuation">]</span> <span class="token punctuation">{<!-- --></span> locker<span class="token punctuation">.</span><span class="token function">lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        QScopedPointer<span class="token operator">&lt;</span>QEvent<span class="token operator">&gt;</span> <span class="token function">event_deleter</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// will delete the event (with the mutex unlocked)</span>
+
+        <span class="token comment">// after all that work, it's time to deliver the event.</span>
+        <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">sendEvent</span><span class="token punctuation">(</span>r<span class="token punctuation">,</span> e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// careful when adding anything below this point - the</span>
+        <span class="token comment">// sendEvent() call might invalidate any invariants this</span>
+        <span class="token comment">// function depends on.</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<p><br>可以看到，核心还是<strong>调用</strong><code>sendEvent</code><strong>将事件发送出去</strong>，而前面我们对<code>sendEvent</code>的源码分析我们可以看到，<strong>事件先是经过事件过滤器，再经过对象的event函数，来进行事件的处理</strong>。</p> 
+<p>所以，下面我们将介绍：<strong>事件过滤器</strong></p> 
+<h3><a id="_415"></a>事件过滤器</h3> 
+<p>在实际应用中，我们经常要将某一个窗口部件的某个事件如鼠标滑轮滚动拦截，然后执行我们自己想要的操作。这个时候，我们就可以用到<strong>事件过滤器(</strong><code>EventFilter</code>**) **</p> 
+<p>首先，我们需要自己编写一个<code>eventFilter</code>函数，</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">bool</span> <span class="token class-name">Class</span><span class="token double-colon punctuation">::</span><span class="token function">eventFilter</span><span class="token punctuation">(</span>QObject<span class="token operator">*</span> watcher<span class="token punctuation">,</span> QEvent<span class="token operator">*</span> event<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//以过滤鼠标滚轮事件为例</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>object <span class="token operator">==</span> m_watcherObject <span class="token operator">&amp;&amp;</span> event<span class="token operator">-&gt;</span><span class="token function">type</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> QEvent<span class="token double-colon punctuation">::</span>Wheel<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    	<span class="token comment">// do something</span>
+        <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>       
+    <span class="token punctuation">}</span>
+
+    <span class="token class-name">QWidget</span><span class="token double-colon punctuation">::</span><span class="token function">eventFilter</span><span class="token punctuation">(</span>watcher<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<br> 
+<p>然后，我们需要为要拦截的某个窗口部件，安装事件过滤器</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">void</span> <span class="token class-name">Class</span><span class="token double-colon punctuation">::</span><span class="token function">initUI</span><span class="token punctuation">(</span><span class="token punctuation">)</span> 
+<span class="token punctuation">{<!-- --></span>
+	QWidget<span class="token operator">*</span> m_watcherObject <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token function">QWidget</span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token comment">// 为对象安装一个事件过滤器</span>
+	m_watcherObject<span class="token operator">-&gt;</span><span class="token function">installEventFilterr</span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token function">initUI</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<br> 
+<p>那么一个对象安装的多个事件过滤器，会以什么样的顺序触发呢？我们在帮助文档中可以看到：<br><br> <strong>后安装的事件过滤器会先触发</strong><br><br> 这一点，我们可以在源码里得到佐证:</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">void</span> <span class="token class-name">QObject</span><span class="token double-colon punctuation">::</span><span class="token function">installEventFilter</span><span class="token punctuation">(</span>QObject <span class="token operator">*</span>obj<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token function">Q_D</span><span class="token punctuation">(</span>QObject<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>obj<span class="token punctuation">)</span>
+        <span class="token keyword">return</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>d<span class="token operator">-&gt;</span>threadData <span class="token operator">!=</span> obj<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>threadData<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">qWarning</span><span class="token punctuation">(</span><span class="token string">"QObject::installEventFilter(): Cannot filter events for objects in a different thread."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>d<span class="token operator">-&gt;</span>extraData<span class="token punctuation">)</span>
+        d<span class="token operator">-&gt;</span>extraData <span class="token operator">=</span> <span class="token keyword">new</span> QObjectPrivate<span class="token double-colon punctuation">::</span>ExtraData<span class="token punctuation">;</span>
+
+    <span class="token comment">// clean up unused items in the list</span>
+    d<span class="token operator">-&gt;</span>extraData<span class="token operator">-&gt;</span>eventFilters<span class="token punctuation">.</span><span class="token function">removeAll</span><span class="token punctuation">(</span><span class="token punctuation">(</span>QObject<span class="token operator">*</span><span class="token punctuation">)</span><span class="token keyword">nullptr</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    d<span class="token operator">-&gt;</span>extraData<span class="token operator">-&gt;</span>eventFilters<span class="token punctuation">.</span><span class="token function">removeAll</span><span class="token punctuation">(</span>obj<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    d<span class="token operator">-&gt;</span>extraData<span class="token operator">-&gt;</span>eventFilters<span class="token punctuation">.</span><span class="token function">prepend</span><span class="token punctuation">(</span>obj<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>可以清楚的看到，事件过滤器，是以<code>prepend</code>的形式被添加进事件过滤器列表的。<br> <br></p> 
+<p>在<code>QCoreApplicationPrivate::sendThroughObjectEventFilters</code>中，则是遍历事件过滤器列表。</p> 
+<pre><code class="prism language-cpp">
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>receiver <span class="token operator">!=</span> <span class="token class-name">QCoreApplication</span><span class="token double-colon punctuation">::</span><span class="token function">instance</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>extraData<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>extraData<span class="token operator">-&gt;</span>eventFilters<span class="token punctuation">.</span><span class="token function">size</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token operator">++</span>i<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            QObject <span class="token operator">*</span>obj <span class="token operator">=</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>extraData<span class="token operator">-&gt;</span>eventFilters<span class="token punctuation">.</span><span class="token function">at</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>obj<span class="token punctuation">)</span>
+                <span class="token keyword">continue</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>obj<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>threadData <span class="token operator">!=</span> receiver<span class="token operator">-&gt;</span><span class="token function">d_func</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-&gt;</span>threadData<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token function">qWarning</span><span class="token punctuation">(</span><span class="token string">"QCoreApplication: Object event filter cannot be in a different thread."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">continue</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>obj<span class="token operator">-&gt;</span><span class="token function">eventFilter</span><span class="token punctuation">(</span>receiver<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">)</span>
+                <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+</code></pre> 
+<br> 
+<p>那么，当有鼠标滚轮事件触发的时候，我们可以看到<code>sendEvent</code>会先走到事件过滤器里**，如果**<code>eventFilter</code><strong>返回一个true，那么事件就不会被继续派发，否则，将会将事件发送到其他的事件过滤器里进行处理，如果其他的事件过滤器均对该事件不进行处理，那么事件将会继续往下派发，走到事件的处理函数</strong><code>event</code><br> <br></p> 
+<h3><a id="_499"></a>夹带私货时间</h3> 
+<ol><li>之前有说到<code>processEvent</code>，添加一个小经验。当我们有时候不得不在主线程循环执行很耗时的操作的时候，这个时候，界面就会刷新不过来，就会导致界面卡顿，影响使用。但是，我们可以在这个循环里，手动调用<code>qApp-&gt;processEvent()</code>，这样就可以<strong>手动调用处理掉所有的事件，就可以解决卡顿的问题</strong>。</li></ol> 
+<br> 
+<blockquote> 
+ <p>创作不易，如果对您有帮助，点赞、关注、收藏支持一下！不甚感激！😊</p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7f8e1576ccad1679b07a82c0fb8af2d8/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">mysql查询结果返回e9</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/2a3988b3d4df10e11c42f3cc7e26bd76/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">mysql更新关联字段问题</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

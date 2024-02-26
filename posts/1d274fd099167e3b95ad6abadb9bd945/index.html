@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MySQL设置远程登录（为root用户设置远程登陆权限） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MySQL设置远程登录（为root用户设置远程登陆权限）" />
+<meta property="og:description" content="MySQL8以前的版本 如果是8以前的版本可以使用
+-- GRANT privileges ON database_name.table_name TO &#39;username&#39;@&#39;hostname&#39; IDENTIFIED BY &#39;password&#39;; -- privileges表示授予的权限，database_name和table_name表示要授权的数据库和表名，username和hostname表示要授权的用户和主机名，password表示用户的密码 GRANT ALL PRIVILEGES ON *.* TO &#39;root&#39;@&#39;%&#39; IDENTIFIED BY &#39;123456&#39; WITH GRANT OPTION; -- 刷新权限 FLUSH PRIVILEGES; 重启MySQL服务，此时应当可以连接成功。
+MySQL8及以上版本 问题 在MySQL8之后，使用 GRANT 命令的使用不会默认创建新账户，所以如果你执行上面的语句显示
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near &#39;IDENTIFIED BY &#39;123456&#39; WITH GRANT OPTION&#39; at line 1 恭喜你，你应当使用的是MySQL8的版本。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/1d274fd099167e3b95ad6abadb9bd945/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-05-25T15:10:58+08:00" />
+<meta property="article:modified_time" content="2023-05-25T15:10:58+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MySQL设置远程登录（为root用户设置远程登陆权限）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2>MySQL8以前的版本</h2> 
+<p>如果是8以前的版本可以使用</p> 
+<pre>-- GRANT privileges ON database_name.table_name TO 'username'@'hostname' IDENTIFIED BY 'password';
+-- privileges表示授予的权限，database_name和table_name表示要授权的数据库和表名，username和hostname表示要授权的用户和主机名，password表示用户的密码
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY '123456' WITH GRANT OPTION;
+-- 刷新权限
+FLUSH PRIVILEGES;</pre> 
+<p>重启MySQL服务，此时应当可以连接成功。</p> 
+<p></p> 
+<h2>MySQL8及以上版本</h2> 
+<h3>问题</h3> 
+<p>在MySQL8之后，使用 <code>GRANT</code> 命令的使用不会默认创建新账户，所以如果你执行上面的语句显示</p> 
+<pre>ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'IDENTIFIED BY '123456' WITH GRANT OPTION' at line 1</pre> 
+<p>恭喜你，你应当使用的是MySQL8的版本。</p> 
+<p></p> 
+<h3>解决</h3> 
+<p>既然问题是使用<code>GRANT</code>时不会创建新账户，那我们先新建一下就好了。</p> 
+<pre>-- 创建'root'@'%'账户
+CREATE USER 'root'@'%' IDENTIFIED BY '123456';
+-- 给'root'@'%'账户设置权限
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%';
+-- 刷新权限
+flush privileges;</pre> 
+<p>此时，应当有两个root账户</p> 
+<pre>use mysql;
+select host, user, authentication_string, plugin from user;</pre> 
+<p>应该可以看到有两个root账户，一个是<code>'root'@'localhost'</code>和<code>'root'@'%'</code>。</p> 
+<blockquote> 
+ <p>看一下两个账号的加密插件是不是caching_sha2_password，至于为什么要看，具体原因往下看。</p> 
+</blockquote> 
+<p>这次应该可以正常连接了。</p> 
+<p></p> 
+<p>如果连接的时候显示<code>plugin caching_sha2_password could not be loaded</code>，那我们就需要改一下加密插件了。</p> 
+<p>方法一：</p> 
+<blockquote> 
+ <p>这种方法应当在创建'root'@'%'之前设置，不然就使用第二种更加方便。</p> 
+ <p>可以理解为，</p> 
+ <p>方法一是为之后所有新用户指定加密插件，</p> 
+ <p>方法二是修改指定一个用户的加密插件。</p> 
+</blockquote> 
+<p>修改my.ini文件，在[mysqld]下面新增</p> 
+<pre>default_authentication_plugin=mysql_native_password</pre> 
+<p>方法二：</p> 
+<pre>alter user 'root'@'%' identified with mysql_native_password by '123456';</pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/062f390966e7287011e51b30634ed589/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">如何查看cpu核数以及线程数</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3b1ecfb9e5e2b349d757f06244953db4/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Windows&amp;Linux共享文件夹之利用虚拟机VM创建共享文件夹</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

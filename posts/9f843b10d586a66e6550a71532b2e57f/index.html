@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>13.5-“制作一款私有IAP串口下载小工具”之STM32的Bootloader代码编写（包含源码） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="13.5-“制作一款私有IAP串口下载小工具”之STM32的Bootloader代码编写（包含源码）" />
+<meta property="og:description" content="一、开发环境与工具 STM32CubeMX、TrueSTUDIO、J-Flash V6.32f
+芯片：STM32L072KBUx
+二、使用CubeMx新建工程与配置说明 使用CubeMX通过芯片型号新建工程。需要配置如下内容：
+配置系统时钟下载程序的SWD口一个定时器（开启中断）一个串口（开启接收中断） 配置过程及详细参数如以下截图所示：
+注意：只要能实现同样功能即可，不强制必须使用串口1或定时器7。
+三、通信协议构架代码 在单片中需要接收来自上位机的数据，并安装协议规定格式反馈数据。比上位机端简单一些。
+把串口接收到的每1byte数据，依次传递给以下这个“协议识别函数”来进行“封包”识别：
+void APP_UartProcess(uint8_t uart_data) { if(IsStartRecvCommand == true) { UartRxCache[UartRxCacheIndex&#43;&#43;] = uart_data; uint16_t TempCacheLen = UartRxCacheIndex; if(TempCacheLen &gt; 4 &amp;&amp; UartRxCache[TempCacheLen - 4] == TAIL[0] &amp;&amp; UartRxCache[TempCacheLen - 3] == TAIL[1] &amp;&amp; UartRxCache[TempCacheLen - 2] == TAIL[2] &amp;&amp; UartRxCache[TempCacheLen - 1] == TAIL[3] &amp;&amp; UartRxCache[sizeof (HEAD)] &#43; sizeof (HEAD) &#43; sizeof (TAIL) == TempCacheLen //check pkg len ) { //检测到一包接收完成 ProcessAFinishedPackage(); UartRxCacheIndex = 0; IsStartRecvCommand = false; } } else if(uart_data == HEAD[0] &amp;&amp; IsStartRecvCommand == false) { //only receiving command when start with a head IsStartRecvCommand = true; UartRxCache[UartRxCacheIndex&#43;&#43;] = uart_data; } } 当单片机需要给上位机反馈命令的时候，使用以下函数计算出“反馈封包”：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9f843b10d586a66e6550a71532b2e57f/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-08-05T23:59:41+08:00" />
+<meta property="article:modified_time" content="2020-08-05T23:59:41+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">13.5-“制作一款私有IAP串口下载小工具”之STM32的Bootloader代码编写（包含源码）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>一、开发环境与工具</h3> 
+<p>STM32CubeMX、TrueSTUDIO、J-Flash V6.32f<br> 芯片：STM32L072KBUx</p> 
+<h3><a id="CubeMx_4"></a>二、使用CubeMx新建工程与配置说明</h3> 
+<p>使用CubeMX通过芯片型号新建工程。需要配置如下内容：</p> 
+<ul><li>配置系统时钟</li><li>下载程序的SWD口</li><li>一个定时器（开启中断）</li><li>一个串口（开启接收中断）</li></ul> 
+<p>配置过程及详细参数如以下截图所示：<br> 注意：只要能实现同样功能即可，不强制必须使用串口1或定时器7。<br> <img src="https://images2.imgbox.com/32/d5/mclRsdhC_o.png" alt="在这里插入图片描述" width="600" height="300"><br> <img src="https://images2.imgbox.com/6b/39/wpQVAbAm_o.png" alt="在这里插入图片描述" width="300" height="180"><br> <img src="https://images2.imgbox.com/22/65/xUtFeggX_o.png" alt="在这里插入图片描述" width="300" height="400"><br> <img src="https://images2.imgbox.com/97/a5/exsKcwKo_o.png" alt="在这里插入图片描述" width="300" height="240"><br> <img src="https://images2.imgbox.com/6f/2a/5cBhAJOf_o.png" alt="在这里插入图片描述" width="300" height="400"><img src="https://images2.imgbox.com/8a/76/9ZDUY0Br_o.png" alt="在这里插入图片描述" width="300" height="260"></p> 
+<h3><a id="_18"></a>三、通信协议构架代码</h3> 
+<p>在单片中需要接收来自上位机的数据，并安装协议规定格式反馈数据。比上位机端简单一些。<br> 把串口接收到的每1byte数据，依次传递给以下这个“协议识别函数”来进行“封包”识别：</p> 
+<pre><code class="prism language-c"><span class="token keyword">void</span> <span class="token function">APP_UartProcess</span><span class="token punctuation">(</span>uint8_t uart_data<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+	<span class="token keyword">if</span><span class="token punctuation">(</span>IsStartRecvCommand <span class="token operator">==</span> true<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		UartRxCache<span class="token punctuation">[</span>UartRxCacheIndex<span class="token operator">++</span><span class="token punctuation">]</span> <span class="token operator">=</span> uart_data<span class="token punctuation">;</span>
+
+		uint16_t TempCacheLen <span class="token operator">=</span> UartRxCacheIndex<span class="token punctuation">;</span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>TempCacheLen <span class="token operator">&gt;</span> <span class="token number">4</span> <span class="token operator">&amp;&amp;</span>
+				UartRxCache<span class="token punctuation">[</span>TempCacheLen <span class="token operator">-</span> <span class="token number">4</span><span class="token punctuation">]</span> <span class="token operator">==</span> TAIL<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span>
+				UartRxCache<span class="token punctuation">[</span>TempCacheLen <span class="token operator">-</span> <span class="token number">3</span><span class="token punctuation">]</span> <span class="token operator">==</span> TAIL<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span>
+				UartRxCache<span class="token punctuation">[</span>TempCacheLen <span class="token operator">-</span> <span class="token number">2</span><span class="token punctuation">]</span> <span class="token operator">==</span> TAIL<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span>
+				UartRxCache<span class="token punctuation">[</span>TempCacheLen <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">==</span> TAIL<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span>
+				UartRxCache<span class="token punctuation">[</span><span class="token keyword">sizeof</span> <span class="token punctuation">(</span>HEAD<span class="token punctuation">)</span><span class="token punctuation">]</span> <span class="token operator">+</span> <span class="token keyword">sizeof</span> <span class="token punctuation">(</span>HEAD<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token keyword">sizeof</span> <span class="token punctuation">(</span>TAIL<span class="token punctuation">)</span>  <span class="token operator">==</span> TempCacheLen <span class="token comment">//check pkg len</span>
+
+		<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span> <span class="token comment">//检测到一包接收完成</span>
+			<span class="token function">ProcessAFinishedPackage</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			UartRxCacheIndex <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			IsStartRecvCommand <span class="token operator">=</span> false<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+
+	<span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token keyword">if</span><span class="token punctuation">(</span>uart_data <span class="token operator">==</span> HEAD<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span> IsStartRecvCommand <span class="token operator">==</span> false<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span> <span class="token comment">//only receiving command when start with a head</span>
+		IsStartRecvCommand <span class="token operator">=</span> true<span class="token punctuation">;</span>
+		UartRxCache<span class="token punctuation">[</span>UartRxCacheIndex<span class="token operator">++</span><span class="token punctuation">]</span> <span class="token operator">=</span> uart_data<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>当单片机需要给上位机反馈命令的时候，使用以下函数计算出“反馈封包”：</p> 
+<pre><code class="prism language-c"><span class="token comment">/**
+ * @brief	获取命令反馈封包,返回数据包长度
+ * @param	resPkg 参数详情
+ * @retval	反馈封包最终长度, -1 缓存数组长度不够
+ */</span>
+<span class="token keyword">int</span> <span class="token function">APP_GetProtocolResponsePKG</span><span class="token punctuation">(</span>ResponsePkg <span class="token operator">*</span>resPkg<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+	<span class="token comment">//CRC校验码 = [命令类型码 + 命令码 + 命令参数]</span>
+	<span class="token comment">//计算方括号内的数据</span>
+	uint16_t res_data_len <span class="token operator">=</span> resPkg<span class="token operator">-&gt;</span>param_len <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">;</span>
+	uint8_t res_data<span class="token punctuation">[</span>res_data_len<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	res_data<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">=</span> resPkg<span class="token operator">-&gt;</span>command_type<span class="token punctuation">;</span>
+	res_data<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">=</span> resPkg<span class="token operator">-&gt;</span>command<span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> a <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> a <span class="token operator">&lt;</span> resPkg<span class="token operator">-&gt;</span>param_len<span class="token punctuation">;</span> a<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		res_data<span class="token punctuation">[</span><span class="token number">2</span> <span class="token operator">+</span> a<span class="token punctuation">]</span>  <span class="token operator">=</span> resPkg<span class="token operator">-&gt;</span>param_buf<span class="token punctuation">[</span>a<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token comment">//计算缓存数据是否够用</span>
+	uint16_t buffer_need_len <span class="token operator">=</span> res_data_len <span class="token operator">+</span> <span class="token number">8</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>buffer_need_len <span class="token operator">&gt;</span> resPkg<span class="token operator">-&gt;</span>res_buffer_len<span class="token punctuation">)</span> <span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">;</span>
+
+	<span class="token comment">//CRC校验码</span>
+	uint16_t crc<span class="token punctuation">;</span>
+	<span class="token function">GetCRC</span><span class="token punctuation">(</span>res_data<span class="token punctuation">,</span> res_data_len<span class="token punctuation">,</span> <span class="token operator">&amp;</span>crc<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	uint8_t crc_high_byte <span class="token operator">=</span> <span class="token punctuation">(</span>crc <span class="token operator">&gt;&gt;</span> <span class="token number">8</span><span class="token punctuation">)</span> <span class="token operator">&amp;</span> <span class="token number">0xff</span><span class="token punctuation">;</span>
+	uint8_t crc_low_byte <span class="token operator">=</span> crc <span class="token operator">&amp;</span> <span class="token number">0xff</span><span class="token punctuation">;</span>
+
+	<span class="token comment">//组装封包</span>
+	uint8_t<span class="token operator">*</span> res_buf <span class="token operator">=</span> resPkg<span class="token operator">-&gt;</span>res_buffer<span class="token punctuation">;</span>
+	<span class="token keyword">int</span> res_buf_index <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+
+	res_buf<span class="token punctuation">[</span>res_buf_index<span class="token operator">++</span><span class="token punctuation">]</span> <span class="token operator">=</span> HEAD<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	res_buf<span class="token punctuation">[</span>res_buf_index<span class="token operator">++</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span><span class="token comment">//temp pkg len</span>
+
+	<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> a <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> a <span class="token operator">&lt;</span> res_data_len<span class="token punctuation">;</span> a<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		res_buf<span class="token punctuation">[</span>res_buf_index<span class="token operator">++</span><span class="token punctuation">]</span>  <span class="token operator">=</span> res_data<span class="token punctuation">[</span>a<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	res_buf<span class="token punctuation">[</span>res_buf_index<span class="token operator">++</span><span class="token punctuation">]</span> <span class="token operator">=</span> crc_high_byte<span class="token punctuation">;</span>
+	res_buf<span class="token punctuation">[</span>res_buf_index<span class="token operator">++</span><span class="token punctuation">]</span> <span class="token operator">=</span> crc_low_byte<span class="token punctuation">;</span>
+
+	uint8_t tail_buf_len <span class="token operator">=</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>TAIL<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> a <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> a <span class="token operator">&lt;</span> tail_buf_len<span class="token punctuation">;</span> a<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		res_buf<span class="token punctuation">[</span>res_buf_index<span class="token operator">++</span><span class="token punctuation">]</span>  <span class="token operator">=</span> TAIL<span class="token punctuation">[</span>a<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token comment">//计算包长</span>
+	uint8_t head_len <span class="token operator">=</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>HEAD<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	uint8_t tail_len <span class="token operator">=</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>TAIL<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	uint8_t temp_pkg_len <span class="token operator">=</span> res_buf_index<span class="token punctuation">;</span>
+
+	uint8_t pkg_len <span class="token operator">=</span> temp_pkg_len <span class="token operator">-</span> head_len <span class="token operator">-</span> tail_len<span class="token punctuation">;</span>
+	res_buf<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">=</span> pkg_len<span class="token punctuation">;</span>
+
+	<span class="token keyword">return</span> temp_pkg_len<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>以上为协议相关的2个关键函数，其他函数请参考第八小节的项目源码。</p> 
+<h3><a id="_107"></a>四、介绍一下实现一个秒级延时定时器的方法</h3> 
+<p>这里主要讲一下本代码在实现秒级延时的设计思想。<br> 需求中，我们不仅要求达到指定的时间延时，还需要再延时等待的过程中，接收来自串口的数据，如果串口接收到一个“更新App的请求”。则必须中断延时，来执行“更新App的请求”。<br> 因此，我们不能使用Delay函数来实现延时。所以要使用定时器达到延时。我在一开始写实现这个定时器的时候犯了一个错误。一共需要延时5s左右。我把这5s的时间值直接写到了定时器的周期寄存器中。测试发现没有达到5s的延时。经过调试才明白。定时器的周期寄存器最大为0xffff即65535，也就是说寄存器是放不下5s对应的周期寄存器值。因此重新设计为，定时器500ms中断一次，通过统计中断的次数来，达到一个5s的延时（即，秒级的延时）。为了把定时器实现这个延时的逻辑整理到一个代码文件中，设计了一个“回调函数”，因此，可以通过定时器模块的接口函数设定“所需的定时时间”，当定时时间到达后，定时模块会调用配置好的“回调函数”。把延时完成后需要调用的代码，放在“回调函数”即可。</p> 
+<h3><a id="Bootloaderapp_112"></a>五、作为被Bootloader启动的app需要做哪些编码操作呢？</h3> 
+<p>注意：编程软件默认生成的是hex文件，因此需要配置生成bin文件。<br> 使用bootloader之后，App就不能放置在Flash的默认启动地址了，bootloader会把app放到一个设计好的flash地址所指定的地方。对应的App自己也需要自己被放置到flash的哪个地址，才能正确的使用app的堆栈和中断向量表。否则app无法运行。那么设置app自己的地址方法根据不同开发平台设置方式不同。</p> 
+<p>用keil的设置方式：<br> <img src="https://images2.imgbox.com/9a/4e/Z4d9VRal_o.jpg" alt="在这里插入图片描述" width="500" height="320"></p> 
+<p>使用TrueSTUDIO的设置方式：<br> //注意还需要 在STM32L072KB_FLASH.ld 文件中 修改flash的地址如下：<br> <img src="https://images2.imgbox.com/62/e3/EsBH9w9f_o.png" alt="在这里插入图片描述" width="600" height="100"></p> 
+<p>由于bootloader在跳转到App之前，把总中断关闭了，因此在app运行后的第一句代码就应该“打开总中断”。在实际中还需要其他的一些配置。总结起来写成一个函数，如下代码所示：</p> 
+<pre><code class="prism language-c"><span class="token macro property">#<span class="token directive keyword">define</span> USE_IAP</span>
+<span class="token comment">//#define USE_FREERTOS</span>
+<span class="token keyword">void</span> <span class="token function">BSP_BootloaderInit</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+<span class="token comment">//重新设置中断向量表</span>
+<span class="token macro property">#<span class="token directive keyword">ifdef</span> USE_IAP</span>
+	SCB<span class="token operator">-&gt;</span>VTOR <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>uint32_t<span class="token punctuation">)</span>FLASH_BASE<span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token number">0x8000</span><span class="token punctuation">)</span> <span class="token operator">&amp;</span> <span class="token punctuation">(</span>uint32_t<span class="token punctuation">)</span><span class="token number">0x1fffff80</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">//开启总中断</span>
+<span class="token macro property">#<span class="token directive keyword">ifdef</span> USE_FREERTOS</span>
+	<span class="token comment">//FreeRTOS		：不需要下面的这行打开中断调用，调用了后App反而无法执行</span>
+<span class="token macro property">#<span class="token directive keyword">else</span></span>
+	<span class="token comment">//无任何单片机操作系统	：需要下面这句话，来打开总中断</span>
+	<span class="token function">__set_PRIMASK</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token macro property">#<span class="token directive keyword">endif</span></span>
+	
+<span class="token macro property">#<span class="token directive keyword">endif</span></span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="_144"></a>六、调试代码经过记录</h3> 
+<p>在调试bootloader的过程中，最难调试的部分是Flash的写入和擦除。 必须要把目标bin文件准确完整的写入到Flash的指定地址中。另一个地方是要准确的擦除flash（不能擦除不该擦除的地方）。说这几部分难，是因为擦除和写入的的结果不容易直观的通过调试看到。因此我们需要借助一个专业的Flash操作工具来辅助调试。这个工具就是与“J-Link”配套的软件“J-Flash”。</p> 
+<ol><li>J-Flash功能列表（需要连接J-Link使用）：</li></ol> 
+<ul><li>加密芯片</li><li>解密芯片</li><li>擦除整个芯片</li><li>擦除指定扇区</li><li>烧写</li><li>烧写并校验</li><li>校验</li><li>从芯片flash读取程序（整个程序或指定扇区）</li><li>启动应用程序</li></ul> 
+<ol start="2"><li>本Bootloader调试过程中，使用到J-Flash的地方</li></ol> 
+<ul><li> <p>“校验”功能：<br> 使用自己的bootloader写bin文件到flash中，如果想要确认一下是否正确写入。可以使用J-Flash的“校验”功能校验。“出错”校验的结果截图如下：<br> <img src="https://images2.imgbox.com/52/f9/wQNAxxTZ_o.png" alt="在这里插入图片描述" width="350" height="150"></p> </li><li> <p>“从芯片flash读取程序”的功能：<br> 把bootloader写入到芯片中的bin文件使用j-Flash读取出来，同时使用J-Flash打开bin文件。可以通过人工对比发现两者的差异。从而找出bootloder烧写bin的错误。比如在开发本bootloader的时候，发现bootloader写入到flash的程序无法运行，经过读取出来与原bin文件对比发现大小端的不同。bin文件正确在flash储存的时候，应该是低位在前。但是之前bootloader是把高位写在来前面。因此导致写入的应用程序无法运行。发现大小端不同的截图如下：<br> <img src="https://images2.imgbox.com/3a/56/LXEsvC3c_o.jpg" alt="在这里插入图片描述" width="400" height="300"></p> </li></ul> 
+<h3><a id="_167"></a>八、获取源码与源码目录说明</h3> 
+<p>源码包含内容：</p> 
+<ul><li>CubeMx工程</li><li>TrueStudio工程</li></ul> 
+<p><a href="https://github.com/robert1207/UpperComputerProgramingGuideSrc/tree/master/13_5_stm32_iap_bootloader/IAP_BL_STM32L072KBUx">点此获取源码</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9b7d54dce4cc330aae97d265b8a8fd6e/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">完全二叉树、平衡二叉树、二叉查找树（二叉排序树）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/e9f76c9f5fefde8f02b8e2632980e8a6/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">数据中台架构实践</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>如何统计百万用户在线状态-bitmap - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="如何统计百万用户在线状态-bitmap" />
+<meta property="og:description" content="背景 经常你会听到，说我们的网站日活是多少，每天在线人数多少等等，那他是怎么实现的？
+bitmap介绍 BitMap 原本的含义是用一个比特位来映射某个元素的状态。由于一个比特位只能表示 0 和 1 两种状态，所以 BitMap 能映射的状态有限，但是使用比特位的优势是能大量的节省内存空间。
+在 Redis 中，可以把 Bitmaps 想象成一个以比特位为单位的数组，数组的每个单元只能存储0和1，数组的下标在 Bitmaps 中叫做偏移量。
+位图不是实际的数据类型，而是在 String 类型上定义的一组面向位的操作，将其视为位向量。由于字符串是二进制安全 blob，其最大长度为 512 MB，因此它们适合设置最多 2^32 个不同位。
+基本使用 SETBIT 语法
+SETBIT key offset value 设置或者清空 key 的 value 在 offset 处的 bit 值（只能是 0 或者 1）。
+警告：当设置最后一个可能的位（偏移量等于2^32 -1）并且存储在key处的字符串值尚未保存字符串值，或者保存一个小的字符串值时，Redis需要分配所有可能阻塞的中间内存服务器一段时间了。在 2010 MacBook Pro 上，设置位号 2^32 -1（512MB 分配）需要约 300ms，设置位号 2^30 -1（128MB 分配）需要约 80ms，设置位号 2^28 -1（32MB 分配）需要约 30 毫秒，设置位数 2^26 -1（8MB 分配）需要约 8 毫秒。请注意，一旦完成第一次分配，后续对同一键的 SETBIT 调用将不会产生分配开销。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/40a72c09b35e5ef042f4a75df65c2116/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-24T13:51:48+08:00" />
+<meta property="article:modified_time" content="2024-01-24T13:51:48+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">如何统计百万用户在线状态-bitmap</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="_0"></a>背景</h2> 
+<p>经常你会听到，说我们的网站日活是多少，每天在线人数多少等等，那他是怎么实现的？</p> 
+<h2><a id="bitmap_3"></a>bitmap介绍</h2> 
+<p>BitMap 原本的含义是用一个比特位来映射某个元素的状态。由于一个比特位只能表示 0 和 1 两种状态，所以 BitMap 能映射的状态有限，但是使用比特位的优势是能大量的节省内存空间。</p> 
+<p>在 Redis 中，可以把 Bitmaps 想象成一个以比特位为单位的数组，数组的每个单元只能存储0和1，数组的下标在 Bitmaps 中叫做偏移量。</p> 
+<p><img src="https://images2.imgbox.com/37/56/bBXQ642K_o.png" alt=""></p> 
+<p>位图不是实际的数据类型，而是在 String 类型上定义的一组面向位的操作，将其视为位向量。由于字符串是二进制安全 blob，其最大长度为 <strong>512 MB</strong>，因此它们适合设置最多 <strong>2^32</strong> 个不同位。</p> 
+<h2><a id="_14"></a>基本使用</h2> 
+<h3><a id="SETBIT_16"></a>SETBIT</h3> 
+<p>语法</p> 
+<pre><code>SETBIT key offset value
+</code></pre> 
+<p>设置或者清空 key 的 value 在 offset 处的 bit 值（只能是 0 或者 1）。</p> 
+<p><strong>警告</strong>：当设置最后一个可能的位（偏移量等于2^32 -1）并且存储在key处的字符串值尚未保存字符串值，或者保存一个小的字符串值时，Redis需要分配所有可能阻塞的中间内存服务器一段时间了。在 2010 MacBook Pro 上，设置位号 2^32 -1（512MB 分配）需要约 300ms，设置位号 2^30 -1（128MB 分配）需要约 80ms，设置位号 2^28 -1（32MB 分配）需要约 30 毫秒，设置位数 2^26 -1（8MB 分配）需要约 8 毫秒。请注意，一旦完成第一次分配，后续对同一键的 <strong>SETBIT</strong> 调用将不会产生分配开销。</p> 
+<p>示例：</p> 
+<pre><code>//设置
+setbit mykey 7 1
+//清空
+setbit mykey 7 0
+</code></pre> 
+<h3><a id="GETBIT_37"></a><strong>GETBIT</strong></h3> 
+<p>返回 key 处存储的字符串值中偏移处的位值</p> 
+<p>当偏移量超出字符串长度时，字符串被假定为具有 0 位的连续空间。当 key 不存在时，它被假定为空字符串，因此 offset 总是超出范围，并且 value 也被假定为 0 位的连续空间</p> 
+<p>语法</p> 
+<pre><code>GETBIT key offset
+</code></pre> 
+<p>示例</p> 
+<pre><code>getbit mykey 7
+</code></pre> 
+<h3><a id="BITCOUNT__55"></a>BITCOUNT <strong>位计数</strong></h3> 
+<p>计算字符串中设置位的数量（总体计数）</p> 
+<p>语法</p> 
+<pre><code>BITCOUNT key [start end]
+</code></pre> 
+<p>示例</p> 
+<pre><code>#获取mykey内值为 1 的个数
+BITCOUNT mykey
+# 获取指定范围内值为 1 的个数,start 和 end 以字节为单位
+BITCOUNT mykey 0 1
+</code></pre> 
+<h3><a id="BITOP_74"></a>BITOP</h3> 
+<p>在多个键（包含字符串值）之间执行按位运算并将结果存储在目标键中</p> 
+<p>语法：</p> 
+<pre><code>#AND 与运算 &amp;
+#OR 或运算 |
+# XOR 异或 ^
+#NOT 取反 ~
+BITOP &lt;AND | OR | XOR | NOT&gt; destkey key [key ...]
+</code></pre> 
+<p><strong>BITOP</strong> 命令支持四种按位运算：AND、OR、XOR 和 NOT，因此调用该命令的有效形式为：</p> 
+<ul><li><strong>BITOP AND destkey srckey1 srckey2 srckey3 … srckeyN</strong></li><li><strong>BITOP OR destkey srckey1 srckey2 srckey3 … srckeyN</strong></li><li><strong>BITOP XOR destkey srckey1 srckey2 srckey3 … srckeyN</strong></li><li><strong>BITOP NOT destkey srckey</strong></li></ul> 
+<p>操作的结果始终存储在 <strong>destkey</strong> 中</p> 
+<p>示例：</p> 
+<pre><code>BITOP AND destmap bitmap:01 bitmap:02 bitmap:03
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a9/cf/xGxi0SQd_o.png" alt=""></p> 
+<h2><a id="_105"></a>场景</h2> 
+<h3><a id="_107"></a>在线用户统计</h3> 
+<p>只需要一个 key，然后用户 id 为 offset，如果在线就设置为 1，不在线就设置为 0。</p> 
+<p><strong>执行步骤</strong></p> 
+<p>第一步，执行以下指令，表示用户已登录。</p> 
+<pre><code>SETBIT login_status 10086 1
+</code></pre> 
+<p>第二步，检查该用户是否登陆，返回值 1 表示已登录。</p> 
+<pre><code>GETBIT login_status 10086
+</code></pre> 
+<p>第三步，登出，将 offset 对应的 value 设置成 0。</p> 
+<pre><code>SETBIT login_status 10086 0
+</code></pre> 
+<p><strong>内存占用</strong>：</p> 
+<p>假设当前站点有5000W用户，那么一天的数据大约为50000000/8/1024/1024=6MB，可以看出非常节约内存空间</p> 
+<p><strong>代码实现</strong></p> 
+<pre><code>public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.1.250.157",6379);
+        jedis.auth("google00");
+        //设置用户登录在线
+        jedis.setbit("login_status",10086L,true);
+        //查询用户登录状态
+        boolean loginStatus = jedis.getbit("login_status",10086L);
+        if (loginStatus){
+            System.out.println("10086 用户在线");
+        }else {
+            System.out.println("10086 用户离线");
+        }
+        //用户退出登录,值设置为0
+        jedis.setbit("login_status",10086L,false);
+    }
+</code></pre> 
+<h3><a id="_155"></a>用户签到</h3> 
+<p>在签到统计中，每个用户每天的签到用 1 个 bit 位表示，一年的签到只需要 365 个 bit 位。一个月最多只有 31 天，只需要 31 个 bit 位即可。</p> 
+<p>比如统计编号 10086 的用户在 2024年 1 月份的打卡情况要如何进行？</p> 
+<p>key 可以设计成 uid:sign:{userId}:{yyyyMM}，月份的每一天的值 - 1 可以作为 offset（因为 offset 从 0 开始，所以 offset = 日期 - 1）。</p> 
+<p>第一步，执行下面指令表示记录用户在 2024 年 1 月 16 号打卡。</p> 
+<pre><code>SETBIT uid:sign:10086:202401 15 1
+</code></pre> 
+<p>第二步，判断编号 89757 用户在 2024 年 1月 16 号是否打卡。</p> 
+<pre><code>GETBIT uid:sign:10086:202401 15
+</code></pre> 
+<p>第三步，统计该用户在 1 月份的打卡次数，使用 BITCOUNT 指令。该指令用于统计给定的 bit 数组中，值 = 1 的 bit 位的数量。</p> 
+<pre><code>BITCOUNT uid:sign:89757:202405
+</code></pre> 
+<p>代码实现</p> 
+<pre><code>public static void main(String[] args) {
+        Jedis jedis = new Jedis("10.1.250.157",6379);
+        jedis.auth("google00");
+        //记录用户在 2024 年 1 月 16 号打卡
+        jedis.setbit("uid:sign:10086:202401",10086L,true);
+        //判断用户在 2024 年 1 月 16 是否打卡
+        boolean loginStatus = jedis.getbit("uid:sign:10086:202401",10086L);
+        if (loginStatus){
+            System.out.println("10086用户 2024 年 1 月 16 打卡");
+        }else {
+            System.out.println("10086用户 2024 年 1 月 16 未打卡");
+        }
+        //统计1月份打卡次数
+        long num = jedis.bitcount("uid:sign:10086:202401");
+        System.out.println("用户10086在1月份打卡："+num+"次");
+    }
+</code></pre> 
+<h3><a id="_203"></a><strong>统计活跃用户（用户登陆情况）</strong></h3> 
+<p>使用日期作为 key，然后用户 id 为 offset，如果当日活跃过就设置为1。具体怎么样才算活跃这个标准大家可以自己指定。</p> 
+<p>假如用户id为，「1，2,3,4,5,6」</p> 
+<p>用户2024年1月15号用登录情况</p> 
+<pre><code>用户1登录
+setbit login:20240115 1 1
+用户2登录
+setbit login:20240115 2 1
+用户3登录
+setbit login:20240115 3 1
+用户4登录
+setbit login:20240115 4 1
+用户5登录
+setbit login:20240115 5 1
+</code></pre> 
+<p>用户2024年1月16号用登录情况</p> 
+<pre><code>用户1登录
+setbit login:20240116 1 1
+用户2登录
+setbit login:20240116 2 1
+用户3登录
+setbit login:20240116 3 1
+用户4登录
+setbit login:20240116 4 1
+</code></pre> 
+<p>用户2024年1月17号用登录情况</p> 
+<pre><code>用户1登录
+setbit login:20240117 1 1
+用户2登录
+setbit login:20240117 2 1
+
+用户4登录
+setbit login:20240117 4 1
+用户6登录
+setbit login:20240117 6 1
+</code></pre> 
+<p>统计连续两天活跃的用户总数：</p> 
+<pre><code>bitop and dest1 login:20240115 login:20240116 
+# dest1 中值为1的offset，就是连续两天活跃用户的ID
+bitcount dest1
+</code></pre> 
+<p>统计2024年1月15日 ~ 2024年1月17日 活跃过的用户：</p> 
+<pre><code>bitop or dest2 login:20240115 login:20240116 login:20240117
+</code></pre> 
+<h3><a id="_265"></a>掘金签到送矿石</h3> 
+<p><img src="https://images2.imgbox.com/d7/52/hCFjFt9n_o.png" alt="image.png"><br> 通过上面的示例，小伙伴可以自己想想怎么去实现</p> 
+<p><strong>提示</strong>：在签到统计中，每个用户每天的签到用 1 个 bit 位表示，一年的签到只需要 365 个 bit 位，一个用户一个key</p> 
+<blockquote> 
+ <p>写作不易，刚好你看到，刚好对你有帮助，动动小手，点点赞，欢迎转发，有疑问的欢迎留言或者私信讨论，有问必回。</p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/22644b89aa22a48dbcf4d46ebe3433cb/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">汤姆·齐格弗里德《纳什均衡与博弈论》笔记（7）博弈论与概率论</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/61f1b7865f6eb010f6bf89bfa5ee6b63/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Python 字符串不可变性的优缺点</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

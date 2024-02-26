@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>三维重建（8）--SLAM系统设计 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="三维重建（8）--SLAM系统设计" />
+<meta property="og:description" content=" 目录
+一、ORB-SLAM系统概述
+1、概述
+2、数据库
+3、算法流程
+二、跟踪 三、建图 四、回环修正 一、ORB-SLAM系统概述 1、概述 SLAM（Simultaneous Localization and Mapping）同步定位与建图，应用于机器人和自主车辆等自主系统的技术，能够在未知环境中同时定位自身位置并构建地图。SLAM在机器人、自动驾驶汽车、无人机等领域都有广泛应用。
+ORB-SLAM作为常见的单目摄像机SLAM方案，由三个线程组成，分别是跟踪、建图、回环修正。
+跟踪：确定当前帧位姿
+建图：完成局部地图构建
+回环修正：回环检测以及基于回环信息修正系统漂移
+2、数据库 （1）快速图像匹配数据库
+快速图像匹配数据库分为视觉词典和关键帧的词袋模型检索数据库。
+视觉词典就是将一张图片中的若干特征部分拆解，获得一个包含有若干特征的视觉词典。
+词袋模型检索数据库：利用TF-IDF算法，根据相似度，对于不同图片查询出与数据库中最相似的特征。
+（2）三维重建的核心数据库
+三维重建的核心数据库分为地图点、关键帧、共视图、本质树四类。
+地图点：包含世界坐标系下3D坐标，观测方向即所有可以观测到该特征点的视图所产生的的观测方向的均值，ORB特征描述子（相对比之前SfM的sift算子），该点能被观测到的最大距离和最小距离。
+关键帧：摄像机位姿，内参数，该帧被提取到的全部ORB特征描述子以及与地图点之间的对应关系。
+共视图：一种无向有权图，节点是关键帧，两个节点共享的地图点数大于阈值则存在一条边，边的权重为共享地图点个数
+本质图：共视图的子图，保留所有结点，边数量较共视图更少，目的是加速回环校正的计算。
+3、算法流程 二、跟踪 跟踪：通过给定当前帧，从图像中提取ORB特征，根据上一帧估计当前帧姿态，估计失败时尝试全局重定位初始化位姿，并构建局部地图进一步优化位姿，并确定是否设置为关键帧。
+ORB特征提取：参见ORB特征提取详解-CSDN博客
+地图初始化：
+初始位姿估计：
+局部位姿优化：
+关键帧获取：
+三、建图 建图：完成局部地图构建，包括对关键帧的插入，验证最近生成的地图点并进行筛选，然后生成新的地图点，使用局部捆绑调整（只调整世界坐标系下三维点，不改变摄像机位姿），最后对插入的关键帧进行筛选，去除多余的关键帧。
+关键帧插入： （1）更新共视图，增加新的结点，更新共视图连接关系
+（2）更新生成树的节点关系
+（3）计算该新增关键帧的词袋表示，为新建地图点做准备
+地图点剔除：
+若实际观测比例大于理论值的25%，且地图点创建后，连续的三个关键帧都可以观测到，则保留该新增地图点。
+若任何时间连续观测的关键帧数均小于3，则剔除该点。
+新地图点生成：
+对于当前帧没有被匹配的特征点做如下处理：
+（1）在共视图中选取20帧共视程度最高且基线宽度大于某阈值的关键帧进行特征点匹配与三角化，对重构结果进行尺度、重投影误差、视差不宜过小正向深度的检验。
+（2）通过检验的点投影到其他视图中，若匹配成功则建立地图和关键帧特征点的对应关系。
+局部地图优化：
+当前帧及共视关键帧，及其所看到的的所有世界坐标系下的地图点，参与局部BA优化。
+局部BA优化只优化地图点的位置，但摄像机位姿在优化过程中固定不变。
+局部BA优化方法：
+局部关键帧剔除：
+保证场景不发生变化的情况下，如果当前帧的90%的地图点都可以被至少其他三个关键帧在相同或更精细的尺度观测到，那么该关键帧被剔除。
+通过局部关键帧剔除，可以有效的控制关键帧数量，以此来减少参数数量，提高运算效率。
+四、回环修正 回环修正：包含闭环检测和闭环校正两步，闭环检测使用词袋模型找到闭环图片，然后通过Sim3算法去计算相似变换。闭环校正主要是闭环融合和Essential Graph的图优化。
+回环候选帧检测： 计算Sim3变换：
+回环融合：
+位姿优化： Reference：https://www.bilibili.com/video/BV1fa411r7hr/?spm_id_from=333.999.0.0&amp;vd_source=2152dec20715e478285cc87cc31201ed " />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/062eb965036ca2bafc7ced5515b4a724/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-28T19:35:41+08:00" />
+<meta property="article:modified_time" content="2024-01-28T19:35:41+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">三维重建（8）--SLAM系统设计</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="%E4%B8%80%E3%80%81ORB-SLAM%E7%B3%BB%E7%BB%9F%E6%A6%82%E8%BF%B0-toc" style="margin-left:40px;"><a href="#%E4%B8%80%E3%80%81ORB-SLAM%E7%B3%BB%E7%BB%9F%E6%A6%82%E8%BF%B0" rel="nofollow">一、ORB-SLAM系统概述</a></p> 
+<p id="1%E3%80%81%E6%A6%82%E8%BF%B0-toc" style="margin-left:80px;"><a href="#1%E3%80%81%E6%A6%82%E8%BF%B0" rel="nofollow">1、概述</a></p> 
+<p id="2%E3%80%81%E6%95%B0%E6%8D%AE%E5%BA%93-toc" style="margin-left:80px;"><a href="#2%E3%80%81%E6%95%B0%E6%8D%AE%E5%BA%93" rel="nofollow">2、数据库</a></p> 
+<p id="3%E3%80%81%E7%AE%97%E6%B3%95%E6%B5%81%E7%A8%8B-toc" style="margin-left:80px;"><a href="#3%E3%80%81%E7%AE%97%E6%B3%95%E6%B5%81%E7%A8%8B" rel="nofollow">3、算法流程</a></p> 
+<p id="%E4%BA%8C%E3%80%81%E8%B7%9F%E8%B8%AA%C2%A0-toc" style="margin-left:40px;"><a href="#%E4%BA%8C%E3%80%81%E8%B7%9F%E8%B8%AA%C2%A0" rel="nofollow">二、跟踪 </a></p> 
+<p id="%E4%B8%89%E3%80%81%E5%BB%BA%E5%9B%BE%C2%A0-toc" style="margin-left:40px;"><a href="#%E4%B8%89%E3%80%81%E5%BB%BA%E5%9B%BE%C2%A0" rel="nofollow">三、建图 </a></p> 
+<p id="%E5%9B%9B%E3%80%81%E5%9B%9E%E7%8E%AF%E4%BF%AE%E6%AD%A3%C2%A0-toc" style="margin-left:40px;"><a href="#%E5%9B%9B%E3%80%81%E5%9B%9E%E7%8E%AF%E4%BF%AE%E6%AD%A3%C2%A0" rel="nofollow">四、回环修正 </a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h3 id="%E4%B8%80%E3%80%81ORB-SLAM%E7%B3%BB%E7%BB%9F%E6%A6%82%E8%BF%B0">一、ORB-SLAM系统概述</h3> 
+<h4 id="1%E3%80%81%E6%A6%82%E8%BF%B0">1、概述</h4> 
+<p>        SLAM（Simultaneous Localization and Mapping）同步定位与建图，应用于机器人和自主车辆等自主系统的技术，能够在未知环境中同时定位自身位置并构建地图。SLAM在机器人、自动驾驶汽车、无人机等领域都有广泛应用。</p> 
+<p>        ORB-SLAM作为常见的单目摄像机SLAM方案，由三个线程组成，分别是跟踪、建图、回环修正。</p> 
+<p>        跟踪：确定当前帧位姿</p> 
+<p>        建图：完成局部地图构建</p> 
+<p>        回环修正：回环检测以及基于回环信息修正系统漂移</p> 
+<h4 id="2%E3%80%81%E6%95%B0%E6%8D%AE%E5%BA%93">2、数据库</h4> 
+<p>（1）快速图像匹配数据库</p> 
+<p>        快速图像匹配数据库分为视觉词典和关键帧的词袋模型检索数据库。</p> 
+<p>        视觉词典就是将一张图片中的若干特征部分拆解，获得一个包含有若干特征的视觉词典。</p> 
+<p>        词袋模型检索数据库：利用TF-IDF算法，根据相似度，对于不同图片查询出与数据库中最相似的特征。</p> 
+<p>（2）三维重建的核心数据库</p> 
+<p>        三维重建的核心数据库分为地图点、关键帧、共视图、本质树四类。</p> 
+<p>        地图点：包含世界坐标系下3D坐标，观测方向即所有可以观测到该特征点的视图所产生的的观测方向的均值，ORB特征描述子（相对比之前SfM的sift算子），该点能被观测到的最大距离和最小距离。</p> 
+<p>        关键帧：摄像机位姿，内参数，该帧被提取到的全部ORB特征描述子以及与地图点之间的对应关系。</p> 
+<p>        共视图：一种无向有权图，节点是关键帧，两个节点共享的地图点数大于阈值则存在一条边，边的权重为共享地图点个数</p> 
+<p>        本质图：共视图的子图，保留所有结点，边数量较共视图更少，目的是加速回环校正的计算。</p> 
+<h4 id="3%E3%80%81%E7%AE%97%E6%B3%95%E6%B5%81%E7%A8%8B">3、算法流程</h4> 
+<p class="img-center"><img alt="" height="224" src="https://images2.imgbox.com/df/07/QBjRp3CR_o.png" width="520"></p> 
+<p></p> 
+<h3 id="%E4%BA%8C%E3%80%81%E8%B7%9F%E8%B8%AA%C2%A0">二、跟踪 </h3> 
+<p>        跟踪：通过给定当前帧，从图像中提取ORB特征，根据上一帧估计当前帧姿态，估计失败时尝试全局重定位初始化位姿，并构建局部地图进一步优化位姿，并确定是否设置为关键帧。</p> 
+<p class="img-center"><img alt="" height="89" src="https://images2.imgbox.com/71/15/glZ0Cd4f_o.png" width="520"></p> 
+<p>        ORB特征提取：参见<a href="https://blog.csdn.net/zouzoupaopao229/article/details/52625678?ops_request_misc=%257B%2522request%255Fid%2522%253A%2522170628343116800192241240%2522%252C%2522scm%2522%253A%252220140713.130102334..%2522%257D&amp;request_id=170628343116800192241240&amp;biz_id=0&amp;utm_medium=distribute.pc_search_result.none-task-blog-2~all~sobaiduend~default-2-52625678-null-null.142%5Ev99%5Econtrol&amp;utm_term=ORB%E7%89%B9%E5%BE%81%E6%8F%90%E5%8F%96&amp;spm=1018.2226.3001.4187" title="ORB特征提取详解-CSDN博客">ORB特征提取详解-CSDN博客</a></p> 
+<p><strong>地图初始化：</strong></p> 
+<p class="img-center"><img alt="" height="183" src="https://images2.imgbox.com/08/cc/hpFULSfh_o.png" width="450"></p> 
+<p><strong>初始位姿估计：</strong></p> 
+<p class="img-center"><img alt="" height="141" src="https://images2.imgbox.com/b8/d1/R863p6Si_o.png" width="450"></p> 
+<p><strong>局部位姿优化：</strong></p> 
+<p class="img-center"><img alt="" height="159" src="https://images2.imgbox.com/dd/88/HbhdhWJM_o.png" width="520"></p> 
+<p><strong>关键帧获取：</strong></p> 
+<p class="img-center"><img alt="" height="143" src="https://images2.imgbox.com/67/67/UTC2E5DV_o.png" width="450"></p> 
+<h3 id="%E4%B8%89%E3%80%81%E5%BB%BA%E5%9B%BE%C2%A0">三、建图 </h3> 
+<p>        建图：完成局部地图构建，包括对关键帧的插入，验证最近生成的地图点并进行筛选，然后生成新的地图点，使用局部捆绑调整（只调整世界坐标系下三维点，不改变摄像机位姿），最后对插入的关键帧进行筛选，去除多余的关键帧。</p> 
+<p class="img-center"><img alt="" height="92" src="https://images2.imgbox.com/51/cc/9s92oFLB_o.png" width="520"></p> 
+<p><strong>关键帧插入： </strong></p> 
+<p>（1）更新共视图，增加新的结点<img alt="K_i" class="mathcode" src="https://images2.imgbox.com/c4/09/5wyiWHZq_o.png">，更新共视图连接关系</p> 
+<p>（2）更新生成树的节点关系</p> 
+<p>（3）计算该新增关键帧的词袋表示，为新建地图点做准备</p> 
+<p><strong>地图点剔除：</strong></p> 
+<p><strong>        </strong>若实际观测比例大于理论值的25%，且地图点创建后，连续的三个关键帧都可以观测到，则保留该新增地图点。</p> 
+<p>        若任何时间连续观测的关键帧数均小于3，则剔除该点。</p> 
+<p><strong>新地图点生成：</strong></p> 
+<p><strong>        </strong>对于当前帧没有被匹配的特征点做如下处理：</p> 
+<p>（1）在共视图中选取20帧共视程度最高且基线宽度大于某阈值的关键帧进行特征点匹配与三角化，对重构结果进行尺度、重投影误差、视差不宜过小正向深度的检验。</p> 
+<p>（2）通过检验的点投影到其他视图中，若匹配成功则建立地图和关键帧特征点的对应关系。</p> 
+<p><strong>局部地图优化：</strong></p> 
+<p><strong>        </strong>当前帧及共视关键帧，及其所看到的的所有世界坐标系下的地图点，参与局部BA优化。</p> 
+<p>        局部BA优化只优化地图点的位置，但摄像机位姿在优化过程中固定不变。</p> 
+<p>局部BA优化方法：</p> 
+<p class="img-center"><img alt="" height="283" src="https://images2.imgbox.com/10/c6/N4wXgkqE_o.png" width="520"></p> 
+<p><strong>局部关键帧剔除：</strong></p> 
+<p><strong>        </strong>保证场景不发生变化的情况下，如果当前帧的90%的地图点都可以被至少其他三个关键帧在相同或更精细的尺度观测到，那么该关键帧被剔除。</p> 
+<p>        通过局部关键帧剔除，可以有效的控制关键帧数量，以此来减少参数数量，提高运算效率。</p> 
+<h3><br> 四、回环修正 </h3> 
+<p>        回环修正：包含闭环检测和闭环校正两步，闭环检测使用词袋模型找到闭环图片，然后通过Sim3算法去计算相似变换。闭环校正主要是闭环融合和Essential Graph的图优化。</p> 
+<p class="img-center"><img alt="" height="115" src="https://images2.imgbox.com/b7/a5/TyDIdtQk_o.png" width="520"></p> 
+<p><strong>回环候选帧检测： </strong></p> 
+<p class="img-center"><img alt="" height="437" src="https://images2.imgbox.com/b1/4d/LejxzS95_o.png" width="520"></p> 
+<p><strong>计算Sim3变换：</strong></p> 
+<p class="img-center"><img alt="" height="228" src="https://images2.imgbox.com/76/37/FA7TpHf7_o.png" width="520"></p> 
+<p><strong>回环融合：</strong></p> 
+<p class="img-center"><img alt="" height="167" src="https://images2.imgbox.com/ef/75/kkBvmcyW_o.png" width="520"></p> 
+<p><strong>位姿优化： </strong></p> 
+<p class="img-center"><img alt="" height="145" src="https://images2.imgbox.com/3a/8a/4jq8wvp7_o.png" width="520"></p> 
+<p> </p> 
+<blockquote> 
+ <p>Reference：<a href="https://www.bilibili.com/video/BV1fa411r7hr/?spm_id_from=333.999.0.0&amp;vd_source=2152dec20715e478285cc87cc31201ed" rel="nofollow" title="https://www.bilibili.com/video/BV1fa411r7hr/?spm_id_from=333.999.0.0&amp;vd_source=2152dec20715e478285cc87cc31201ed">https://www.bilibili.com/video/BV1fa411r7hr/?spm_id_from=333.999.0.0&amp;vd_source=2152dec20715e478285cc87cc31201ed</a> </p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/91e2ac523d3b16e01488885b4691b447/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">网络编程套接字(2)</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/6aa1262f6b788f09210a0625596c0782/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">如何使用YOLOv8训练自己的模型</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

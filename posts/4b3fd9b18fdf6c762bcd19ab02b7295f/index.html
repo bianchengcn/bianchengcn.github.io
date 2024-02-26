@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>55 Read Committed隔离级别是如何基于ReadView机制实现的？ - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="55 Read Committed隔离级别是如何基于ReadView机制实现的？" />
+<meta property="og:description" content="今天我们来给大家讲一下，基于之前我们说的ReadView机制是如何实现Read Committed隔离级别 的，那么当然了，首先就是要先做一些简单的回顾。
+这个RC隔离级别，实际上意思就是说你事务运行期间，只要别的事务修改数据还提交了，你就是可以读 到人家修改的数据的，所以是会发生不可重复读的问题，包括幻读的问题，都会有的。
+那么所谓的ReadView机制，之前我们讲过，他是基于undo log版本链条实现的一套读视图机制，他意 思就是说你事务生成一个ReadView，然后呢，如果是你事务自己更新的数据，自己是可以读到的，或 者是在你生成ReadView之前提交的事务修改的值，也是可以读取到的。 但是如果是你生成ReadView的时候，就已经活跃的事务，在你生成ReadView之后修改了数据，接着提 交了，此时你是读不到的，或者是你生成ReadView以后再开启的事务修改了数据，还提交了，此时也 是读不到的。 所以上面的那套机制，实际上就是ReadView机制的一个原理。好，那么既然都回顾完了，我们就来看 看，如何基于ReadView机制来实现RC隔离级别呢？ 其实这里的一个非常核心的要点在于，当你一个事务设置他处于RC隔离级别的时候，他是每次发起查 询，都重新生成一个ReadView！
+大家注意，这点是非常重要的，接着我们通过画图一步一步来给大家演示这个RC隔离级别是怎么做到 的。 首先假设我们的数据库里有一行数据，是事务id=50的一个事务之前就插入进去的，然后现在呢，活跃 着两个事务，一个是事务A（id=60），一个是事务B（id=70），此时如下图所示。
+现在的情况就是，事务B发起了一次update操作，更新了这条数据，把这条数据的值修改为了值B，所 以此时数据的trx_id会变为事务B的id=70，同时会生成一条undo log，由roll_pointer来指向，看下图： 这个时候，事务A要发起一次查询操作，此时他一发起查询操作，就会生成一个ReadView，此时 ReadView里的min_trx_id=60，max_trx_id=71，creator_trx_id=60，此时如下图所示。
+这个时候事务A发起查询，发现当前这条数据的trx_id是70。也就是说，属于ReadView的事务id范围之 间，说明是他生成ReadView之前就有这个活跃的事务，是这个事务修改了这条数据的值，但是此时这 个事务B还没提交，所以ReadView的m_ids活跃事务列表里，是有[60, 70]两个id的，所以此时根据 ReadView的机制，此时事务A是无法查到事务B修改的值B的。 接着就顺着undo log版本链条往下查找，就会找到一个原始值，发现他的trx_id是50，小于当前 ReadView里的min_trx_id，说明是他生成ReadView之前，就有一个事务插入了这个值并且早就提交 了，因此可以查到这个原始值，如下图。
+接着，咱们假设事务B此时就提交了，好了，那么提交了就说明事务B不会活跃于数据库里了，是不是？ 可以的，大家一定记住，事务B现在提交了。那么按照RC隔离级别的定义，事务B此时一旦提交了，说 明事务A下次再查询，就可以读到事务B修改过的值了，因为事务B提交了。 那么到底怎么让事务A能够独到提交的事务B修改过的值呢？ 很简单，就是让事务A下次发起查询，再次生成一个ReadView。此时再次生成ReadView，数据库内活 跃的事务只有事务A了，因此min_trx_id是60，mac_trx_id是71，但是m_ids这个活跃事务列表里，只 会有一个60了，事务B的id=70不会出现在m_ids活跃事务列表里了，如下图。
+此时事务A再次基于这个ReadView去查询，会发现这条数据的trx_id=70，虽然在ReadView的 min_trx_id和max_trx_id范围之间，但是此时并不在m_ids列表内，说明事务B在生成本次ReadView之 前就已经提交了。
+那么既然在生成本次ReadView之前，事务B就已经提交了，就说明这次你查询就可以查到事务B修改过 的这个值了，此时事务A就会查到值B，如下图所示。
+到此为止，RC隔离级别如何实现的，大家应该就理解了，他的关键点在于每次查询都生成新的 ReadView，那么如果在你这次查询之前，有事务修改了数据还提交了，你这次查询生成的ReadView 里，那个m_ids列表当然不包含这个已经提交的事务了，既然不包含已经提交的事务了，那么当然可以 读到人家修改过的值了。
+这就是基于ReadView实现RC隔离级别的原理，希望大家好好仔细去体会，实际上，基于undo log多版 本链条以及ReadView机制实现的多事务并发执行的RC隔离级别、RR隔离级别，就是数据库的MVCC多 版本并发控制机制。 他本质是协调你多个事务并发运行的时候，并发的读写同一批数据，此时应该如何协调互相的可见性。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/4b3fd9b18fdf6c762bcd19ab02b7295f/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-05-14T18:29:17+08:00" />
+<meta property="article:modified_time" content="2021-05-14T18:29:17+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">55 Read Committed隔离级别是如何基于ReadView机制实现的？</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p style="text-indent:33px;"><span style="color:#333333;">今天我们来给大家讲一下，基于之前我们说的ReadView</span><span style="color:#333333;">机制是如何实现</span><span style="color:#333333;">Read Committed</span><span style="color:#333333;">隔离级别 的，那么当然了，首先就是要先做一些简单的回顾。</span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">这个RC</span><span style="color:#333333;">隔离级别，实际上意思就是说你事务运行期间，只要别的事务修改数据还提交了，你就是可以读 到人家修改的数据的，所以是会发生不可重复读的问题，包括幻读的问题，都会有的。</span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">那么所谓的ReadView</span><span style="color:#333333;">机制，之前我们讲过，他是基于</span><span style="color:#333333;">undo log</span><span style="color:#333333;">版本链条实现的一套读视图机制，他意 思就是说你事务生成一个ReadView</span><span style="color:#333333;">，然后呢，如果是你事务自己更新的数据，自己是可以读到的，或 者是在你生成ReadView</span><span style="color:#333333;">之前提交的事务修改的值，也是可以读取到的。 </span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">但是如果是你生成ReadView</span><span style="color:#333333;">的时候，就已经活跃的事务，在你生成</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">之后修改了数据，接着提 交了，此时你是读不到的，或者是你生成ReadView</span><span style="color:#333333;">以后再开启的事务修改了数据，还提交了，此时也 是读不到的。 </span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">所以上面的那套机制，实际上就是ReadView</span><span style="color:#333333;">机制的一个原理。好，那么既然都回顾完了，我们就来看 看，如何基于ReadView</span><span style="color:#333333;">机制来实现</span><span style="color:#333333;">RC</span><span style="color:#333333;">隔离级别呢？ </span></p> 
+<p style="text-indent:33px;"><span style="color:#f33b45;">其实这里的一个非常核心的要点在于，当你一个事务设置他处于RC隔离级别的时候，他是每次发起查 询，都重新生成一个ReadView！</span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">大家注意，这点是非常重要的，接着我们通过画图一步一步来给大家演示这个RC</span><span style="color:#333333;">隔离级别是怎么做到 的。 </span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">首先假设我们的数据库里有一行数据，是事务id=50</span><span style="color:#333333;">的一个事务之前就插入进去的，然后现在呢，活跃 着两个事务，一个是事务A</span><span style="color:#333333;">（</span><span style="color:#333333;">id=60</span><span style="color:#333333;">），一个是事务</span><span style="color:#333333;">B</span><span style="color:#333333;">（</span><span style="color:#333333;">id=70</span><span style="color:#333333;">），此时如下图所示。</span></p> 
+<p style="text-indent:33px;"><img alt="" height="548" src="https://images2.imgbox.com/7d/91/ymYgP1dF_o.png" width="1200"></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">现在的情况就是，事务B</span><span style="color:#333333;">发起了一次</span><span style="color:#333333;">update</span><span style="color:#333333;">操作，更新了这条数据，把这条数据的值修改为了值</span><span style="color:#333333;">B</span><span style="color:#333333;">，所 以此时数据的trx_id</span><span style="color:#333333;">会变为事务</span><span style="color:#333333;">B</span><span style="color:#333333;">的</span><span style="color:#333333;">id=70</span><span style="color:#333333;">，同时会生成一条</span><span style="color:#333333;">undo log</span><span style="color:#333333;">，由</span><span style="color:#333333;">roll_pointer</span><span style="color:#333333;">来指向，看下图： </span></p> 
+<p style="text-indent:33px;"><img alt="" height="674" src="https://images2.imgbox.com/2f/72/pkCG9SBb_o.png" width="1200"></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">这个时候，事务A</span><span style="color:#333333;">要发起一次查询操作，此时他一发起查询操作，就会生成一个</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">，此时 ReadView里的</span><span style="color:#333333;">min_trx_id=60</span><span style="color:#333333;">，</span><span style="color:#333333;">max_trx_id=71</span><span style="color:#333333;">，creator_trx_id=60，此时如下图所示。</span><img alt="" height="586" src="https://images2.imgbox.com/f5/8c/5pAyx8iT_o.png" width="1200"></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">这个时候事务A</span><span style="color:#333333;">发起查询，发现当前这条数据的</span><span style="color:#333333;">trx_id</span><span style="color:#333333;">是</span><span style="color:#333333;">70</span><span style="color:#333333;">。也就是说，属于</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">的事务</span><span style="color:#333333;">id</span><span style="color:#333333;">范围之 间，说明是他生成ReadView</span><span style="color:#333333;">之前就有这个活跃的事务，是这个事务修改了这条数据的值，但是此时这 个事务B</span><span style="color:#333333;">还没提交，所以</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">的</span><span style="color:#333333;">m_ids</span><span style="color:#333333;">活跃事务列表里，是有</span><span style="color:#333333;">[60, 70]</span><span style="color:#333333;">两个</span><span style="color:#333333;">id</span><span style="color:#333333;">的，所以此时根据 ReadView的机制，此时事务</span><span style="color:#333333;">A</span><span style="color:#333333;">是无法查到事务</span><span style="color:#333333;">B</span><span style="color:#333333;">修改的值</span><span style="color:#333333;">B</span><span style="color:#333333;">的。 </span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">接着就顺着undo log</span><span style="color:#333333;">版本链条往下查找，就会找到一个原始值，发现他的</span><span style="color:#333333;">trx_id</span><span style="color:#333333;">是</span><span style="color:#333333;">50</span><span style="color:#333333;">，小于当前 ReadView里的</span><span style="color:#333333;">min_trx_id</span><span style="color:#333333;">，说明是他生成</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">之前，就有一个事务插入了这个值并且早就提交 了，因此可以查到这个原始值，如下图。</span></p> 
+<p style="text-indent:33px;"><img alt="" height="838" src="https://images2.imgbox.com/75/0f/Tu0UEmWh_o.png" width="1200"></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">接着，咱们假设事务B</span><span style="color:#333333;">此时就提交了，好了，那么提交了就说明事务</span><span style="color:#333333;">B</span><span style="color:#333333;">不会活跃于数据库里了，是不是？ 可以的，大家一定记住，事务B</span><span style="color:#333333;">现在提交了。那么按照</span><span style="color:#333333;">RC</span><span style="color:#333333;">隔离级别的定义，事务</span><span style="color:#333333;">B</span><span style="color:#333333;">此时一旦提交了，说 明事务A</span><span style="color:#333333;">下次再查询，就可以读到事务</span><span style="color:#333333;">B</span><span style="color:#333333;">修改过的值了，因为事务</span><span style="color:#333333;">B</span><span style="color:#333333;">提交了。 </span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">那么到底怎么让事务A</span><span style="color:#333333;">能够独到提交的事务</span><span style="color:#333333;">B</span><span style="color:#333333;">修改过的值呢？ 很简单，就是让事务A</span><span style="color:#333333;">下次发起查询，再次生成一个</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">。此时再次生成</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">，数据库内活 跃的事务只有事务A</span><span style="color:#333333;">了，因此</span><span style="color:#333333;">min_trx_id</span><span style="color:#333333;">是</span><span style="color:#333333;">60</span><span style="color:#333333;">，</span><span style="color:#333333;">mac_trx_id</span><span style="color:#333333;">是</span><span style="color:#333333;">71</span><span style="color:#333333;">，但是</span><span style="color:#333333;">m_ids</span><span style="color:#333333;">这个活跃事务列表里，只 会有一个60</span><span style="color:#333333;">了，事务</span><span style="color:#333333;">B</span><span style="color:#333333;">的</span><span style="color:#333333;">id=70</span><span style="color:#333333;">不会出现在</span><span style="color:#333333;">m_ids</span><span style="color:#333333;">活跃事务列表里了，如下图。</span></p> 
+<p style="text-indent:33px;"><img alt="" height="746" src="https://images2.imgbox.com/d7/cc/D4Sbi9jw_o.png" width="1200"></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">此时事务A</span><span style="color:#333333;">再次基于这个</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">去查询，会发现这条数据的</span><span style="color:#333333;">trx_id=70</span><span style="color:#333333;">，虽然在</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">的 min_trx_id和</span><span style="color:#333333;">max_trx_id</span><span style="color:#333333;">范围之间，但是此时并不在</span><span style="color:#333333;">m_ids</span><span style="color:#333333;">列表内，说明事务</span><span style="color:#333333;">B</span><span style="color:#333333;">在生成本次</span><span style="color:#333333;">ReadView</span><span style="color:#333333;">之 前就已经提交了。</span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">那么既然在生成本次ReadView</span><span style="color:#333333;">之前，事务</span><span style="color:#333333;">B</span><span style="color:#333333;">就已经提交了，就说明这次你查询就可以查到事务</span><span style="color:#333333;">B</span><span style="color:#333333;">修改过 的这个值了，此时事务A</span><span style="color:#333333;">就会查到值B，如下图所示。</span><img alt="" height="802" src="https://images2.imgbox.com/1d/b5/XgRv640J_o.png" width="1200"></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">到此为止，RC</span><span style="color:#333333;">隔离级别如何实现的，大家应该就理解了，他的关键点在于每次查询都生成新的 ReadView，那么如果在你这次查询之前，有事务修改了数据还提交了，你这次查询生成的</span><span style="color:#333333;">ReadView 里，那个m_ids</span><span style="color:#333333;">列表当然不包含这个已经提交的事务了，既然不包含已经提交的事务了，那么当然可以 读到人家修改过的值了。</span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">这就是基于ReadView</span><span style="color:#333333;">实现</span><span style="color:#333333;">RC</span><span style="color:#333333;">隔离级别的原理，希望大家好好仔细去体会，实际上，基于</span><span style="color:#333333;">undo log</span><span style="color:#333333;">多版 本链条以及ReadView</span><span style="color:#333333;">机制实现的多事务并发执行的</span><span style="color:#333333;">RC</span><span style="color:#333333;">隔离级别、</span><span style="color:#333333;">RR</span><span style="color:#333333;">隔离级别，就是数据库的</span><span style="color:#333333;">MVCC</span><span style="color:#333333;">多 版本并发控制机制。 </span></p> 
+<p style="text-indent:33px;"><span style="color:#333333;">他本质是协调你多个事务并发运行的时候，并发的读写同一批数据，此时应该如何协调互相的可见性。</span></p> 
+<p style="text-indent:33px;"> </p> 
+<p style="text-indent:33px;"> </p> 
+<p style="text-indent:33px;"> </p> 
+<p style="text-indent:33px;"> </p> 
+<p style="text-indent:33px;"> </p> 
+<p style="text-indent:33px;"> </p> 
+<p style="text-indent:33px;"> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/4048ad4eff229f74bcf0f234373b69df/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">IDEA中解决＜%@ taglib uri=“http://java.sun.com/jsp/jstl/core“ prefix=“c“%＞报错</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/34292bfab3b96c40b5667dc3598fc9ab/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">linux中安装redis-5.0.2</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

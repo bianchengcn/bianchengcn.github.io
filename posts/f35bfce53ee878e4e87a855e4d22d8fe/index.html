@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Springboot整合Elasticsearch、搭建Logstash同步数据 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Springboot整合Elasticsearch、搭建Logstash同步数据" />
+<meta property="og:description" content="文章目录 整合Springboot测试实体类创建索引（文档）更新文档查询文档删除文档数据分页文档查询高亮分页查询删除索引小结 Logstash概念安装配置自定义模板中文分词不生效 整合Springboot 通过虚拟机搭建ES，这里使用的版本是6.4.3，引入相应依赖
+&lt;dependency&gt; &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt; &lt;artifactId&gt;spring-boot-starter-data-elasticsearch&lt;/artifactId&gt; # 使用2.2.2是为了对应ES的版本 &lt;version&gt;2.2.2.RELEASE&lt;/version&gt; &lt;/dependency&gt; 引入依赖之后可以自行查看
+spring: data: elasticsearch: # 在es中配置的名称 cluster-name: es # 如果是集群，用,分隔 cluster-nodes: 192.168.1.7:9300 测试实体类 package com.csea.entity; import lombok.Data; import org.springframework.data.annotation.Id; import org.springframework.data.elasticsearch.annotations.Document; import org.springframework.data.elasticsearch.annotations.Field; /** * @author Csea * @title */ @Data @Document(indexName = &#34;merchant&#34;, type = &#34;doc&#34;) public class Merchant { @Id private Long merchantId; // store = true 表示这是要存储的字段 @Field(store = true) private String name; @Field(store = true) private String mob; @Field(store = true) private String address; @Field(store = true) private String descr; } 创建索引（文档） 当索引不存在时候，会先创建索引，并将数据插入。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/f35bfce53ee878e4e87a855e4d22d8fe/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-06-23T21:56:27+08:00" />
+<meta property="article:modified_time" content="2021-06-23T21:56:27+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Springboot整合Elasticsearch、搭建Logstash同步数据</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><ul><li><a href="#Springboot_2" rel="nofollow">整合Springboot</a></li><li><ul><li><a href="#_26" rel="nofollow">测试实体类</a></li><li><a href="#_62" rel="nofollow">创建索引（文档）</a></li><li><a href="#_83" rel="nofollow">更新文档</a></li><li><a href="#_103" rel="nofollow">查询文档</a></li><li><a href="#_119" rel="nofollow">删除文档数据</a></li><li><a href="#_127" rel="nofollow">分页文档查询</a></li><li><a href="#_148" rel="nofollow">高亮分页查询</a></li><li><a href="#_214" rel="nofollow">删除索引</a></li><li><a href="#_223" rel="nofollow">小结</a></li></ul> 
+    </li><li><a href="#Logstash_226" rel="nofollow">Logstash</a></li><li><ul><li><a href="#_228" rel="nofollow">概念</a></li><li><a href="#_238" rel="nofollow">安装配置</a></li><li><a href="#_334" rel="nofollow">自定义模板</a></li><li><ul><li><a href="#_437" rel="nofollow">中文分词不生效</a></li></ul> 
+    </li></ul> 
+   </li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h4><a id="Springboot_2"></a>整合Springboot</h4> 
+<p>通过虚拟机搭建ES，这里使用的版本是6.4.3，引入相应依赖</p> 
+<pre><code class="prism language-bash"><span class="token operator">&lt;</span>dependency<span class="token operator">&gt;</span>
+	<span class="token operator">&lt;</span>groupId<span class="token operator">&gt;</span>org.springframework.boot<span class="token operator">&lt;</span>/groupId<span class="token operator">&gt;</span>
+	<span class="token operator">&lt;</span>artifactId<span class="token operator">&gt;</span>spring-boot-starter-data-elasticsearch<span class="token operator">&lt;</span>/artifactId<span class="token operator">&gt;</span>
+	<span class="token comment"># 使用2.2.2是为了对应ES的版本</span>
+	<span class="token operator">&lt;</span>version<span class="token operator">&gt;</span><span class="token number">2.2</span>.2.RELEASE<span class="token operator">&lt;</span>/version<span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span>/dependency<span class="token operator">&gt;</span>
+</code></pre> 
+<p>引入依赖之后可以自行查看<br> <img src="https://images2.imgbox.com/63/d6/xIgvq1MN_o.png" alt=""></p> 
+<pre><code class="prism language-yaml"><span class="token key atrule">spring</span><span class="token punctuation">:</span>
+  <span class="token key atrule">data</span><span class="token punctuation">:</span>
+    <span class="token key atrule">elasticsearch</span><span class="token punctuation">:</span>
+      <span class="token comment"># 在es中配置的名称</span>
+      <span class="token key atrule">cluster-name</span><span class="token punctuation">:</span> es
+      <span class="token comment"># 如果是集群，用,分隔</span>
+      <span class="token key atrule">cluster-nodes</span><span class="token punctuation">:</span> 192.168.1.7<span class="token punctuation">:</span><span class="token number">9300</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/6b/20/NixAtTPj_o.png" alt=""></p> 
+<h5><a id="_26"></a>测试实体类</h5> 
+<pre><code class="prism language-java"><span class="token keyword">package</span> <span class="token namespace">com<span class="token punctuation">.</span>csea<span class="token punctuation">.</span>entity</span><span class="token punctuation">;</span>
+
+<span class="token keyword">import</span> <span class="token namespace">lombok<span class="token punctuation">.</span></span><span class="token class-name">Data</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>data<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Id</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>data<span class="token punctuation">.</span>elasticsearch<span class="token punctuation">.</span>annotations<span class="token punctuation">.</span></span><span class="token class-name">Document</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>data<span class="token punctuation">.</span>elasticsearch<span class="token punctuation">.</span>annotations<span class="token punctuation">.</span></span><span class="token class-name">Field</span><span class="token punctuation">;</span>
+
+<span class="token comment">/**
+ * @author Csea
+ * @title
+ */</span>
+<span class="token annotation punctuation">@Data</span>
+<span class="token annotation punctuation">@Document</span><span class="token punctuation">(</span>indexName <span class="token operator">=</span> <span class="token string">"merchant"</span><span class="token punctuation">,</span> type <span class="token operator">=</span> <span class="token string">"doc"</span><span class="token punctuation">)</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">Merchant</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Id</span>
+    <span class="token keyword">private</span> <span class="token class-name">Long</span> merchantId<span class="token punctuation">;</span>
+	<span class="token comment">// store = true 表示这是要存储的字段</span>
+    <span class="token annotation punctuation">@Field</span><span class="token punctuation">(</span>store <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">)</span>
+    <span class="token keyword">private</span> <span class="token class-name">String</span> name<span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Field</span><span class="token punctuation">(</span>store <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">)</span>
+    <span class="token keyword">private</span> <span class="token class-name">String</span> mob<span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Field</span><span class="token punctuation">(</span>store <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">)</span>
+    <span class="token keyword">private</span> <span class="token class-name">String</span> address<span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Field</span><span class="token punctuation">(</span>store <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">)</span>
+    <span class="token keyword">private</span> <span class="token class-name">String</span> descr<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<h5><a id="_62"></a>创建索引（文档）</h5> 
+<p>当索引不存在时候，会先创建索引，并将数据插入。</p> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Autowired</span>
+    <span class="token keyword">private</span> <span class="token class-name">ElasticsearchTemplate</span> elasticsearchTemplate<span class="token punctuation">;</span>
+	<span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">createIndex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Merchant</span> merchant <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Merchant</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        merchant<span class="token punctuation">.</span><span class="token function">setMerchantId</span><span class="token punctuation">(</span><span class="token number">1001L</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        merchant<span class="token punctuation">.</span><span class="token function">setName</span><span class="token punctuation">(</span><span class="token string">"Csea-杂货铺1"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        merchant<span class="token punctuation">.</span><span class="token function">setAddress</span><span class="token punctuation">(</span><span class="token string">"大道8888号"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        merchant<span class="token punctuation">.</span><span class="token function">setDescr</span><span class="token punctuation">(</span><span class="token string">"好吃的不得了"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        merchant<span class="token punctuation">.</span><span class="token function">setMob</span><span class="token punctuation">(</span><span class="token string">"13899999999"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">IndexQuery</span> indexQuery <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">IndexQueryBuilder</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">withObject</span><span class="token punctuation">(</span>merchant<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        elasticsearchTemplate<span class="token punctuation">.</span><span class="token function">index</span><span class="token punctuation">(</span>indexQuery<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<p>执行完之后可以看到merchant索引已经创建，并且文档也新增了。<br> <img src="https://images2.imgbox.com/4c/ef/JFbuTrAo_o.png" alt=""><br> <img src="https://images2.imgbox.com/48/07/pWgK2iUh_o.png" alt=""></p> 
+<h5><a id="_83"></a>更新文档</h5> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">updateMerchantDoc</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> sourceMap <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">HashMap</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        sourceMap<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span><span class="token string">"name"</span><span class="token punctuation">,</span> <span class="token string">"Csea-杂货铺-update"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        sourceMap<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span><span class="token string">"adress"</span><span class="token punctuation">,</span> <span class="token string">"光明大道8888号"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        sourceMap<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span><span class="token string">"descr"</span><span class="token punctuation">,</span> <span class="token string">"好吃你就多吃点！~"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">IndexRequest</span> indexRequest <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">IndexRequest</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        indexRequest<span class="token punctuation">.</span><span class="token function">source</span><span class="token punctuation">(</span>sourceMap<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token class-name">UpdateQuery</span> query <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">UpdateQueryBuilder</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">withClass</span><span class="token punctuation">(</span><span class="token class-name">Merchant</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">withId</span><span class="token punctuation">(</span><span class="token string">"1001"</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">withIndexRequest</span><span class="token punctuation">(</span>indexRequest<span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        elasticsearchTemplate<span class="token punctuation">.</span><span class="token function">update</span><span class="token punctuation">(</span>query<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/25/a1/8HeEUCAt_o.png" alt=""></p> 
+<h5><a id="_103"></a>查询文档</h5> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">queryMerchantDoc</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">GetQuery</span> query <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">GetQuery</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        query<span class="token punctuation">.</span><span class="token function">setId</span><span class="token punctuation">(</span><span class="token string">"1001"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">Merchant</span> merchant <span class="token operator">=</span> elasticsearchTemplate<span class="token punctuation">.</span><span class="token function">queryForObject</span><span class="token punctuation">(</span>query<span class="token punctuation">,</span> <span class="token class-name">Merchant</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"查询到的数据是={}"</span><span class="token punctuation">,</span> merchant<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<pre><code class="prism language-java"><span class="token class-name"><span class="token namespace">com<span class="token punctuation">.</span>test<span class="token punctuation">.</span></span>ESTest</span> <span class="token operator">:</span> 查询到的数据是<span class="token operator">=</span><span class="token class-name">Merchant</span><span class="token punctuation">(</span>merchantId<span class="token operator">=</span><span class="token number">1001</span><span class="token punctuation">,</span> name<span class="token operator">=</span><span class="token class-name">Csea</span><span class="token operator">-</span>杂货铺<span class="token operator">-</span>update<span class="token punctuation">,</span> mob<span class="token operator">=</span><span class="token number">13899999999</span><span class="token punctuation">,</span> address<span class="token operator">=</span>大道<span class="token number">8888</span>号<span class="token punctuation">,</span> descr<span class="token operator">=</span>好吃你就多吃点！<span class="token operator">~</span><span class="token punctuation">)</span>
+</code></pre> 
+<h5><a id="_119"></a>删除文档数据</h5> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">delMerchantDoc</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        elasticsearchTemplate<span class="token punctuation">.</span><span class="token function">delete</span><span class="token punctuation">(</span><span class="token class-name">Merchant</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> <span class="token string">"1001"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="_127"></a>分页文档查询</h5> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">searchPageMerchantDoc</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+        <span class="token class-name">Pageable</span> pageable <span class="token operator">=</span> <span class="token class-name">PageRequest</span><span class="token punctuation">.</span><span class="token function">of</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">20</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token class-name">SearchQuery</span> query <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">NativeSearchQueryBuilder</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">withQuery</span><span class="token punctuation">(</span><span class="token class-name">QueryBuilders</span><span class="token punctuation">.</span><span class="token function">matchQuery</span><span class="token punctuation">(</span><span class="token string">"description"</span><span class="token punctuation">,</span> <span class="token string">"God Engineer "</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">withPageable</span><span class="token punctuation">(</span>pageable<span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">AggregatedPage</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Merchant</span><span class="token punctuation">&gt;</span></span> merchants <span class="token operator">=</span> elasticsearchTemplate<span class="token punctuation">.</span><span class="token function">queryForPage</span><span class="token punctuation">(</span>query<span class="token punctuation">,</span> <span class="token class-name">Merchant</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Merchant</span><span class="token punctuation">&gt;</span></span> content <span class="token operator">=</span> merchants<span class="token punctuation">.</span><span class="token function">getContent</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Merchant</span> merchant <span class="token operator">:</span> content<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"查询到的文档为：{}"</span><span class="token punctuation">,</span> merchant<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+    <span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="_148"></a>高亮分页查询</h5> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">searchHightMerchantDoc</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+        <span class="token class-name">String</span> preTag <span class="token operator">=</span> <span class="token string">"&lt;font color='red'&gt;"</span><span class="token punctuation">;</span>
+        <span class="token class-name">String</span> postTg <span class="token operator">=</span> <span class="token string">"&lt;/font&gt;"</span><span class="token punctuation">;</span>
+
+        <span class="token class-name">Pageable</span> pageable <span class="token operator">=</span> <span class="token class-name">PageRequest</span><span class="token punctuation">.</span><span class="token function">of</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">20</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">// 排序</span>
+        <span class="token class-name">SortBuilder</span> sortBuilder <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">FieldSortBuilder</span><span class="token punctuation">(</span><span class="token string">"name"</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">order</span><span class="token punctuation">(</span><span class="token class-name">SortOrder</span><span class="token punctuation">.</span>DESC<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+        <span class="token class-name">SearchQuery</span> query <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">NativeSearchQueryBuilder</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+                <span class="token comment">// 查询的字段</span>
+                <span class="token punctuation">.</span><span class="token function">withQuery</span><span class="token punctuation">(</span><span class="token class-name">QueryBuilders</span><span class="token punctuation">.</span><span class="token function">matchQuery</span><span class="token punctuation">(</span><span class="token string">"mob"</span><span class="token punctuation">,</span> <span class="token string">"88"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">withHighlightFields</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">HighlightBuilder<span class="token punctuation">.</span>Field</span><span class="token punctuation">(</span><span class="token string">"mob"</span><span class="token punctuation">)</span>
+                        <span class="token punctuation">.</span><span class="token function">preTags</span><span class="token punctuation">(</span>preTag<span class="token punctuation">)</span>
+                        <span class="token punctuation">.</span><span class="token function">postTags</span><span class="token punctuation">(</span>postTg<span class="token punctuation">)</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">withSort</span><span class="token punctuation">(</span>sortBuilder<span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">withPageable</span><span class="token punctuation">(</span>pageable<span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">AggregatedPage</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Merchant</span><span class="token punctuation">&gt;</span></span> merchants <span class="token operator">=</span> elasticsearchTemplate<span class="token punctuation">.</span><span class="token function">queryForPage</span><span class="token punctuation">(</span>query<span class="token punctuation">,</span> <span class="token class-name">Merchant</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span>
+                <span class="token keyword">new</span> <span class="token class-name">SearchResultMapper</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token annotation punctuation">@Override</span>
+                    <span class="token keyword">public</span> <span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">T</span><span class="token punctuation">&gt;</span></span> <span class="token class-name">AggregatedPage</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">T</span><span class="token punctuation">&gt;</span></span> <span class="token function">mapResults</span><span class="token punctuation">(</span><span class="token class-name">SearchResponse</span> response<span class="token punctuation">,</span> <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">T</span><span class="token punctuation">&gt;</span></span> aClass<span class="token punctuation">,</span> <span class="token class-name">Pageable</span> pageable<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                        <span class="token class-name">SearchHits</span> hits <span class="token operator">=</span> response<span class="token punctuation">.</span><span class="token function">getHits</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+                        <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Merchant</span><span class="token punctuation">&gt;</span></span> stuList <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">SearchHit</span> hit <span class="token operator">:</span> hits<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token class-name">HighlightField</span> highlightField <span class="token operator">=</span> hit<span class="token punctuation">.</span><span class="token function">getHighlightFields</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string">"mob"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            <span class="token class-name">String</span> mob <span class="token operator">=</span> highlightField<span class="token punctuation">.</span><span class="token function">getFragments</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span><span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+                            <span class="token class-name">Object</span> merchantId <span class="token operator">=</span> hit<span class="token punctuation">.</span><span class="token function">getSourceAsMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string">"merchantId"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            <span class="token class-name">String</span> name <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">)</span> hit<span class="token punctuation">.</span><span class="token function">getSourceAsMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string">"name"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            <span class="token class-name">String</span> descr <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">)</span> hit<span class="token punctuation">.</span><span class="token function">getSourceAsMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string">"descr"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            <span class="token class-name">String</span> address <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">)</span> hit<span class="token punctuation">.</span><span class="token function">getSourceAsMap</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string">"address"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+                            <span class="token class-name">Merchant</span> merchantHL <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">Merchant</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            merchantHL<span class="token punctuation">.</span><span class="token function">setDescr</span><span class="token punctuation">(</span>descr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            merchantHL<span class="token punctuation">.</span><span class="token function">setMerchantId</span><span class="token punctuation">(</span><span class="token class-name">Long</span><span class="token punctuation">.</span><span class="token function">valueOf</span><span class="token punctuation">(</span>merchantId<span class="token punctuation">.</span><span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            merchantHL<span class="token punctuation">.</span><span class="token function">setName</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            merchantHL<span class="token punctuation">.</span><span class="token function">setMob</span><span class="token punctuation">(</span>mob<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            merchantHL<span class="token punctuation">.</span><span class="token function">setAddress</span><span class="token punctuation">(</span>address<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            stuList<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>merchantHL<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+                        <span class="token punctuation">}</span>
+
+                        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>stuList<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token keyword">return</span> <span class="token keyword">new</span> <span class="token class-name">AggregatedPageImpl</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">T</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">)</span> stuList<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        <span class="token punctuation">}</span>
+
+                        <span class="token keyword">return</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+                    <span class="token punctuation">}</span>
+                <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"分页总数：{}"</span><span class="token punctuation">,</span> merchants<span class="token punctuation">.</span><span class="token function">getTotalPages</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Merchant</span><span class="token punctuation">&gt;</span></span> content <span class="token operator">=</span> merchants<span class="token punctuation">.</span><span class="token function">getContent</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Merchant</span> merchant <span class="token operator">:</span> content<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"分页文档数据：{}"</span><span class="token punctuation">,</span> merchant<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+    <span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="_214"></a>删除索引</h5> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Test</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">deleteDelMerchantIndex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        elasticsearchTemplate<span class="token punctuation">.</span><span class="token function">deleteIndex</span><span class="token punctuation">(</span><span class="token class-name">Merchant</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="_223"></a>小结</h5> 
+<p>不建议使用ElasticsearchTemplate对索引进行管理（创建索引、更新映射、删除索引），因为就像使用Mysql，不会通过java代码去改变表结构，ES也是如此，更多是用来进行CRUD操作。</p> 
+<h4><a id="Logstash_226"></a>Logstash</h4> 
+<h5><a id="_228"></a>概念</h5> 
+<ol><li>作为数据采集的工具；</li><li>以id或update_time作为同步边界；<br> 以id同步：初次同步的时候会将所有数据同步过来，之后logstash的定时任务回去检查，比如上次同步到id为2000的数据，那么这次就同步2000之后的数据，使用id作为同步有很大的弊端，就只只能新增数据，无法更新。<br> 以update_time同步：初次同步就将所有的数据同步过来，之后如果有新增或更新的操作，那么就把以上一次更新时间为界，之后的数据全部做一次新增或更新。</li><li>使用logstash-input-jdbd插件同步；</li><li>使用logstash需要跟ES的版本保持一致，比如两者都要是6.4.3版本；</li><li>同步数据时，需要事先创建索引。</li></ol> 
+<h5><a id="_238"></a>安装配置</h5> 
+<p><a href="https://www.elastic.co/cn/downloads/logstash" rel="nofollow">logstash下载地址</a><br> 上传并解压，再上传mysql的驱动jar包，以及jdk（logstash需要jdk）<br> <img src="https://images2.imgbox.com/21/32/WfygsxkA_o.png" alt=""><br> cd进入logstash目录之后，创建文件夹</p> 
+<pre><code class="prism language-powershell">mkdir sync
+</code></pre> 
+<p>进入sync目录，创建配置文件</p> 
+<pre><code class="prism language-powershell"><span class="token comment"># 先创建同步配置文件</span>
+vim logstash<span class="token operator">-</span>db<span class="token operator">-</span>sync<span class="token punctuation">.</span>conf
+<span class="token comment"># 拷贝数据库驱动到该路径下</span>
+<span class="token function">cp</span> <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>mysql<span class="token operator">-</span>connector<span class="token operator">-</span>java<span class="token operator">-</span>8<span class="token punctuation">.</span>0<span class="token punctuation">.</span>13<span class="token punctuation">.</span>jar <span class="token punctuation">.</span>
+</code></pre> 
+<p>修改logstash-db-sync.conf</p> 
+<pre><code class="prism language-powershell">input <span class="token punctuation">{<!-- --></span>
+	jdbc <span class="token punctuation">{<!-- --></span>
+		<span class="token comment"># 设置Mysql/MariaDB 数据库url以及数据库名称</span>
+		jdbc_connection_string =&gt; <span class="token string">"jdbc:mysql://192.168.1.6:3306/xxg?serverTimezone=Asia/Shanghai&amp;characterEncoding=utf8&amp;useSSL=false"</span>
+		<span class="token comment"># 数据库用户名密码</span>
+		jdbc_user =&gt; <span class="token string">"root"</span>
+		jdbc_password =&gt; <span class="token string">"123456"</span>
+		<span class="token comment"># 数据库驱动所在位置，可以是绝对路径或相对路径</span>
+		<span class="token comment">#jdbc_driver_library =&gt; "/usr/local/logstash-6.4.3/sync/mysql-connector-java-5.1.49.jar"</span>
+		jdbc_driver_library =&gt; <span class="token string">"/usr/local/logstash-6.4.3/sync/mysql-connector-java-8.0.13.jar"</span>
+		<span class="token comment"># 驱动类名</span>
+		<span class="token comment">#jdbc_driver_class =&gt; "com.mysql.jdbc.Driver"</span>
+		jdbc_driver_class =&gt; <span class="token string">"com.mysql.cj.jdbc.Driver"</span>
+		<span class="token comment"># 开启分页</span>
+		jdbc_paging_enabled =&gt; <span class="token string">"true"</span>
+		<span class="token comment"># 分页每页数量，可以自定义</span>
+		jdbc_page_size =&gt; <span class="token string">"10000"</span>
+		<span class="token comment"># 执行的sql文件路径</span>
+		statement_filepath =&gt; <span class="token string">"/usr/local/logstash-6.4.3/sync/product.sql"</span>
+		<span class="token comment"># 设置定时任务间隔</span>
+		schedule =&gt; <span class="token string">"* * * * *"</span>
+		<span class="token comment"># 索引类型</span>
+		<span class="token function">type</span> =&gt; <span class="token string">"_doc"</span>
+		<span class="token comment"># 是否开启记录上次追踪的结构，也就是上次更新的实际，这个会记录到 last_run_metadata_path 的文件</span>
+		use_column_value =&gt; true
+		<span class="token comment"># 记录上一次追踪的结果值</span>
+		last_run_metadata_path =&gt; <span class="token string">"/usr/local/logstash-6.4.3/sync/track_time"</span>
+		<span class="token comment"># 如果 use_column_value 为true，配置本参数，追踪的colume名，可以是自增id或者时间</span>
+		tracking_column =&gt; <span class="token string">"update_time"</span>
+		<span class="token comment"># tracking_column 对应字段的类型</span>
+		tracking_column_type =&gt; <span class="token string">"timestamp"</span>
+		<span class="token comment"># 是否清除 last_run_metadata_path 的记录，true则每次都从头开始查询所有</span>
+		clean_run =&gt; false
+		<span class="token comment"># 数据库字段名称大写转小写</span>
+		lowercase_column_names =&gt; false
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+output <span class="token punctuation">{<!-- --></span>
+	elasticsearch <span class="token punctuation">{<!-- --></span>
+		<span class="token comment"># es地址</span>
+		hosts =&gt; <span class="token punctuation">[</span><span class="token string">"192.168.1.7:9200"</span><span class="token punctuation">]</span>
+		<span class="token comment"># 同步索引名</span>
+		index =&gt; <span class="token string">"product"</span>
+		<span class="token comment"># 设置_docID和数据相同，按照执行sql中的字段来</span>
+		document_id =&gt; <span class="token string">"%{product_id}"</span>
+	<span class="token punctuation">}</span>
+	<span class="token comment"># 日志输出</span>
+	stdout <span class="token punctuation">{<!-- --></span>
+		codec =&gt; json_lines
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>添加执行同步查询的sql脚本</p> 
+<pre><code class="prism language-powershell">vim product<span class="token punctuation">.</span>sql
+</code></pre> 
+<pre><code class="prism language-powershell"><span class="token function">SELECT</span>
+	<span class="token operator">*</span> 
+<span class="token keyword">FROM</span>
+	jh_product 
+WHERE
+	is_delete = 0 
+	AND update_time &gt;= :sql_last_value
+</code></pre> 
+<p>:sql_last_value是logstash中要赋值的地方，可以理解为占位符</p> 
+<p>启动logstash，先cd到目录下的bin目录</p> 
+<pre><code class="prism language-powershell"><span class="token punctuation">.</span><span class="token operator">/</span>logstash <span class="token operator">-</span>f <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>logstash<span class="token operator">-</span>6<span class="token punctuation">.</span>4<span class="token punctuation">.</span>3<span class="token operator">/</span>sync<span class="token operator">/</span>logstash<span class="token operator">-</span>db<span class="token operator">-</span>sync<span class="token punctuation">.</span>conf
+</code></pre> 
+<p>启动之后就可以看到数据同步过去，在ES的索引中查看数据<br> <img src="https://images2.imgbox.com/1d/68/9i2Bq6al_o.png" alt=""></p> 
+<h5><a id="_334"></a>自定义模板</h5> 
+<p>因为需要用到中文分词，所以需要自定义模板<br> Get：http://{IP}:{port}/_template/logstash<br> 查看模板信息<br> <img src="https://images2.imgbox.com/9f/05/aJgTDPI8_o.png" alt=""><br> 将拿到的template复制出来进行自定义修改</p> 
+<pre><code class="prism language-bash"><span class="token punctuation">{<!-- --></span>
+    <span class="token string">"order"</span><span class="token builtin class-name">:</span> <span class="token number">10</span>,
+    <span class="token string">"version"</span><span class="token builtin class-name">:</span> <span class="token number">1</span>,
+    <span class="token string">"index_patterns"</span><span class="token builtin class-name">:</span> <span class="token punctuation">[</span><span class="token string">"*"</span><span class="token punctuation">]</span>,
+    <span class="token string">"settings"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">"index"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"refresh_interval"</span><span class="token builtin class-name">:</span> <span class="token string">"5s"</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>,
+    <span class="token string">"mappings"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">"_default_"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"dynamic_templates"</span><span class="token builtin class-name">:</span> <span class="token punctuation">[</span>
+                <span class="token punctuation">{<!-- --></span>
+                    <span class="token string">"message_field"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                        <span class="token string">"path_match"</span><span class="token builtin class-name">:</span> <span class="token string">"message"</span>,
+                        <span class="token string">"match_mapping_type"</span><span class="token builtin class-name">:</span> <span class="token string">"string"</span>,
+                        <span class="token string">"mapping"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"text"</span>,
+                            <span class="token string">"norms"</span><span class="token builtin class-name">:</span> <span class="token boolean">false</span>
+                        <span class="token punctuation">}</span>
+                    <span class="token punctuation">}</span>
+                <span class="token punctuation">}</span>,
+                <span class="token punctuation">{<!-- --></span>
+                    <span class="token string">"string_fields"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                        <span class="token string">"match"</span><span class="token builtin class-name">:</span> <span class="token string">"*"</span>,
+                        <span class="token string">"match_mapping_type"</span><span class="token builtin class-name">:</span> <span class="token string">"string"</span>,
+                        <span class="token string">"mapping"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"text"</span>,
+                            <span class="token string">"norms"</span><span class="token builtin class-name">:</span> false,
+                            <span class="token string">"analyzer"</span><span class="token builtin class-name">:</span> <span class="token string">"ik_max_word"</span>,
+                            <span class="token string">"fields"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                                <span class="token string">"keyword"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                                    <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"keyword"</span>,
+                                    <span class="token string">"ignore_above"</span><span class="token builtin class-name">:</span> <span class="token number">256</span>
+                                <span class="token punctuation">}</span>
+                            <span class="token punctuation">}</span>
+                        <span class="token punctuation">}</span>
+                    <span class="token punctuation">}</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">]</span>,
+            <span class="token string">"properties"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token string">"@timestamp"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"date"</span>
+                <span class="token punctuation">}</span>,
+                <span class="token string">"@version"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"keyword"</span>
+                <span class="token punctuation">}</span>,
+                <span class="token string">"geoip"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token string">"dynamic"</span><span class="token builtin class-name">:</span> true,
+                    <span class="token string">"properties"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                        <span class="token string">"ip"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"ip"</span>
+                        <span class="token punctuation">}</span>,
+                        <span class="token string">"location"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"geo_point"</span>
+                        <span class="token punctuation">}</span>,
+                        <span class="token string">"latitude"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"half_float"</span>
+                        <span class="token punctuation">}</span>,
+                        <span class="token string">"longitude"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"half_float"</span>
+                        <span class="token punctuation">}</span>
+                    <span class="token punctuation">}</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>,
+    <span class="token string">"aliases"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>创建完毕之后，在logstash目录的sync下创建新的json文件</p> 
+<pre><code class="prism language-powershell">vim logstash<span class="token operator">-</span>ik<span class="token punctuation">.</span>json
+</code></pre> 
+<p>将自定义模板内容放入json文件中</p> 
+<p>然后修改logstash-db-sync.conf 配置，在output中添加如下配置，保存之后，重启logstash即可</p> 
+<pre><code class="prism language-bash">output <span class="token punctuation">{<!-- --></span>
+	elasticsearch <span class="token punctuation">{<!-- --></span>
+		<span class="token comment"># 定义模板名称</span>
+		template_name <span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token string">"myik"</span>
+		<span class="token comment"># 模板所在位置</span>
+		template <span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token string">"/usr/local/logstash-6.4.3/sync/logstash-ik.json"</span>
+		<span class="token comment"># 重写模板</span>
+		template_overwrite <span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token boolean">true</span>
+		<span class="token comment">#默认为true，false关闭logstash自动管理模板功能，如果自定义模板，则设置false</span>
+		manage_template <span class="token operator">=</span><span class="token operator">&gt;</span> <span class="token boolean">false</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/28/cd/RZfOSTZy_o.png" alt=""></p> 
+<h6><a id="_437"></a>中文分词不生效</h6> 
+<p>如果出现中文分词"analyzer": "ik_max_word"不生效的情况可以先将manage_template改为true，然后启动logstash同步，同步之后，使用：<br> Get：http://{IP}:{port}/_template/{template名称}<br> 来查看模板是否已经上传到es<br> <img src="https://images2.imgbox.com/fe/9c/qJOrP19K_o.png" alt=""><br> 同步之后将manage_template改为false，重新同步即可。<br> 主要就是模板没有被上传到ES导致的。<br> 另外可以修改模板中order的值，值越大，在 merge 规则的时候优先级越高。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/b33781a98c15847f520d120777cb525d/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">用计算机表白的数字,高级暗语表白 数字1-9暗语表白 暗语表白越难懂越好</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/d0dc62f696065cd85afd1c7fef4d5a1d/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">计算机网络技术表白,网络表白的经典句子</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

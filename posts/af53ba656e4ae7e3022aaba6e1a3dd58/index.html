@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>权限解决方案：Shiro自定义Permission、AOP &#43; Shiro - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="权限解决方案：Shiro自定义Permission、AOP &#43; Shiro" />
+<meta property="og:description" content="标题 一、说明二、spring-shiro如何实例化并执行对应的permission？1. 核心想法&amp;思路问题一问题二问题三问题四 2. 具体解读(1)初始化PermissionResolver(2) 实例化并执行permission(3) shiro是如何处理permission返回的结果？[1] 继承关系SecurityManager[2] 逻辑终结 三、ModularRealmAuthorizer继承图 四、WildcardPermission对比规则五、基于业务自定义permission &amp; 重写AuthorizerRealm的isPermitted(重点)思路说明自定义Permission &amp; AuthorizingRealm实现AuthorizerRealm，重写isPermitted（重要）shiro配置aop切入 六、衍生问题 一、说明 二、三、四都是推导过程，结论在五，可以直接应用。
+主要有两点：
+自定义PermissionAOP &#43; Shiro 二、spring-shiro如何实例化并执行对应的permission？ permission执行的片段过程：PermissionAnnotationHandler的assertAuthorized，里面会调用DelegatingSubject。DelegatingSubject里面会委托SecurityManager，默认实例化的SecurityManager就是AuthorizingSecurityManager，AuthorizingSecurityManager会再把任务委托给Authorizer，这里Authorizer的实例是ModularRealmAuthorizer，ModularRealmAuthorizer会把任务再委托给AuthorizingRealm，AuthorizingRealm会把任务再给Permission。
+实例过程：
+PermissionAnnotationHandler -&gt; DelegatingSubject -&gt; AuthorizingSecurityManager-&gt; ModularRealmAuthorizer -&gt; AuthorizingRealm -&gt; Permission
+抽象过程：
+PermissionAnnotationHandler -&gt; Subject -&gt; SecurityManager -&gt; Authorizer -&gt; Realm -&gt; Permission
+如果没有这个权限，会在ModularRealmAuthorizer的assertRealmsConfigured抛出IllegalStateException异常。
+核心想法：自定义permission
+1. 核心想法&amp;思路 我们详细说一下，我们可以利用的过程。我们沿着一个核心的问题出发，自定义permission。
+问题
+在permission执行的片段过程中，它在哪里开始初始化？
+最后我们可不可以自定义permission？
+在哪里处理permission逻辑？
+如果可以那如何去定义？
+问题一 问题：在permission执行的片段过程中，它在哪里开始初始化？
+经过调试，把代码定位到了AuthorizerRealm上面。其它作用看具体解答的第二处。
+重点关注第一个isPermitted的注释说明。
+结论：如果要自定义Permission，就得自定义PermissionResolver，让它去实现我们自定义的Permission。但是要覆盖AuthorizingRealm的setPermissionResolver方法。
+public abstract class AuthorizingRealm extends AuthenticatingRealm implements Authorizer, Initializable, PermissionResolverAware, RolePermissionResolverAware { // 本次问题的主角依赖。get/set不贴出来了 private PermissionResolver permissionResolver; private RolePermissionResolver permissionRoleResolver; public boolean isPermitted(PrincipalCollection principals, String permission) { // 问题核心，这里直接得到Permission的实例。 // PermissionReasolver的作用就是创建Permission实例的地方，在resolvePermission方法中创建。 // WildcardPermissionResolver就是一个好例子。 // 重点：所以我们自己自定义一个PermissionResolver，然后覆盖掉AuthorizingRealm的setPermissionResolver就行了。 Permission p = getPermissionResolver()." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/af53ba656e4ae7e3022aaba6e1a3dd58/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-06-16T11:09:47+08:00" />
+<meta property="article:modified_time" content="2022-06-16T11:09:47+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">权限解决方案：Shiro自定义Permission、AOP &#43; Shiro</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>标题</h4> 
+ <ul><li><a href="#_2" rel="nofollow">一、说明</a></li><li><a href="#springshiropermission_11" rel="nofollow">二、spring-shiro如何实例化并执行对应的permission？</a></li><li><ul><li><a href="#1__27" rel="nofollow">1. 核心想法&amp;思路</a></li><li><ul><li><ul><li><a href="#_41" rel="nofollow">问题一</a></li><li><a href="#_88" rel="nofollow">问题二</a></li><li><a href="#_94" rel="nofollow">问题三</a></li><li><a href="#_104" rel="nofollow">问题四</a></li></ul> 
+   </li></ul> 
+   </li><li><a href="#2__114" rel="nofollow">2. 具体解读</a></li><li><ul><li><a href="#1PermissionResolver_116" rel="nofollow">(1)初始化PermissionResolver</a></li><li><a href="#2_permission_146" rel="nofollow">(2) 实例化并执行permission</a></li><li><a href="#3_shiropermission_190" rel="nofollow">(3) shiro是如何处理permission返回的结果？</a></li><li><ul><li><a href="#1_SecurityManager_192" rel="nofollow">[1] 继承关系SecurityManager</a></li><li><a href="#2__245" rel="nofollow">[2] 逻辑终结</a></li></ul> 
+   </li></ul> 
+  </li></ul> 
+  </li><li><a href="#ModularRealmAuthorizer_334" rel="nofollow">三、ModularRealmAuthorizer</a></li><li><ul><li><ul><li><a href="#_336" rel="nofollow">继承图</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#WildcardPermission_397" rel="nofollow">四、WildcardPermission对比规则</a></li><li><a href="#permission__AuthorizerRealmisPermitted_474" rel="nofollow">五、基于业务自定义permission &amp; 重写AuthorizerRealm的isPermitted(重点)</a></li><li><ul><li><ul><li><a href="#_478" rel="nofollow">思路说明</a></li><li><a href="#Permission__AuthorizingRealm_500" rel="nofollow">自定义Permission &amp; AuthorizingRealm</a></li><li><a href="#AuthorizerRealmisPermitted_561" rel="nofollow">实现AuthorizerRealm，重写isPermitted（重要）</a></li><li><a href="#shiro_657" rel="nofollow">shiro配置</a></li><li><a href="#aop_728" rel="nofollow">aop切入</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#_758" rel="nofollow">六、衍生问题</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="_2"></a>一、说明</h2> 
+<p>二、三、四都是推导过程，结论在五，可以直接应用。</p> 
+<p>主要有两点：</p> 
+<ol><li>自定义Permission</li><li>AOP + Shiro</li></ol> 
+<h2><a id="springshiropermission_11"></a>二、spring-shiro如何实例化并执行对应的permission？</h2> 
+<p><strong>permission执行的片段过程</strong>：<code>PermissionAnnotationHandler</code>的assertAuthorized，里面会调用<code>DelegatingSubject</code>。<code>DelegatingSubject</code>里面会委托<code>SecurityManager</code>，默认实例化的<code>SecurityManager</code>就是<code>AuthorizingSecurityManager</code>，<code>AuthorizingSecurityManager</code>会再把任务委托给<code>Authorizer</code>，这里<code>Authorizer</code>的实例是<code>ModularRealmAuthorizer</code>，<code>ModularRealmAuthorizer</code>会把任务再委托给<code>AuthorizingRealm</code>，<code>AuthorizingRealm</code>会把任务再给<code>Permission</code>。</p> 
+<p>实例过程：</p> 
+<blockquote> 
+ <p>PermissionAnnotationHandler -&gt; DelegatingSubject -&gt; AuthorizingSecurityManager-&gt; ModularRealmAuthorizer -&gt; AuthorizingRealm -&gt; Permission</p> 
+</blockquote> 
+<p>抽象过程：</p> 
+<blockquote> 
+ <p>PermissionAnnotationHandler -&gt; Subject -&gt; SecurityManager -&gt; Authorizer -&gt; Realm -&gt; Permission</p> 
+</blockquote> 
+<p>如果没有这个权限，会在<code>ModularRealmAuthorizer</code>的<code>assertRealmsConfigured</code>抛出<code>IllegalStateException</code>异常。</p> 
+<p>核心想法：自定义permission</p> 
+<h3><a id="1__27"></a>1. 核心想法&amp;思路</h3> 
+<p>我们详细说一下，我们可以利用的过程。我们沿着一个核心的问题出发，<strong>自定义permission</strong>。</p> 
+<ul><li> <p>问题</p> 
+  <ol><li> <p>在permission执行的片段过程中，它在哪里开始初始化？</p> </li><li> <p>最后我们可不可以自定义permission？</p> </li><li> <p>在哪里处理permission逻辑？</p> </li><li> <p>如果可以那如何去定义？</p> </li></ol> </li></ul> 
+<h5><a id="_41"></a>问题一</h5> 
+<p>问题：在permission执行的片段过程中，它在哪里开始初始化？</p> 
+<p>经过调试，把代码定位到了AuthorizerRealm上面。其它作用看具体解答的第二处。</p> 
+<p>重点关注第一个<code>isPermitted</code>的注释说明。</p> 
+<p><strong>结论：如果要自定义Permission，就得自定义PermissionResolver，让它去实现我们自定义的Permission。但是要覆盖AuthorizingRealm的setPermissionResolver方法。</strong></p> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">abstract</span> <span class="token keyword">class</span> <span class="token class-name">AuthorizingRealm</span> <span class="token keyword">extends</span> <span class="token class-name">AuthenticatingRealm</span>
+        <span class="token keyword">implements</span> <span class="token class-name">Authorizer</span><span class="token punctuation">,</span> <span class="token class-name">Initializable</span><span class="token punctuation">,</span> <span class="token class-name">PermissionResolverAware</span><span class="token punctuation">,</span> <span class="token class-name">RolePermissionResolverAware</span> <span class="token punctuation">{<!-- --></span>
+    
+    <span class="token comment">// 本次问题的主角依赖。get/set不贴出来了</span>
+    <span class="token keyword">private</span> <span class="token class-name">PermissionResolver</span> permissionResolver<span class="token punctuation">;</span>
+    <span class="token keyword">private</span> <span class="token class-name">RolePermissionResolver</span> permissionRoleResolver<span class="token punctuation">;</span>
+    
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">String</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// 问题核心，这里直接得到Permission的实例。</span>
+        <span class="token comment">// PermissionReasolver的作用就是创建Permission实例的地方，在resolvePermission方法中创建。</span>
+        <span class="token comment">// WildcardPermissionResolver就是一个好例子。</span>
+        <span class="token comment">// 重点：所以我们自己自定义一个PermissionResolver，然后覆盖掉AuthorizingRealm的setPermissionResolver就行了。</span>
+        <span class="token class-name">Permission</span> p <span class="token operator">=</span> <span class="token function">getPermissionResolver</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">resolvePermission</span><span class="token punctuation">(</span>permission<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span>principals<span class="token punctuation">,</span> p<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">Permission</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">AuthorizationInfo</span> info <span class="token operator">=</span> <span class="token function">getAuthorizationInfo</span><span class="token punctuation">(</span>principals<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span>permission<span class="token punctuation">,</span> info<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">//visibility changed from private to protected per SHIRO-332</span>
+    <span class="token keyword">protected</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">Permission</span> permission<span class="token punctuation">,</span> <span class="token class-name">AuthorizationInfo</span> info<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Permission</span><span class="token punctuation">&gt;</span></span> perms <span class="token operator">=</span> <span class="token function">getPermissions</span><span class="token punctuation">(</span>info<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>perms <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>perms<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Permission</span> perm <span class="token operator">:</span> perms<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span>perm<span class="token punctuation">.</span><span class="token function">implies</span><span class="token punctuation">(</span>permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="_88"></a>问题二</h5> 
+<p>问题：最后我们可不可以自定义permission？</p> 
+<p>由问题一的解答，我们就知道Permission是可以自定义，但是要实现自己的PermissionResolver。而且这个PermissionResolver必须要给到AuthorizerRealm对象。</p> 
+<h5><a id="_94"></a>问题三</h5> 
+<p>问题：在哪里处理permission逻辑？</p> 
+<p>由开头说的实例过程</p> 
+<blockquote> 
+ <p>PermissionAnnotationHandler -&gt; DelegatingSubject -&gt; AuthorizingSecurityManager-&gt; ModularRealmAuthorizer -&gt; AuthorizingRealm -&gt; Permission</p> 
+</blockquote> 
+<p>我们就知道是AuthorizingRealm把任务委托给Permission处理，这个才是最终的执行过程。shiro默认实现是<code>WildcardPermission</code></p> 
+<h5><a id="_104"></a>问题四</h5> 
+<p>问题：如果可以那如何去定义？</p> 
+<p>这个问题是我自己提问的，但是我觉得这是一个比较具有方向性的问题。</p> 
+<ol><li>首先我们已经知道要自定义Permission ，必须要自定义 WildcardPermissionResolver，再把它的对象给到Authorizer。</li><li>其次我们再决定 Permission是如何实现权限的比对的，可以参考WildcardPermission。<strong>会在目录三仔细分析</strong></li><li>最后我们可以模仿PermissionAnnotationHandler，实现更细颗粒度的权限控制，比如：基于数据做权限控制，基于栏目关系做权限控制。<strong>会在目录四仔细分析</strong></li></ol> 
+<h3><a id="2__114"></a>2. 具体解读</h3> 
+<h4><a id="1PermissionResolver_116"></a>(1)初始化PermissionResolver</h4> 
+<p><code>UserRealm</code>继承了<code>AuthorizingRealm</code>，所以我们在初始化<code>UserRealm</code>之后，会初始化<code>AuthorizingRealm</code>。</p> 
+<p>里面<strong>默认</strong>给我们实现了<code>WildcardPermissionResolver</code>，它的<code>resolvePermission</code>方法实例化的就是<code>WildcardPermission</code></p> 
+<pre><code class="prism language-java">ublic <span class="token keyword">abstract</span> <span class="token keyword">class</span> <span class="token class-name">AuthorizingRealm</span> <span class="token keyword">extends</span> <span class="token class-name">AuthenticatingRealm</span>
+        <span class="token keyword">implements</span> <span class="token class-name">Authorizer</span><span class="token punctuation">,</span> <span class="token class-name">Initializable</span><span class="token punctuation">,</span> <span class="token class-name">PermissionResolverAware</span><span class="token punctuation">,</span> <span class="token class-name">RolePermissionResolverAware</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">public</span> <span class="token class-name">AuthorizingRealm</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">this</span><span class="token punctuation">(</span><span class="token keyword">null</span><span class="token punctuation">,</span> <span class="token keyword">null</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">public</span> <span class="token class-name">AuthorizingRealm</span><span class="token punctuation">(</span><span class="token class-name">CacheManager</span> cacheManager<span class="token punctuation">,</span> <span class="token class-name">CredentialsMatcher</span> matcher<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">super</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>cacheManager <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span><span class="token function">setCacheManager</span><span class="token punctuation">(</span>cacheManager<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token punctuation">}</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>matcher <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span><span class="token function">setCredentialsMatcher</span><span class="token punctuation">(</span>matcher<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token punctuation">}</span>
+
+        <span class="token keyword">this</span><span class="token punctuation">.</span>authorizationCachingEnabled <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+        <span class="token comment">// 默认的PermissionResolver</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>permissionResolver <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">WildcardPermissionResolver</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token keyword">int</span> instanceNumber <span class="token operator">=</span> INSTANCE_COUNT<span class="token punctuation">.</span><span class="token function">getAndIncrement</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>authorizationCacheName <span class="token operator">=</span> <span class="token function">getClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getName</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">+</span> DEFAULT_AUTHORIZATION_CACHE_SUFFIX<span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>instanceNumber <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>authorizationCacheName <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span>authorizationCacheName <span class="token operator">+</span> <span class="token string">"."</span> <span class="token operator">+</span> instanceNumber<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h4><a id="2_permission_146"></a>(2) 实例化并执行permission</h4> 
+<blockquote> 
+ <p>下面三个方法共同构成了单个permission的整个逻辑。</p> 
+</blockquote> 
+<p><code>一 </code> 它主要获取了<code>PermissionResolver</code>的具体实现，这里默认的是<code>WildcardPermissionResolver</code>。它主要的作用是实例化具体permission的实现。</p> 
+<p><code>二</code> 它主要是执行了一个抽象方法<code>getAuthorizationInfo</code>，其实也就是我们<code>UserRealm</code>实现的<code>getAuthorizationInfo</code>， 主要是获取<code>AuthorizationInfo</code>。</p> 
+<p><code>三</code> 它就是执行具体的permission了，比对 注解获取到的permission和AuthorizationInfo里面的permission，会返回比较的结果。这里有一个过程 <code>SecurityManager</code> -&gt; <code>Authorizer </code>-&gt; <code>Realm</code>，执行isPermitted是从<code>SecurityManager</code>开始，一直通过委托，最后在realm执行，realm就是我们可以定义扩展的地方。</p> 
+<pre><code class="prism language-java"><span class="token keyword">class</span> <span class="token class-name">AuthorizingRealm</span> <span class="token keyword">extends</span> <span class="token class-name">AuthenticatingRealm</span>
+        <span class="token keyword">implements</span> <span class="token class-name">Authorizer</span><span class="token punctuation">,</span> <span class="token class-name">Initializable</span><span class="token punctuation">,</span> <span class="token class-name">PermissionResolverAware</span><span class="token punctuation">,</span> <span class="token class-name">RolePermissionResolverAware</span><span class="token punctuation">{<!-- --></span>
+    <span class="token comment">/**
+     * 下面截取的只是String的permission，因为其它的跟这个逻辑都差不多。
+     */</span>
+    
+    <span class="token comment">// 一</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">String</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Permission</span> p <span class="token operator">=</span> <span class="token function">getPermissionResolver</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">resolvePermission</span><span class="token punctuation">(</span>permission<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span>principals<span class="token punctuation">,</span> p<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// 二</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">Permission</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">AuthorizationInfo</span> info <span class="token operator">=</span> <span class="token function">getAuthorizationInfo</span><span class="token punctuation">(</span>principals<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span>permission<span class="token punctuation">,</span> info<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// 三</span>
+    <span class="token keyword">protected</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">Permission</span> permission<span class="token punctuation">,</span> <span class="token class-name">AuthorizationInfo</span> info<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Permission</span><span class="token punctuation">&gt;</span></span> perms <span class="token operator">=</span> <span class="token function">getPermissions</span><span class="token punctuation">(</span>info<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>perms <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>perms<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Permission</span> perm <span class="token operator">:</span> perms<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span>perm<span class="token punctuation">.</span><span class="token function">implies</span><span class="token punctuation">(</span>permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h4><a id="3_shiropermission_190"></a>(3) shiro是如何处理permission返回的结果？</h4> 
+<h5><a id="1_SecurityManager_192"></a>[1] 继承关系SecurityManager</h5> 
+<p><img src="https://images2.imgbox.com/f3/9a/cGNcD7gv_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/94/c7/JzBdhErS_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>对比上面两个继承图，最后一个是SpringBoot使用的。</p> 
+</blockquote> 
+<pre><code class="prism language-java"><span class="token comment">// shiro简单的配置</span>
+<span class="token keyword">class</span> <span class="token class-name">ShiroConfig</span><span class="token punctuation">{<!-- --></span>
+     <span class="token annotation punctuation">@Bean</span>
+    <span class="token keyword">public</span> <span class="token class-name">ShiroFilterFactoryBean</span> <span class="token function">shiroFilterFactoryBean</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Autowired</span> <span class="token class-name">DefaultWebSecurityManager</span> defaultWebSecurityManager<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">ShiroFilterFactoryBean</span> shiroFilterFactoryBean <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ShiroFilterFactoryBean</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        shiroFilterFactoryBean<span class="token punctuation">.</span><span class="token function">setSecurityManager</span><span class="token punctuation">(</span>defaultWebSecurityManager<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> filterChainDefinitionMap <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashMap</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        filterChainDefinitionMap<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span><span class="token string">"/**"</span><span class="token punctuation">,</span> <span class="token string">"authc"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        shiroFilterFactoryBean<span class="token punctuation">.</span><span class="token function">setFilterChainDefinitionMap</span><span class="token punctuation">(</span>filterChainDefinitionMap<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        shiroFilterFactoryBean<span class="token punctuation">.</span><span class="token function">setLoginUrl</span><span class="token punctuation">(</span><span class="token string">"/user/login"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> shiroFilterFactoryBean<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Bean</span><span class="token punctuation">(</span><span class="token string">"securityManager"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token class-name">DefaultWebSecurityManager</span> <span class="token function">defaultWebSecurityManager</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Autowired</span> <span class="token class-name">Realm</span> realm<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DefaultWebSecurityManager</span> defaultWebSecurityManager <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">DefaultWebSecurityManager</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        defaultWebSecurityManager<span class="token punctuation">.</span><span class="token function">setRealm</span><span class="token punctuation">(</span>realm<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> defaultWebSecurityManager<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token comment">/**
+     * 开启shiro的注解扫描。
+     * @return
+     */</span>
+    <span class="token annotation punctuation">@Bean</span>
+    <span class="token keyword">public</span> <span class="token class-name">AuthorizationAttributeSourceAdvisor</span> <span class="token function">authorizationAttributeSourceAdvisor</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Qualifier</span><span class="token punctuation">(</span><span class="token string">"securityManager"</span><span class="token punctuation">)</span> <span class="token class-name">SecurityManager</span> securityManager<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">AuthorizationAttributeSourceAdvisor</span> authorizationAttributeSourceAdvisor <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">AuthorizationAttributeSourceAdvisor</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        authorizationAttributeSourceAdvisor<span class="token punctuation">.</span><span class="token function">setSecurityManager</span><span class="token punctuation">(</span>securityManager<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> authorizationAttributeSourceAdvisor<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 解决注解扫描不生效的问题。
+     * @return
+     */</span>
+     <span class="token annotation punctuation">@Bean</span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token class-name">DefaultAdvisorAutoProxyCreator</span> <span class="token function">getDefaultAdvisorAutoProxyCreator</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DefaultAdvisorAutoProxyCreator</span> defaultAdvisorAutoProxyCreator<span class="token operator">=</span><span class="token keyword">new</span> <span class="token class-name">DefaultAdvisorAutoProxyCreator</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        defaultAdvisorAutoProxyCreator<span class="token punctuation">.</span><span class="token function">setUsePrefix</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> defaultAdvisorAutoProxyCreator<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="2__245"></a>[2] 逻辑终结</h5> 
+<p><code>AuthorizingSecurityManager</code> permission回调逻辑结束点之一，权限不足的时候，会抛出UnauthorizedException，并停止往下执行</p> 
+<pre><code class="prism language-java"><span class="token keyword">class</span> <span class="token class-name">AuthorizingSecurityManager</span> <span class="token keyword">extends</span> <span class="token class-name">AuthenticatingSecurityManager</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// 重要属性</span>
+    <span class="token keyword">protected</span> <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Realm</span><span class="token punctuation">&gt;</span></span> realms<span class="token punctuation">;</span>
+    
+    <span class="token keyword">public</span> <span class="token class-name">AuthorizingSecurityManager</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">super</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>authorizer <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ModularRealmAuthorizer</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token comment">// checkPermission 会调用对应的isPermission</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">checkPermission</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">String</span> permission<span class="token punctuation">)</span> <span class="token keyword">throws</span> <span class="token class-name">AuthorizationException</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">assertRealmsConfigured</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">isPermitted</span><span class="token punctuation">(</span>principals<span class="token punctuation">,</span> permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">UnauthorizedException</span><span class="token punctuation">(</span><span class="token string">"Subject does not have permission ["</span> <span class="token operator">+</span> permission <span class="token operator">+</span> <span class="token string">"]"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+	
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">checkPermission</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">Permission</span> permission<span class="token punctuation">)</span> <span class="token keyword">throws</span> <span class="token class-name">AuthorizationException</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">assertRealmsConfigured</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">isPermitted</span><span class="token punctuation">(</span>principals<span class="token punctuation">,</span> permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">UnauthorizedException</span><span class="token punctuation">(</span><span class="token string">"Subject does not have permission ["</span> <span class="token operator">+</span> permission <span class="token operator">+</span> <span class="token string">"]"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token comment">// 下面两个都把授权委托给了AuthorizerRealm</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">Permission</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">assertRealmsConfigured</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Realm</span> realm <span class="token operator">:</span> <span class="token function">getRealms</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token punctuation">(</span>realm <span class="token keyword">instanceof</span> <span class="token class-name">Authorizer</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token keyword">continue</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">Authorizer</span><span class="token punctuation">)</span> realm<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">isPermitted</span><span class="token punctuation">(</span>principals<span class="token punctuation">,</span> permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+     <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">String</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">assertRealmsConfigured</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Realm</span> realm <span class="token operator">:</span> <span class="token function">getRealms</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token punctuation">(</span>realm <span class="token keyword">instanceof</span> <span class="token class-name">Authorizer</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token keyword">continue</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">Authorizer</span><span class="token punctuation">)</span> realm<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">isPermitted</span><span class="token punctuation">(</span>principals<span class="token punctuation">,</span> permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>上面有两个checkPermission方法，其实逻辑都是一样的，只是permission的参数类型不一样。</p> 
+<p>他们都调用了isPermission，根据返回的结果，再决定抛出异常，终止程序继续往下运行，这就是其中之一的结束点。</p> 
+<p>###　(4) PermissionAnnotationHandler - @RequisePermission</p> 
+<pre><code class="prism language-java"><span class="token keyword">class</span> <span class="token class-name">PermissionAnnotationHandler</span><span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">assertAuthorized</span><span class="token punctuation">(</span><span class="token class-name">Annotation</span> a<span class="token punctuation">)</span> <span class="token keyword">throws</span> <span class="token class-name">AuthorizationException</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token punctuation">(</span>a <span class="token keyword">instanceof</span> <span class="token class-name">RequiresPermissions</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token keyword">return</span><span class="token punctuation">;</span>
+
+        <span class="token class-name">RequiresPermissions</span> rpAnnotation <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">RequiresPermissions</span><span class="token punctuation">)</span> a<span class="token punctuation">;</span>
+        <span class="token class-name">String</span><span class="token punctuation">[</span><span class="token punctuation">]</span> perms <span class="token operator">=</span> <span class="token function">getAnnotationValue</span><span class="token punctuation">(</span>a<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">Subject</span> subject <span class="token operator">=</span> <span class="token function">getSubject</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>perms<span class="token punctuation">.</span>length <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            subject<span class="token punctuation">.</span><span class="token function">checkPermission</span><span class="token punctuation">(</span>perms<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token class-name">Logical</span><span class="token punctuation">.</span>AND<span class="token punctuation">.</span><span class="token function">equals</span><span class="token punctuation">(</span>rpAnnotation<span class="token punctuation">.</span><span class="token function">logical</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token function">getSubject</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">checkPermissions</span><span class="token punctuation">(</span>perms<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token class-name">Logical</span><span class="token punctuation">.</span>OR<span class="token punctuation">.</span><span class="token function">equals</span><span class="token punctuation">(</span>rpAnnotation<span class="token punctuation">.</span><span class="token function">logical</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token comment">// Avoid processing exceptions unnecessarily - "delay" throwing the exception by calling hasRole first</span>
+            <span class="token keyword">boolean</span> hasAtLeastOnePermission <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+            <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">String</span> permission <span class="token operator">:</span> perms<span class="token punctuation">)</span> <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">getSubject</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">isPermitted</span><span class="token punctuation">(</span>permission<span class="token punctuation">)</span><span class="token punctuation">)</span> hasAtLeastOnePermission <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+            <span class="token comment">// Cause the exception if none of the role match, note that the exception message will be a bit misleading</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>hasAtLeastOnePermission<span class="token punctuation">)</span> <span class="token function">getSubject</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">checkPermission</span><span class="token punctuation">(</span>perms<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="ModularRealmAuthorizer_334"></a>三、ModularRealmAuthorizer</h2> 
+<h4><a id="_336"></a>继承图</h4> 
+<p><img src="https://images2.imgbox.com/46/87/KUA6RTJ0_o.png" alt="在这里插入图片描述"></p> 
+<p>由继承图看出，ModularRealmAuthorizer具有初始化 PermissionResolver、和初始化RolePermissionResolver的功能。</p> 
+<p>还具有Authorizer授权的功能。它是permission整个委托过程的一环，<code>AuthorizingSecurityManager</code> -&gt;<code> ModularRealmAuthorizer</code> -&gt; <code>UserRealm</code>。</p> 
+<p>具体初始化地方是在，<code>AuthorizingSecurityManager</code>的构造函数里边。</p> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">abstract</span> <span class="token keyword">class</span> <span class="token class-name">AuthorizingSecurityManager</span> <span class="token keyword">extends</span> <span class="token class-name">AuthenticatingSecurityManager</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">/**
+     * The wrapped instance to which all of this &lt;tt&gt;SecurityManager&lt;/tt&gt; authorization calls are delegated.
+     */</span>
+    <span class="token keyword">private</span> <span class="token class-name">Authorizer</span> authorizer<span class="token punctuation">;</span>
+
+    <span class="token comment">/**
+     * Default no-arg constructor that initializes an internal default
+     * {@link org.apache.shiro.authz.ModularRealmAuthorizer ModularRealmAuthorizer}.
+     */</span>
+    <span class="token keyword">public</span> <span class="token class-name">AuthorizingSecurityManager</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">super</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>authorizer <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ModularRealmAuthorizer</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><code>ModularRealmAuthorizer</code></p> 
+<pre><code class="prism language-java"><span class="token keyword">class</span> <span class="token class-name">ModularRealmAuthorizer</span><span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// 给realm初始化RolePermissionResolver</span>
+    <span class="token keyword">protected</span> <span class="token keyword">void</span> <span class="token function">applyRolePermissionResolverToRealms</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">RolePermissionResolver</span> resolver <span class="token operator">=</span> <span class="token function">getRolePermissionResolver</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Realm</span><span class="token punctuation">&gt;</span></span> realms <span class="token operator">=</span> <span class="token function">getRealms</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>resolver <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">&amp;&amp;</span> realms <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>realms<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Realm</span> realm <span class="token operator">:</span> realms<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span>realm <span class="token keyword">instanceof</span> <span class="token class-name">RolePermissionResolverAware</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">RolePermissionResolverAware</span><span class="token punctuation">)</span> realm<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">setRolePermissionResolver</span><span class="token punctuation">(</span>resolver<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// 授权，这里会直接调用我们UserRealm继承的AuthorizingRealm的isPermitted()</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principals<span class="token punctuation">,</span> <span class="token class-name">Permission</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">assertRealmsConfigured</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Realm</span> realm <span class="token operator">:</span> <span class="token function">getRealms</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token punctuation">(</span>realm <span class="token keyword">instanceof</span> <span class="token class-name">Authorizer</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span> <span class="token keyword">continue</span><span class="token punctuation">;</span><span class="token punctuation">}</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">Authorizer</span><span class="token punctuation">)</span> realm<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">isPermitted</span><span class="token punctuation">(</span>principals<span class="token punctuation">,</span> permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="WildcardPermission_397"></a>四、WildcardPermission对比规则</h2> 
+<p>下面我就粘出部分重要的代码逻辑。</p> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">WildcardPermission</span> <span class="token keyword">implements</span> <span class="token class-name">Permission</span><span class="token punctuation">,</span> <span class="token class-name">Serializable</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">protected</span> <span class="token keyword">static</span> <span class="token keyword">final</span> <span class="token class-name">String</span> WILDCARD_TOKEN <span class="token operator">=</span> <span class="token string">"*"</span><span class="token punctuation">;</span>
+    <span class="token keyword">protected</span> <span class="token keyword">static</span> <span class="token keyword">final</span> <span class="token class-name">String</span> PART_DIVIDER_TOKEN <span class="token operator">=</span> <span class="token string">":"</span><span class="token punctuation">;</span>
+    <span class="token keyword">protected</span> <span class="token keyword">static</span> <span class="token keyword">final</span> <span class="token class-name">String</span> SUBPART_DIVIDER_TOKEN <span class="token operator">=</span> <span class="token string">","</span><span class="token punctuation">;</span>
+    <span class="token keyword">protected</span> <span class="token keyword">static</span> <span class="token keyword">final</span> <span class="token keyword">boolean</span> DEFAULT_CASE_SENSITIVE <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token comment">// 这个方法是把wildcardString字符串分割成一个List&lt;Set&lt;String&gt;&gt;，先通过:分割，之后基于:分割结果，再通过,分割。</span>
+    <span class="token comment">// </span>
+    <span class="token keyword">protected</span> <span class="token keyword">void</span> <span class="token function">setParts</span><span class="token punctuation">(</span><span class="token class-name">String</span> wildcardString<span class="token punctuation">,</span> <span class="token keyword">boolean</span> caseSensitive<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        wildcardString <span class="token operator">=</span> <span class="token class-name">StringUtils</span><span class="token punctuation">.</span><span class="token function">clean</span><span class="token punctuation">(</span>wildcardString<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>wildcardString <span class="token operator">==</span> <span class="token keyword">null</span> <span class="token operator">||</span> wildcardString<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">IllegalArgumentException</span><span class="token punctuation">(</span><span class="token string">"Wildcard string cannot be null or empty. Make sure permission strings are properly formatted."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>caseSensitive<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            wildcardString <span class="token operator">=</span> wildcardString<span class="token punctuation">.</span><span class="token function">toLowerCase</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">// 通过:分割</span>
+        <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> parts <span class="token operator">=</span> <span class="token class-name">CollectionUtils</span><span class="token punctuation">.</span><span class="token function">asList</span><span class="token punctuation">(</span>wildcardString<span class="token punctuation">.</span><span class="token function">split</span><span class="token punctuation">(</span>PART_DIVIDER_TOKEN<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>parts <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Set</span><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">String</span> part <span class="token operator">:</span> parts<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token comment">// 基于:分割的结果，再通过,进行分割</span>
+            <span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> subparts <span class="token operator">=</span> <span class="token class-name">CollectionUtils</span><span class="token punctuation">.</span><span class="token function">asSet</span><span class="token punctuation">(</span>part<span class="token punctuation">.</span><span class="token function">split</span><span class="token punctuation">(</span>SUBPART_DIVIDER_TOKEN<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>subparts<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">IllegalArgumentException</span><span class="token punctuation">(</span><span class="token string">"Wildcard string cannot contain parts with only dividers. Make sure permission strings are properly formatted."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>parts<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>subparts<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>parts<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">IllegalArgumentException</span><span class="token punctuation">(</span><span class="token string">"Wildcard string cannot contain only dividers. Make sure permission strings are properly formatted."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token comment">// 权限逻辑对比。</span>
+    <span class="token comment">// 前提：括号这个形参是通过PermissionAnnotationHandler扫描注解得来的。然后本身类的对象是通过AuthorizationInfo实例化出来的。</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">implies</span><span class="token punctuation">(</span><span class="token class-name">Permission</span> p<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token punctuation">(</span>p <span class="token keyword">instanceof</span> <span class="token class-name">WildcardPermission</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token class-name">WildcardPermission</span> wp <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">WildcardPermission</span><span class="token punctuation">)</span> p<span class="token punctuation">;</span>
+        <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Set</span><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> otherParts <span class="token operator">=</span> wp<span class="token punctuation">.</span><span class="token function">getParts</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token comment">// 例子：p(形参) [[user], [update, save]] obj(当前类对象)[[user], [update, insert]]</span>
+        <span class="token comment">// 1. false的逻辑: obj存在通配符 与 obj包含p的所有子元素，两个都不满足的情况下，就是权限不够。</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> otherPart <span class="token operator">:</span> otherParts<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">getParts</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">size</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span> <span class="token number">1</span> <span class="token operator">&lt;</span> i<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> part <span class="token operator">=</span> <span class="token function">getParts</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>part<span class="token punctuation">.</span><span class="token function">contains</span><span class="token punctuation">(</span>WILDCARD_TOKEN<span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>part<span class="token punctuation">.</span><span class="token function">containsAll</span><span class="token punctuation">(</span>otherPart<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+                i<span class="token operator">++</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">// 例子：p(形参) [[user], [update, save]] obj(当前类对象)[[user], [update, insert], [aa]]</span>
+        <span class="token comment">// 2. false的逻辑: 如果obj比p元素多的情况下，obj不包含*就代表权限不足。</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> <span class="token function">getParts</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">size</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> part <span class="token operator">=</span> <span class="token function">getParts</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>part<span class="token punctuation">.</span><span class="token function">contains</span><span class="token punctuation">(</span>WILDCARD_TOKEN<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">// 以上false逻辑都不满足的情况下，就代表权限满足。</span>
+        <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="permission__AuthorizerRealmisPermitted_474"></a>五、基于业务自定义permission &amp; 重写AuthorizerRealm的isPermitted(重点)</h2> 
+<p>比如我们要基于数据层面做权限，不是基于接口层面。我们可以使用SpringAOP实现，下面展示代码例子。</p> 
+<h4><a id="_478"></a>思路说明</h4> 
+<p>这里主要通过 aop 拦截具体的方法，执行Subject.checkPermission。</p> 
+<p>然后流程就是</p> 
+<blockquote> 
+ <p>AOP -&gt; DelegatingSubject -&gt; AuthorizingSecurityManager-&gt; ModularRealmAuthorizer -&gt; AuthorizingRealm -&gt; Permission</p> 
+</blockquote> 
+<p>shiro自带的流程是</p> 
+<blockquote> 
+ <p>PermissionAnnotationHandler -&gt; DelegatingSubject -&gt; AuthorizingSecurityManager-&gt; ModularRealmAuthorizer -&gt; AuthorizingRealm -&gt; Permission</p> 
+</blockquote> 
+<p>这里我们自己的流程自带两个扩展点，AOP这里是一个，自定义Permission是一个。</p> 
+<p><strong>-------------- 下面是重点 --------------</strong></p> 
+<ol><li> <p>原本的PermissionAnnotationHandler是获取方法上的注解拿到 具体的Permission字符串，现在我们改成AOP，获取Permission字符串的地方我们可以改成数据库。</p> </li><li> <p>最后就是Permission，我们可以自己定义Permision实现，对比的规则也可以根据自己的业务进行扩展。而不仅仅限于WildcardPermission提供的规则。</p> </li></ol> 
+<h4><a id="Permission__AuthorizingRealm_500"></a>自定义Permission &amp; AuthorizingRealm</h4> 
+<pre><code class="prism language-java"><span class="token comment">/**
+ * @author ：orange
+ * @date ：Created in 2022/6/1 10:30
+ * @description：自定义permission处理器
+ */</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">OrangePermissionResolver</span> <span class="token keyword">extends</span> <span class="token class-name">WildcardPermissionResolver</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token class-name">Permission</span> <span class="token function">resolvePermission</span><span class="token punctuation">(</span><span class="token class-name">String</span> permissionString<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> <span class="token keyword">new</span> <span class="token class-name">OrangePermission</span><span class="token punctuation">(</span>permissionString<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+
+<span class="token comment">/**
+ * @author ：orange
+ * @date ：Created in 2022/6/1 10:46
+ * @description：具体处理
+ */</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">OrangePermission</span> <span class="token keyword">extends</span> <span class="token class-name">WildcardPermission</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token comment">/**
+     * 业务标识符
+     */</span>
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">String</span> DISTINCTION <span class="token operator">=</span> <span class="token string">"data"</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">public</span> <span class="token class-name">OrangePermission</span><span class="token punctuation">(</span><span class="token class-name">String</span> wildcardString<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">this</span><span class="token punctuation">(</span>wildcardString<span class="token punctuation">,</span> <span class="token boolean">false</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">public</span> <span class="token class-name">OrangePermission</span><span class="token punctuation">(</span><span class="token class-name">String</span> wildcardString<span class="token punctuation">,</span> <span class="token keyword">boolean</span> caseSensitive<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">super</span><span class="token punctuation">(</span>wildcardString<span class="token punctuation">,</span> caseSensitive<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 具体扩展的业务
+     * @return
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">business</span><span class="token punctuation">(</span><span class="token class-name">Permission</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 这里可以自定义了。
+     * @param permission
+     * @return
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">implies</span><span class="token punctuation">(</span><span class="token class-name">Permission</span> permission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token punctuation">(</span>permission <span class="token keyword">instanceof</span> <span class="token class-name">OrangePermission</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token keyword">super</span><span class="token punctuation">.</span><span class="token function">implies</span><span class="token punctuation">(</span>permission<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+
+</code></pre> 
+<h4><a id="AuthorizerRealmisPermitted_561"></a>实现AuthorizerRealm，重写isPermitted（重要）</h4> 
+<pre><code class="prism language-java"><span class="token comment">/**
+ * @author ：orange
+ * @date ：Created in 2022/6/6 12:28
+ * @description：节点和权限判断。
+ */</span>
+<span class="token annotation punctuation">@Component</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">NodeRolePermission</span> <span class="token punctuation">{<!-- --></span>
+  
+    <span class="token comment">/**
+     * 针对于 父级没有权限，子级有权限，但是要以父级为准的情况。
+     * 权限是否处于开启状态是available字段
+     * @return
+     */</span>
+    <span class="token keyword">private</span> <span class="token keyword">boolean</span> <span class="token function">level</span><span class="token punctuation">(</span><span class="token class-name">CMSPermission</span> cmsPermission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 针对于节点和角色，以节点为准，角色为次。
+     * 如果节点不开启，那么角色就算有权限也不能访问。
+     * 如果节点开启，角色没有权限也不能访问。
+     * 要两个同时开启才能有权限。
+     * @return
+     */</span>
+    <span class="token keyword">private</span> <span class="token keyword">boolean</span> <span class="token function">intersection</span><span class="token punctuation">(</span><span class="token class-name">CMSPermission</span> cmsPermission<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 不需要多次处理，处理一次就行了。
+     * @param wildcard
+     * @return
+     */</span>
+    <span class="token annotation punctuation">@Cacheable</span><span class="token punctuation">(</span>value <span class="token operator">=</span> <span class="token string">"NodeRolePermissionBusiness"</span><span class="token punctuation">,</span> key <span class="token operator">=</span> <span class="token string">"#wildcard"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">business</span><span class="token punctuation">(</span><span class="token class-name">String</span> wildcard<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">SysLanguage</span> sysLanguage <span class="token operator">=</span> langUtil<span class="token punctuation">.</span><span class="token function">getLoginUserLang</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">Optional</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">CMSPermission</span><span class="token punctuation">&gt;</span></span> optionalPermission <span class="token operator">=</span> cmsPermissionRepository<span class="token punctuation">.</span><span class="token function">findByNameAndDeletedIsFalseAndSysLanguage</span><span class="token punctuation">(</span>wildcard<span class="token punctuation">,</span> sysLanguage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>optionalPermission<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token class-name">CMSPermission</span> cmsPermission <span class="token operator">=</span> optionalPermission<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">boolean</span> intersection <span class="token operator">=</span> <span class="token function">intersection</span><span class="token punctuation">(</span>cmsPermission<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">boolean</span> level <span class="token operator">=</span> <span class="token function">level</span><span class="token punctuation">(</span>cmsPermission<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> intersection <span class="token operator">&amp;&amp;</span> level<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Slf4j</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">UserRealm</span> <span class="token keyword">extends</span> <span class="token class-name">AuthorizingRealm</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token annotation punctuation">@Resource</span><span class="token punctuation">(</span>type <span class="token operator">=</span> <span class="token class-name">NodeRolePermission</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span>
+    <span class="token keyword">private</span> <span class="token class-name">NodeRolePermission</span> nodeRolePermission<span class="token punctuation">;</span>
+    
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">protected</span> <span class="token class-name">AuthorizationInfo</span> <span class="token function">doGetAuthorizationInfo</span><span class="token punctuation">(</span><span class="token class-name">PrincipalCollection</span> principalCollection<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">SimpleAuthorizationInfo</span> simpleAuthorizationInfo <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">SimpleAuthorizationInfo</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        simpleAuthorizationInfo<span class="token punctuation">.</span><span class="token function">addStringPermissions</span><span class="token punctuation">(</span><span class="token class-name">Arrays</span><span class="token punctuation">.</span><span class="token function">asList</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">String</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">{<!-- --></span><span class="token string">"user:show,login"</span><span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> simpleAuthorizationInfo<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">protected</span> <span class="token class-name">AuthenticationInfo</span> <span class="token function">doGetAuthenticationInfo</span><span class="token punctuation">(</span><span class="token class-name">AuthenticationToken</span> authenticationToken<span class="token punctuation">)</span> <span class="token keyword">throws</span> <span class="token class-name">AuthenticationException</span> <span class="token punctuation">{<!-- --></span>
+        log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"authenticationInfo"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">String</span> username <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">)</span> authenticationToken<span class="token punctuation">.</span><span class="token function">getPrincipal</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">String</span> password <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">String</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token keyword">char</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span> authenticationToken<span class="token punctuation">.</span><span class="token function">getCredentials</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">String</span> auth <span class="token operator">=</span> <span class="token string">"orange"</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">!</span>auth<span class="token punctuation">.</span><span class="token function">equals</span><span class="token punctuation">(</span>username<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>auth<span class="token punctuation">.</span><span class="token function">equals</span><span class="token punctuation">(</span>password<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token keyword">new</span> <span class="token class-name">SimpleAuthenticationInfo</span><span class="token punctuation">(</span>username<span class="token punctuation">,</span> password<span class="token punctuation">,</span> <span class="token function">getName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+	<span class="token comment">// 这里也是业务扩展点，就比如你在对比permission之后，还需要对比栏目的父级是否也开启的权限。</span>
+	<span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">protected</span> <span class="token keyword">boolean</span> <span class="token function">isPermitted</span><span class="token punctuation">(</span><span class="token class-name">Permission</span> permission<span class="token punctuation">,</span> <span class="token class-name">AuthorizationInfo</span> info<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Permission</span><span class="token punctuation">&gt;</span></span> perms <span class="token operator">=</span> <span class="token function">getPermissions</span><span class="token punctuation">(</span>info<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>perms <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>perms<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">Permission</span> perm <span class="token operator">:</span> perms<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span>perm<span class="token punctuation">.</span><span class="token function">implies</span><span class="token punctuation">(</span>permission<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token keyword">return</span> <span class="token boolean">true</span> <span class="token operator">&amp;&amp;</span> nodeRolePermission<span class="token punctuation">.</span><span class="token function">business</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">KguPermission</span><span class="token punctuation">)</span> permission<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getWildcard</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h4><a id="shiro_657"></a>shiro配置</h4> 
+<pre><code class="prism language-java"><span class="token comment">/**
+ * @author ：orange
+ * @date ：Created in 2022/5/30 0:20
+ * @description：shiro配置
+ */</span>
+<span class="token annotation punctuation">@Configuration</span>
+<span class="token annotation punctuation">@Slf4j</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">ShiroConfig</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token comment">/**
+     * ShiroFilterFactoryBean作用是创建AbstractShiroFilter对象。
+     * @param defaultWebSecurityManager
+     * @return
+     */</span>
+    <span class="token annotation punctuation">@Bean</span>
+    <span class="token keyword">public</span> <span class="token class-name">ShiroFilterFactoryBean</span> <span class="token function">shiroFilterFactoryBean</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Autowired</span> <span class="token class-name">DefaultWebSecurityManager</span> defaultWebSecurityManager<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">ShiroFilterFactoryBean</span> shiroFilterFactoryBean <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ShiroFilterFactoryBean</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        shiroFilterFactoryBean<span class="token punctuation">.</span><span class="token function">setSecurityManager</span><span class="token punctuation">(</span>defaultWebSecurityManager<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> filterChainDefinitionMap <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashMap</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        filterChainDefinitionMap<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span><span class="token string">"/user/login"</span><span class="token punctuation">,</span> <span class="token string">"anon"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        filterChainDefinitionMap<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span><span class="token string">"/**"</span><span class="token punctuation">,</span> <span class="token string">"authc"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        shiroFilterFactoryBean<span class="token punctuation">.</span><span class="token function">setFilterChainDefinitionMap</span><span class="token punctuation">(</span>filterChainDefinitionMap<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        shiroFilterFactoryBean<span class="token punctuation">.</span><span class="token function">setLoginUrl</span><span class="token punctuation">(</span><span class="token string">"/user/login"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> shiroFilterFactoryBean<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Bean</span><span class="token punctuation">(</span><span class="token string">"userRealm"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token class-name">UserRealm</span> <span class="token function">createRealm</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">UserRealm</span> userRealm <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">UserRealm</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        userRealm<span class="token punctuation">.</span><span class="token function">setPermissionResolver</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">OrangePermissionResolver</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> userRealm<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * SecurityManager的web默认实现
+     * @return
+     */</span>
+    <span class="token annotation punctuation">@Bean</span><span class="token punctuation">(</span><span class="token string">"securityManager"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token class-name">DefaultWebSecurityManager</span> <span class="token function">defaultWebSecurityManager</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Autowired</span> <span class="token class-name">UserRealm</span> userRealm<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DefaultWebSecurityManager</span> defaultWebSecurityManager <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">DefaultWebSecurityManager</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        defaultWebSecurityManager<span class="token punctuation">.</span><span class="token function">setRealm</span><span class="token punctuation">(</span>userRealm<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> defaultWebSecurityManager<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 开启shiro的注解扫描。
+     * @return
+     */</span>
+    <span class="token annotation punctuation">@Bean</span>
+    <span class="token keyword">public</span> <span class="token class-name">AuthorizationAttributeSourceAdvisor</span> <span class="token function">authorizationAttributeSourceAdvisor</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Qualifier</span><span class="token punctuation">(</span><span class="token string">"securityManager"</span><span class="token punctuation">)</span> <span class="token class-name">SecurityManager</span> securityManager<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">AuthorizationAttributeSourceAdvisor</span> authorizationAttributeSourceAdvisor <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">AuthorizationAttributeSourceAdvisor</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        authorizationAttributeSourceAdvisor<span class="token punctuation">.</span><span class="token function">setSecurityManager</span><span class="token punctuation">(</span>securityManager<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> authorizationAttributeSourceAdvisor<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 解决注解扫描不生效的问题。
+     * @return
+     */</span>
+    <span class="token annotation punctuation">@Bean</span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token class-name">DefaultAdvisorAutoProxyCreator</span> <span class="token function">getDefaultAdvisorAutoProxyCreator</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DefaultAdvisorAutoProxyCreator</span> defaultAdvisorAutoProxyCreator<span class="token operator">=</span><span class="token keyword">new</span> <span class="token class-name">DefaultAdvisorAutoProxyCreator</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        defaultAdvisorAutoProxyCreator<span class="token punctuation">.</span><span class="token function">setUsePrefix</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> defaultAdvisorAutoProxyCreator<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h4><a id="aop_728"></a>aop切入</h4> 
+<p>这个注解建议可以写在方法上。</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Target</span><span class="token punctuation">(</span><span class="token punctuation">{<!-- --></span><span class="token class-name">ElementType</span><span class="token punctuation">.</span>METHOD<span class="token punctuation">,</span> <span class="token class-name">ElementType</span><span class="token punctuation">.</span>TYPE<span class="token punctuation">}</span><span class="token punctuation">)</span>
+<span class="token annotation punctuation">@Retention</span><span class="token punctuation">(</span><span class="token class-name">RetentionPolicy</span><span class="token punctuation">.</span>RUNTIME<span class="token punctuation">)</span>
+<span class="token keyword">public</span> <span class="token annotation punctuation">@interface</span> <span class="token class-name">OrangePermission</span> <span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span>
+</code></pre> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Aspect</span>
+<span class="token annotation punctuation">@Component</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">ShiroAdvice</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Pointcut</span><span class="token punctuation">(</span><span class="token string">"@annotation(OrangePermission)"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">data</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Before</span><span class="token punctuation">(</span><span class="token string">"data()"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">advice</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Subject</span> subject <span class="token operator">=</span> <span class="token class-name">SecurityUtils</span><span class="token punctuation">.</span><span class="token function">getSubject</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        subject<span class="token punctuation">.</span><span class="token function">checkPermission</span><span class="token punctuation">(</span><span class="token string">"user:none"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span><span class="token string">"接口之前"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="_758"></a>六、衍生问题</h2>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/34940dd1d787a5ca810f0d90b1f87d87/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Detected applied migration not resolved locally：</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/a97a5c6a22298b0a3e95c0c8de49098e/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">wsl2安装出现问题，可以下载ubuntu，但是启动出现0x800704cf问题</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>kafka发送大消息 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="kafka发送大消息" />
+<meta property="og:description" content="1 kafka消息压缩 kafka关于消息压缩的定义（来源于官网）：
+此为 Kafka 中端到端的块压缩功能。如果启用，数据将由 producer 压缩，以压缩格式写入服务器，并由 consumer 解压缩。压缩将提高 consumer 的吞吐量，但需付出一定的解压成本。
+压缩就是用时间换空间，其基本理念是基于重复，将重复的片段编码为字典，字典的 key 为重复片段，value 为更短的代码，比如序列号，然后将原始内容中的片段用代码表示，达到缩短内容的效果，压缩后的内容则由字典和代码序列两部分组成。解压时根据字典和代码序列可无损地还原为原始内容。通常来讲，重复越多，压缩效果越好。比如 JSON 是 Kafka 消息中常用的序列化格式，单条消息内可能并没有多少重复片段，但如果是批量消息，则会有大量重复的字段名，批量中消息越多，则重复越多，这也是为什么 Kafka 更偏向块压缩，而不是单条消息压缩。
+2 kafka的消息压缩类型对比 目前 Kafka 共支持四种主要的压缩类型：Gzip、Snappy、Lz4 和 Zstd。关于这几种压缩的特性。
+压缩类型压缩率CPU 使用率压缩速度带宽使用率GzipHighestHighestSlowestLowestSnappyMediumModerateModerateMediumLz4LowLowestFastestHighestZstdMediumModerateModerateMedium 从上表可知，Snappy 在 CPU 使用率、压缩比、压缩速度和网络带宽使用率之间实现良好的平衡，我们最终也是采用的该类型进行压缩试点。这里值得一提的是，Zstd 是 Facebook 于 2016 年开源的新压缩算法，压缩率和压缩性能都不错，具有与 Snappy（Google 杰作）相似的特性，直到 Kafka 的 2.1.0 版本才引入支持。
+3 何时需要压缩 压缩是需要额外的 CPU 代价的，并且会带来一定的消息分发延迟，因而在压缩前要慎重考虑是否有必要。
+压缩带来的磁盘空间和带宽节省远大于额外的 CPU 代价，这样的压缩是值得的。数据量足够大且具重复性。消息压缩是批量的，低频的数据流可能都无法填满一个批量，会影响压缩比。数据重复性越高，往往压缩效果越好，例如 JSON、XML 等结构化数据；但若数据不具重复性，例如文本都是唯一的 md5 或 UUID 之类，违背了压缩的重复性前提，压缩效果可能不会理想。系统对消息分发的延迟没有严苛要求，可容忍轻微的延迟增长。 4 如何开启压缩 Kafka 通过配置属性 compression.type 控制是否压缩。该属性在 producer 端和 broker 端各自都有一份，也就是说，我们可以选择在 producer 或 broker 端开启压缩，对应的应用场景各有不同。目前没有尝试在broker段开启压缩。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/4053f50c53c698229b6402ba3934d0d3/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-12-25T20:54:17+08:00" />
+<meta property="article:modified_time" content="2023-12-25T20:54:17+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">kafka发送大消息</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2>1 kafka消息压缩</h2> 
+<p><strong>kafka关于消息压缩的定义（来源于官网）：</strong></p> 
+<p>        此为 Kafka 中端到端的块压缩功能。如果启用，数据将由 producer 压缩，以压缩格式写入服务器，并由 consumer 解压缩。压缩将提高 consumer 的吞吐量，但需付出一定的解压成本。</p> 
+<p>        压缩就是用时间换空间，其基本理念是基于重复，将重复的片段编码为字典，字典的 key 为重复片段，value 为更短的代码，比如序列号，然后将原始内容中的片段用代码表示，达到缩短内容的效果，压缩后的内容则由字典和代码序列两部分组成。解压时根据字典和代码序列可无损地还原为原始内容。通常来讲，重复越多，压缩效果越好。比如 JSON 是 Kafka 消息中常用的序列化格式，单条消息内可能并没有多少重复片段，但如果是批量消息，则会有大量重复的字段名，批量中消息越多，则重复越多，这也是为什么 Kafka 更偏向块压缩，而不是单条消息压缩。</p> 
+<h2>2 kafka的消息压缩类型对比</h2> 
+<p>        目前 Kafka 共支持四种主要的压缩类型：Gzip、Snappy、Lz4 和 Zstd。关于这几种压缩的特性。</p> 
+<table><thead><tr><th>压缩类型</th><th>压缩率</th><th>CPU 使用率</th><th>压缩速度</th><th>带宽使用率</th></tr></thead><tbody><tr><td>Gzip</td><td>Highest</td><td>Highest</td><td>Slowest</td><td>Lowest</td></tr><tr><td>Snappy</td><td>Medium</td><td>Moderate</td><td>Moderate</td><td>Medium</td></tr><tr><td>Lz4</td><td>Low</td><td>Lowest</td><td>Fastest</td><td>Highest</td></tr><tr><td>Zstd</td><td>Medium</td><td>Moderate</td><td>Moderate</td><td>Medium</td></tr></tbody></table> 
+<p>        从上表可知，Snappy 在 CPU 使用率、压缩比、压缩速度和网络带宽使用率之间实现良好的平衡，我们最终也是采用的该类型进行压缩试点。这里值得一提的是，Zstd 是 Facebook 于 2016 年开源的新压缩算法，压缩率和压缩性能都不错，具有与 Snappy（Google 杰作）相似的特性，直到 Kafka 的 2.1.0 版本才引入支持。</p> 
+<h2>3 何时需要压缩</h2> 
+<p>        压缩是需要额外的 CPU 代价的，并且会带来一定的消息分发延迟，因而在压缩前要慎重考虑是否有必要。</p> 
+<ul><li>压缩带来的磁盘空间和带宽节省远大于额外的 CPU 代价，这样的压缩是值得的。</li><li>数据量足够大且具重复性。消息压缩是批量的，低频的数据流可能都无法填满一个批量，会影响压缩比。数据重复性越高，往往压缩效果越好，例如 JSON、XML 等结构化数据；但若数据不具重复性，例如文本都是唯一的 md5 或 UUID 之类，违背了压缩的重复性前提，压缩效果可能不会理想。</li><li>系统对消息分发的延迟没有严苛要求，可容忍轻微的延迟增长。</li></ul> 
+<h2>4 如何开启压缩</h2> 
+<p>        Kafka 通过配置属性 <code>compression.type</code> 控制是否压缩。该属性在 producer 端和 broker 端各自都有一份，也就是说，我们可以选择在 producer 或 broker 端开启压缩，对应的应用场景各有不同。目前没有尝试在broker段开启压缩。</p> 
+<h3>4.1 在broker端开启解压缩</h3> 
+<p>        Broker 端的 <code>compression.type</code> 属性默认值为 <code>producer</code>，即<strong>直接继承 producer 端</strong>所发来消息的压缩方式，无论消息采用何种压缩或者不压缩，broker 都原样存储。、</p> 
+<h4>4.1.1 broker 和 topic 两个级别</h4> 
+<p>        在 broker 端的压缩配置分为两个级别：全局的 broker 级别 和 局部的 topic 级别。顾名思义，如果配置的是 broker 级别，则对于该 Kafka 集群中所有的 topic 都是生效的。但如果 topic 级别配置了自己的压缩类型，则会覆盖 broker 全局的配置，以 topic 自己配置的为准。</p> 
+<p style="text-align:justify;"><strong>broker级别：</strong>要配置 broker 级别的压缩类型，可通过 <code>configs</code> 命令修改   <code>compression.type</code>  配置项取值。此处要使修改生效，是否需要重启 broker 取决于 Kafak 的版本，在 1.1.0 之前，任何配置项的改动都需要重启 broker 才生效，而从 1.1.0 版本开始，Kafka 引入了动态 broker 参数，将配置项分为三类：<code>read-only</code>、<code>per-broker</code> 和 <code>cluster-wide</code>，第一类跟原来一样需重启才生效，而后面两类都是动态生效的，只是影响范围不同，关于 Kafka 动态参数，以后单开博文介绍。从 <a href="https://kafka.apache.org/documentation/#brokerconfigs_compression.type" rel="nofollow" title="官网">官网</a> 可以看到，<code>compression.type</code> 是属于 <code>cluster-wide</code> 的，如果是 1.1.0 及之后的版本，则无需重启 broker。</p> 
+<p><strong>topic级别：</strong>topic 的配置分为两部分，一部分是 topic 特有的，如 partitions 等，另一部分则是默认采用 broker 配置，但也可以覆盖。如果要定义 topic 级别的压缩，可以在 topic 创建时通过 --config 选项覆盖配置项 <code>compression.type</code> 的取值，命令如下：</p> 
+<pre><code class="language-bash">sh bin/kafka-topics.sh \
+--create \
+--topic my-topic \
+--replication-factor 1 \
+--partitions 1 \
+--config compression.type=snappy</code></pre> 
+<p>也可以通过 <code>configs</code> 命令修改 topic 的 <code>compression.type</code> 取值，命令如下：</p> 
+<pre><code class="language-bash">bin/kafka-configs.sh \
+--entity-type topics \
+--entity-name my-topic \
+--alter \
+--add-config compression.type=snappy</code></pre> 
+<h3>4.2 在 Producer 端压缩</h3> 
+<p>        跟 broker 端一样，producer 端的压缩配置属性依然是 <code>compression.type</code>，只不过默认值和可选值有所不同。默认值为 <code>none</code>，表示不压缩。直接在代码层面更改 producer 的 config。但需要注意的是，改完 config 之后，需要重启 producer 端的应用程序，压缩才会生效。</p> 
+<p>代码示例如下：</p> 
+<pre><code class="language-java">public class KafkaProducerTest {
+
+
+    public static void main(String[] args) {
+        String brokerList = "127.0.0.1:9092";
+
+        Properties properties = new Properties();
+        properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+        properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        properties.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG,"2097245");
+        properties.put(ProducerConfig.COMPRESSION_TYPE_CONFIG,"gzip");
+        KafkaProducer&lt;String, String&gt; producer = new KafkaProducer&lt;&gt;(properties);
+
+        String topic = "mytestTopic1";
+
+        int sizeInMb = 2; // 设置字符串大小为2MB
+        int sizeInBytes = sizeInMb * 1024 * 1024; // 转换为字节数
+        StringBuilder largeString = new StringBuilder(sizeInBytes);
+        largeString.append(":");
+        for (int i = 0; i &lt; sizeInBytes; i++) {
+            largeString.append("A"); // 使用大写字母"A"来构建字符串
+        }
+        String msg = largeString.toString();
+        try {
+            for (int i = 0; i &lt; 100; i++) {
+                String msg1 = i+msg;
+                producer.send(new ProducerRecord&lt;&gt;(topic, msg1));
+                Thread.sleep(500);
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+
+
+    }
+}</code></pre> 
+<p>上面示例特意制造了一个大字符串作为消息，测试压缩，需要注意的是，配置压缩的时候同时也需要配置消息的最大值。即：max.request.size。</p> 
+<h2>5 解压缩</h2> 
+<p>可能发生解压的地方依然是两处：consumer 端和 broker 端。</p> 
+<p><strong>consumer端：</strong>consumer 端发生解压的唯一条件就是从 broker 端拉取到的消息是带压缩的。此时，consumer 会根据 <code>recordBatch</code> 中 <code>compressionType</code> 来对消息进行解压。</p> 
+<p><strong>broker端：</strong>broker 端是否发生解压取决于 producer 发过来的批量消息 <code>recordBatch</code> 是否是压缩的：如果 producer 开启了压缩，则会发生解压，否则不会。原因简单说下，在 broker 端持久化消息前，会对消息做各种验证，此时必然会迭代 <code>recordBatch</code>，而在迭代的过程中，会直接采用 <code>recordBatch</code> 上的 <code>compressionType</code> 对消息字节流进行处理，是否解压取决于 <code>compressionType</code> 是否是压缩类型。关于这点，可以在   <code>LogValidator</code> 的 <code>validateMessagesAndAssignOffsets</code> 方法实现中可以看到，在 <code>convertAndAssignOffsetsNonCompressed</code>、<code>assignOffsetsNonCompressed</code>  和 <code>validateMessagesAndAssignOffsetsCompressed</code> 三个不同的分支中，都会看到 <code>records.batches.forEach {...}</code> 的身影，而在后面的源码分析中会发现，在 <code>recordBatch</code> 的迭代器逻辑中，直接采用的 <code>compressionType</code> 的解压逻辑对消息字节流读取的。也就是说，如果 <code>recordBatch</code> 是压缩的 ，只要对其进行了迭代访问，则会自动触发解压逻辑。</p> 
+<p>通俗一点讲：<strong>producer端配置了压缩，consumer自动解压缩</strong>。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/04be21091e58ea2b0b636e3adf2b78a5/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">基于 Element UI 适用于 Vue 2 版本的虚拟列表选择器组件el-select</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/86900ef03aa60d87acb0e7b312cfc02c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【运维路不弯】最简单的k8s集群搭建(基于ubuntu22.04 cloud-img)</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

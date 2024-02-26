@@ -1,0 +1,2445 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>神经网路语言模型(NNLM)的理解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="神经网路语言模型(NNLM)的理解" />
+<meta property="og:description" content="用神经网络来训练语言模型的思想最早由百度 IDL （深度学习研究院）的徐伟提出[1],NNLM（Nerual Network Language Model）是这方面的一个经典模型，具体内容可参考 Bengio 2003年发表在JMLR上的论文。原文地址：
+http://jmlr.org/papers/volume3/bengio03a/bengio03a.pdf
+与传统的估算 p ( w t ∣ w t − ( n − 1 ) , . . . w t − 1 ) p(w_t|w_{t-(n-1)},...w_{t-1}) p(wt​∣wt−(n−1)​,...wt−1​)不同，NNLM模型直接通过一个神经网络结构对n元条件概率进行评估，NNLM模型的基本结构如下：
+1. 模型原理 1.1 模型输入： 首先从语料库中搜集一系列长度为n的文本序列 ( w t , w t − 1 . . . w t − ( n − 1 ) ) (w_t,w_{t-1}...w_{t-(n-1)}) (wt​,wt−1​...wt−(n−1)​)，然后组成训练集D，我这里的理解是语料库就是我们在特定领域搜集的文本语料，同时还要有一个词典。有了训练数据和词典，下面就来看下模型是怎样进行前向传播的。
+这里先对单个语句序列进行计算，也可以说是单个样本，比如： w 1 … w T w_1 …w_T w1​…wT​ 其中 w t ∈ V w_t∈V wt​∈V，这里的 V V V是所有单词的集合（即词典）， V i V_i Vi​表示词典中的第 i 个单词。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/e565d841951b7f337d8b9b204299b219/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2018-08-24T17:53:36+08:00" />
+<meta property="article:modified_time" content="2018-08-24T17:53:36+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">神经网路语言模型(NNLM)的理解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>用神经网络来训练语言模型的思想最早由百度 IDL （深度学习研究院）的徐伟提出[1],NNLM（Nerual Network Language Model）是这方面的一个经典模型，具体内容可参考 Bengio 2003年发表在JMLR上的论文。原文地址：<br> <a href="http://jmlr.org/papers/volume3/bengio03a/bengio03a.pdf" rel="nofollow">http://jmlr.org/papers/volume3/bengio03a/bengio03a.pdf</a></p> 
+<p>与传统的估算<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         p 
+        
+       
+         ( 
+        
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+         ∣ 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           ( 
+          
+         
+           n 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+           ) 
+          
+         
+        
+       
+         , 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         . 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+         ) 
+        
+       
+      
+        p(w_t|w_{t-(n-1)},...w_{t-1}) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1.1052em; vertical-align: -0.3552em;"></span><span class="mord mathit">p</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mord">∣</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3448em;"><span class="" style="top: -2.5198em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mbin mtight">−</span><span class="mopen mtight">(</span><span class="mord mathit mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span><span class="mclose mtight">)</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.3552em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>不同，NNLM模型直接通过一个神经网络结构对n元条件概率进行评估，NNLM模型的基本结构如下：<br> <img src="https://images2.imgbox.com/2b/f0/PPdVbFWP_o.png" alt="这里写图片描述"></p> 
+<h5><a id="1__7"></a>1. 模型原理</h5> 
+<h6><a id="11__9"></a>1.1 模型输入：</h6> 
+<p>首先从语料库中搜集一系列长度为n的文本序列<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         ( 
+        
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         . 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           ( 
+          
+         
+           n 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+           ) 
+          
+         
+        
+       
+         ) 
+        
+       
+      
+        (w_t,w_{t-1}...w_{t-(n-1)}) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1.1052em; vertical-align: -0.3552em;"></span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3448em;"><span class="" style="top: -2.5198em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mbin mtight">−</span><span class="mopen mtight">(</span><span class="mord mathit mtight">n</span><span class="mbin mtight">−</span><span class="mord mtight">1</span><span class="mclose mtight">)</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.3552em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>，然后组成训练集D，我这里的理解是语料库就是我们在特定领域搜集的文本语料，同时还要有一个词典。有了训练数据和词典，下面就来看下模型是怎样进行前向传播的。</p> 
+<p>这里先对单个语句序列进行计算，也可以说是单个样本，比如：<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          w 
+         
+        
+          1 
+         
+        
+       
+         … 
+        
+        
+        
+          w 
+         
+        
+          T 
+         
+        
+       
+      
+        w_1 …w_T 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.58056em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="minner">…</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.328331em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight" style="margin-right: 0.13889em;">T</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span></span></span></span></span> 其中<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+         ∈ 
+        
+       
+         V 
+        
+       
+      
+        w_t∈V 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.6891em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathit" style="margin-right: 0.22222em;">V</span></span></span></span></span>，这里的<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         V 
+        
+       
+      
+        V 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathit" style="margin-right: 0.22222em;">V</span></span></span></span></span>是所有单词的集合（即词典），<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          V 
+         
+        
+          i 
+         
+        
+       
+      
+        V_i 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.83333em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.22222em;">V</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.311664em;"><span class="" style="top: -2.55em; margin-left: -0.22222em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span></span></span></span></span>表示词典中的第 i 个单词。</p> 
+<h6><a id="12__15"></a>1.2 模型参数：</h6> 
+<p>NNLM的目标是训练如下模型：<br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         f 
+        
+       
+         ( 
+        
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+         , 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           2 
+          
+         
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           1 
+          
+         
+        
+       
+         ) 
+        
+       
+         = 
+        
+       
+         p 
+        
+       
+         ( 
+        
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+         ∣ 
+        
+        
+        
+          w 
+         
+        
+          1 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+         ) 
+        
+       
+      
+        f(w_t,w_{t−1},...,w_{t−n+2},w_{t−n+1})=p(w_t|w_1^{t−1}) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.10764em;">f</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">2</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1.12055em; vertical-align: -0.266308em;"></span><span class="mord mathit">p</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mord">∣</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.854239em;"><span class="" style="top: -2.43369em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span><span class="" style="top: -3.10313em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.266308em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span><br> 其中<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+      
+        w_t 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.58056em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span></span></span></span></span>表示词序列中第t个单词，<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          w 
+         
+        
+          1 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+      
+        w_1^{t−1} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1.12055em; vertical-align: -0.266308em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.854239em;"><span class="" style="top: -2.43369em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span><span class="" style="top: -3.10313em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.266308em;"><span class=""></span></span></span></span></span></span></span></span></span></span>表示从第1个词到第t个词组成的子序列。模型需要满足的约束条件是：</p> 
+<ul><li><span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          f 
+         
+        
+          ( 
+         
+         
+         
+           w 
+          
+         
+           t 
+          
+         
+        
+          , 
+         
+         
+         
+           w 
+          
+          
+          
+            t 
+           
+          
+            − 
+           
+          
+            1 
+           
+          
+         
+        
+          , 
+         
+        
+          . 
+         
+        
+          . 
+         
+        
+          . 
+         
+        
+          , 
+         
+         
+         
+           w 
+          
+          
+          
+            t 
+           
+          
+            − 
+           
+          
+            n 
+           
+          
+            + 
+           
+          
+            2 
+           
+          
+         
+        
+          , 
+         
+         
+         
+           w 
+          
+          
+          
+            t 
+           
+          
+            − 
+           
+          
+            n 
+           
+          
+            + 
+           
+          
+            1 
+           
+          
+         
+        
+          ) 
+         
+        
+          &amp;gt; 
+         
+        
+          0 
+         
+        
+       
+         f(w_t,w_{t−1},...,w_{t−n+2},w_{t−n+1})&amp;gt;0 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.10764em;">f</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">2</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">0</span></span></span></span></span></li><li><span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+         
+         
+           ∑ 
+          
+         
+           i 
+          
+          
+          
+            ∣ 
+           
+          
+            V 
+           
+          
+            ∣ 
+           
+          
+         
+        
+          f 
+         
+        
+          ( 
+         
+         
+         
+           w 
+          
+         
+           t 
+          
+         
+        
+          , 
+         
+         
+         
+           w 
+          
+          
+          
+            t 
+           
+          
+            − 
+           
+          
+            1 
+           
+          
+         
+        
+          , 
+         
+        
+          . 
+         
+        
+          . 
+         
+        
+          . 
+         
+        
+          , 
+         
+         
+         
+           w 
+          
+          
+          
+            t 
+           
+          
+            − 
+           
+          
+            n 
+           
+          
+            + 
+           
+          
+            2 
+           
+          
+         
+        
+          , 
+         
+         
+         
+           w 
+          
+          
+          
+            t 
+           
+          
+            − 
+           
+          
+            n 
+           
+          
+            + 
+           
+          
+            1 
+           
+          
+         
+        
+          ) 
+         
+        
+          = 
+         
+        
+          1 
+         
+        
+       
+         \sum ^{|V|}_i f(w_t,w_{t−1},...,w_{t−n+2},w_{t−n+1})=1 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1.32761em; vertical-align: -0.29971em;"></span><span class="mop"><span class="mop op-symbol small-op" style="position: relative; top: -5e-06em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 1.0279em;"><span class="" style="top: -2.40029em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">i</span></span></span><span class="" style="top: -3.2029em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∣</span><span class="mord mathit mtight" style="margin-right: 0.22222em;">V</span><span class="mord mtight">∣</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.29971em;"><span class=""></span></span></span></span></span></span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.10764em;">f</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">2</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span></span></span></span></span></li></ul> 
+<p>上面模型的意思是当给定一段序列时，由其前面的(t-1)个词预测第n个词的概率。<br> 限制条件一：即是通过网络得到的每个概率值都要大于0。<br> 而对于第二个限制条件：因为我们的神经网络模型最终得到的输出是针对每t-1个词的输入来预测下一个，也即是第t个词是什么。因此模型的实际输出是一个向量，该向量的每一个分量依次对应下一个词为词典中某个词的概率。所以|v|维的概率值中必定有一个最大的概率，而其他的概率较小。</p> 
+<p>上面是模型的输入和输出，下面说下前向传播的过程：该模型可分为特征映射和计算条件概率分布两部分</p> 
+<ol><li> <p>特征映射：通过映射矩阵 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           C 
+          
+         
+           ∈ 
+          
+          
+          
+            R 
+           
+           
+           
+             ∣ 
+            
+           
+             V 
+            
+           
+             ∣ 
+            
+           
+             × 
+            
+           
+             m 
+            
+           
+          
+         
+        
+          C \in R^{|V|×m} 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72243em; vertical-align: -0.0391em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.888em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.888em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∣</span><span class="mord mathit mtight" style="margin-right: 0.22222em;">V</span><span class="mord mtight">∣</span><span class="mbin mtight">×</span><span class="mord mathit mtight">m</span></span></span></span></span></span></span></span></span></span></span></span></span>将输入的每个词映射为一个特征向量，<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           C 
+          
+         
+           ( 
+          
+         
+           i 
+          
+         
+           ) 
+          
+         
+           ∈ 
+          
+          
+          
+            R 
+           
+          
+            m 
+           
+          
+         
+        
+          C(i) \in R^m 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord mathit">i</span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.664392em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">m</span></span></span></span></span></span></span></span></span></span></span></span>表示词典中第 i 个词对应的特征向量，其中 m 表示特征向量的维度。这里的映射可以是one-hot。然后将通过特征映射得到<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             n 
+            
+           
+             + 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           , 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           , 
+          
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+        
+          C(w_{t−n+1}),...,C(w_{t−1}) 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>合并成一个 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           ( 
+          
+         
+           n 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+           ) 
+          
+         
+           m 
+          
+         
+        
+          (n−1)m 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit">n</span><span class="mord">−</span><span class="mord">1</span><span class="mclose">)</span><span class="mord mathit">m</span></span></span></span></span>维的向量<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           ( 
+          
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             n 
+            
+           
+             + 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           , 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           , 
+          
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           ) 
+          
+         
+        
+          (C(w_{t−n+1}),...,C(w_{t−1})) 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mclose">)</span></span></span></span></span>，因为每一个词是m维的，总共有n-1个词，所以总共有<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           ( 
+          
+         
+           n 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+           ) 
+          
+         
+           m 
+          
+         
+        
+          (n−1)m 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit">n</span><span class="mord">−</span><span class="mord">1</span><span class="mclose">)</span><span class="mord mathit">m</span></span></span></span></span>维。<br> 也可以说是：一个从词汇表V到实数向量空间的映射C。通过这个映射得到每个单词的向量表示。</p> </li><li> <p>计算条件概率分布：通过一个函数 g(g是前馈或递归神经网络)将输入的词向量序列<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           ( 
+          
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             n 
+            
+           
+             + 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           , 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           , 
+          
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           ) 
+          
+         
+        
+          (C(w_{t−n+1}),...,C(w_{t−1})) 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mclose">)</span></span></span></span></span>转化为一个概率分布 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           y 
+          
+         
+           ∈ 
+          
+          
+          
+            R 
+           
+           
+           
+             ∣ 
+            
+           
+             V 
+            
+           
+             ∣ 
+            
+           
+          
+         
+        
+          y∈R^{|V|} 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.73354em; vertical-align: -0.19444em;"></span><span class="mord mathit" style="margin-right: 0.03588em;">y</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.888em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.888em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∣</span><span class="mord mathit mtight" style="margin-right: 0.22222em;">V</span><span class="mord mtight">∣</span></span></span></span></span></span></span></span></span></span></span></span></span>，所以这里的输出是|v|维的，和词典的维度是相同的。y中第 i 位表示词序列中第 n 个词是 Vi的概率，即：<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           f 
+          
+         
+           ( 
+          
+         
+           i 
+          
+         
+           , 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             1 
+            
+           
+          
+         
+           , 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           , 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             n 
+            
+           
+             + 
+            
+           
+             2 
+            
+           
+          
+         
+           , 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             n 
+            
+           
+             + 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           = 
+          
+         
+           g 
+          
+         
+           ( 
+          
+         
+           i 
+          
+         
+           , 
+          
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             n 
+            
+           
+             + 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           , 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           , 
+          
+         
+           C 
+          
+         
+           ( 
+          
+          
+          
+            w 
+           
+           
+           
+             t 
+            
+           
+             − 
+            
+           
+             1 
+            
+           
+          
+         
+           ) 
+          
+         
+           ) 
+          
+         
+        
+          f(i,w_{t−1},...,w_{t−n+2},w_{t−n+1})=g(i,C(w_{t−n+1}),...,C(w_{t−1})) 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.10764em;">f</span><span class="mopen">(</span><span class="mord mathit">i</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">2</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.03588em;">g</span><span class="mopen">(</span><span class="mord mathit">i</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mclose">)</span></span></span></span></span></p> </li></ol> 
+<p>下面详细介绍下神经网络的结构，网络输出层采用的是softmax函数，如下式所示：<br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         p 
+        
+       
+         ( 
+        
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+         ∣ 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+         , 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           2 
+          
+         
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           1 
+          
+         
+        
+       
+         ) 
+        
+       
+         = 
+        
+        
+         
+         
+           e 
+          
+          
+          
+            y 
+           
+           
+           
+             w 
+            
+           
+             t 
+            
+           
+          
+         
+         
+          
+          
+            ∑ 
+           
+          
+            i 
+           
+          
+          
+          
+            e 
+           
+           
+           
+             y 
+            
+           
+             i 
+            
+           
+          
+         
+        
+       
+      
+        p(w_t|w_{t−1},...,w_{t−n+2},w_{t−n+1})=\frac{e^{y_{w_t}}}{∑_ie^{y_i}} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit">p</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mord">∣</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">2</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1.48985em; vertical-align: -0.570007em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.919845em;"><span class="" style="top: -2.655em;"><span class="pstrut" style="height: 3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mop mtight"><span class="mop op-symbol small-op mtight" style="position: relative; top: -5e-06em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.149647em;"><span class="" style="top: -2.17856em; margin-left: 0em; margin-right: 0.0714286em;"><span class="pstrut" style="height: 2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathit mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.321439em;"><span class=""></span></span></span></span></span></span><span class="mspace mtight" style="margin-right: 0.195167em;"></span><span class="mord mtight"><span class="mord mathit mtight">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.640093em;"><span class="" style="top: -2.83255em; margin-right: 0.0714286em;"><span class="pstrut" style="height: 2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathit mtight" style="margin-right: 0.03588em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3448em;"><span class="" style="top: -2.3448em; margin-left: -0.03588em; margin-right: 0.1em;"><span class="pstrut" style="height: 2.65952em;"></span><span class="mord mathit mtight">i</span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.31472em;"><span class=""></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="" style="top: -3.23em;"><span class="pstrut" style="height: 3em;"></span><span class="frac-line" style="border-bottom-width: 0.04em;"></span></span><span class="" style="top: -3.394em;"><span class="pstrut" style="height: 3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathit mtight">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.751207em;"><span class="" style="top: -2.94366em; margin-right: 0.0714286em;"><span class="pstrut" style="height: 2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathit mtight" style="margin-right: 0.03588em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.23056em;"><span class="" style="top: -2.3em; margin-left: -0.03588em; margin-right: 0.1em;"><span class="pstrut" style="height: 2.5em;"></span><span class="mord mtight"><span class="mord mtight"><span class="mord mathit mtight" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3448em;"><span class="" style="top: -2.3448em; margin-left: -0.02691em; margin-right: 0.1em;"><span class="pstrut" style="height: 2.61508em;"></span><span class="mord mathit mtight">t</span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.27028em;"><span class=""></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.47028em;"><span class=""></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.570007em;"><span class=""></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p> 
+<p>其中<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         y 
+        
+       
+         = 
+        
+       
+         b 
+        
+       
+         + 
+        
+       
+         W 
+        
+       
+         x 
+        
+       
+         + 
+        
+       
+         U 
+        
+       
+         t 
+        
+       
+         a 
+        
+       
+         n 
+        
+       
+         h 
+        
+       
+         ( 
+        
+       
+         d 
+        
+       
+         + 
+        
+       
+         H 
+        
+       
+         x 
+        
+       
+         ) 
+        
+       
+      
+        y=b+Wx+Utanh(d+Hx) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.625em; vertical-align: -0.19444em;"></span><span class="mord mathit" style="margin-right: 0.03588em;">y</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.77777em; vertical-align: -0.08333em;"></span><span class="mord mathit">b</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathit" style="margin-right: 0.13889em;">W</span><span class="mord mathit">x</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.10903em;">U</span><span class="mord mathit">t</span><span class="mord mathit">a</span><span class="mord mathit">n</span><span class="mord mathit">h</span><span class="mopen">(</span><span class="mord mathit">d</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.08125em;">H</span><span class="mord mathit">x</span><span class="mclose">)</span></span></span></span></span>，模型的参数 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         θ 
+        
+       
+         = 
+        
+       
+         ( 
+        
+       
+         b 
+        
+       
+         ， 
+        
+       
+         d 
+        
+       
+         ， 
+        
+       
+         W 
+        
+       
+         ， 
+        
+       
+         U 
+        
+       
+         ， 
+        
+       
+         H 
+        
+       
+         ， 
+        
+       
+         C 
+        
+       
+         ) 
+        
+       
+      
+        \theta=(b，d，W，U，H，C) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.69444em; vertical-align: 0em;"></span><span class="mord mathit" style="margin-right: 0.02778em;">θ</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit">b</span><span class="mord cjk_fallback">，</span><span class="mord mathit">d</span><span class="mord cjk_fallback">，</span><span class="mord mathit" style="margin-right: 0.13889em;">W</span><span class="mord cjk_fallback">，</span><span class="mord mathit" style="margin-right: 0.10903em;">U</span><span class="mord cjk_fallback">，</span><span class="mord mathit" style="margin-right: 0.08125em;">H</span><span class="mord cjk_fallback">，</span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mclose">)</span></span></span></span></span>。<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         x 
+        
+       
+         = 
+        
+       
+         ( 
+        
+       
+         C 
+        
+       
+         ( 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           1 
+          
+         
+        
+       
+         ) 
+        
+       
+         , 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         , 
+        
+       
+         C 
+        
+       
+         ( 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+         ) 
+        
+       
+         ) 
+        
+       
+      
+        x=(C(w_{t−n+1}),...,C(w_{t−1})) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathit">x</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.07153em;">C</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mclose">)</span></span></span></span></span>是神经网络的输入。<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         W 
+        
+       
+         ∈ 
+        
+        
+        
+          R 
+         
+         
+         
+           ∣ 
+          
+         
+           V 
+          
+         
+           ∣ 
+          
+         
+           × 
+          
+         
+           ( 
+          
+         
+           n 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+           ) 
+          
+         
+           m 
+          
+         
+        
+       
+      
+        W \in R^{|V|×(n−1)m} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72243em; vertical-align: -0.0391em;"></span><span class="mord mathit" style="margin-right: 0.13889em;">W</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.888em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.888em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∣</span><span class="mord mathit mtight" style="margin-right: 0.22222em;">V</span><span class="mord mtight">∣</span><span class="mbin mtight">×</span><span class="mopen mtight">(</span><span class="mord mathit mtight">n</span><span class="mord mtight">−</span><span class="mord mtight">1</span><span class="mclose mtight">)</span><span class="mord mathit mtight">m</span></span></span></span></span></span></span></span></span></span></span></span></span>是可选参数，如果输入层与输出层没有直接相连（如图中绿色虚线所示），则可令W=0。</p> 
+<p>当输入层和输出层没有直接相连时：<br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         H 
+        
+       
+         ∈ 
+        
+        
+        
+          R 
+         
+         
+         
+           h 
+          
+         
+           × 
+          
+         
+           ( 
+          
+         
+           n 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+           ) 
+          
+         
+           m 
+          
+         
+        
+       
+      
+        H \in R^{h×(n−1)m} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72243em; vertical-align: -0.0391em;"></span><span class="mord mathit" style="margin-right: 0.08125em;">H</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.888em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.888em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">h</span><span class="mbin mtight">×</span><span class="mopen mtight">(</span><span class="mord mathit mtight">n</span><span class="mord mtight">−</span><span class="mord mtight">1</span><span class="mclose mtight">)</span><span class="mord mathit mtight">m</span></span></span></span></span></span></span></span></span></span></span></span></span>是输入层到隐含层的权重矩阵，其中h表示隐含层神经元的数目。此时隐藏层运算：<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         h 
+        
+       
+         × 
+        
+       
+         ( 
+        
+       
+         n 
+        
+       
+         − 
+        
+       
+         1 
+        
+       
+         ) 
+        
+       
+         m 
+        
+       
+      
+        h×(n−1)m 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.77777em; vertical-align: -0.08333em;"></span><span class="mord mathit">h</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit">n</span><span class="mord">−</span><span class="mord">1</span><span class="mclose">)</span><span class="mord mathit">m</span></span></span></span></span>和<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         ( 
+        
+       
+         n 
+        
+       
+         − 
+        
+       
+         1 
+        
+       
+         ) 
+        
+       
+         m 
+        
+       
+         × 
+        
+       
+         1 
+        
+       
+      
+        (n-1)m ×1 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathit">n</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord">1</span><span class="mclose">)</span><span class="mord mathit">m</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span></span></span></span></span> 相乘得到<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         h 
+        
+       
+         × 
+        
+       
+         1 
+        
+       
+      
+        h×1 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.77777em; vertical-align: -0.08333em;"></span><span class="mord mathit">h</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span></span></span></span></span><br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         U 
+        
+       
+         ∈ 
+        
+        
+        
+          R 
+         
+         
+         
+           ∣ 
+          
+         
+           V 
+          
+         
+           ∣ 
+          
+         
+           × 
+          
+         
+           h 
+          
+         
+        
+       
+      
+        U∈R^{|V|×h} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72243em; vertical-align: -0.0391em;"></span><span class="mord mathit" style="margin-right: 0.10903em;">U</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.888em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.888em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∣</span><span class="mord mathit mtight" style="margin-right: 0.22222em;">V</span><span class="mord mtight">∣</span><span class="mbin mtight">×</span><span class="mord mathit mtight">h</span></span></span></span></span></span></span></span></span></span></span></span></span>是隐含层到输出层的权重矩阵。<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         d 
+        
+       
+         ∈ 
+        
+        
+        
+          R 
+         
+        
+          h 
+         
+        
+       
+      
+        d\in R^h 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.73354em; vertical-align: -0.0391em;"></span><span class="mord mathit">d</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.849108em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.849108em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">h</span></span></span></span></span></span></span></span></span></span></span></span>和 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         b 
+        
+       
+         ∈ 
+        
+        
+        
+          R 
+         
+         
+         
+           ∣ 
+          
+         
+           V 
+          
+         
+           ∣ 
+          
+         
+        
+       
+      
+        b \in R^{|V|} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.73354em; vertical-align: -0.0391em;"></span><span class="mord mathit">b</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.888em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.888em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∣</span><span class="mord mathit mtight" style="margin-right: 0.22222em;">V</span><span class="mord mtight">∣</span></span></span></span></span></span></span></span></span></span></span></span></span>分别是隐含层和输出层的偏置参数。这时的输出层运算：<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         ∣ 
+        
+       
+         V 
+        
+       
+         ∣ 
+        
+       
+         × 
+        
+       
+         h 
+        
+       
+      
+        |V|×h 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord">∣</span><span class="mord mathit" style="margin-right: 0.22222em;">V</span><span class="mord">∣</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.69444em; vertical-align: 0em;"></span><span class="mord mathit">h</span></span></span></span></span>和<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         h 
+        
+       
+         × 
+        
+       
+         1 
+        
+       
+      
+        h×1 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.77777em; vertical-align: -0.08333em;"></span><span class="mord mathit">h</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span></span></span></span></span>相乘得到<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         ∣ 
+        
+       
+         V 
+        
+       
+         ∣ 
+        
+       
+         × 
+        
+       
+         1 
+        
+       
+      
+        |V|×1 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord">∣</span><span class="mord mathit" style="margin-right: 0.22222em;">V</span><span class="mord">∣</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span></span></span></span></span>。</p> 
+<p>以上就是前向传播的过程。</p> 
+<h6><a id="13__47"></a>1.3 模型训练</h6> 
+<p>模型的训练目标是最大化以下似然函数：<br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         L 
+        
+       
+         = 
+        
+        
+        
+          1 
+         
+        
+          T 
+         
+        
+        
+        
+          ∑ 
+         
+        
+          t 
+         
+        
+       
+         l 
+        
+       
+         o 
+        
+       
+         g 
+        
+       
+         f 
+        
+       
+         ( 
+        
+        
+        
+          w 
+         
+        
+          t 
+         
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+        
+       
+         , 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         . 
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           2 
+          
+         
+        
+       
+         , 
+        
+        
+        
+          w 
+         
+         
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           1 
+          
+         
+        
+       
+         ; 
+        
+       
+         θ 
+        
+       
+         ) 
+        
+       
+         + 
+        
+       
+         R 
+        
+       
+         ( 
+        
+       
+         θ 
+        
+       
+         ) 
+        
+       
+      
+        L=\frac{1}{T} \sum_t logf(w_t,w_{t−1},...,w_{t−n+2},w_{t−n+1};θ)+R(θ) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathit">L</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1.19011em; vertical-align: -0.345em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.845108em;"><span class="" style="top: -2.655em;"><span class="pstrut" style="height: 3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight" style="margin-right: 0.13889em;">T</span></span></span></span><span class="" style="top: -3.23em;"><span class="pstrut" style="height: 3em;"></span><span class="frac-line" style="border-bottom-width: 0.04em;"></span></span><span class="" style="top: -3.394em;"><span class="pstrut" style="height: 3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.345em;"><span class=""></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mop"><span class="mop op-symbol small-op" style="position: relative; top: -5e-06em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.130846em;"><span class="" style="top: -2.40029em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.29971em;"><span class=""></span></span></span></span></span></span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.01968em;">l</span><span class="mord mathit">o</span><span class="mord mathit" style="margin-right: 0.03588em;">g</span><span class="mord mathit" style="margin-right: 0.10764em;">f</span><span class="mopen">(</span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.280556em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathit mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord">.</span><span class="mord">.</span><span class="mord">.</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">2</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathit" style="margin-right: 0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02691em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.208331em;"><span class=""></span></span></span></span></span></span><span class="mpunct">;</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathit" style="margin-right: 0.02778em;">θ</span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="mopen">(</span><span class="mord mathit" style="margin-right: 0.02778em;">θ</span><span class="mclose">)</span></span></span></span></span>，其中<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         θ 
+        
+       
+      
+        \theta 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.69444em; vertical-align: 0em;"></span><span class="mord mathit" style="margin-right: 0.02778em;">θ</span></span></span></span></span>为模型的所有参数，<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         R 
+        
+       
+         ( 
+        
+       
+         θ 
+        
+       
+         ) 
+        
+       
+      
+        R(\theta) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathit" style="margin-right: 0.00773em;">R</span><span class="mopen">(</span><span class="mord mathit" style="margin-right: 0.02778em;">θ</span><span class="mclose">)</span></span></span></span></span>为正则化项。</p> 
+<p>使用梯度下降算法更新参数的过程如下：<br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         θ 
+        
+       
+         ← 
+        
+       
+         θ 
+        
+       
+         + 
+        
+       
+         λ 
+        
+        
+         
+         
+           ∂ 
+          
+         
+           l 
+          
+         
+           o 
+          
+         
+           g 
+          
+         
+           p 
+          
+         
+           ( 
+          
+         
+           w 
+          
+         
+           t 
+          
+         
+           ∣ 
+          
+         
+           w 
+          
+         
+           t 
+          
+         
+           − 
+          
+         
+           1 
+          
+         
+           , 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           . 
+          
+         
+           , 
+          
+         
+           w 
+          
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           2 
+          
+         
+           , 
+          
+         
+           w 
+          
+         
+           t 
+          
+         
+           − 
+          
+         
+           n 
+          
+         
+           + 
+          
+         
+           1 
+          
+         
+           ) 
+          
+         
+         
+         
+           ∂ 
+          
+         
+           θ 
+          
+         
+        
+       
+      
+        \theta←\theta+ \lambda \frac{∂logp(wt|wt−1,...,wt−n+2,wt−n+1)}{∂θ} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.69444em; vertical-align: 0em;"></span><span class="mord mathit" style="margin-right: 0.02778em;">θ</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">←</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.77777em; vertical-align: -0.08333em;"></span><span class="mord mathit" style="margin-right: 0.02778em;">θ</span><span class="mspace" style="margin-right: 0.222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right: 0.222222em;"></span></span><span class="base"><span class="strut" style="height: 1.355em; vertical-align: -0.345em;"></span><span class="mord mathit">λ</span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 1.01em;"><span class="" style="top: -2.655em;"><span class="pstrut" style="height: 3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight" style="margin-right: 0.05556em;">∂</span><span class="mord mathit mtight" style="margin-right: 0.02778em;">θ</span></span></span></span><span class="" style="top: -3.23em;"><span class="pstrut" style="height: 3em;"></span><span class="frac-line" style="border-bottom-width: 0.04em;"></span></span><span class="" style="top: -3.485em;"><span class="pstrut" style="height: 3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight" style="margin-right: 0.05556em;">∂</span><span class="mord mathit mtight" style="margin-right: 0.01968em;">l</span><span class="mord mathit mtight">o</span><span class="mord mathit mtight" style="margin-right: 0.03588em;">g</span><span class="mord mathit mtight">p</span><span class="mopen mtight">(</span><span class="mord mathit mtight" style="margin-right: 0.02691em;">w</span><span class="mord mathit mtight">t</span><span class="mord mtight">∣</span><span class="mord mathit mtight" style="margin-right: 0.02691em;">w</span><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mtight">1</span><span class="mpunct mtight">,</span><span class="mord mtight">.</span><span class="mord mtight">.</span><span class="mord mtight">.</span><span class="mpunct mtight">,</span><span class="mord mathit mtight" style="margin-right: 0.02691em;">w</span><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">2</span><span class="mpunct mtight">,</span><span class="mord mathit mtight" style="margin-right: 0.02691em;">w</span><span class="mord mathit mtight">t</span><span class="mord mtight">−</span><span class="mord mathit mtight">n</span><span class="mbin mtight">+</span><span class="mord mtight">1</span><span class="mclose mtight">)</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.345em;"><span class=""></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>,其中<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         λ 
+        
+       
+      
+        \lambda 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.69444em; vertical-align: 0em;"></span><span class="mord mathit">λ</span></span></span></span></span>为步长。</p> 
+<p>总结：由于NNLM模型使用了低维紧凑的词向量对上文进行表示，这解决了词袋模型带来的数据稀疏、语义鸿沟等问题。显然nnlm是一种更好的n元语言模型；另一方面在相似的上下文语境中，nnlm模型可以预测出相似的目标词，而传统模型无法做到这一点。</p> 
+<p>参考：<br> <a href="https://blog.csdn.net/u010089444/article/details/52624964?ref=myread">https://blog.csdn.net/u010089444/article/details/52624964?ref=myread</a><br> <a href="https://www.zhihu.com/question/32275069" rel="nofollow">https://www.zhihu.com/question/32275069</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/721f7e1ce12f4a727eb13e1a1b75fa9b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">纯css美化select</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/608ec9ca7cdf69ac8e19c52244d7fb34/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">win10系统重装后只有一个盘了别的盘的文件如何找到</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

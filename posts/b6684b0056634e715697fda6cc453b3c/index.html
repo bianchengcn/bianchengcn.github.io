@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Spring Boot全局异常处理器（原理及使用详解） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Spring Boot全局异常处理器（原理及使用详解）" />
+<meta property="og:description" content="目录
+1 什么是全局异常处理器
+2 为什么需要全局异常
+3 原理和目标
+4 @ControllerAdvice注解
+4.1 Advice（通知）
+4.2 @ControllerAdvice结合方法型注解@ExceptionHandler,用于捕获Controller中抛出的指定类型的异常，从而达到全局不同类型的异常区别处理的目的。
+4.3 结合方法型注解@InitBinder,用于request中自定义参数解析方式进行注册，从而达到自定义指定格式参数的目的
+4.4 结合方法型注解@ModelAttribute，表示其注解的方法将会在目标Controller方法执行之前执行
+4.5 @ControllerAdvice注解作用原理
+4.6 @RestControllerAdvice
+5 编码实现全局异常处理器
+1 什么是全局异常处理器 软件开发springboot项目过程中，不可避免的需要处理各种异常，spring mvc架构中各层会出现大量的try{...} catch{...} finally{...}代码块，不仅有大量的冗余代码，而且还影响代码的可读性。这样就需要定义个全局统一异常处理器，以便业务层再也不必处理异常。
+Spring在3.2版本增加了一个注解@ControllerAdvice，可以与@ExceptionHandler、@InitBinder、@ModelAtribute等注解配套使用。不过跟异常处理相关的只有注解@ExceptionHandler,从字面上看，就是异常处理器的意思。
+2 为什么需要全局异常 不用强制写try-catch，由全局异常处理器统一捕获处理。自定义异常，只能用全局异常来捕获。不能直接返回给客户端，客户端是看不懂的，需要接入全局异常处理器JSR303规范的Validator参数校验器，参数校验不通过会抛异常，是无法使用try-catch语句直接捕获，只能使用全局异常处理器。 3 原理和目标 简单的说，@ControllerAdvice注解可以把异常处理器应用到所有控制器，而不是单个控制器。借助该注解，我们可以实现：在独立的某个地方，比如单独的一个类，定义一套对各章异常的处理机制，然后在类的签名加上注解@ControllerAdvice，统一对不同阶段的，不同异常进行处理。这就是统一异常处理的原理。
+对异常按阶段进行分类，大体可以分成：进入Controller前的异常和Service层异常
+目标就是消灭95%以上的try catch代码块，并以优雅的Assert（断言）方式来校验业务的异常情况，只关注业务逻辑，而不用花费大量精力写冗余的try catch代码块。
+4 @ControllerAdvice注解 @ControllerAdvice注解是Spring3.2中新增的注解，学名是Controller增强器，作用是给Controller控制器添加统一的操作或处理，对于@ControllerAdvice，我们比较熟悉的用法是结合@ExceptionHandler用于全局异常的处理，但其作用不止于此。ControllerAdvice拆开来就是Controller Advice，关于Advice，在Spring的AOP中，是用来封装一个切面所有属性的，包括切入点和需要织入的切面逻辑。这里ControllerAdvice也可以这么理解。
+4.1 Advice（通知） Spring AOP通过PointCut来指定在哪些类的哪写方法上织入横切逻辑，通过Advice来指定在切点上具体做什么事情。如方法前做什么，方法后做什么，抛出异常做什么。再来看一下图
+主要可分为5类增强：
+MethodBeforeAdvice：目标方法实施前增强AfterReturningAdvice：目标方法实施后增强ThrowsAdvice：异常抛出增强IntroductionAdvice：引介增强，为目标类添加新的属性和方法。可以构建组合对象来实现多继承MethodInterceptor：方法拦截器，环绕增强，在方法的前后实施操作 前置增强：主要匹配到的切点运行之前执行，在XML配置中使用&lt;aop:before&gt;，相应的接口为MethodBeforeAdvice。当一个Bean对象实现了MethodBeforeAdvice，在XML配置文件中指定这个bean为advice，Spring会自动在切点方法执行前执行MethodBeforeAdvice的接口。
+&lt;bean id=&#34;helloworld&#34; class=&#34;me.aihe.exam.controller.HelloWorld&#34; /&gt; &lt;!-- timelog实现了MethodBeforeAdvice接口 --&gt; &lt;bean id=&#34;timeLog&#34; class=&#34;me.aihe.exam.controller.TimeLoggingAop&#34; /&gt; &lt;aop:config&gt; &lt;aop:pointcut id=&#34;hello&#34; expression=&#34;execution(public * * (..))&#34;&gt;&lt;/aop:pointcut&gt; &lt;!" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b6684b0056634e715697fda6cc453b3c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-01-10T10:16:38+08:00" />
+<meta property="article:modified_time" content="2023-01-10T10:16:38+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Spring Boot全局异常处理器（原理及使用详解）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="-toc" style="margin-left:40px;"></p> 
+<p id="1%20%E4%BB%80%E4%B9%88%E6%98%AF%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E5%99%A8-toc" style="margin-left:40px;"><a href="#1%20%E4%BB%80%E4%B9%88%E6%98%AF%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E5%99%A8" rel="nofollow">1 什么是全局异常处理器</a></p> 
+<p id="2%20%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8-toc" style="margin-left:40px;"><a href="#2%20%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8" rel="nofollow">2 为什么需要全局异常</a></p> 
+<p id="3%C2%A0%E5%8E%9F%E7%90%86%E5%92%8C%E7%9B%AE%E6%A0%87-toc" style="margin-left:40px;"><a href="#3%C2%A0%E5%8E%9F%E7%90%86%E5%92%8C%E7%9B%AE%E6%A0%87" rel="nofollow">3 原理和目标</a></p> 
+<p id="4%C2%A0%40ControllerAdvice%E6%B3%A8%E8%A7%A3-toc" style="margin-left:40px;"><a href="#4%C2%A0%40ControllerAdvice%E6%B3%A8%E8%A7%A3" rel="nofollow">4 @ControllerAdvice注解</a></p> 
+<p id="4.1%C2%A0Advice%EF%BC%88%E9%80%9A%E7%9F%A5%EF%BC%89-toc" style="margin-left:80px;"><a href="#4.1%C2%A0Advice%EF%BC%88%E9%80%9A%E7%9F%A5%EF%BC%89" rel="nofollow">4.1 Advice（通知）</a></p> 
+<p id="4.2%20%40ControllerAdvice%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40ExceptionHandler%2C%E7%94%A8%E4%BA%8E%E6%8D%95%E8%8E%B7Controller%E4%B8%AD%E6%8A%9B%E5%87%BA%E7%9A%84%E6%8C%87%E5%AE%9A%E7%B1%BB%E5%9E%8B%E7%9A%84%E5%BC%82%E5%B8%B8%EF%BC%8C%E4%BB%8E%E8%80%8C%E8%BE%BE%E5%88%B0%E5%85%A8%E5%B1%80%E4%B8%8D%E5%90%8C%E7%B1%BB%E5%9E%8B%E7%9A%84%E5%BC%82%E5%B8%B8%E5%8C%BA%E5%88%AB%E5%A4%84%E7%90%86%E7%9A%84%E7%9B%AE%E7%9A%84%E3%80%82-toc" style="margin-left:80px;"><a href="#4.2%20%40ControllerAdvice%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40ExceptionHandler%2C%E7%94%A8%E4%BA%8E%E6%8D%95%E8%8E%B7Controller%E4%B8%AD%E6%8A%9B%E5%87%BA%E7%9A%84%E6%8C%87%E5%AE%9A%E7%B1%BB%E5%9E%8B%E7%9A%84%E5%BC%82%E5%B8%B8%EF%BC%8C%E4%BB%8E%E8%80%8C%E8%BE%BE%E5%88%B0%E5%85%A8%E5%B1%80%E4%B8%8D%E5%90%8C%E7%B1%BB%E5%9E%8B%E7%9A%84%E5%BC%82%E5%B8%B8%E5%8C%BA%E5%88%AB%E5%A4%84%E7%90%86%E7%9A%84%E7%9B%AE%E7%9A%84%E3%80%82" rel="nofollow">4.2 @ControllerAdvice结合方法型注解@ExceptionHandler,用于捕获Controller中抛出的指定类型的异常，从而达到全局不同类型的异常区别处理的目的。</a></p> 
+<p id="4.3%20%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40InitBinder%2C%E7%94%A8%E4%BA%8Erequest%E4%B8%AD%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8F%82%E6%95%B0%E8%A7%A3%E6%9E%90%E6%96%B9%E5%BC%8F%E8%BF%9B%E8%A1%8C%E6%B3%A8%E5%86%8C%EF%BC%8C%E4%BB%8E%E8%80%8C%E8%BE%BE%E5%88%B0%E8%87%AA%E5%AE%9A%E4%B9%89%E6%8C%87%E5%AE%9A%E6%A0%BC%E5%BC%8F%E5%8F%82%E6%95%B0%E7%9A%84%E7%9B%AE%E7%9A%84-toc" style="margin-left:80px;"><a href="#4.3%20%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40InitBinder%2C%E7%94%A8%E4%BA%8Erequest%E4%B8%AD%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8F%82%E6%95%B0%E8%A7%A3%E6%9E%90%E6%96%B9%E5%BC%8F%E8%BF%9B%E8%A1%8C%E6%B3%A8%E5%86%8C%EF%BC%8C%E4%BB%8E%E8%80%8C%E8%BE%BE%E5%88%B0%E8%87%AA%E5%AE%9A%E4%B9%89%E6%8C%87%E5%AE%9A%E6%A0%BC%E5%BC%8F%E5%8F%82%E6%95%B0%E7%9A%84%E7%9B%AE%E7%9A%84" rel="nofollow">4.3 结合方法型注解@InitBinder,用于request中自定义参数解析方式进行注册，从而达到自定义指定格式参数的目的</a></p> 
+<p id="4.4%20%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40ModelAttribute%EF%BC%8C%E8%A1%A8%E7%A4%BA%E5%85%B6%E6%B3%A8%E8%A7%A3%E7%9A%84%E6%96%B9%E6%B3%95%E5%B0%86%E4%BC%9A%E5%9C%A8%E7%9B%AE%E6%A0%87Controller%E6%96%B9%E6%B3%95%E6%89%A7%E8%A1%8C%E4%B9%8B%E5%89%8D%E6%89%A7%E8%A1%8C-toc" style="margin-left:80px;"><a href="#4.4%20%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40ModelAttribute%EF%BC%8C%E8%A1%A8%E7%A4%BA%E5%85%B6%E6%B3%A8%E8%A7%A3%E7%9A%84%E6%96%B9%E6%B3%95%E5%B0%86%E4%BC%9A%E5%9C%A8%E7%9B%AE%E6%A0%87Controller%E6%96%B9%E6%B3%95%E6%89%A7%E8%A1%8C%E4%B9%8B%E5%89%8D%E6%89%A7%E8%A1%8C" rel="nofollow">4.4 结合方法型注解@ModelAttribute，表示其注解的方法将会在目标Controller方法执行之前执行</a></p> 
+<p id="4.5%20%40ControllerAdvice%E6%B3%A8%E8%A7%A3%E4%BD%9C%E7%94%A8%E5%8E%9F%E7%90%86-toc" style="margin-left:80px;"><a href="#4.5%20%40ControllerAdvice%E6%B3%A8%E8%A7%A3%E4%BD%9C%E7%94%A8%E5%8E%9F%E7%90%86" rel="nofollow">4.5 @ControllerAdvice注解作用原理</a></p> 
+<p id="4.6%20%40RestControllerAdvice-toc" style="margin-left:80px;"><a href="#4.6%20%40RestControllerAdvice" rel="nofollow">4.6 @RestControllerAdvice</a></p> 
+<p id="5%20%E7%BC%96%E7%A0%81%E5%AE%9E%E7%8E%B0%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E5%99%A8-toc" style="margin-left:40px;"><a href="#5%20%E7%BC%96%E7%A0%81%E5%AE%9E%E7%8E%B0%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E5%99%A8" rel="nofollow">5 编码实现全局异常处理器</a></p> 
+<p></p> 
+<h3 id="1%20%E4%BB%80%E4%B9%88%E6%98%AF%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E5%99%A8">1 什么是全局异常处理器</h3> 
+<p>　　软件开发springboot项目过程中，不可避免的需要处理各种异常，spring mvc架构中各层会出现大量的try{...} catch{...} finally{...}代码块，不仅有大量的冗余代码，而且还影响代码的可读性。这样就需要定义个全局统一异常处理器，以便业务层再也不必处理异常。</p> 
+<p>　　Spring在3.2版本增加了一个注解@ControllerAdvice，可以与@ExceptionHandler、@InitBinder、@ModelAtribute等注解配套使用。不过跟异常处理相关的只有注解@ExceptionHandler,从字面上看，就是<strong>异常处理器</strong>的意思。</p> 
+<h3 id="2%20%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8">2 为什么需要全局异常</h3> 
+<ul><li>不用强制写try-catch，由全局异常处理器统一捕获处理。</li><li>自定义异常，只能用全局异常来捕获。不能直接返回给客户端，客户端是看不懂的，需要接入全局异常处理器</li><li>JSR303规范的Validator参数校验器，参数校验不通过会抛异常，是无法使用try-catch语句直接捕获，只能使用全局异常处理器。</li></ul> 
+<h3 id="3%C2%A0%E5%8E%9F%E7%90%86%E5%92%8C%E7%9B%AE%E6%A0%87">3 <a href="https://blog.csdn.net/lemon_TT/article/details/127091478" title="原理和目标">原理和目标</a></h3> 
+<p>　　简单的说，@ControllerAdvice注解可以把异常处理器应用到所有控制器，而不是单个控制器。借助该注解，我们可以实现：在独立的某个地方，比如单独的一个类，定义一套对各章异常的处理机制，然后在类的签名加上注解@ControllerAdvice，统一对<strong>不同阶段的，不同异常</strong>进行处理。这就是统一异常处理的原理。</p> 
+<p>　　对异常按阶段进行分类，大体可以分成：进入Controller前的异常和Service层异常</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/cf/5a/rDQAGJ7X_o.png"></p> 
+<p>        目标就是消灭95%以上的try catch代码块，并以优雅的Assert（断言）方式来校验业务的异常情况，只关注业务逻辑，而不用花费大量精力写冗余的try catch代码块。</p> 
+<h3 id="4%C2%A0%40ControllerAdvice%E6%B3%A8%E8%A7%A3">4 <a href="https://blog.csdn.net/huanger_/article/details/119213237" title="@ControllerAdvice注解">@ControllerAdvice注解</a></h3> 
+<p>　　@ControllerAdvice注解是Spring3.2中新增的注解，学名是<strong>Controller增强器</strong>，作用是给Controller控制器添加统一的操作或处理，对于@ControllerAdvice，我们比较熟悉的用法是结合@ExceptionHandler用于全局异常的处理，但其作用不止于此。ControllerAdvice拆开来就是Controller Advice，关于Advice，在Spring的AOP中，是用来封装一个切面所有属性的，包括切入点和需要织入的切面逻辑。这里ControllerAdvice也可以这么理解。</p> 
+<h4 id="4.1%C2%A0Advice%EF%BC%88%E9%80%9A%E7%9F%A5%EF%BC%89">4.1 <a href="https://www.jianshu.com/p/6c1b73b54c46" rel="nofollow" title="Advice（通知）">Advice（通知）</a></h4> 
+<p>　　Spring AOP通过PointCut来指定在哪些类的哪写方法上织入横切逻辑，通过Advice来指定在切点上具体做什么事情。如方法前做什么，方法后做什么，抛出异常做什么。再来看一下图</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/e5/67/5zep9JaP_o.png"></p> 
+<p>　主要可分为5类增强：</p> 
+<ul><li> 
+  <ul><li>MethodBeforeAdvice：目标方法实施前增强</li><li>AfterReturningAdvice：目标方法实施后增强</li><li>ThrowsAdvice：异常抛出增强</li><li>IntroductionAdvice：引介增强，为目标类添加新的属性和方法。可以构建组合对象来实现多继承</li><li>MethodInterceptor：方法拦截器，环绕增强，在方法的前后实施操作</li></ul></li></ul> 
+<p>　　<strong>前置增强：</strong>主要匹配到的切点运行之前执行，在XML配置中使用&lt;aop:before&gt;，相应的接口为MethodBeforeAdvice。当一个Bean对象实现了MethodBeforeAdvice，在XML配置文件中指定这个bean为advice，Spring会自动在切点方法执行前执行MethodBeforeAdvice的接口。</p> 
+<pre><code class="language-java">&lt;bean id="helloworld" class="me.aihe.exam.controller.HelloWorld" /&gt;
+    
+    &lt;!-- timelog实现了MethodBeforeAdvice接口 --&gt;
+    &lt;bean id="timeLog" class="me.aihe.exam.controller.TimeLoggingAop" /&gt;
+    &lt;aop:config&gt;
+        &lt;aop:pointcut id="hello" expression="execution(public * * (..))"&gt;&lt;/aop:pointcut&gt;
+        
+        &lt;!-- advisor的作用为将Pointcut和Advice组装起来 --&gt;
+        &lt;aop:advisor
+                id="timelogAdvisor"
+                advice-ref="timeLog"
+                pointcut-ref="hello"
+        /&gt;
+    &lt;/aop:config&gt;</code></pre> 
+<p>　在调用相应的切点方法之前，前置增强都会生效。</p> 
+<p>　　<strong>后置增强：</strong>弄明白了前置增强，后置增强也是同一个道理，不过后置增强是在切点运行后执行。接口为AfterReturningAdvice，在切点方法运行之后，后置增强会生效。</p> 
+<p>　　<strong>异常抛出增强：</strong>当切点方法抛出异常时，异常抛出增强才会被执行。其接口为ThrowAdvice，接口没有指定方法，实现这个接口的对象是通过反射来调用其增强方法的。</p> 
+<p>　　<strong>增强案例：</strong>根据前面的前置，后置，异常抛出增强，看一个完整的案例：　</p> 
+<pre><code class="language-java">// TimeLoggingAop实现了前置增强，后置增强，异常环绕增强
+public class TimeLoggingAop implements MethodBeforeAdvice,AfterReturningAdvice,ThrowsAdvice {
+    private long startTime = 0;
+
+    @Override
+    public void before(Method method, Object[] objects, Object o) throws Throwable {
+        startTime = System.nanoTime();
+    }
+
+
+    @Override
+    public void afterReturning(Object returnValue, Method method, Object[] objects, Object target) throws Throwable {
+        long spentTime = System.nanoTime() - startTime;
+        String clazzName = target.getClass().getCanonicalName();
+        String methodName = method.getName();
+        System.out.println("执行" + clazzName + "#" + methodName + "消耗" + new BigDecimal(spentTime).divide(new BigDecimal(1000000)) + "毫秒");
+    }
+
+    public void afterThrowing(Method method, Object[] args, Object target, Exception ex){
+        System.out.println("执行" + method.getName() + "出现异常，" + "异常消息为：" + ex.getMessage());
+    }
+}
+// 普通的HelloWorld对象
+public class HelloWorld {
+    
+    public void sayHello(){
+        System.out.println("hello");
+    }
+
+    public void sayHelloWithException(){
+        System.out.println("hello");
+        throw new RuntimeException("Hello World运行时出了一点问题");
+    }
+}
+
+  public static void main(String[] args) {
+        //普通对象
+        HelloWorld helloWorld = new HelloWorld();
+        //增强对象
+        BeforeAdvice beforeAdvice = new TimeLoggingAop();
+        //组装普通对象和增强对象
+        ProxyFactory proxyFactory = new ProxyFactory();
+        proxyFactory.setTarget(helloWorld);
+        proxyFactory.addAdvice(beforeAdvice);
+
+        //获取组装后的代理对象
+        HelloWorld proxyHelloWorld = (HelloWorld) proxyFactory.getProxy();
+        //运行
+        proxyHelloWorld.sayHello();
+        proxyHelloWorld.sayHelloWithException();
+    }
+
+//运行结果
+hello
+执行me.aihe.exam.controller.HelloWorld#sayHello消耗29.392268毫秒
+
+hello
+执行sayHelloWithException出现异常，异常消息为：Hello World运行时出了一点问题</code></pre> 
+<p>        在原本方法之上增加一些额外的东西，原本的功能增强了，所以叫增强，这是中文翻译过来的增强。英文名为Advice，建议，在方法周围建议方法做什么事情，然后真的做了。。。　</p> 
+<h4 id="4.2%20%40ControllerAdvice%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40ExceptionHandler%2C%E7%94%A8%E4%BA%8E%E6%8D%95%E8%8E%B7Controller%E4%B8%AD%E6%8A%9B%E5%87%BA%E7%9A%84%E6%8C%87%E5%AE%9A%E7%B1%BB%E5%9E%8B%E7%9A%84%E5%BC%82%E5%B8%B8%EF%BC%8C%E4%BB%8E%E8%80%8C%E8%BE%BE%E5%88%B0%E5%85%A8%E5%B1%80%E4%B8%8D%E5%90%8C%E7%B1%BB%E5%9E%8B%E7%9A%84%E5%BC%82%E5%B8%B8%E5%8C%BA%E5%88%AB%E5%A4%84%E7%90%86%E7%9A%84%E7%9B%AE%E7%9A%84%E3%80%82">4.2 @ControllerAdvice结合方法型注解@ExceptionHandler,用于捕获Controller中抛出的指定类型的异常，从而达到全局不同类型的异常区别处理的目的。</h4> 
+<p>　　@ExceptionHandler这个注解表示Controller中任何一个方法发生异常，则会被注解了@ExceptionHandler的方法拦截到。对应的异常类执行对应的方法，如果都没有匹配到异常类，则采用近亲匹配的方法</p> 
+<pre><code class="language-java">package com.liurq.config.shiro.handle;
+
+import org.apache.shiro.authz.UnauthorizedException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.context.request.NativeWebRequest;
+
+@ControllerAdvice
+public class UnauthorizedExceptionHandle {
+
+    /**
+     * 可以获取请求的request对象，按需进行操作
+     * 可以获取抛出的异常对象，按需进行操作
+     * 可对请求进行重定向，将请求重定向到某个页面或控制器
+     * 需要返回json串儿的话，在方法上添加@ResponseBody注解即可
+     * @param request
+     * @param e
+     * @return
+     */
+//    @ResponseBody
+    @ExceptionHandler({UnauthorizedException.class})
+    public String unauthorizedException(NativeWebRequest request, UnauthorizedException e){
+        System.out.println(request.getParameter("param1"));
+        e.printStackTrace();
+        return "redirect:/403";
+    }
+}</code></pre> 
+<h4 id="4.3%20%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40InitBinder%2C%E7%94%A8%E4%BA%8Erequest%E4%B8%AD%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8F%82%E6%95%B0%E8%A7%A3%E6%9E%90%E6%96%B9%E5%BC%8F%E8%BF%9B%E8%A1%8C%E6%B3%A8%E5%86%8C%EF%BC%8C%E4%BB%8E%E8%80%8C%E8%BE%BE%E5%88%B0%E8%87%AA%E5%AE%9A%E4%B9%89%E6%8C%87%E5%AE%9A%E6%A0%BC%E5%BC%8F%E5%8F%82%E6%95%B0%E7%9A%84%E7%9B%AE%E7%9A%84">4.3 结合方法型注解@InitBinder,用于request中自定义参数解析方式进行注册，从而达到自定义指定格式参数的目的</h4> 
+<p>　　用于请求中注册自定义参数的解析，从而达到自定义请求参数格式的目的。</p> 
+<ul><li>由@InitBinder表示的方法，可以对WebDataBinder对象进行初始化。WebDataBinder是DataBinder的子类，用于完成由表单到JavaBean属性的绑定。</li><li>在使用SpringMVC的时候，经常会遇到表单中的日期字符串和JavaBean的Date类型，而SpringMVC默认不支持这个格式的转换，所以需要手动配置，自定义数据的绑定才能解决这个问题。在需要日期转换的Controller中使用SpringMVC的注解@Initbinder和Spring自带的WebDateBinder类来操作。WebDataBinder是用来绑定请求参数到指定的属性编辑器。由于前端传到controller里的值是String类型的，当往Model里Set这个值的时候，如果set的这个属性是个对象，Spring就会去找对应的editor进行转换，然后再set进去。</li><li>标注在controller上的@InitBinder只对当前Controller生效，要想全局生效，可以使用@ControllerAdivce。通过@ControllerAdvice可以将对于控制器的全局配置放置在同一个位置。</li></ul> 
+<pre><code class="language-java">@ControllerAdvice
+public class MyControllerAdvice {
+
+    /**
+     * 转换前端传入的日期变量参数为指定格式。
+     *
+     * @param binder 数据绑定参数。
+     */
+    @InitBinder
+    public void initBinder(WebDataBinder binder) {
+        binder.registerCustomEditor(Date.class,
+                new CustomDateEditor(new SimpleDateFormat(MyDateUtil.COMMON_SHORT_DATETIME_FORMAT), false));
+    }
+}</code></pre> 
+<h4 id="4.4%20%E7%BB%93%E5%90%88%E6%96%B9%E6%B3%95%E5%9E%8B%E6%B3%A8%E8%A7%A3%40ModelAttribute%EF%BC%8C%E8%A1%A8%E7%A4%BA%E5%85%B6%E6%B3%A8%E8%A7%A3%E7%9A%84%E6%96%B9%E6%B3%95%E5%B0%86%E4%BC%9A%E5%9C%A8%E7%9B%AE%E6%A0%87Controller%E6%96%B9%E6%B3%95%E6%89%A7%E8%A1%8C%E4%B9%8B%E5%89%8D%E6%89%A7%E8%A1%8C">4.4 结合方法型注解@ModelAttribute，表示其注解的方法将会在目标Controller方法执行之前执行</h4> 
+<p>　　搭配@ModelAttribute注解可以做全局数据绑定，在到达控制器前，将属性放入modelMap中，可以通过name属性指定数据在数据在map中的key，如果不指定的话，有相同返回类型会产生覆盖，建议每个都通过name参数指定key。</p> 
+<h4 id="4.5%20%40ControllerAdvice%E6%B3%A8%E8%A7%A3%E4%BD%9C%E7%94%A8%E5%8E%9F%E7%90%86">4.5 @ControllerAdvice注解<a href="https://www.jianshu.com/p/acf7fdf20326" rel="nofollow" title="作用原理">作用原理</a></h4> 
+<p>　　我们看看Spring是怎么实现的，首先前端控制器DispatcherServlet对象在创建时会初始化一系列的对象：　</p> 
+<pre><code class="language-java">public class DispatcherServlet extends FrameworkServlet{
+  //......
+  protected void initStrategies(ApplicationContext context){
+      initMultipartResolver(context);
+      initLocaleResolver(context);
+      initThemeResolver(context);
+      initHandlerMappings(context);
+      initHandlerAdapters(context);
+      initHandlerExceptionResolvers(context);
+      initRequestToViewNameTranslator(context);
+      initViewResolvers(context);
+      initFlashMapManager(context);        
+  }    
+  //......  
+}</code></pre> 
+<p>　对于@ControllerAdvice注解，我们重点关注initHandlerAdapters(context)和initHandlerExceptionResolvers(context)这两个方法。</p> 
+<ul><li>initHandlerAdapters(context)方法会取得所有实现了HandlerAdapter接口的bean并保存起来，其中就有一个类型为RequestMappingHandlerAdapter的bean，这个bean就是@RequestMapping注解能起作用的关键，这个bean在应用启动过程中会获取所有被@ControllerAdvice注解标注的bean对象做进一步处理：找到所有ModelAttribute标注的方法并缓存起来，找到所有InitBinder标注的方法并缓存起来。经过处理之后，@ModelAttribute和@InitBinder就能起作用了。</li><li>DispatcherServlet的initHandlerExceptionResolvers(context)方法，方法会取得所有实现了HandlerExceptionResolver接口的bean并保存起来，七张就有一个类型为ExceptionHandlerExceptionResolver的bean，这个bean在应用启动过程中会获取所有被@ControllerAdvice注解标注的bean对象做进一步处理。</li></ul> 
+<h4 id="4.6%20%40RestControllerAdvice">4.6 @RestControllerAdvice</h4> 
+<p>　　点进去看到@RestControllerAdvice是一个组合注解，是<strong>@ResponseBody</strong>和<strong>@ControllerAdvice</strong>的组合</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/13/8c/rlr8ircC_o.png"></p> 
+<p> 　　而函数体中用到了@AliasFor注解，因此可以通过@RestControllerAdvice的属性传递将属性值传给@ControllerAdvice。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/f0/76/8fS1Oaf5_o.png"></p> 
+<p> 　　因此，在使用时可直接将包名传给@RestControllerAdvice来指定Controller范围</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/ba/ae/bH1NXQ93_o.png"></p> 
+<p>　<strong>@ResponseBody:</strong></p> 
+<ul><li> 
+  <ul><li>注解的作用是将controller的方法返回的对象通过适当的转换器转换为指定的格式之后，写入到response对象的body区（响应体中），通常用来返回JSON数据或者是XML数据，需要注意的是在使用此注解之后不会再走视图处理器，而是直接将数据写入到输入流中，它的效果等同于通过response对象输出指定格式的数据。</li><li>需要通过@RestponseBody注解将返回的JSON字符串放入响应体中，然后再前台才能拿到json字符串进行解析，如果不加，响应体中就没有放入json字符串，前台自然是拿不到数据的。</li><li>默认情况下，使用@ResponseBody返回的数据只能是String类型，其它类型返回时会出现异常：java.lang.IllegalArgumentException:  No converter found for return value of type。这里提示没有对应的转换器，这里可以添加转换器将数据转换为特定的格式，JSON是数据通信的主要格式，</li></ul></li></ul> 
+<p> 　　<a href="https://www.cnblogs.com/nsywBlog/p/14826924.html" rel="nofollow" title="这里">这里</a>做了这样的解释：　　　　</p> 
+<ul><li> 
+  <ul><li> <p>@responsebody这个注解表示你的返回值将存在responsebody中返回到前端，也就是将return返回值作为请求返回值，return的数据不会解析成返回跳转路径，将java对象转为json格式的数据，前端接收后会显示将数据到页面，如果不加的话 返回值将会作为url的一部分，页面会跳转到这个url，也就是跳转到你返回的这个路径。</p> </li><li> <p>@ResponseBody这个注解通常使用在控制层（controller）的方法上，其作用是将方法的返回值以特定的格式写入到response的body区域，进而将数据返回给客户端。当方法上面没有写ResponseBody,底层会将方法的返回值封装为ModelAndView对象。</p> </li><li> <p>@ResponseBody这个注解使用情景：当返回的数据不是html标签的页面，而是其他某种格式的数据时（如json、xml等）使用，常用在ajax异步请求中，可以通过 ajax 的“success”：fucntion(data){} data直接获取到。</p> </li><li> <p>@ResponseBody这个注解一般是作用在方法上的，加上该注解表示该方法的返回结果直接写到Http response Body中，在RequestMapping中 return返回值默认解析为跳转路径，如果你此时想让Controller返回一个字符串或者对象到前台。</p> </li></ul></li></ul> 
+<h3 id="5%20%E7%BC%96%E7%A0%81%E5%AE%9E%E7%8E%B0%E5%85%A8%E5%B1%80%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E5%99%A8">5 编码实现全局异常处理器</h3> 
+<ul><li><strong>步骤1：封装异常内容，统一存储在枚举类中</strong></li></ul> 
+<pre><code class="language-java">/**
+ *  返回应答中的错误信息
+ * **/
+public enum ErrorCodeEnum {
+
+    NO_ERROR("没有错误"),       DATA_VALIDATED_FAILED("数据验证事白，请核对！"),
+
+    UNHANDLED_EXCEPTION("未处理的异常！");
+
+    ErrorCodeEnum(String errorMessage) { this.errorMessage = errorMessage; }
+
+    private final String errorMessage;
+
+    public String getErrorMessage(){
+        return errorMessage;
+    }
+}</code></pre> 
+<ul><li><strong>步骤2：封装Controller的异常结果</strong></li></ul> 
+<pre><code class="language-java">@Data
+public class CallResult{
+    private static final CallResult OK = new CallResult();   
+    private boolean success = true;
+    private String errorMessage = null;
+    private JSONObject data;
+
+    public static CallResult create(String errorMessage){      
+        return errorMessage == null ? ok() : error(errorMessage);
+    }
+
+    public static CallResult ok() { return OK; }
+
+    public static CallResult ok(JSONObject data){       
+        CallResult result = new CallResult();
+        result.data = data;
+        return result;
+    }
+
+    public static CallResult error(String errorMessage) {
+        CallResult result = new CallResult();
+        result.success = false;
+        result.errorMessage = errorMessage;
+        return result;
+    }
+    
+    public static &lt;T&gt; CallResult error(String errorMessage, T data){
+        CallResult result = new CallResult();
+        result.success = false;
+        result.errorMessge = errorMessage;
+        JSONObject jsonObject  new JSONObject();
+        jsonObject.put("errorData", data);
+        result.data = jsonObject;
+        return result;
+    }
+}</code></pre> 
+<ul><li><strong>步骤3：加个全局异常处理器，对异常进行处理（为图方便，这里只先捕捉了注解@NotBlank的异常抛出，@NotBlank会抛出一个MethodArgumentNotValidException类型的异常，这里先处理这个异常）</strong></li></ul> 
+<pre><code class="language-java">package com.****.demo.common;
+
+import org.springframework.context.support.DefaultMessageSourceResolvable;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.stream.Collectors;
+
+@RestControllerAdvice("com.****.demo")
+public class MyExceptionHandler {
+
+    //@NotBlank抛出异常处理
+    @ExceptionHandler(value = MethodArgumentNotValidException.class)
+    public CallResult bindExceptionHandle(MethodArgumentNotValidException ex){
+        String message = ex.getBindingResult().getAllErrors().stream().map(DefaultMessageSourceResolvable::getDefaultMessage).collect(Collectors.joining());
+        return CallResult.error(message);
+    }
+}</code></pre> 
+<ul><li><strong>创建实体</strong></li></ul> 
+<pre><code class="language-java">public class User implements Serializable {
+
+    @ApiModelProperty(value = "名称")
+    @NotBlank(message = "name不能为空(哈哈，自定义哒)")
+    private String demoName;
+
+    @ApiModelProperty(value = "年龄")
+    @NotNull(message = "age 不能为空")
+    private Integer age;
+
+    @ApiModelProperty(value = "id")
+    @NotNull(message = "id 不能为空")
+    private Integer id;
+}</code></pre> 
+<ul><li><strong>Controller</strong></li></ul> 
+<pre><code class="language-java">@RestController    
+public class UserController{
+
+    @PostMapping("/setUser")
+    @ApiOperation(value = "获取用户信息")
+    public CallResult updateUser(@RequestBody @Valid User user) {
+        userService.setUser(user);
+        return CallResult.ok();
+    }
+}</code></pre> 
+<ul><li><strong>测试</strong>，为测试@NotBlank，将demoName值设为空</li></ul> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/51/d6/6w48LfSR_o.png"></p> 
+<p><strong>结果显示：</strong></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/d2/30/HOIDPwhp_o.png"></p> 
+<p>没有try-catch块的优雅代码……完美！</p> 
+<p>本文引用了很多大神的博客，基本都加了链接，如果有漏加链接侵权的，请联系作者删除，谢谢！</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a5baaf06567acd0210e8662229d5bf1a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">CocosCreator2.x 开发笔记</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/166150ffa9f804b831c2cacd7697a032/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">vue动态添加/删除dom元素</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

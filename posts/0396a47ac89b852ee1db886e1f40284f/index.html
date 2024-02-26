@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>腾讯云SDK并发调用优化方案 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="腾讯云SDK并发调用优化方案" />
+<meta property="og:description" content="目录
+一、概述
+二、 网关的使用
+2.1 核心代码
+三、腾讯云SDK依赖包的改造
+一、概述 此网关主要用于协调腾讯云SDK调用的QPS消耗，使得多个腾讯云用户资源能得到最大限度的利用。避免直接使用腾讯云SDK 时，在较大并发情况下导致接口调用异常。网关的工作流程如下图所示：
+如上图所示，各个客户端在发起腾讯云SDK调用时，请求统一先发到网关，网关会根据现有的腾讯云账户资源使用情况，通过负载均衡算法，选择一个合适的腾讯云账户来执行请求，将请求转发到腾讯云服务，从而保证了腾讯云用户资源的最大利用。在这个过程中，如果暂时未找到可用的腾讯云用户，则会阻塞线程，直到有可用的账户时再将线程唤醒放行，避免了在较大并发量时直接调用SDK，而导致接口报错的情况发生。
+二、 网关的使用 2.1 核心代码 RequestLimitFilter.java
+package com.tencentcloudapi.gateway.filter; import com.tencentcloudapi.common.Sign; import com.tencentcloudapi.common.exception.TencentCloudSDKException; import com.tencentcloudapi.gateway.api.dto.UserInfo; import com.tencentcloudapi.gateway.api.service.UserManageService; import io.micrometer.common.util.StringUtils; import jakarta.annotation.Resource; import lombok.extern.slf4j.Slf4j; import org.springframework.cloud.gateway.filter.GatewayFilterChain; import org.springframework.cloud.gateway.filter.GlobalFilter; import org.springframework.core.Ordered; import org.springframework.http.server.reactive.ServerHttpRequest; import org.springframework.stereotype.Component; import org.springframework.util.CollectionUtils; import org.springframework.web.server.ServerWebExchange; import reactor.core.publisher.Mono; import javax.xml.bind.DatatypeConverter; import java.nio.charset.StandardCharsets; import java.sql.Date; import java.text.SimpleDateFormat; import java.util.*; import java.util.concurrent.Semaphore; /** * @Description 限流过滤器 * @Author miller.Lai * @Date 2023-11-06 10:23 */ @Component @Slf4j public class RequestLimitFilter implements GlobalFilter, Ordered { @Resource private UserManageService userManageService; @Override public Mono&lt;Void&gt; filter(ServerWebExchange exchange, GatewayFilterChain chain) { ServerHttpRequest request = exchange." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/0396a47ac89b852ee1db886e1f40284f/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-30T17:08:13+08:00" />
+<meta property="article:modified_time" content="2024-01-30T17:08:13+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">腾讯云SDK并发调用优化方案</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="id-腾讯云SDK专用网关部署-一、概述-toc" style="margin-left:0px;"><a href="#id-%E8%85%BE%E8%AE%AF%E4%BA%91SDK%E4%B8%93%E7%94%A8%E7%BD%91%E5%85%B3%E9%83%A8%E7%BD%B2-%E4%B8%80%E3%80%81%E6%A6%82%E8%BF%B0" rel="nofollow">一、概述</a></p> 
+<p id="id-腾讯云SDK专用网关部署-二、网关的使用-toc" style="margin-left:0px;"><a href="#id-%E8%85%BE%E8%AE%AF%E4%BA%91SDK%E4%B8%93%E7%94%A8%E7%BD%91%E5%85%B3%E9%83%A8%E7%BD%B2-%E4%BA%8C%E3%80%81%E7%BD%91%E5%85%B3%E7%9A%84%E4%BD%BF%E7%94%A8" rel="nofollow">二、 网关的使用</a></p> 
+<p id="id-腾讯云SDK专用网关部署-2.1下载代码-toc" style="margin-left:40px;"><a href="#id-%E8%85%BE%E8%AE%AF%E4%BA%91SDK%E4%B8%93%E7%94%A8%E7%BD%91%E5%85%B3%E9%83%A8%E7%BD%B2-2.1%E4%B8%8B%E8%BD%BD%E4%BB%A3%E7%A0%81" rel="nofollow">2.1 核心代码</a></p> 
+<p id="id-腾讯云SDK并发调用优化方案-二、腾讯云SDK依赖包的改造-toc" style="margin-left:0px;"><a href="#id-%E8%85%BE%E8%AE%AF%E4%BA%91SDK%E5%B9%B6%E5%8F%91%E8%B0%83%E7%94%A8%E4%BC%98%E5%8C%96%E6%96%B9%E6%A1%88-%E4%BA%8C%E3%80%81%E8%85%BE%E8%AE%AF%E4%BA%91SDK%E4%BE%9D%E8%B5%96%E5%8C%85%E7%9A%84%E6%94%B9%E9%80%A0" rel="nofollow">三、腾讯云SDK依赖包的改造</a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h2 id="id-腾讯云SDK专用网关部署-一、概述">一、概述</h2> 
+<p>     此网关主要用于协调腾讯云SDK调用的QPS消耗，使得多个腾讯云用户资源能得到最大限度的利用。避免直接使用腾讯云SDK 时，在较大并发情况下导致接口调用异常。网关的工作流程如下图所示：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/fc/8c/MB99AHpb_o.png"></p> 
+<p>     如上图所示，各个客户端在发起腾讯云SDK调用时，请求统一先发到网关，网关会根据现有的腾讯云账户资源使用情况，通过负载均衡算法，选择一个合适的腾讯云账户来执行请求，将请求转发到腾讯云服务，从而保证了腾讯云用户资源的最大利用。在这个过程中，如果暂时未找到可用的腾讯云用户，则会阻塞线程，直到有可用的账户时再将线程唤醒放行，避免了在较大并发量时直接调用SDK，而导致接口报错的情况发生。</p> 
+<h2 id="id-腾讯云SDK专用网关部署-二、网关的使用">二、 网关的使用</h2> 
+<h3 id="id-腾讯云SDK专用网关部署-2.1下载代码">2.1 核心代码</h3> 
+<p>   RequestLimitFilter.java</p> 
+<pre><code class="language-java">package com.tencentcloudapi.gateway.filter;
+
+
+import com.tencentcloudapi.common.Sign;
+import com.tencentcloudapi.common.exception.TencentCloudSDKException;
+import com.tencentcloudapi.gateway.api.dto.UserInfo;
+import com.tencentcloudapi.gateway.api.service.UserManageService;
+import io.micrometer.common.util.StringUtils;
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import javax.xml.bind.DatatypeConverter;
+import java.nio.charset.StandardCharsets;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.concurrent.Semaphore;
+
+/**
+ * @Description 限流过滤器
+ * @Author miller.Lai
+ * @Date 2023-11-06 10:23
+ */
+@Component
+@Slf4j
+public class RequestLimitFilter implements GlobalFilter, Ordered {
+
+
+    @Resource
+    private UserManageService userManageService;
+
+
+    @Override
+    public Mono&lt;Void&gt; filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        // 打印请求路径
+        String requestUri = request.getPath().pathWithinApplication().value();
+        log.info("接受到请求，请求路径：{}", requestUri);
+
+        List&lt;String&gt; authorizationList = request.getHeaders().get("authorization");
+        List&lt;String&gt; actionList = request.getHeaders().get("X-TC-Action");
+        // 如果请求头中存在 authorization 信息，则要进行替换，以适应现有的接口TPS限制策略
+        if (!CollectionUtils.isEmpty(authorizationList) &amp;&amp; StringUtils.isNotEmpty(authorizationList.get(0))&amp;&amp;
+                !CollectionUtils.isEmpty(actionList) &amp;&amp; StringUtils.isNotEmpty(actionList.get(0))) {
+            UserInfo userInfo = new UserInfo();
+            // 接口名称
+            String action = null;
+            try {
+                action = actionList.get(0);
+                log.info("当前调用API名称：{}", action);
+                // 获取可用的腾讯秘钥，这是一个阻塞方法
+                userInfo = userManageService.getAvailableUserInfo(action);
+                String secretId = userInfo.getSecretInfo().getSecretId();
+                String secretKey = userInfo.getSecretInfo().getSecretKey();
+                // 根据可用的秘钥对请求头中的认证信息做重新生成
+                String signedHeaders = "content-type;host";
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+                // 接口请求所在秒钟
+                String timestamp = String.valueOf(System.currentTimeMillis() / 1000L);
+                String date = sdf.format(new Date(Long.valueOf(timestamp + "000")));
+                String service = request.getHeaders().get("service") != null ?  request.getHeaders().get("service").get(0) : "";
+                String credentialScope = date + "/" + service + "/tc3_request";
+                String stringToSign = request.getHeaders().get("stringToSign") != null ? new String(Base64.getDecoder().decode(Objects.requireNonNull(request.getHeaders().get("stringToSign")).get(0).getBytes())) : "";
+                try {
+                    byte[] secretDate = Sign.hmac256(("TC3" + secretKey).getBytes(StandardCharsets.UTF_8), date);
+                    byte[] secretService = Sign.hmac256(secretDate, service);
+                    byte[] secretSigning = Sign.hmac256(secretService, "tc3_request");
+                    String signature = DatatypeConverter.printHexBinary(Sign.hmac256(secretSigning, stringToSign)).toLowerCase();
+                    String authorization = "TC3-HMAC-SHA256 Credential=" + secretId + "/" + credentialScope + ", SignedHeaders=" + signedHeaders + ", Signature=" + signature;
+                    exchange.getRequest().mutate().headers(httpHeaders -&gt; {
+                        // 去除自定义的请求头
+                        httpHeaders.remove("service");
+                        httpHeaders.remove("stringToSign");
+                        // 去除不合法的认证信息
+                        httpHeaders.remove("authorization");
+                        // 塞入有效的认证信息
+                        httpHeaders.add("authorization", authorization);
+
+                    });
+                } catch (TencentCloudSDKException e) {
+                    throw new RuntimeException(e);
+                }
+                log.info("线程 {} 的请求时间:{} 毫秒,secretId:{}",Thread.currentThread().getName(),System.currentTimeMillis(),secretId);
+                UserInfo finalUserInfo = userInfo;
+                String finalAction = action;
+
+
+                // 如果上述过着正常获取信号量的许可
+                String hasAcquired = userManageService.getHasAcquiredThreadLocal().get();
+                userManageService.getHasAcquiredThreadLocal().remove();
+                return chain.filter(exchange).then( Mono.fromRunnable(() -&gt; {
+                    // 接口逻辑执行完毕后释放信号量锁
+                    if("1".equals(hasAcquired)){
+                        finalUserInfo.getInterfaceInfo(finalAction).getSemaphore().release();
+                        log.info("线程 {} 已释放线程锁",Thread.currentThread().getName());
+                    }
+                }));
+
+            } catch (Exception e) {
+                // 在发生错误时释放信号量锁
+                // 将当前线程标记为已获取许可
+                String hasAcquired = userManageService.getHasAcquiredThreadLocal().get();
+                if("1".equals(hasAcquired)){
+                    userInfo.getInterfaceInfo(action).getSemaphore().release();
+                    userManageService.getHasAcquiredThreadLocal().remove();
+                    log.info("线程 {} 已释放线程锁",Thread.currentThread().getName());
+                }
+
+                throw new RuntimeException(e);
+            }
+        }else{
+            return chain.filter(exchange);
+        }
+    }
+
+    @Override
+    public int getOrder() {
+        return 1;
+    }
+}
+</code></pre> 
+<pre>UserManageServiceImpl.java</pre> 
+<pre><code class="language-java">package com.tencentcloudapi.gateway.api.service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tencentcloudapi.gateway.api.dto.UserInfo;
+import com.tencentcloudapi.gateway.api.dto.InterfaceInfo;
+import io.micrometer.common.util.StringUtils;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Service;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * @author Miller.Lai
+ * @description:  腾讯云用户管理实现类
+ * @date 2024-01-25 17:13:10
+ */
+@Service
+public class UserManageServiceImpl implements UserManageService {
+
+    private  List&lt;UserInfo&gt;  userInfos;
+
+
+    @Value("${tencentcloud.api.authorization.file:}")
+    private String authorizationJsonUrl;
+
+
+    private ThreadLocal&lt;String&gt; hasAcquiredThreadLocal ;
+
+
+    public ThreadLocal&lt;String&gt; getHasAcquiredThreadLocal() {
+        return hasAcquiredThreadLocal;
+    }
+
+
+    @PostConstruct
+    public void init(){
+        try {
+            InputStream inputStreams = null;
+            // 如果有指定authorization文件路径，则按指定的路径找配置文件
+            if (StringUtils.isNotBlank(authorizationJsonUrl)) {
+                inputStreams = new FileInputStream(authorizationJsonUrl);
+            } else {
+                // 从resource目录下加载JSON文件
+                Resource resource = new ClassPathResource("authorization.json");
+                inputStreams = resource.getInputStream();
+            }
+            // 使用Jackson的ObjectMapper将JSON数组内容映射为List对象
+            ObjectMapper objectMapper = new ObjectMapper();
+            userInfos = objectMapper.readValue(inputStreams, new TypeReference&lt;&gt;() {});
+            hasAcquiredThreadLocal =new ThreadLocal&lt;&gt;();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 随机获取一个可用的用户
+     * @param action
+     * @return
+     */
+    @Override
+    public UserInfo getAvailableUserInfo(String action) {
+
+        // 可用的用户列表
+        List&lt;UserInfo&gt; availableUserInfos = new ArrayList&lt;&gt;();
+
+        // 计算总权重，即总并发量
+        int totalWeight = 0;
+
+        // 过滤可用的腾讯用户,过滤条件: action匹配
+        for (int i = 0; i &lt; userInfos.size(); i++) {
+            UserInfo userInfo =userInfos.get(i);
+            // 当前用户是否可用
+            boolean available = false;
+            for (int j = 0; j &lt; userInfo.getInterfaces().size(); j++) {
+                InterfaceInfo interfaceInfo  = userInfo.getInterfaces().get(j);
+                if(interfaceInfo.getAction().equals(action)){
+                    available = true;
+                    totalWeight += interfaceInfo.getMaxTPS();
+                    break;
+                }
+            }
+            // 如果当前用户可用，则加入列表
+            if(available){
+                availableUserInfos.add(userInfo);
+            }
+        }
+
+        // 如果没找到可用用户，说明用户接口配置文件存在问题
+        if(availableUserInfos.size() == 0 ){
+           throw new RuntimeException("未找到可用的腾讯用户，请检查接口配置文件");
+        }
+
+        // 根据总权重生成权重随机数，0 ~ totalWeight-1
+        int randomWeight = new Random().nextInt(totalWeight);
+
+        // 根据权重值选择对应的用户
+        int currentWeight = 0;
+        for (int i = 0; i &lt; availableUserInfos.size(); i++) {
+            UserInfo userInfo = availableUserInfos.get(i);
+            for (int j = 0; j &lt; userInfo.getInterfaces().size(); j++) {
+                InterfaceInfo interfaceInfo = userInfo.getInterfaces().get(j);
+                // 找到对应的接口
+                if (interfaceInfo.getAction().equals(action)) {
+                    currentWeight += interfaceInfo.getMaxTPS();
+                    // 如果当前接口的当前权重 &gt; 随机权重， 则使用当前用户
+                    if (currentWeight &gt; randomWeight) {
+                        // 给线程加锁，这是一个阻塞方法，如果当前用户的并发数达到上限，则当前线程会被阻塞
+                        try {
+                            interfaceInfo.getSemaphore().tryAcquire(30, TimeUnit.SECONDS);
+                            // 将当前线程标记为已获取许可
+                            hasAcquiredThreadLocal.set("1");
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        } finally {
+                            return userInfo;
+                        }
+
+                    }
+                    break;
+                }
+            }
+        }
+
+        return null;
+
+    }
+}
+</code></pre> 
+<p>authorization.json</p> 
+<pre><code class="language-java">[
+  {
+    "secretInfo": {
+      "secretId": "AKIDpiYK2xxxxxxxxxxxxxxxxxxbUyOk2W",
+      "secretKey": "dFlSKDBDXXXXXXXXXXXXXXXXXXYdyBE5"
+    },
+    "interfaces": [
+      {
+        "action": "RecognizeTableAccurateOCR",
+        "maxTPS": 2
+      },
+      {
+        "action": "VehicleLicenseOCR",
+        "maxTPS": 10
+      },
+      {
+        "action": "DriverLicenseOCR",
+        "maxTPS": 10
+      },
+      {
+        "action": "MLIDPassportOCR",
+        "maxTPS": 5
+      },
+      {
+        "action": "HmtResidentPermitOCR",
+        "maxTPS": 20
+      },
+      {
+        "action": "MainlandPermitOCR",
+        "maxTPS": 20
+      }
+    ]
+  },
+  {
+    "secretInfo": {
+      "secretId": "AKIDJh9fxxxxxxxxxxxxxxxxxxxxxv8IOR",
+      "secretKey": "00HaowzxxxxxxxxxxxxxxxxxxxxxjMp8b"
+    },
+    "interfaces": [
+      {
+        "action": "RecognizeTableAccurateOCR",
+        "maxTPS": 2
+      },
+      {
+        "action": "VehicleLicenseOCR",
+        "maxTPS": 10
+      },
+      {
+        "action": "DriverLicenseOCR",
+        "maxTPS": 10
+      },
+      {
+        "action": "MLIDPassportOCR",
+        "maxTPS": 5
+      },
+      {
+        "action": "HmtResidentPermitOCR",
+        "maxTPS": 20
+      },
+      {
+        "action": "MainlandPermitOCR",
+        "maxTPS": 20
+      }
+    ]
+  }
+]</code></pre> 
+<p>application-dev.yml</p> 
+<pre><code class="language-java">spring:
+  application:
+    name: uap-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: tencentcloud-route
+          uri: https://ocr.tencentcloudapi.com
+          predicates:
+            - Path=/tencentcloudapi/**
+          filters:
+            - StripPrefix=1
+  main:
+    web-application-type: reactive
+server:
+  port: 9000
+
+# 腾讯云用户接口权限配置文件
+#tencentcloud:
+#  api:
+#    authorization:
+#      file: d://authorization.json
+</code></pre> 
+<h2 id="id-腾讯云SDK并发调用优化方案-二、腾讯云SDK依赖包的改造">三、腾讯云SDK依赖包的改造</h2> 
+<p>修改 <strong>com.tencentcloudapi.common.AbstractClient</strong> 类中 <strong>REMOTE_SERVER_ADDRESS </strong>的值，指向实际的网关地址，如下所示：</p> 
+<pre><code class="language-java">/*
+ * Copyright (c) 2018 THL A29 Limited, a Tencent company. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package com.tencentcloudapi.common;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
+import com.tencentcloudapi.common.exception.TencentCloudSDKException;
+import com.tencentcloudapi.common.http.HttpConnection;
+import com.tencentcloudapi.common.profile.ClientProfile;
+import com.tencentcloudapi.common.profile.HttpProfile;
+import okhttp3.*;
+import okhttp3.Headers.Builder;
+
+import javax.crypto.Mac;
+import javax.net.ssl.SSLContext;
+import javax.xml.bind.DatatypeConverter;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+import java.util.*;
+
+public abstract class AbstractClient {
+  /**
+   * 远程服务地址，根据实际情况修改
+   * 格式为：http://ip:port/tencentcloudapi
+   */
+  public static String REMOTE_SERVER_ADDRESS = "http://localhost:9000/tencentcloudapi";
+  public static final int HTTP_RSP_OK = 200;
+  public static final String SDK_VERSION = "SDK_JAVA_3.1.699";
+
+  private Credential credential;
+  private ClientProfile profile;
+  private String endpoint;
+  private String service;
+  private String region;
+  private String path;
+  private String sdkVersion;
+  private String apiVersion;
+  public Gson gson;
+  private TCLog log;
+  private HttpConnection httpConnection;
+  public AbstractClient(String endpoint, String version, Credential credential, String region) {
+    this(endpoint, version, credential, region, new ClientProfile());
+  }
+
+  static {
+    String remoteServerAddress = System.getenv("REMOTE_SERVER_ADDRESS");
+    if(remoteServerAddress != null){
+      AbstractClient.REMOTE_SERVER_ADDRESS = remoteServerAddress;
+    }
+  }
+
+
+  public AbstractClient(
+      String endpoint,
+      String version,
+      Credential credential,
+      String region,
+      ClientProfile profile) {
+    this.credential = credential;
+    this.profile = profile;
+    this.endpoint = endpoint;
+    this.service = endpoint.split("\\.")[0];
+    this.region = region;
+    this.path = "/";
+    this.sdkVersion = AbstractClient.SDK_VERSION;
+    this.apiVersion = version;
+    this.gson = new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create();
+    this.log = new TCLog(getClass().getName(), profile.isDebug());
+    this.httpConnection = new HttpConnection(
+            this.profile.getHttpProfile().getConnTimeout(),
+            this.profile.getHttpProfile().getReadTimeout(),
+            this.profile.getHttpProfile().getWriteTimeout()
+    );
+    this.httpConnection.addInterceptors(this.log);
+    this.trySetProxy(this.httpConnection);
+    warmup();
+  }
+
+  public void setRegion(String region) {
+    this.region = region;
+  }
+
+  public String getRegion() {
+    return this.region;
+  }
+
+  public void setClientProfile(ClientProfile profile) {
+    this.profile = profile;
+  }
+
+  public ClientProfile getClientProfile() {
+    return this.profile;
+  }
+
+  public void setCredential(Credential credential) {
+    this.credential = credential;
+  }
+
+  public Credential getCredential() {
+    return this.credential;
+  }
+
+  /**
+   * Use post/json with tc3-hmac-sha256 signature to call any action. Ignore request method and
+   * signature method defined in profile.
+   *
+   * @param action Name of action to be called.
+   * @param jsonPayload Parameters of action serialized in json string format.
+   * @return Raw response from API if request succeeded, otherwise an exception will be raised
+   *     instead of raw response
+   * @throws TencentCloudSDKException
+   */
+  public String call(String action, String jsonPayload) throws TencentCloudSDKException {
+    HashMap&lt;String, String&gt; headers = this.getHeaders();
+    headers.put("X-TC-Action", action);
+    headers.put("Content-Type", "application/json; charset=utf-8");
+    byte[] requestPayload = jsonPayload.getBytes(StandardCharsets.UTF_8);
+    String authorization = this.getAuthorization(headers, requestPayload);
+    headers.put("Authorization", authorization);
+    String url = REMOTE_SERVER_ADDRESS + this.path;
+    return this.getResponseBody(url, headers, requestPayload);
+  }
+
+  /**
+   * Use post application/octet-stream with tc3-hmac-sha256 signature to call specific action.
+   * Ignore request method and signature method defined in profile.
+   *
+   * @param action Name of action to be called.
+   * @param headers Parameters of the action, will be put in http header.
+   * @param body octet-stream binary body.
+   * @return Raw response from API if request succeeded, otherwise an exception will be raised
+   *     instead of raw response
+   * @throws TencentCloudSDKException
+   */
+  public String callOctetStream(String action, HashMap&lt;String, String&gt; headers, byte[] body)
+      throws TencentCloudSDKException {
+    headers.putAll(this.getHeaders());
+    headers.put("X-TC-Action", action);
+    headers.put("Content-Type", "application/octet-stream; charset=utf-8");
+    String authorization = this.getAuthorization(headers, body);
+    headers.put("Authorization", authorization);
+    String url = REMOTE_SERVER_ADDRESS + this.path;
+    return this.getResponseBody(url, headers, body);
+  }
+
+  private HashMap&lt;String, String&gt; getHeaders() {
+    HashMap&lt;String, String&gt; headers = new HashMap&lt;String, String&gt;();
+    String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+    headers.put("X-TC-Timestamp", timestamp);
+    headers.put("X-TC-Version", this.apiVersion);
+    headers.put("X-TC-Region", this.getRegion());
+    headers.put("X-TC-RequestClient", SDK_VERSION);
+    headers.put("Host", this.getEndpoint());
+    String token = this.credential.getToken();
+    if (token != null &amp;&amp; !token.isEmpty()) {
+      headers.put("X-TC-Token", token);
+    }
+    if (this.profile.isUnsignedPayload()) {
+      headers.put("X-TC-Content-SHA256", "UNSIGNED-PAYLOAD");
+    }
+    if (null != this.profile.getLanguage()) {
+      headers.put("X-TC-Language", this.profile.getLanguage().getValue());
+    }
+    return headers;
+  }
+
+  private String getAuthorization(HashMap&lt;String, String&gt; headers, byte[] body)
+      throws TencentCloudSDKException {
+    String endpoint = this.getEndpoint();
+    // always use post tc3-hmac-sha256 signature process
+    // okhttp always set charset even we don't specify it,
+    // to ensure signature be correct, we have to set it here as well.
+    String contentType = headers.get("Content-Type");
+    byte[] requestPayload = body;
+    String canonicalUri = "/";
+    String canonicalQueryString = "";
+    String canonicalHeaders = "content-type:" + contentType + "\nhost:" + endpoint + "\n";
+    String signedHeaders = "content-type;host";
+
+    String hashedRequestPayload = "";
+    if (this.profile.isUnsignedPayload()) {
+      hashedRequestPayload = Sign.sha256Hex("UNSIGNED-PAYLOAD".getBytes(StandardCharsets.UTF_8));
+    } else {
+      hashedRequestPayload = Sign.sha256Hex(requestPayload);
+    }
+    String canonicalRequest =
+        HttpProfile.REQ_POST
+            + "\n"
+            + canonicalUri
+            + "\n"
+            + canonicalQueryString
+            + "\n"
+            + canonicalHeaders
+            + "\n"
+            + signedHeaders
+            + "\n"
+            + hashedRequestPayload;
+
+    String timestamp = headers.get("X-TC-Timestamp");
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+    String date = sdf.format(new Date(Long.valueOf(timestamp + "000")));
+    String service = endpoint.split("\\.")[0];
+    String credentialScope = date + "/" + service + "/" + "tc3_request";
+    String hashedCanonicalRequest =
+        Sign.sha256Hex(canonicalRequest.getBytes(StandardCharsets.UTF_8));
+    String stringToSign =
+        "TC3-HMAC-SHA256\n" + timestamp + "\n" + credentialScope + "\n" + hashedCanonicalRequest;
+
+    String secretId = this.credential.getSecretId();
+    String secretKey = this.credential.getSecretKey();
+    byte[] secretDate = Sign.hmac256(("TC3" + secretKey).getBytes(StandardCharsets.UTF_8), date);
+    byte[] secretService = Sign.hmac256(secretDate, service);
+    byte[] secretSigning = Sign.hmac256(secretService, "tc3_request");
+    String signature =
+        DatatypeConverter.printHexBinary(Sign.hmac256(secretSigning, stringToSign)).toLowerCase();
+    return "TC3-HMAC-SHA256 "
+        + "Credential="
+        + secretId
+        + "/"
+        + credentialScope
+        + ", "
+        + "SignedHeaders="
+        + signedHeaders
+        + ", "
+        + "Signature="
+        + signature;
+  }
+
+  private String getResponseBody(String url, HashMap&lt;String, String&gt; headers, byte[] body)
+      throws TencentCloudSDKException {
+    Builder hb = new Builder();
+    for (String key : headers.keySet()) {
+      hb.add(key, headers.get(key));
+    }
+    Response resp = this.httpConnection.postRequest(url, body, hb.build());
+    if (resp.code() != AbstractClient.HTTP_RSP_OK) {
+      String msg = "response code is " + resp.code() + ", not 200";
+      log.info(msg);
+      throw new TencentCloudSDKException(msg, "", "ServerSideError");
+    }
+    String respbody = null;
+    try {
+      respbody = resp.body().string();
+    } catch (IOException e) {
+      String msg =
+          "Cannot transfer response body to string, because Content-Length is too large, or Content-Length and stream length disagree.";
+      log.info(msg);
+      throw new TencentCloudSDKException(msg, "", e.getClass().getName());
+    }
+    JsonResponseModel&lt;JsonResponseErrModel&gt; errResp = null;
+    try {
+      Type errType = new TypeToken&lt;JsonResponseModel&lt;JsonResponseErrModel&gt;&gt;() {}.getType();
+      errResp = gson.fromJson(respbody, errType);
+    } catch (JsonSyntaxException e) {
+      String msg = "json is not a valid representation for an object of type";
+      log.info(msg);
+      throw new TencentCloudSDKException(msg, "", e.getClass().getName());
+    }
+    if (errResp.response.error != null) {
+      throw new TencentCloudSDKException(
+          errResp.response.error.message, errResp.response.requestId, errResp.response.error.code);
+    }
+    return respbody;
+  }
+
+  private void trySetProxy(HttpConnection conn) {
+    String host = this.profile.getHttpProfile().getProxyHost();
+    int port = this.profile.getHttpProfile().getProxyPort();
+
+    if (host == null || host.isEmpty()) {
+      return;
+    }
+    Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port));
+    conn.setProxy(proxy);
+
+    final String username = this.profile.getHttpProfile().getProxyUsername();
+    final String password = this.profile.getHttpProfile().getProxyPassword();
+    if (username == null || username.isEmpty()) {
+      return;
+    }
+    conn.setProxyAuthenticator(
+        new Authenticator() {
+          @Override
+          public Request authenticate(Route route, Response response) throws IOException {
+            String credential = Credentials.basic(username, password);
+            return response
+                    .request()
+                    .newBuilder()
+                    .header("Proxy-Authorization", credential)
+                    .build();
+          }
+        });
+  }
+
+  protected String internalRequest(AbstractModel request, String actionName)
+      throws TencentCloudSDKException {
+    Response okRsp = null;
+    String endpoint = this.getEndpoint();
+    String[] binaryParams = request.getBinaryParams();
+    String sm = this.profile.getSignMethod();
+    String reqMethod = this.profile.getHttpProfile().getReqMethod();
+
+    // currently, customized params only can be supported via post json tc3-hmac-sha256
+    HashMap&lt;String, Object&gt; customizedParams = request.any();
+    if (customizedParams.size() &gt; 0) {
+      if (binaryParams.length &gt; 0) {
+        throw new TencentCloudSDKException(
+            "WrongUsage: Cannot post multipart with customized parameters.");
+      }
+      if (sm.equals(ClientProfile.SIGN_SHA1) || sm.equals(ClientProfile.SIGN_SHA256)) {
+        throw new TencentCloudSDKException(
+            "WrongUsage: Cannot use HmacSHA1 or HmacSHA256 with customized parameters.");
+      }
+      if (reqMethod.equals(HttpProfile.REQ_GET)) {
+        throw new TencentCloudSDKException(
+            "WrongUsage: Cannot use get method with customized parameters.");
+      }
+    }
+
+    if (binaryParams.length &gt; 0 || sm.equals(ClientProfile.SIGN_TC3_256)) {
+      okRsp = doRequestWithTC3(endpoint, request, actionName);
+    } else if (sm.equals(ClientProfile.SIGN_SHA1) || sm.equals(ClientProfile.SIGN_SHA256)) {
+      okRsp = doRequest(endpoint, request, actionName);
+    } else {
+      throw new TencentCloudSDKException(
+          "Signature method " + sm + " is invalid or not supported yet.");
+    }
+
+    if (okRsp.code() != AbstractClient.HTTP_RSP_OK) {
+      String msg = "response code is " + okRsp.code() + ", not 200";
+      log.info(msg);
+      throw new TencentCloudSDKException(msg, "", "ServerSideError");
+    }
+    String strResp = null;
+    try {
+      strResp = okRsp.body().string();
+    } catch (IOException e) {
+      String msg = "Cannot transfer response body to string, because Content-Length is too large, or Content-Length and stream length disagree.";
+      log.info(msg);
+      throw new TencentCloudSDKException(msg, "", endpoint.getClass().getName());
+    }
+
+    JsonResponseModel&lt;JsonResponseErrModel&gt; errResp = null;
+    try {
+      Type errType = new TypeToken&lt;JsonResponseModel&lt;JsonResponseErrModel&gt;&gt;() {}.getType();
+      errResp = gson.fromJson(strResp, errType);
+    } catch (JsonSyntaxException e) {
+      String msg = "json is not a valid representation for an object of type";
+      log.info(msg);
+      throw new TencentCloudSDKException(msg, "", e.getClass().getName());
+    }
+    if (errResp.response.error != null) {
+      throw new TencentCloudSDKException(
+          errResp.response.error.message,
+          errResp.response.requestId,
+          errResp.response.error.code);
+    }
+
+    return strResp;
+  }
+
+  private Response doRequest(String endpoint, AbstractModel request, String action)
+      throws TencentCloudSDKException {
+    HashMap&lt;String, String&gt; param = new HashMap&lt;String, String&gt;();
+    request.toMap(param, "");
+    String strParam = this.formatRequestData(action, param);
+    String reqMethod = this.profile.getHttpProfile().getReqMethod();
+    String url = REMOTE_SERVER_ADDRESS + this.path;
+    if (reqMethod.equals(HttpProfile.REQ_GET)) {
+      return this.httpConnection.getRequest(url + "?" + strParam);
+    } else if (reqMethod.equals(HttpProfile.REQ_POST)) {
+      return this.httpConnection.postRequest(url, strParam);
+    } else {
+      throw new TencentCloudSDKException("Method only support (GET, POST)");
+    }
+  }
+
+  private Response doRequestWithTC3(String endpoint, AbstractModel request, String action)
+      throws TencentCloudSDKException {
+    String httpRequestMethod = this.profile.getHttpProfile().getReqMethod();
+    if (httpRequestMethod == null) {
+      throw new TencentCloudSDKException(
+          "Request method should not be null, can only be GET or POST");
+    }
+    String contentType = "application/x-www-form-urlencoded";
+    byte[] requestPayload = "".getBytes(StandardCharsets.UTF_8);
+    HashMap&lt;String, String&gt; params = new HashMap&lt;String, String&gt;();
+    request.toMap(params, "");
+    String[] binaryParams = request.getBinaryParams();
+    if (binaryParams.length &gt; 0) {
+      httpRequestMethod = HttpProfile.REQ_POST;
+      String boundary = UUID.randomUUID().toString();
+      // okhttp always set charset even we don't specify it,
+      // to ensure signature be correct, we have to set it here as well.
+      contentType = "multipart/form-data; charset=utf-8" + "; boundary=" + boundary;
+      try {
+        requestPayload = getMultipartPayload(request, boundary);
+      } catch (Exception e) {
+        throw new TencentCloudSDKException("Failed to generate multipart. because: " + e);
+      }
+    } else if (httpRequestMethod.equals(HttpProfile.REQ_POST)) {
+      requestPayload = AbstractModel.toJsonString(request).getBytes(StandardCharsets.UTF_8);
+      // okhttp always set charset even we don't specify it,
+      // to ensure signature be correct, we have to set it here as well.
+      contentType = "application/json; charset=utf-8";
+    }
+    String canonicalUri = "/";
+    String canonicalQueryString = this.getCanonicalQueryString(params, httpRequestMethod);
+    String canonicalHeaders = "content-type:" + contentType + "\nhost:" + endpoint + "\n";
+    String signedHeaders = "content-type;host";
+
+    String hashedRequestPayload = "";
+    if (this.profile.isUnsignedPayload()) {
+      hashedRequestPayload = Sign.sha256Hex("UNSIGNED-PAYLOAD".getBytes(StandardCharsets.UTF_8));
+    } else {
+      hashedRequestPayload = Sign.sha256Hex(requestPayload);
+    }
+    String canonicalRequest =
+        httpRequestMethod
+            + "\n"
+            + canonicalUri
+            + "\n"
+            + canonicalQueryString
+            + "\n"
+            + canonicalHeaders
+            + "\n"
+            + signedHeaders
+            + "\n"
+            + hashedRequestPayload;
+
+    String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+    String date = sdf.format(new Date(Long.valueOf(timestamp + "000")));
+    String service = endpoint.split("\\.")[0];
+    String credentialScope = date + "/" + service + "/" + "tc3_request";
+    String hashedCanonicalRequest =
+        Sign.sha256Hex(canonicalRequest.getBytes(StandardCharsets.UTF_8));
+    String stringToSign =
+        "TC3-HMAC-SHA256\n" + timestamp + "\n" + credentialScope + "\n" + hashedCanonicalRequest;
+
+    String secretId = this.credential.getSecretId();
+    String secretKey = this.credential.getSecretKey();
+    byte[] secretDate = Sign.hmac256(("TC3" + secretKey).getBytes(StandardCharsets.UTF_8), date);
+    byte[] secretService = Sign.hmac256(secretDate, service);
+    byte[] secretSigning = Sign.hmac256(secretService, "tc3_request");
+    String signature =
+        DatatypeConverter.printHexBinary(Sign.hmac256(secretSigning, stringToSign)).toLowerCase();
+    String authorization =
+        "TC3-HMAC-SHA256 "
+            + "Credential="
+            + secretId
+            + "/"
+            + credentialScope
+            + ", "
+            + "SignedHeaders="
+            + signedHeaders
+            + ", "
+            + "Signature="
+            + signature;
+
+    String url = REMOTE_SERVER_ADDRESS + this.path;
+    Builder hb = new Builder();
+    hb.add("Content-Type", contentType)
+        .add("Host", endpoint)
+        .add("Authorization", authorization)
+        .add("X-TC-Action", action)
+        .add("X-TC-Timestamp", timestamp)
+        .add("X-TC-Version", this.apiVersion)
+        .add("X-TC-RequestClient", SDK_VERSION);
+    if (null != this.getRegion()) {
+      hb.add("X-TC-Region", this.getRegion());
+    }
+    String token = this.credential.getToken();
+    if (token != null &amp;&amp; !token.isEmpty()) {
+      hb.add("X-TC-Token", token);
+    }
+    if (this.profile.isUnsignedPayload()) {
+      hb.add("X-TC-Content-SHA256", "UNSIGNED-PAYLOAD");
+    }
+    if (null != this.profile.getLanguage()) {
+      hb.add("X-TC-Language", this.profile.getLanguage().getValue());
+    }
+    if (null != service ) {
+      hb.add("service", service);
+    }
+    if (null != stringToSign ) {
+      hb.add("stringToSign", new String(Base64.getEncoder().encode(stringToSign.getBytes())));
+    }
+    Headers headers = hb.build();
+    if (httpRequestMethod.equals(HttpProfile.REQ_GET)) {
+      return this.httpConnection.getRequest(url + "?" + canonicalQueryString, headers);
+    } else if (httpRequestMethod.equals(HttpProfile.REQ_POST)) {
+      return this.httpConnection.postRequest(url, requestPayload, headers);
+    } else {
+      throw new TencentCloudSDKException("Method only support GET, POST");
+    }
+  }
+
+  private byte[] getMultipartPayload(AbstractModel request, String boundary) throws Exception {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    String[] binaryParams = request.getBinaryParams();
+    for (Map.Entry&lt;String, byte[]&gt; entry : request.getMultipartRequestParams().entrySet()) {
+      baos.write("--".getBytes(StandardCharsets.UTF_8));
+      baos.write(boundary.getBytes(StandardCharsets.UTF_8));
+      baos.write("\r\n".getBytes(StandardCharsets.UTF_8));
+      baos.write("Content-Disposition: form-data; name=\"".getBytes(StandardCharsets.UTF_8));
+      baos.write(entry.getKey().getBytes(StandardCharsets.UTF_8));
+      if (Arrays.asList(binaryParams).contains(entry.getKey())) {
+        baos.write("\"; filename=\"".getBytes(StandardCharsets.UTF_8));
+        baos.write(entry.getKey().getBytes(StandardCharsets.UTF_8));
+        baos.write("\"\r\n".getBytes(StandardCharsets.UTF_8));
+      } else {
+        baos.write("\"\r\n".getBytes(StandardCharsets.UTF_8));
+      }
+      baos.write("\r\n".getBytes(StandardCharsets.UTF_8));
+      baos.write(entry.getValue());
+      baos.write("\r\n".getBytes(StandardCharsets.UTF_8));
+    }
+    if (baos.size() != 0) {
+      baos.write("--".getBytes(StandardCharsets.UTF_8));
+      baos.write(boundary.getBytes(StandardCharsets.UTF_8));
+      baos.write("--\r\n".getBytes(StandardCharsets.UTF_8));
+    }
+    byte[] bytes = baos.toByteArray();
+    baos.close();
+    return bytes;
+  }
+
+  private String getCanonicalQueryString(HashMap&lt;String, String&gt; params, String method)
+      throws TencentCloudSDKException {
+    if (method != null &amp;&amp; method.equals(HttpProfile.REQ_POST)) {
+      return "";
+    }
+    StringBuilder queryString = new StringBuilder("");
+    for (Map.Entry&lt;String, String&gt; entry : params.entrySet()) {
+      String v;
+      try {
+        v = URLEncoder.encode(entry.getValue(), "UTF8");
+      } catch (UnsupportedEncodingException e) {
+        throw new TencentCloudSDKException("UTF8 is not supported." + e.getMessage());
+      }
+      queryString.append("&amp;").append(entry.getKey()).append("=").append(v);
+    }
+    if (queryString.length() == 0) {
+      return "";
+    } else {
+      return queryString.toString().substring(1);
+    }
+  }
+
+  private String formatRequestData(String action, Map&lt;String, String&gt; param)
+      throws TencentCloudSDKException {
+    param.put("Action", action);
+    param.put("RequestClient", this.sdkVersion);
+    param.put("Nonce", String.valueOf(Math.abs(new SecureRandom().nextInt())));
+    param.put("Timestamp", String.valueOf(System.currentTimeMillis() / 1000));
+    param.put("Version", this.apiVersion);
+
+    if (this.credential.getSecretId() != null &amp;&amp; (!this.credential.getSecretId().isEmpty())) {
+      param.put("SecretId", this.credential.getSecretId());
+    }
+
+    if (this.region != null &amp;&amp; (!this.region.isEmpty())) {
+      param.put("Region", this.region);
+    }
+
+    if (this.profile.getSignMethod() != null &amp;&amp; (!this.profile.getSignMethod().isEmpty())) {
+      param.put("SignatureMethod", this.profile.getSignMethod());
+    }
+
+    if (this.credential.getToken() != null &amp;&amp; (!this.credential.getToken().isEmpty())) {
+      param.put("Token", this.credential.getToken());
+    }
+
+    if (null != this.profile.getLanguage()) {
+      param.put("Language", this.profile.getLanguage().getValue());
+    }
+
+    String endpoint = this.getEndpoint();
+
+    String sigInParam =
+        Sign.makeSignPlainText(
+            new TreeMap&lt;String, String&gt;(param),
+            this.profile.getHttpProfile().getReqMethod(),
+            endpoint,
+            this.path);
+    String sigOutParam =
+        Sign.sign(this.credential.getSecretKey(), sigInParam, this.profile.getSignMethod());
+
+    String strParam = "";
+    try {
+      for (Map.Entry&lt;String, String&gt; entry : param.entrySet()) {
+        strParam +=
+            (URLEncoder.encode(entry.getKey(), "utf-8")
+                + "="
+                + URLEncoder.encode(entry.getValue(), "utf-8")
+                + "&amp;");
+      }
+      strParam += ("Signature=" + URLEncoder.encode(sigOutParam, "utf-8"));
+    } catch (UnsupportedEncodingException e) {
+      throw new TencentCloudSDKException(e.getClass().getName() + "-" + e.getMessage());
+    }
+    return strParam;
+  }
+
+  /** warm up, try to avoid unnecessary cost in the first request */
+  private void warmup() {
+    try {
+      // it happens in SDK signature process.
+      // first invoke costs around 250 ms.
+      Mac.getInstance("HmacSHA1");
+      Mac.getInstance("HmacSHA256");
+      // it happens inside okhttp, but I think any https framework/package will do the same.
+      // first invoke costs around 150 ms.
+      SSLContext sslContext = SSLContext.getInstance("TLS");
+      sslContext.init(null, null, null);
+    } catch (Exception e) {
+      // ignore but print message to console
+      e.printStackTrace();
+    }
+  }
+
+  private String getEndpoint() {
+    // in case user has reset endpoint after init this client
+    if (null != this.profile.getHttpProfile().getEndpoint()) {
+      return this.profile.getHttpProfile().getEndpoint();
+    } else {
+      // protected abstract String getService();
+      // use this.getService() from overrided subclass will be better
+      return this.service + "." + this.profile.getHttpProfile().getRootDomain();
+    }
+  }
+
+  /**
+   * 请注意购买类接口谨慎调用，可能导致多次购买
+   * 仅幂等接口推荐使用
+   *
+   * @param req
+   * @param retryTimes
+   * @throws TencentCloudSDKException
+   */
+  public Object retry(AbstractModel req, int retryTimes) throws TencentCloudSDKException {
+    if (retryTimes &lt; 0 || retryTimes &gt; 10) {
+      throw new TencentCloudSDKException("The number of retryTimes supported is 0 to 10.", "", "ClientSideError");
+    }
+    Class cls = this.getClass();
+    String methodName = req.getClass().getSimpleName().replace("Request", "");
+    Method method;
+    try {
+      method = cls.getMethod(methodName, req.getClass());
+    } catch (NoSuchMethodException e) {
+      throw new TencentCloudSDKException(e.toString(), "", "ClientSideError");
+    }
+    do {
+      try {
+        return method.invoke(this, req);
+      } catch (IllegalAccessException e) {
+        throw new TencentCloudSDKException(e.toString(), "", "ClientSideError");
+      } catch (InvocationTargetException e) {
+        if (retryTimes == 0) {
+          throw (TencentCloudSDKException) e.getTargetException();
+        }
+      }
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        throw new TencentCloudSDKException(e.toString(), "", "ClientSideError");
+      }
+    } while (--retryTimes &gt;= 0);
+    return null;
+  }
+}
+</code></pre> 
+<p>  将源码中上述类修改后重新达成jar包即可。</p> 
+<p>       本人近十年<a href="https://so.csdn.net/so/search?q=JAVA%E6%9E%B6%E6%9E%84%E8%AE%BE%E8%AE%A1&amp;spm=1001.2101.3001.7020" title="JAVA架构设计">JAVA架构设计</a>经验，长期从事IT技术资源整合。有志于自我技术提升、需要最新IT技术课程的小伙伴，可私信联系我 ，粉丝一律白菜价 </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/80b5fc1353edc5370f62116e5df765de/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">在Windows11的WSL上运行Llama2-7b-chat 下</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/8a607f5fd1033c2dd33d67b64baacb20/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">一篇文章，彻底理解数据库操作语言：DDL、DML、DCL、TCL</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

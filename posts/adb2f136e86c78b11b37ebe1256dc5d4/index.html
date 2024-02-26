@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【Qt&#43;FFmpeg】解码播放本地视频（一） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【Qt&#43;FFmpeg】解码播放本地视频（一）" />
+<meta property="og:description" content="目录
+一、解码线程的设计
+1.解码初始化
+（1）注册所有组件
+（2）打开本地片源
+（3） 查找视频流
+（4）查找对应的解码器
+（5）打开解码器​
+2.run函数循环解码
+（1）图片转成RGB格式
+（2）发送图片信号
+（3）发送一张图片计数&#43;1
+（4）延时操作——1s显示25帧图片
+二、播放窗口类的设计
+1.创建窗口
+2.创建解码线程
+3.开启解码线程
+4.绑定信号槽接收图片信号
+5.界面刷新显示
+一、解码线程的设计 1.解码初始化 （1）注册所有组件 av_register_all();//第一步注册所有组件 （2）打开本地片源 （3） 查找视频流 （4）查找对应的解码器 （5）打开解码器 以上就是解码的初始化工作，附上完整源码
+#include &#34;video.h&#34; video::video(QString filename) { this-&gt;m_stop=false; this-&gt;current_frame_index = 0; openVideoFile(filename); } void video::openVideoFile(QString filename) { qDebug()&lt;&lt;&#34;1.注册所有组件&#34;; av_register_all();//第一步注册所有组件 qDebug()&lt;&lt;&#34;2.打开视频输入文件&#34;; //给avformat_context开空间 avformat_context = avformat_alloc_context(); //avformat_open_input参数一：视频文件格式上下文-&gt;AVFormatContext-&gt;包含了视频信息(视频名、时长、大小等) //参数二：文件路径 qDebug()&lt;&lt;&#34;打开&#34;&lt;&lt;filename&lt;&lt;&#34;视频文件进行播放&#34;; int avformat_open_result = avformat_open_input(&amp;avformat_context,filename.toStdString().c_str(),NULL,NULL); if (avformat_open_result != 0) { //获取异常信息 char* error_info = new char[32]; av_strerror(avformat_open_result, error_info, 100); qDebug()&lt;&lt;QString(&#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/adb2f136e86c78b11b37ebe1256dc5d4/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-10-11T14:54:10+08:00" />
+<meta property="article:modified_time" content="2022-10-11T14:54:10+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【Qt&#43;FFmpeg】解码播放本地视频（一）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="%E4%B8%80%E3%80%81%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B%E7%9A%84%E8%AE%BE%E8%AE%A1-toc" style="margin-left:0px;"><a href="#%E4%B8%80%E3%80%81%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B%E7%9A%84%E8%AE%BE%E8%AE%A1" rel="nofollow">一、解码线程的设计</a></p> 
+<p id="1.%E8%A7%A3%E7%A0%81%E5%88%9D%E5%A7%8B%E5%8C%96-toc" style="margin-left:40px;"><a href="#1.%E8%A7%A3%E7%A0%81%E5%88%9D%E5%A7%8B%E5%8C%96" rel="nofollow">1.解码初始化</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E6%B3%A8%E5%86%8C%E6%89%80%E6%9C%89%E7%BB%84%E4%BB%B6-toc" style="margin-left:80px;"><a href="#%EF%BC%881%EF%BC%89%E6%B3%A8%E5%86%8C%E6%89%80%E6%9C%89%E7%BB%84%E4%BB%B6" rel="nofollow">（1）注册所有组件</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E6%89%93%E5%BC%80%E6%9C%AC%E5%9C%B0%E7%89%87%E6%BA%90-toc" style="margin-left:80px;"><a href="#%EF%BC%882%EF%BC%89%E6%89%93%E5%BC%80%E6%9C%AC%E5%9C%B0%E7%89%87%E6%BA%90" rel="nofollow">（2）打开本地片源</a></p> 
+<p id="%C2%A0%EF%BC%883%EF%BC%89%C2%A0%E6%9F%A5%E6%89%BE%E8%A7%86%E9%A2%91%E6%B5%81-toc" style="margin-left:80px;"><a href="#%C2%A0%EF%BC%883%EF%BC%89%C2%A0%E6%9F%A5%E6%89%BE%E8%A7%86%E9%A2%91%E6%B5%81" rel="nofollow"> （3） 查找视频流</a></p> 
+<p id="%C2%A0%EF%BC%884%EF%BC%89%E6%9F%A5%E6%89%BE%E5%AF%B9%E5%BA%94%E7%9A%84%E8%A7%A3%E7%A0%81%E5%99%A8-toc" style="margin-left:80px;"><a href="#%C2%A0%EF%BC%884%EF%BC%89%E6%9F%A5%E6%89%BE%E5%AF%B9%E5%BA%94%E7%9A%84%E8%A7%A3%E7%A0%81%E5%99%A8" rel="nofollow"> （4）查找对应的解码器</a></p> 
+<p id="%C2%A0%EF%BC%885%EF%BC%89%E6%89%93%E5%BC%80%E8%A7%A3%E7%A0%81%E5%99%A8%E2%80%8B%E7%BC%96%E8%BE%91-toc" style="margin-left:80px;"><a href="#%C2%A0%EF%BC%885%EF%BC%89%E6%89%93%E5%BC%80%E8%A7%A3%E7%A0%81%E5%99%A8%E2%80%8B%E7%BC%96%E8%BE%91" rel="nofollow"> （5）打开解码器​</a></p> 
+<p id="%C2%A02.run%E5%87%BD%E6%95%B0%E5%BE%AA%E7%8E%AF%E8%A7%A3%E7%A0%81-toc" style="margin-left:40px;"><a href="#%C2%A02.run%E5%87%BD%E6%95%B0%E5%BE%AA%E7%8E%AF%E8%A7%A3%E7%A0%81" rel="nofollow"> 2.run函数循环解码</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E5%9B%BE%E7%89%87%E8%BD%AC%E6%88%90RGB%E6%A0%BC%E5%BC%8F-toc" style="margin-left:80px;"><a href="#%EF%BC%881%EF%BC%89%E5%9B%BE%E7%89%87%E8%BD%AC%E6%88%90RGB%E6%A0%BC%E5%BC%8F" rel="nofollow">（1）图片转成RGB格式</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E5%8F%91%E9%80%81%E5%9B%BE%E7%89%87%E4%BF%A1%E5%8F%B7-toc" style="margin-left:80px;"><a href="#%EF%BC%882%EF%BC%89%E5%8F%91%E9%80%81%E5%9B%BE%E7%89%87%E4%BF%A1%E5%8F%B7" rel="nofollow">（2）发送图片信号</a></p> 
+<p id="%EF%BC%883%EF%BC%89%E5%8F%91%E9%80%81%E4%B8%80%E5%BC%A0%E5%9B%BE%E7%89%87%E8%AE%A1%E6%95%B0%2B1-toc" style="margin-left:80px;"><a href="#%EF%BC%883%EF%BC%89%E5%8F%91%E9%80%81%E4%B8%80%E5%BC%A0%E5%9B%BE%E7%89%87%E8%AE%A1%E6%95%B0%2B1" rel="nofollow">（3）发送一张图片计数+1</a></p> 
+<p id="%EF%BC%884%EF%BC%89%E5%BB%B6%E6%97%B6%E6%93%8D%E4%BD%9C%E2%80%94%E2%80%941s%E6%98%BE%E7%A4%BA25%E5%B8%A7%E5%9B%BE%E7%89%87-toc" style="margin-left:80px;"><a href="#%EF%BC%884%EF%BC%89%E5%BB%B6%E6%97%B6%E6%93%8D%E4%BD%9C%E2%80%94%E2%80%941s%E6%98%BE%E7%A4%BA25%E5%B8%A7%E5%9B%BE%E7%89%87" rel="nofollow">（4）延时操作——1s显示25帧图片</a></p> 
+<p id="%E4%BA%8C%E3%80%81%E6%92%AD%E6%94%BE%E7%AA%97%E5%8F%A3%E7%B1%BB%E7%9A%84%E8%AE%BE%E8%AE%A1-toc" style="margin-left:0px;"><a href="#%E4%BA%8C%E3%80%81%E6%92%AD%E6%94%BE%E7%AA%97%E5%8F%A3%E7%B1%BB%E7%9A%84%E8%AE%BE%E8%AE%A1" rel="nofollow">二、播放窗口类的设计</a></p> 
+<p id="1.%E5%88%9B%E5%BB%BA%E7%AA%97%E5%8F%A3-toc" style="margin-left:80px;"><a href="#1.%E5%88%9B%E5%BB%BA%E7%AA%97%E5%8F%A3" rel="nofollow">1.创建窗口</a></p> 
+<p id="2.%E5%88%9B%E5%BB%BA%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B-toc" style="margin-left:80px;"><a href="#2.%E5%88%9B%E5%BB%BA%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B" rel="nofollow">2.创建解码线程</a></p> 
+<p id="3.%E5%BC%80%E5%90%AF%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B-toc" style="margin-left:80px;"><a href="#3.%E5%BC%80%E5%90%AF%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B" rel="nofollow">3.开启解码线程</a></p> 
+<p id="4.%E7%BB%91%E5%AE%9A%E4%BF%A1%E5%8F%B7%E6%A7%BD%E6%8E%A5%E6%94%B6%E5%9B%BE%E7%89%87%E4%BF%A1%E5%8F%B7-toc" style="margin-left:80px;"><a href="#4.%E7%BB%91%E5%AE%9A%E4%BF%A1%E5%8F%B7%E6%A7%BD%E6%8E%A5%E6%94%B6%E5%9B%BE%E7%89%87%E4%BF%A1%E5%8F%B7" rel="nofollow">4.绑定信号槽接收图片信号</a></p> 
+<p id="5.%E7%95%8C%E9%9D%A2%E5%88%B7%E6%96%B0%E6%98%BE%E7%A4%BA-toc" style="margin-left:80px;"><a href="#5.%E7%95%8C%E9%9D%A2%E5%88%B7%E6%96%B0%E6%98%BE%E7%A4%BA" rel="nofollow">5.界面刷新显示</a></p> 
+<p></p> 
+<h2 id="%E4%B8%80%E3%80%81%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B%E7%9A%84%E8%AE%BE%E8%AE%A1">一、解码线程的设计</h2> 
+<h3 id="1.%E8%A7%A3%E7%A0%81%E5%88%9D%E5%A7%8B%E5%8C%96">1.解码初始化</h3> 
+<h4 id="%EF%BC%881%EF%BC%89%E6%B3%A8%E5%86%8C%E6%89%80%E6%9C%89%E7%BB%84%E4%BB%B6">（1）注册所有组件</h4> 
+<pre><code>av_register_all();//第一步注册所有组件</code></pre> 
+<h4 id="%EF%BC%882%EF%BC%89%E6%89%93%E5%BC%80%E6%9C%AC%E5%9C%B0%E7%89%87%E6%BA%90">（2）打开本地片源</h4> 
+<p><img alt="" height="425" src="https://images2.imgbox.com/a8/7b/LvY1WzSO_o.png" width="1200"></p> 
+<h4 id="%C2%A0%EF%BC%883%EF%BC%89%C2%A0%E6%9F%A5%E6%89%BE%E8%A7%86%E9%A2%91%E6%B5%81"> （3） 查找视频流</h4> 
+<p><img alt="" height="679" src="https://images2.imgbox.com/6d/19/U5r63W6Q_o.png" width="1148"></p> 
+<h4 id="%C2%A0%EF%BC%884%EF%BC%89%E6%9F%A5%E6%89%BE%E5%AF%B9%E5%BA%94%E7%9A%84%E8%A7%A3%E7%A0%81%E5%99%A8"> （4）查找对应的解码器</h4> 
+<p><img alt="" height="287" src="https://images2.imgbox.com/12/ef/1KdZPbZ7_o.png" width="1012"></p> 
+<h4 id="%C2%A0%EF%BC%885%EF%BC%89%E6%89%93%E5%BC%80%E8%A7%A3%E7%A0%81%E5%99%A8%E2%80%8B%E7%BC%96%E8%BE%91"> （5）打开解码器<img alt="" height="217" src="https://images2.imgbox.com/c5/b2/Ar6fjVfx_o.png" width="925"></h4> 
+<p> 以上就是解码的初始化工作，附上完整源码</p> 
+<pre><code>#include "video.h"
+
+video::video(QString filename)
+{
+    this-&gt;m_stop=false;
+    this-&gt;current_frame_index = 0;
+    openVideoFile(filename);
+}
+void video::openVideoFile(QString filename)
+{
+    qDebug()&lt;&lt;"1.注册所有组件";
+    av_register_all();//第一步注册所有组件
+    qDebug()&lt;&lt;"2.打开视频输入文件";
+    //给avformat_context开空间
+    avformat_context = avformat_alloc_context();
+    //avformat_open_input参数一：视频文件格式上下文-&gt;AVFormatContext-&gt;包含了视频信息(视频名、时长、大小等)
+    //参数二：文件路径
+    qDebug()&lt;&lt;"打开"&lt;&lt;filename&lt;&lt;"视频文件进行播放";
+    int avformat_open_result = avformat_open_input(&amp;avformat_context,filename.toStdString().c_str(),NULL,NULL);
+    if (avformat_open_result != 0)
+    {
+        //获取异常信息
+        char* error_info = new char[32];
+        av_strerror(avformat_open_result, error_info, 100);
+        qDebug()&lt;&lt;QString("异常信息 %1").arg(error_info);
+    };
+    qDebug()&lt;&lt;"3.查找视频流信息";
+    //参数一：视频封装格式上下文-&gt;AVFormatContext; 参数二：配置，可以不设置
+    //返回值：&gt;=0找到，否则失败
+    int avformat_find_stream_info_result = avformat_find_stream_info(avformat_context,NULL);
+    if (avformat_find_stream_info_result &lt; 0)
+    {
+        //获取失败
+        char* error_info = new char[32];
+        av_strerror(avformat_find_stream_info_result, error_info, 100);
+        qDebug()&lt;&lt;QString("异常信息 %1").arg(error_info);//打印异常信息
+    }
+    av_stream_index = -1;
+    for (int i = 0; i &lt; avformat_context-&gt;nb_streams; i++)
+    {
+        //循环遍历每一流找到视频流
+        if (avformat_context-&gt;streams[i]-&gt;codec-&gt;codec_type == AVMEDIA_TYPE_VIDEO)
+        {
+            //找到了
+            av_stream_index = i;
+            break;
+        }
+    }
+    if (av_stream_index == -1)
+    {
+        qDebug()&lt;&lt;QString("没有找到视频流");
+    }
+    qDebug()&lt;&lt;"4.查找解码器";
+    //第一点：获取当前解码器是属于什么类型解码器-&gt;找到了视频流
+    //第二点：根据视频流-&gt;查找到视频解码器上下文-&gt;视频压缩数据
+    avcodec_context = avformat_context-&gt;streams[av_stream_index]-&gt;codec;//编解码器上下文
+    //第三点：根据解码器上下文-&gt;获取解码器ID
+    avcodec = avcodec_find_decoder(avcodec_context-&gt;codec_id);
+    if (avcodec == NULL)
+    {
+        qDebug()&lt;&lt;QString("没有找到视频解码器");
+    }
+
+    qDebug()&lt;&lt;"5.打开解码器";
+    int avcodec_open2_result = avcodec_open2(avcodec_context,avcodec,NULL);
+    if (avcodec_open2_result != 0)
+    {
+        char* error_info = new char[32];
+        av_strerror(avformat_find_stream_info_result, error_info, 100);
+        qDebug()&lt;&lt;QString("异常信息 %1").arg(error_info);
+    }
+
+    qDebug()&lt;&lt;"视频详细信息输出";
+    qDebug()&lt;&lt;"视频名称"&lt;&lt;avformat_context-&gt;filename;
+    qDebug()&lt;&lt;"视频时长/s"&lt;&lt;avformat_context-&gt;duration/1000000;
+    qDebug()&lt;&lt;QString("视频分辨率%1x%2").arg(avcodec_context-&gt;width).arg(avcodec_context-&gt;height);
+
+    //自动打印输入或输出的详细信息
+    av_dump_format(avformat_context,0, filename.toStdString().c_str(),0);
+}</code></pre> 
+<h3 id="%C2%A02.run%E5%87%BD%E6%95%B0%E5%BE%AA%E7%8E%AF%E8%A7%A3%E7%A0%81"> 2.run函数循环解码</h3> 
+<p>首先要做的是初始化包数据、输入输出帧数据、缓冲区、转换图片格式参数准备等</p> 
+<p>然后循环读取视频帧，进行循环解码</p> 
+<h4 id="%EF%BC%881%EF%BC%89%E5%9B%BE%E7%89%87%E8%BD%AC%E6%88%90RGB%E6%A0%BC%E5%BC%8F">（1）图片转成RGB格式</h4> 
+<h4 id="%EF%BC%882%EF%BC%89%E5%8F%91%E9%80%81%E5%9B%BE%E7%89%87%E4%BF%A1%E5%8F%B7">（2）发送图片信号</h4> 
+<h4 id="%EF%BC%883%EF%BC%89%E5%8F%91%E9%80%81%E4%B8%80%E5%BC%A0%E5%9B%BE%E7%89%87%E8%AE%A1%E6%95%B0%2B1">（3）发送一张图片计数+1</h4> 
+<h4 id="%EF%BC%884%EF%BC%89%E5%BB%B6%E6%97%B6%E6%93%8D%E4%BD%9C%E2%80%94%E2%80%941s%E6%98%BE%E7%A4%BA25%E5%B8%A7%E5%9B%BE%E7%89%87">（4）延时操作——1s显示25帧图片</h4> 
+<pre><code>void video::run()
+{   
+    qDebug()&lt;&lt;"6.循环解码";
+    //packet开空间
+    av_packet = (AVPacket*)av_malloc(sizeof(AVPacket));
+
+    //输入-&gt;环境一帧数据-&gt;缓冲区-&gt;类似于一张图
+    pFramein = av_frame_alloc();
+    //输出-&gt;帧数据-&gt;数据格式-&gt;RGB
+    pFrameRGB = av_frame_alloc();
+    //只有指定了AVFrame的像素格式、画面大小才能真正分配内存
+    //缓冲区分配内存
+    pOutbuffer = (uint8_t *)av_malloc(avpicture_get_size(
+                                          AV_PIX_FMT_RGB32, avcodec_context-&gt;width, avcodec_context-&gt;height));
+    //初始化缓冲区 类似于memset
+    avpicture_fill((AVPicture *)pFrameRGB, pOutbuffer,
+                   AV_PIX_FMT_RGB32, avcodec_context-&gt;width, avcodec_context-&gt;height);
+
+    //解码的状态类型(0:表示解码完毕，非0:表示正在解码)
+    //int current_frame_index = 0;
+
+    //用于转码（缩放）的参数，转之前的宽高，转之后的宽高，格式等
+    //准备一个视频像素数据格式上下文
+    //参数一：输入帧数据宽
+    //参数二：输入帧数据高
+    //参数三：输入帧数据格式
+    //参数四：输出帧数据宽
+    //参数五：输出帧数据高
+    //参数六：输出帧数据格式-&gt;AV_PIX_FMT_RGB32
+    //参数七：视频像素数据格式转换算法类型
+    //参数八：字节对齐类型(C/C++里面)-&gt;提高读取效率
+    SwsContext* pSwsContext = sws_getContext(avcodec_context-&gt;width,
+                                             avcodec_context-&gt;height,
+                                             avcodec_context-&gt;pix_fmt,
+                                             avcodec_context-&gt;width,
+                                             avcodec_context-&gt;height,
+                                             AV_PIX_FMT_RGB32,
+                                             SWS_BICUBIC,NULL,NULL,NULL);
+
+    int ret=0;
+    while (m_stop == false)
+    {
+        //&gt;=0:说明有数据，继续读取   &lt;0:说明读取完毕，结束
+        //从视频文件上下文中读取包--- 有数据就一直读取
+        if (av_read_frame(avformat_context,av_packet) &gt;= 0)
+        {
+            //解码什么类型流(视频流、音频流、字幕流等等...)
+            if (av_packet-&gt;stream_index == av_stream_index)
+            {
+                //发送一个包数据进行解码
+                avcodec_send_packet(avcodec_context, av_packet);
+                //接收一个包数据，解压成一帧
+                ret = avcodec_receive_frame(avcodec_context,pFramein);
+                if (ret == 0)
+                {
+                    //图片格式的转换  输入 输出
+                    sws_scale(pSwsContext, (const unsigned char* const*)pFramein-&gt;data, pFramein-&gt;linesize, 0, avcodec_context-&gt;height,
+                              pFrameRGB-&gt;data,  pFrameRGB-&gt;linesize);
+
+                    QImage  *tmpImg  = new QImage((uchar *)pOutbuffer, avcodec_context-&gt;width,
+                                                  avcodec_context-&gt;height,QImage::Format_RGB32);
+
+                    QImage image=tmpImg-&gt;copy();
+                    qDebug()&lt;&lt;"接收图片信号"&lt;&lt;image;
+                    //计数第几张图片
+                    current_frame_index++;
+                    //发送图片信号
+                    emit sigGetOneFrame(image);   
+                    //emit SendOneData(current_frame_index);
+                    //延时操作  1秒显示25帧--1000/25=40
+                    QThread::msleep(timeSpeed);
+                    //获取的视频信息
+                    qDebug()&lt;&lt;QString("当前遍历第 %1 帧").arg(current_frame_index);
+                }
+            }
+        }
+        else
+        {
+            qDebug()&lt;&lt;"播放完毕";
+            this-&gt;current_frame_index=0;//清空计数
+            this-&gt;stop();
+        }
+        av_free_packet(av_packet);
+    }
+
+}
+video::~video()
+{
+    qDebug()&lt;&lt;"7.关闭所有解码组件";
+    av_packet_free(&amp;av_packet);
+    //关闭流
+    avcodec_close(avcodec_context);
+    avformat_free_context(avformat_context);
+
+}
+void video::stop()
+{
+    m_stop = true;
+}
+</code></pre> 
+<p>头文件</p> 
+<pre><code>#ifndef VIDEO_H
+#define VIDEO_H
+#include &lt;QString&gt;
+#include &lt;QDebug&gt;
+#include "mythread.h"
+#include &lt;QImage&gt;
+
+//当前C++兼容C语言
+extern "C"
+{
+//avcodec:编解码(最重要的库)
+#include &lt;libavcodec/avcodec.h&gt;
+//avformat:封装格式处理
+#include &lt;libavformat/avformat.h&gt;
+//swscale:视频像素数据格式转换
+#include &lt;libswscale/swscale.h&gt;
+//avdevice:各种设备的输入输出
+#include &lt;libavdevice/avdevice.h&gt;
+//avutil:工具库（大部分库都需要这个库的支持）
+#include &lt;libavutil/avutil.h&gt;
+#include "libswresample/swresample.h"
+}
+class video : public myThread//自定义线程类，可以直接继承QThread
+{
+    Q_OBJECT
+public:
+    video(QString filename);
+    ~video();
+    //打开视频文件
+    void openVideoFile(QString filename);
+    void run();//重写run函数，线程执行任务
+    void stop();
+    //定义停止的标志位
+    bool m_stop;
+private:
+    //视频文件上下文格式
+    AVFormatContext* avformat_context;
+    //编解码器上下文格式
+    AVCodecContext* avcodec_context;
+    //解码器上下文格式
+    AVCodec* avcodec;
+    //数据包
+    AVPacket* av_packet;
+    //保存视频流的索引
+    int av_stream_index;
+    //输入和输出的帧数据
+    AVFrame *pFramein;
+    AVFrame *pFrameRGB;
+    uint8_t * pOutbuffer;
+    int ret;
+    QImage m_image;
+    //计算第几帧图片
+    int current_frame_index;
+signals:   
+    //发送解码得到的一帧帧像素数据--保存的图片信息
+    void sigGetOneFrame(QImage image);
+};
+
+
+#endif // VIDEO_H
+</code></pre> 
+<h2 id="%E4%BA%8C%E3%80%81%E6%92%AD%E6%94%BE%E7%AA%97%E5%8F%A3%E7%B1%BB%E7%9A%84%E8%AE%BE%E8%AE%A1">二、播放窗口类的设计</h2> 
+<p>构造函数中</p> 
+<h4 id="1.%E5%88%9B%E5%BB%BA%E7%AA%97%E5%8F%A3">1.创建窗口</h4> 
+<p><img alt="" height="108" src="https://images2.imgbox.com/b3/7e/pk3P7pCn_o.png" width="483"></p> 
+<h4 id="2.%E5%88%9B%E5%BB%BA%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B">2.创建解码线程</h4> 
+<p><img alt="" height="72" src="https://images2.imgbox.com/26/96/yE9X8yJu_o.png" width="439"></p> 
+<h4 id="3.%E5%BC%80%E5%90%AF%E8%A7%A3%E7%A0%81%E7%BA%BF%E7%A8%8B">3.开启解码线程</h4> 
+<p><img alt="" height="78" src="https://images2.imgbox.com/75/cf/hGtsPTd8_o.png" width="277"></p> 
+<h4 id="4.%E7%BB%91%E5%AE%9A%E4%BF%A1%E5%8F%B7%E6%A7%BD%E6%8E%A5%E6%94%B6%E5%9B%BE%E7%89%87%E4%BF%A1%E5%8F%B7">4.绑定信号槽接收图片信号</h4> 
+<p><img alt="" height="40" src="https://images2.imgbox.com/54/84/X48VKN5y_o.png" width="1200"></p> 
+<p><img alt="" height="244" src="https://images2.imgbox.com/fc/e4/nnUgL0cq_o.png" width="646">  </p> 
+<h4 id="5.%E7%95%8C%E9%9D%A2%E5%88%B7%E6%96%B0%E6%98%BE%E7%A4%BA">5.界面刷新显示</h4> 
+<p>绘图事件</p> 
+<p><img alt="" height="242" src="https://images2.imgbox.com/47/49/tJdvFKUN_o.png" width="1045"></p> 
+<pre><code>playVideoWidget::playVideoWidget(QString filename)
+{
+
+    this-&gt;resize(700,468);
+    this-&gt;setWindowTitle("播放器");
+    this-&gt;filename=filename;
+
+//创建解码线程
+    toH264=new video(filename);
+    connect(toH264,SIGNAL(sigGetOneFrame(QImage)),this,SLOT(recviceSlots(QImage)));//接收图片信号槽
+    //启动线程
+    toH264-&gt;start();
+}
+
+void playVideoWidget::recviceSlots(QImage imge)
+{
+    //接收解码线程发送的一帧图片数据
+    qDebug()&lt;&lt;"recive imge";
+    this-&gt;image=imge;
+    //更新界面
+    this-&gt;update();
+}
+
+void playVideoWidget::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    if(!this-&gt;image.isNull())//如果图片不为空
+    {
+        painter.drawImage(QRect(0,0,this-&gt;width(),this-&gt;height()),this-&gt;image);
+    }
+}</code></pre> 
+<p>效果</p> 
+<p><img alt="" height="507" src="https://images2.imgbox.com/48/b4/MFumsMAx_o.png" width="702"></p> 
+<p> 这样就可以播放本地视频了</p> 
+<p></p> 
+<p>感谢观看！！！！</p> 
+<p>以上就是全部内容，如果对您有帮助，欢迎点赞评论，或者发现有哪里写错的，欢迎指正！</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/6f/49/izogdSK0_o.png"></p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a08365969762370be129a2c5221c232a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">springboot整合支付宝沙箱支付</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/fc7bb7aaaea658f1a58b7b95a893f6a5/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Linux CentOS7 离线安装gcc环境</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

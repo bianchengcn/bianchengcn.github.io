@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Android视频与音频复用一个MediaPlayer注意点 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Android视频与音频复用一个MediaPlayer注意点" />
+<meta property="og:description" content="在使用SurfaceView&#43;MediaPlayer播放视频，会使用到SurfaceHolder.Callback 并通过SurfaceHolder.addCallback添加到SurfaceView.getHolder()对象当中，其中SurfaceCallback为SurfaceHolder.Callback 的实例。
+if (mSurfaceCallback == null) { SurfaceHolder holder = mSurfaceView.getHolder(); mSurfaceCallback = new SurfaceCallback(); holder.addCallback(mSurfaceCallback); } SurfaceCallback具体实现如下，其在SurfaceView变为可见状态(VISIBLE)时，会调用surfaceCreated方法，在改方法里面调用 mMediaPlayer.setDisplay(surfaceHolder)进行跟MediaPlayer的绑定，在SurfaceView变为不可见状态（INVISIBLE&amp;GONE)，会调用surfaceDestoryed方法，注意在surfaceDestoryed中，需要对应的解除绑定，这样在后续复用MediaPlayer播放纯音频文件时才不会报错。
+private class SurfaceCallback implements SurfaceHolder.Callback { @Override public void surfaceCreated(SurfaceHolder surfaceHolder) { Log.d(TAG, &#34;surfaceCreated&#34;); if (mMediaPlayer != null) { mMediaPlayer.setDisplay(surfaceHolder); } } @Override public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) { Log.d(TAG, &#34;surfaceChanged&#34;); } @Override public void surfaceDestroyed(SurfaceHolder surfaceHolder) { Log.d(TAG, &#34;surfaceDestroyed&#34;); if (mMediaPlayer != null) { mMediaPlayer." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/a19e4c2756aaa108559b04ba5e4d2483/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-09-06T10:34:26+08:00" />
+<meta property="article:modified_time" content="2022-09-06T10:34:26+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Android视频与音频复用一个MediaPlayer注意点</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>在使用SurfaceView+MediaPlayer播放视频，会使用到SurfaceHolder.Callback 并通过SurfaceHolder.addCallback添加到SurfaceView.getHolder()对象当中，其中SurfaceCallback为SurfaceHolder.Callback 的实例。</p> 
+<pre><code class="language-java">if (mSurfaceCallback == null) {
+SurfaceHolder holder = mSurfaceView.getHolder();
+mSurfaceCallback = new SurfaceCallback();
+holder.addCallback(mSurfaceCallback);
+}</code></pre> 
+<p>SurfaceCallback具体实现如下，其在SurfaceView变为可见状态(VISIBLE)时，会调用surfaceCreated方法，在改方法里面调用 mMediaPlayer.setDisplay(surfaceHolder)进行跟MediaPlayer的绑定，在SurfaceView变为不可见状态（INVISIBLE&amp;GONE)，会调用surfaceDestoryed方法，注意在surfaceDestoryed中，需要对应的解除绑定，这样在后续复用MediaPlayer播放纯音频文件时才不会报错。</p> 
+<pre><code class="language-java">private class SurfaceCallback implements SurfaceHolder.Callback {
+    @Override
+    public void surfaceCreated(SurfaceHolder surfaceHolder) {
+        Log.d(TAG, "surfaceCreated");
+        if (mMediaPlayer != null) {
+            mMediaPlayer.setDisplay(surfaceHolder);
+        }
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+        Log.d(TAG, "surfaceChanged");
+    }
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
+        Log.d(TAG, "surfaceDestroyed");
+        if (mMediaPlayer != null) {
+            mMediaPlayer.setDisplay(null);
+        }
+    }
+}</code></pre> 
+<p>同时在播放纯音频的方法中时，也注意手动置null，mMediaPlayer.setDisplay(null);</p> 
+<pre><code class="language-java">public final void playAudio() {
+        Log.d(TAG, "playAudio");
+        stopAudio();
+        if (mMediaPlayer == null) {
+            initMediaPlayer();
+        }
+
+        try {
+            mMediaPlayer.setDisplay(null);
+            mMediaPlayer.reset();
+            mMediaPlayer.setOnCompletionListener(null);
+            AssetFileDescriptor openFd = getAssets().openFd("xxx.mp3");
+            mMediaPlayer.setDataSource(openFd.getFileDescriptor(), openFd.getStartOffset(), openFd.getLength());
+            mMediaPlayer.setLooping(true);
+            mMediaPlayer.prepareAsync();
+        } catch (Exception e) {
+            e.printStackTrace();
+            stopAudio();
+        }
+    }</code></pre> 
+<p>否则会报如下错误：</p> 
+<pre><code class="language-bash">2022-08-28 01:06:13.468 458-522/? D/SurfaceUtils: connecting to surface 0xb4a9a008, reason setVideoSurfaceTexture
+2022-08-28 01:06:13.469 362-1171/? E/BufferQueueProducer: SurfaceView - com.example.test/com.example.test.autotest.AutoTestActivity#1 connect: BufferQueue has been abandoned
+2022-08-28 01:06:13.469 458-522/? E/SurfaceUtils: Failed to connect to surface 0xb4a9a008, err -19
+2022-08-28 01:06:13.469 458-522/? E/MediaPlayerService: setVideoSurfaceTexture failed: -19
+2022-08-28 01:06:13.469 458-522/? D/NuPlayerDriver: reset(0xb4ff70e0) at state 2
+2022-08-28 01:06:13.469 458-971/? D/NuPlayerDriver: notifyResetComplete(0xb4ff70e0)
+2022-08-28 01:06:13.470 653-653/com.example.text W/System.err: java.lang.IllegalStateException
+2022-08-28 01:06:13.471 653-653/com.example.test W/System.err:     at android.media.MediaPlayer.prepareAsync(Native Method)</code></pre> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a72ada638b50d92eb4f6c5ae1b51578d/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">通过.js.map文件反编译 获取前端源码</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/6620b4aad8d47dd82d62471f001c562a/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">CentOS下离线安装gcc</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

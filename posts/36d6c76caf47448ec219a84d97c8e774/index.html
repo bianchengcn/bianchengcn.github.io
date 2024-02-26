@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>springboot中在方法上使用@Cacheable注解实现redis缓存 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="springboot中在方法上使用@Cacheable注解实现redis缓存" />
+<meta property="og:description" content="简介 平时大家使用redis一般都是直接存储key,value.
+spring全家桶肯定帮大家想到了这一点.可以让大家方便的使用注解操作redis节省代码量.
+把总结放前面:
+总共有三种方式,底层利用了spring的aop,并且方法返回的对象一定要实现序列化
+@Cacheable:注解于方法上,第一次会把后面的cacheNames&#43;key 拼接为key,把返回值序列化后作为value set到redis中去.后面再一次访问相同的key的时候就直接从redis中取值了,不会再访问这个方法 @Override @Cacheable(cacheNames = &#34;product&#34;,key = &#34;#id&#34;) public ProductInfo findOne(String id) { return productInfoRepository.findById(id).orElse(null); } @CachePut:每次都会把方法的返回值序列化之后set到redis中去(每次都会执行方法),即更新这个key对应的值 @Override @CachePut(cacheNames = &#34;product&#34;,key = &#34;#productId&#34;) public ProductInfo onSale(String productId) { ProductInfo productInfo = this.findOne(productId); if(null == productInfo){ throw new SellException(ResultEnum.PRODUCT_NOT_EXIST); } if(productInfo.getProductStatusEnum().getCode() == ProductStatusEnum.UP.getCode()){ log.warn(&#34;[商品上架处理]-----商品已经是上架状态了,这里直接返回原ProductInfo={}&#34;,productInfo); }else { productInfo.setProductStatus(ProductStatusEnum.UP.getCode()); productInfo = this.save(productInfo); } return productInfo; } @CacheEvict:这个比较好理解,就是从redis中把这个key删除了 @Override @CacheEvict(cacheNames = &#34;product&#34;,key = &#34;#productInfo.productId&#34;) public ProductInfo save(ProductInfo productInfo) { return productInfoRepository." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/36d6c76caf47448ec219a84d97c8e774/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-06-07T02:44:23+08:00" />
+<meta property="article:modified_time" content="2020-06-07T02:44:23+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">springboot中在方法上使用@Cacheable注解实现redis缓存</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>简介</h3> 
+<p>平时大家使用redis一般都是直接存储key,value.<br> spring全家桶肯定帮大家想到了这一点.可以让大家方便的使用注解操作redis节省代码量.</p> 
+<p>把总结放前面:<br> 总共有三种方式,底层利用了spring的aop,并且方法返回的对象一定要实现序列化</p> 
+<ul><li><strong>@Cacheable:注解于方法上,第一次会把后面的cacheNames+key 拼接为key,把返回值序列化后作为value set到redis中去.后面再一次访问相同的key的时候就直接从redis中取值了,不会再访问这个方法</strong></li></ul> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Override</span>
+<span class="token annotation punctuation">@Cacheable</span><span class="token punctuation">(</span>cacheNames <span class="token operator">=</span> <span class="token string">"product"</span><span class="token punctuation">,</span>key <span class="token operator">=</span> <span class="token string">"#id"</span><span class="token punctuation">)</span>
+<span class="token keyword">public</span> <span class="token class-name">ProductInfo</span> <span class="token function">findOne</span><span class="token punctuation">(</span><span class="token class-name">String</span> id<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+   <span class="token keyword">return</span> productInfoRepository<span class="token punctuation">.</span><span class="token function">findById</span><span class="token punctuation">(</span>id<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">orElse</span><span class="token punctuation">(</span><span class="token keyword">null</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ul><li><strong>@CachePut:每次都会把方法的返回值序列化之后set到redis中去(每次都会执行方法),即更新这个key对应的值</strong></li></ul> 
+<pre><code class="prism language-java">	<span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@CachePut</span><span class="token punctuation">(</span>cacheNames <span class="token operator">=</span> <span class="token string">"product"</span><span class="token punctuation">,</span>key <span class="token operator">=</span> <span class="token string">"#productId"</span><span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token class-name">ProductInfo</span> <span class="token function">onSale</span><span class="token punctuation">(</span><span class="token class-name">String</span> productId<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">ProductInfo</span> productInfo <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span><span class="token function">findOne</span><span class="token punctuation">(</span>productId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token keyword">null</span> <span class="token operator">==</span> productInfo<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">SellException</span><span class="token punctuation">(</span><span class="token class-name">ResultEnum</span><span class="token punctuation">.</span>PRODUCT_NOT_EXIST<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token keyword">if</span><span class="token punctuation">(</span>productInfo<span class="token punctuation">.</span><span class="token function">getProductStatusEnum</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token class-name">ProductStatusEnum</span><span class="token punctuation">.</span>UP<span class="token punctuation">.</span><span class="token function">getCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">warn</span><span class="token punctuation">(</span><span class="token string">"[商品上架处理]-----商品已经是上架状态了,这里直接返回原ProductInfo={}"</span><span class="token punctuation">,</span>productInfo<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span><span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+            productInfo<span class="token punctuation">.</span><span class="token function">setProductStatus</span><span class="token punctuation">(</span><span class="token class-name">ProductStatusEnum</span><span class="token punctuation">.</span>UP<span class="token punctuation">.</span><span class="token function">getCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            productInfo <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span><span class="token function">save</span><span class="token punctuation">(</span>productInfo<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> productInfo<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<ul><li><strong>@CacheEvict:这个比较好理解,就是从redis中把这个key删除了</strong></li></ul> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Override</span>
+<span class="token annotation punctuation">@CacheEvict</span><span class="token punctuation">(</span>cacheNames <span class="token operator">=</span> <span class="token string">"product"</span><span class="token punctuation">,</span>key <span class="token operator">=</span> <span class="token string">"#productInfo.productId"</span><span class="token punctuation">)</span>
+<span class="token keyword">public</span> <span class="token class-name">ProductInfo</span> <span class="token function">save</span><span class="token punctuation">(</span><span class="token class-name">ProductInfo</span> productInfo<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">return</span> productInfoRepository<span class="token punctuation">.</span><span class="token function">save</span><span class="token punctuation">(</span>productInfo<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>这里的key其实可以不写,比如上面的@CacheEvict中不写的话就会把参数默认为key,即下面的productInfo对象</p> 
+<p><strong>一次驱逐多个redis的key</strong></p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Caching</span><span class="token punctuation">(</span>evict<span class="token operator">=</span><span class="token punctuation">{<!-- --></span>
+			<span class="token annotation punctuation">@CacheEvict</span><span class="token punctuation">(</span>value <span class="token operator">=</span> <span class="token class-name">Cache</span><span class="token punctuation">.</span>CONSTANT<span class="token punctuation">,</span> key <span class="token operator">=</span> <span class="token string">"'"</span> <span class="token operator">+</span> <span class="token class-name">CacheKey</span><span class="token punctuation">.</span>SINGLE_ROLE_NAME <span class="token operator">+</span> <span class="token string">"'+#roleId"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            <span class="token annotation punctuation">@CacheEvict</span><span class="token punctuation">(</span>value <span class="token operator">=</span> <span class="token class-name">Cache</span><span class="token punctuation">.</span>CONSTANT<span class="token punctuation">,</span> key <span class="token operator">=</span> <span class="token string">"'"</span> <span class="token operator">+</span> <span class="token class-name">CacheKey</span><span class="token punctuation">.</span>ROLES_NAME <span class="token operator">+</span> <span class="token string">"'+#roleId"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            <span class="token annotation punctuation">@CacheEvict</span><span class="token punctuation">(</span>value <span class="token operator">=</span> <span class="token class-name">Cache</span><span class="token punctuation">.</span>CONSTANT<span class="token punctuation">,</span> key <span class="token operator">=</span> <span class="token string">"'"</span> <span class="token operator">+</span> <span class="token class-name">CacheKey</span><span class="token punctuation">.</span>SINGLE_ROLE_NAME <span class="token operator">+</span> <span class="token string">"'+#roleId"</span><span class="token punctuation">)</span>
+            <span class="token punctuation">}</span><span class="token punctuation">)</span>
+<span class="token keyword">public</span> <span class="token class-name">ResponseData</span> <span class="token function">remove</span><span class="token punctuation">(</span><span class="token annotation punctuation">@RequestParam</span> <span class="token class-name">Long</span> roleId<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+………………
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="cacheManagerput_keyvalue_66"></a>用cacheManager手动put key和value</h3> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Autowired</span>
+<span class="token keyword">private</span> <span class="token class-name">CacheManager</span> cacheManager<span class="token punctuation">;</span>
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+cacheManager<span class="token punctuation">.</span><span class="token function">getCache</span><span class="token punctuation">(</span><span class="token class-name">PortalConstants</span><span class="token punctuation">.</span>CACHE_PORTAL_MOBILE_VERIFICATION_CODE<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> verificationCode<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<h3><a id="EnableCaching_75"></a>使用注解前现在启动类中加上@EnableCaching注解</h3> 
+<p>这个注解是spring的,在spring-boot-starter-web包中.一般使用springmvc的都在springboot中引入这个依赖了,所以不用另外引入依赖了.</p> 
+<p>如果你想单独引入这个依赖的话</p> 
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-cache&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d2/16/LVzl6BFu_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="Cacheable_set_valueredis_88"></a>可以加在方法上使用@Cacheable set value到redis</h3> 
+<p>使用@Cacheable后,第一次会把后面的cacheNames+key 拼接为key,把返回值序列化后作为value set到redis中去.后面再一次访问相同的key的时候就直接从redis中取值了,不会再访问这个方法,也就不会再从数据库中取值了</p> 
+<p>可以把方法中的参数拼到key上,在这个方法运行完后会把这个方法的返回值<strong>根据@Cacheable注解中的cacheNames+key拼接后的值为key</strong>,set到redis中取,下次再访问这个key的时候直接从redis中取数据,不用去mysql查找一遍了<br> <img src="https://images2.imgbox.com/58/93/nvruaCS9_o.png" alt="在这里插入图片描述"><br> redis中缓存的key<br> <img src="https://images2.imgbox.com/98/4a/cl4TkIKC_o.png" alt="在这里插入图片描述"></p> 
+<p><strong>使用condition,对传入的参数进行,筛选只允许符合条件的请求set到redis中</strong></p> 
+<p>对于现实的需求,肯定有些时候是异常请求,是不需要缓存到redis中的,这里我们也可以使用condition加上判断,判断通过的时候才允许缓存到redis</p> 
+<p><img src="https://images2.imgbox.com/ee/d9/CGaTCymJ_o.png" alt="在这里插入图片描述"></p> 
+<p><strong>有根据请求筛选,那么自然也就有根据方法的结果筛选的,根据结果筛选可以使用unless</strong><br> <img src="https://images2.imgbox.com/46/88/CSQi9JAP_o.png" alt="在这里插入图片描述"><br> @Cacheable中，unless参数的作用是：函数返回值符合表达式条件的，veto（否决）、不缓存<br> 换句话说，函数返回值符合条件的排除掉、只缓存其余不符合条件的</p> 
+<p>若是想要某种条件下才缓存,那么可以在el表达式中对其他情况取反就行了</p> 
+<p>例如,想要返回结果中productId = 1的,那么可以这样写<br> @Cacheable(cacheNames = “product111”,key = “#productInfo.productId”, unless = “!#result.productId.equals(‘1’)”)<br> 把结果中不等于1的排除掉,那么剩下的就是等于1了<br> 这里可能有点绕,因为unless自动在最外面取了个反,所以要双重否定<br> 简单说就是对你想要的结果取反,unless自己外面有取反!!2个取反就还是原先的结果</p> 
+<h3><a id="CachePut_valueredis_123"></a>@CachePut 更新value到redis</h3> 
+<p>@CachePut和@Cacheable的相同点都可以加在方法上</p> 
+<p>不同之处在于@CachePut是每次都会把方法的返回值序列化之后set到redis中去(每次都会执行方法),即更新这个key对应的值,适合用于修改值的方法</p> 
+<p><img src="https://images2.imgbox.com/eb/89/4UgdJqGN_o.png" alt="在这里插入图片描述"></p> 
+<p>这里要注意一点参数里的key后面支持spel表达式,可以从下面的方法中获取参数,然后类型和获取的参数的类型是一样的,虽然外面的双引号,但是里面你直接给个数字,它会当成int去处理的,int的话就会有上限2^31 -1</p> 
+<p><a href="https://www.jianshu.com/p/e0b50053b5d3" rel="nofollow">spel表达式介绍</a></p> 
+<p>比如,下图中key就为String类型的字符串<br> <img src="https://images2.imgbox.com/25/f3/IYMt5TBU_o.png" alt="在这里插入图片描述"></p> 
+<p>而下图中key的值就是int类型的<br> <img src="https://images2.imgbox.com/9f/c6/mnNQHdWu_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="CacheEvict_redis_key_147"></a>@CacheEvict 从redis中删除 key</h3> 
+<p>这个也比较好理解,就是从redis中把这个key删除了</p> 
+<p>这里的key其实可以不写,不写的话就会把参数默认为key,即下面的productInfo对象<br> <img src="https://images2.imgbox.com/32/41/u0M2uruG_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="CacheConfigcacheNames_153"></a>使用@CacheConfig注解可以让多个方法使用统一的cacheNames</h3> 
+<p>如果在同一个类中,要使用redis缓存的每个方法中都要写cacheNames是不是觉得很麻烦,可以使用@CacheConfig(cacheNames = “product”),为下面的注解默认使用上面这个CacheConfig中定义的cacheNames</p> 
+<p>这个和css中的作用域一样,如果方法上的注解有自己定义的cacheNames,那么最后生效的还是方法上自己定义的cacheNames,并不会强行使用类上CacheConfig定义的cacheNames<br> <img src="https://images2.imgbox.com/69/87/svb4vAE5_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/3e93c8d27461a4aac43a245ec4233e27/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">OpenCV-C&#43;&#43;-CUDA-02-图像基本操作之像素操作</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/c52ba0f47a31b644f720231635ad58b4/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">vagrant 启动失败 There was an error while executing `VBoxManage`, a CLI used by Vagrant for controlli......</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

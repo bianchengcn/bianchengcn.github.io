@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>跟着cherno手搓游戏引擎【15】DrawCall的封装 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="跟着cherno手搓游戏引擎【15】DrawCall的封装" />
+<meta property="og:description" content="目标： Application.cpp:把渲染循环里的glad代码封装成自己的类：
+#include&#34;ytpch.h&#34; #include &#34;Application.h&#34; #include&#34;Log.h&#34; #include &#34;YOTO/Renderer/Renderer.h&#34; #include&#34;Input.h&#34; namespace YOTO { #define BIND_EVENT_FN(x) std::bind(&amp;x, this, std::placeholders::_1) Application* Application::s_Instance = nullptr; Application::Application() { YT_CORE_ASSERT(!s_Instance, &#34;Application需要为空！&#34;) s_Instance = this; //智能指针 m_Window = std::unique_ptr&lt;Window&gt;(Window::Creat()); //设置回调函数 m_Window-&gt;SetEventCallback(BIND_EVENT_FN(Application::OnEvent)); //new一个Layer，放在最后层进行渲染 m_ImGuiLayer = new ImGuiLayer(); PushOverlay(m_ImGuiLayer); //unsigned int id; //glGenBuffers(1, &amp;id); uint32_t indices[3] = { 0,1,2 }; float vertices[3 * 7] = { -0.5f,-0.5f,0.0f, 0.8f,0.2f,0.8f,1.0f, 0.5f,-0.5f,0.0f, 0.2f,0.3f,0.8f,1.0f, 0.0f,0.5f,0.0f, 0.8f,0.8f,0.2f,1.0f, }; m_VertexArray.reset(VertexArray::Create()); std::shared_ptr&lt;VertexBuffer&gt; m_VertexBuffer; m_VertexBuffer.reset(VertexBuffer::Create(vertices, sizeof(vertices))); { BufferLayout setlayout = { {ShaderDataType::Float3,&#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/1291f555df26d1bd472019d4d670a14b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-30T15:35:26+08:00" />
+<meta property="article:modified_time" content="2024-01-30T15:35:26+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">跟着cherno手搓游戏引擎【15】DrawCall的封装</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2>目标：</h2> 
+<p><strong> Application.cpp:把渲染循环里的glad代码封装成自己的类：</strong></p> 
+<pre><code class="language-cpp">#include"ytpch.h"
+#include "Application.h"
+
+#include"Log.h"
+#include "YOTO/Renderer/Renderer.h"
+#include"Input.h"
+
+
+namespace YOTO {
+#define BIND_EVENT_FN(x) std::bind(&amp;x, this, std::placeholders::_1)
+
+	 Application* Application::s_Instance = nullptr;
+
+	Application::Application() {
+
+		YT_CORE_ASSERT(!s_Instance, "Application需要为空！")
+		s_Instance = this;
+		//智能指针
+		m_Window = std::unique_ptr&lt;Window&gt;(Window::Creat());
+		//设置回调函数
+		m_Window-&gt;SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
+		//new一个Layer，放在最后层进行渲染
+		m_ImGuiLayer = new ImGuiLayer();
+		PushOverlay(m_ImGuiLayer);  
+		//unsigned int id;
+		//glGenBuffers(1, &amp;id);
+
+		uint32_t indices[3] = { 0,1,2 };
+		float vertices[3 * 7] = {
+			-0.5f,-0.5f,0.0f, 0.8f,0.2f,0.8f,1.0f,
+			0.5f,-0.5f,0.0f,  0.2f,0.3f,0.8f,1.0f,
+			0.0f,0.5f,0.0f,   0.8f,0.8f,0.2f,1.0f,
+		};
+
+		m_VertexArray.reset(VertexArray::Create());
+
+
+		std::shared_ptr&lt;VertexBuffer&gt; m_VertexBuffer;
+		m_VertexBuffer.reset(VertexBuffer::Create(vertices, sizeof(vertices)));
+
+		{
+			BufferLayout setlayout = {
+
+	{ShaderDataType::Float3,"a_Position"},
+		{ShaderDataType::Float4,"a_Color"}
+			};
+			m_VertexBuffer-&gt;SetLayout(setlayout);
+
+		}
+
+		m_VertexArray-&gt;AddVertexBuffer(m_VertexBuffer);
+		
+		 
+		std::shared_ptr&lt;IndexBuffer&gt;m_IndexBuffer;
+		m_IndexBuffer.reset(IndexBuffer::Create(indices, sizeof(indices)/sizeof(uint32_t)));
+
+		m_VertexArray-&gt;AddIndexBuffer(m_IndexBuffer);
+
+		std::string vertexSource = R"(
+		#version 330 core
+		layout(location = 0) in vec3 a_Position;
+		layout(location = 1) in vec4 a_Color;
+		out vec3 v_Position;
+		out vec4 v_Color;
+		void main(){
+		v_Position=a_Position;
+		v_Color=a_Color;
+		gl_Position =vec4( a_Position+0.5,1.0);
+		}
+		)";
+		//绘制颜色
+		std::string fragmentSource = R"(
+		#version 330 core
+		layout(location = 0) out vec4 color;
+		in vec3 v_Position;
+		in vec4 v_Color;
+		void main(){
+		color=vec4(v_Color);
+		}
+		)";
+		m_Shader.reset(new Shader(vertexSource, fragmentSource));
+
+		///测试/
+
+		m_SquareVA.reset(VertexArray::Create());
+
+		float squareVertices[3 * 4] = {
+			-0.5f,-0.5f,0.0f,
+			0.5f,-0.5f,0.0f, 
+			0.5f,0.5f,0.0f,
+			-0.5f,0.5f,0.0f
+		};
+		std::shared_ptr&lt;VertexBuffer&gt; squareVB;
+		squareVB.reset(VertexBuffer::Create(squareVertices, sizeof(squareVertices)));
+		squareVB-&gt;SetLayout({
+			{ShaderDataType::Float3,"a_Position"}
+		});
+		m_SquareVA-&gt;AddVertexBuffer(squareVB);
+		uint32_t squareIndices[6] = { 0,1,2,2,3,0 };
+		std::shared_ptr&lt;IndexBuffer&gt; squareIB; 
+
+		squareIB.reset((IndexBuffer::Create(squareIndices, sizeof(squareIndices) / sizeof(uint32_t))));
+
+		m_SquareVA-&gt;AddIndexBuffer(squareIB);
+		
+		//测试：
+		std::string BlueShaderVertexSource = R"(
+		#version 330 core
+		layout(location = 0) in vec3 a_Position;
+		out vec3 v_Position;
+		void main(){
+		v_Position=a_Position;
+		gl_Position =vec4( a_Position,1.0);
+		}
+		)";
+		//绘制颜色
+		std::string BlueShaderFragmentSource = R"(
+		#version 330 core
+		layout(location = 0) out vec4 color;
+		in vec3 v_Position;
+		void main(){
+		color=vec4(0.2,0.3,0.8,1.0);
+		}
+		)";
+		m_BlueShader.reset(new Shader(BlueShaderVertexSource, BlueShaderFragmentSource));
+	}
+	Application::~Application() {
+
+	}
+	/// &lt;summary&gt;
+	/// 所有的Window事件都会在这触发，作为参数e
+	/// &lt;/summary&gt;
+	/// &lt;param name="e"&gt;&lt;/param&gt;
+	void Application::OnEvent(Event&amp; e) {
+		//根据事件类型绑定对应事件
+		EventDispatcher dispatcher(e);
+		dispatcher.Dispatch&lt;WindowCloseEvent&gt;(BIND_EVENT_FN(Application::OnWindowClosed));
+		//输出事件信息
+		YT_CORE_INFO("Application：{0}",e);
+		for (auto it = m_LayerStack.end(); it != m_LayerStack.begin();) {
+			(*--it)-&gt;OnEvent(e);
+			if (e.m_Handled)
+				break;
+		}
+	}
+
+	bool Application::OnWindowClosed(WindowCloseEvent&amp; e) {
+		m_Running = false;
+		return true;
+	}
+	void Application::Run() {
+		WindowResizeEvent e(1280, 720);
+		if (e.IsInCategory(EventCategoryApplication)) {
+			YT_CORE_TRACE(e);
+		}
+		if (e.IsInCategory(EventCategoryInput)) {
+			YT_CORE_ERROR(e);
+		}
+
+		while (m_Running)
+		{
+			/*	glClearColor(0.2f, 0.2f, 0.2f,1);
+				glClear(GL_COLOR_BUFFER_BIT);*/
+			RenderCommand::SetClearColor({0.2f, 0.2f, 0.2f, 1.0f});
+			RenderCommand::Clear();
+
+			Renderer::BeginScene();
+			{
+				m_BlueShader-&gt;Bind();
+				Renderer::Submit(m_SquareVA);
+				m_Shader-&gt;Bind();
+				Renderer::Submit(m_VertexArray);
+				Renderer::EndScene();
+			}
+
+	
+
+			//m_BlueShader-&gt;Bind();
+			//m_SquareVA-&gt;Bind();
+			//glDrawElements(GL_TRIANGLES, m_SquareVA-&gt;GetIndexBuffer()-&gt;GetCount(), GL_UNSIGNED_INT, nullptr);
+			glBindVertexArray(m_VertexArray);
+			//m_Shader-&gt;Bind();
+			//m_VertexArray-&gt;Bind();
+			//glDrawElements(GL_TRIANGLES,m_VertexArray-&gt;GetIndexBuffer()-&gt;GetCount(),GL_UNSIGNED_INT,nullptr); 
+
+			for (Layer* layer : m_LayerStack) {
+				layer-&gt;OnUpdate();
+			}
+			//将ImGui的刷新放到APP中，与Update分开
+			m_ImGuiLayer-&gt;Begin();
+			
+			for (Layer* layer : m_LayerStack) {
+				layer-&gt;OnImGuiRender();
+			}
+			m_ImGuiLayer-&gt;End();
+			m_Window-&gt;OnUpdate();
+		}
+	}
+	void Application::PushLayer(Layer* layer) {
+		m_LayerStack.PushLayer(layer);
+		layer-&gt;OnAttach();
+	}
+	void Application::PushOverlay(Layer* layer) {
+		m_LayerStack.PushOverlay(layer);
+		layer-&gt;OnAttach();
+	}
+}</code></pre> 
+<h2>抽象：</h2> 
+<p><strong>RendererAPI.h:渲染API的抽象，包括API实现的功能都封装一下：</strong></p> 
+<pre><code class="language-cpp">#pragma once
+#include&lt;glm/glm.hpp&gt;
+#include "VertexArray.h"
+namespace YOTO {
+	class RendererAPI
+	{
+	public:
+		enum class API {
+			None = 0,
+			OpenGL = 1
+		};
+	public:
+		virtual void SetClearColor(const glm::vec4&amp; color)=0;
+		virtual void Clear() = 0;
+		virtual void DrawIndexed(const std::shared_ptr&lt;VertexArray&gt;&amp; vertexArray)=0;	
+
+		inline static API GetAPI() { return s_API; }
+	private:
+		static API s_API;
+	};
+}
+
+
+</code></pre> 
+<p><strong> RendererAPI.cpp:给当前API赋值：</strong></p> 
+<pre><code class="language-cpp">#include "ytpch.h"
+#include "RendererAPI.h"
+namespace YOTO {
+	RendererAPI::API RendererAPI::s_API = RendererAPI::API::OpenGL;
+}</code></pre> 
+<h2> 实现：</h2> 
+<p><strong>OpenGLRendererAPI.h:实现接口，制定重写方法，在cpp中封账glad代码：</strong></p> 
+<pre><code class="language-cpp">#pragma once
+#include"YOTO/Renderer/RendererAPI.h"
+namespace YOTO {
+	class OpenGLRendererAPI:public RendererAPI
+	{
+	public:
+		virtual void SetClearColor(const glm::vec4&amp; color)override;
+		virtual void Clear()override;
+		virtual void DrawIndexed(const std::shared_ptr&lt;VertexArray&gt;&amp; vertexArray) override;
+	};
+}
+
+
+</code></pre> 
+<p><strong> OpenGLRendererAPI.cpp:</strong></p> 
+<pre><code class="language-cpp">#include "ytpch.h"
+#include "OpenGLRendererAPI.h"
+#include &lt;glad/glad.h&gt;
+namespace YOTO {
+	void OpenGLRendererAPI::SetClearColor(const glm::vec4&amp; color)
+	{
+		glClearColor(color.r, color.g, color.b, color.a);
+	}
+	void OpenGLRendererAPI::Clear()
+	{
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	}
+	void OpenGLRendererAPI::DrawIndexed(const std::shared_ptr&lt;VertexArray&gt;&amp; vertexArray)
+	{
+		glDrawElements(GL_TRIANGLES, vertexArray-&gt;GetIndexBuffer()-&gt;GetCount(), GL_UNSIGNED_INT, nullptr);
+	}
+}</code></pre> 
+<h2>调用：</h2> 
+<p><strong>RenderCommand.h:根据当前API调用API的一些通用方法：</strong></p> 
+<pre><code class="language-cpp">#pragma once
+#include"RendererAPI.h"
+namespace YOTO {
+	class RenderCommand
+	{
+	public:
+		inline static void SetClearColor(const glm::vec4&amp; color) {
+			s_RendererAPI-&gt;SetClearColor(color);
+		}
+		inline static void Clear() {
+			s_RendererAPI-&gt;Clear();
+		}
+		inline static void DrawIndexed(const std::shared_ptr&lt;VertexArray&gt;&amp; vertexArray) {
+			s_RendererAPI-&gt;DrawIndexed(vertexArray);
+		}
+	private:
+		static RendererAPI* s_RendererAPI;
+
+	};
+
+}
+
+</code></pre> 
+<p><strong> RenderCommand.cpp:（个人觉得应该在new的时候再给API的枚举赋值，在 RendererAPI</strong></p> 
+<p><strong>.cpp中导致可以new 其他API枚举选另一个API）（不知道后面会不会改）</strong></p> 
+<pre><code class="language-cpp">#include "ytpch.h"
+#include "RenderCommand.h"
+#include"Platform/OpenGL/OpenGLRendererAPI.h"
+namespace YOTO {
+	RendererAPI* RenderCommand::s_RendererAPI = new OpenGLRendererAPI;
+}</code></pre> 
+<p><strong>Renderer.h: 对command的一些方法进行进一步封装，并拓展出Begin和End方法：</strong></p> 
+<pre><code class="language-cpp">#pragma once
+#include"RenderCommand.h"
+namespace YOTO {
+	
+	class Renderer {
+	public:
+		static void BeginScene();
+		static void EndScene();
+		static void Submit(const std::shared_ptr&lt;VertexArray&gt;&amp; vertexArray);
+		inline static RendererAPI::API GetAPI() {
+			return RendererAPI::GetAPI();
+		}
+	};
+
+}</code></pre> 
+<p><strong>Renderer.cpp: </strong></p> 
+<pre><code class="language-cpp">#include"ytpch.h"
+#include"Renderer.h"
+namespace YOTO {
+	void Renderer::BeginScene()
+	{
+	}
+	void Renderer::EndScene()
+	{
+	}
+	void Renderer::Submit(const std::shared_ptr&lt;VertexArray&gt;&amp; vertexArray)
+	{
+		vertexArray-&gt;Bind();
+		RenderCommand::DrawIndexed(vertexArray);
+	}
+}</code></pre> 
+<h2>修改：</h2> 
+<p>所有switch的枚举都改成这样（会报错，报了再改也行）</p> 
+<pre><code class="language-cpp">RendererAPI::API::OpenGL:</code></pre> 
+<h2>测试：</h2> 
+<p><img alt="" height="800" src="https://images2.imgbox.com/3f/d7/FwDt4tAi_o.png" width="1200"></p> 
+<p> 原汁原味儿~能跑出来就对了！</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a65ecf080b110a5297bda8c8e45b1533/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">雾锁王国多人联机专用服务器推荐！最高支持16人联机</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f460d7b401876b555a13fd3944d07fb6/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">小白都会的幻兽帕鲁服务器搭建教程（详细图文）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

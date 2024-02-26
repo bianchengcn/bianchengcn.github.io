@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Flink JobManager 和 TaskManager 原理 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Flink JobManager 和 TaskManager 原理" />
+<meta property="og:description" content="转自：https://www.cnblogs.com/nicekk/p/11561836.html
+一、概述 Flink 整个系统主要由两个组件组成，分别为 JobManager 和 TaskManager，Flink 架构也遵循 Master - Slave 架构设计原则，JobManager 为 Master 节点，TaskManager 为 Worker （Slave）节点。
+所有组件之间的通信都是借助于 Akka Framework，包括任务的状态以及 Checkpoint 触发等信息。
+二、Client 客户端 客户端负责将任务提交到集群，与 JobManager 构建 Akka 连接，然后将任务提交到 JobManager，通过和 JobManager 之间进行交互获取任务执行状态。
+客户端提交任务可以采用 CLI 方式或者通过使用 Flink WebUI 提交，也可以在应用程序中指定 JobManager 的 RPC 网络端口构建 ExecutionEnvironment 提交 Flink 应用。
+三、JobManager JobManager 负责整个 Flink 集群任务的调度以及资源的管理，从客户端中获取提交的应用，然后根据集群中 TaskManager 上 TaskSlot 的使用情况，为提交的应用分配相应的 TaskSlot 资源并命令 TaskManager 启动从客户端中获取的应用。
+JobManager 相当于整个集群的 Master 节点，且整个集群有且只有一个活跃的 JobManager ，负责整个集群的任务管理和资源管理。
+JobManager 和 TaskManager 之间通过 Actor System 进行通信，获取任务执行的情况并通过 Actor System 将应用的任务执行情况发送给客户端。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/5a55f987e42944aafec5b80604b30a0a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2019-09-29T16:51:00+08:00" />
+<meta property="article:modified_time" content="2019-09-29T16:51:00+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Flink JobManager 和 TaskManager 原理</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <div id="cnblogs_post_body" class="blogpost-body"> 
+ <p>转自：<a href="https://www.cnblogs.com/nicekk/p/11561836.html" rel="nofollow">https://www.cnblogs.com/nicekk/p/11561836.html</a></p> 
+ <p> </p> 
+ <h3 class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">一、概述</span></h3> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">Flink 整个系统主要由两个组件组成，分别为 JobManager 和 TaskManager，Flink 架构也遵循 Master - Slave 架构设计原则，JobManager 为 Master 节点，TaskManager 为 Worker （Slave）节点。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">所有组件之间的通信都是借助于 Akka Framework，包括任务的状态以及 Checkpoint 触发等信息。</span></p> 
+ <p> </p> 
+ <h3 class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">二、Client 客户端</span></h3> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">客户端负责将任务提交到集群，与 JobManager 构建 Akka 连接，然后将任务提交到 JobManager，通过和 JobManager 之间进行交互获取任务执行状态。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">客户端提交任务可以采用 CLI 方式或者通过使用 Flink WebUI 提交，也可以在应用程序中指定 JobManager 的 RPC 网络端口构建 ExecutionEnvironment 提交 Flink 应用。</span></p> 
+ <p> </p> 
+ <h3 class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">三、JobManager</span></h3> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">JobManager 负责整个 Flink 集群任务的调度以及资源的管理，从客户端中获取提交的应用，然后根据集群中 TaskManager 上 TaskSlot 的使用情况，为提交的应用分配相应的 TaskSlot 资源并命令 TaskManager 启动从客户端中获取的应用。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">JobManager 相当于整个集群的 Master 节点，且整个集群有且只有一个活跃的 JobManager ，负责整个集群的任务管理和资源管理。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">JobManager 和 TaskManager 之间通过 Actor System 进行通信，获取任务执行的情况并通过 Actor System 将应用的任务执行情况发送给客户端。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">同时在任务执行的过程中，Flink JobManager 会触发 Checkpoint 操作，每个 TaskManager 节点 收到 Checkpoint 触发指令后，完成 Checkpoint 操作，所有的 Checkpoint 协调过程都是在 Fink JobManager 中完成。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">当任务完成后，Flink 会将任务执行的信息反馈给客户端，并且释放掉 TaskManager 中的资源以供下一次提交任务使用。</span></p> 
+ <p> </p> 
+ <p> </p> 
+ <h3 class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">四、TaskManager</span></h3> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">TaskManager 相当于整个集群的 Slave 节点，负责具体的任务执行和对应任务在每个节点上的资源申请和管理。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">客户端通过将编写好的 Flink 应用编译打包，提交到 JobManager，然后 JobManager 会根据已注册在 JobManager 中 TaskManager 的资源情况，将任务分配给有资源的 TaskManager节点，然后启动并运行任务。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">TaskManager 从 JobManager 接收需要部署的任务，然后使用 Slot 资源启动 Task，建立数据接入的网络连接，接收数据并开始数据处理。同时 TaskManager 之间的数据交互都是通过数据流的方式进行的。</span></p> 
+ <p> </p> 
+ <p class="ql-long-2432719"><span class="ql-author-2432719 ql-font-microsoftyahei ql-size-14">可以看出，Flink 的任务运行其实是采用多线程的方式，这和 MapReduce 多 JVM 进行的方式有很大的区别，Flink 能够极大提高 CPU 使用效率，在多个任务和 Task 之间通过 TaskSlot 方式共享系统资源，每个 TaskManager 中通过管理多个 TaskSlot 资源池进行对资源进行有效管理。</span></p> 
+</div> 
+<p>转载于:https://www.cnblogs.com/leon0/p/11608742.html</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/3d74c3da5a639055d654e420d053b3c1/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">vue字符串与数组，json字符串与json对象之间的相互转换</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3f35039001cb492870285ff8613ab7bd/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">centos7.x安装docker-ce</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

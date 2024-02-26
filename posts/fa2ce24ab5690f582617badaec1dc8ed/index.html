@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>jenkins&#43;gitlab实现iOS自动打包的坎坷之路（本文包含CI\CD过程中的一些坑点以及一些理解及建议） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="jenkins&#43;gitlab实现iOS自动打包的坎坷之路（本文包含CI\CD过程中的一些坑点以及一些理解及建议）" />
+<meta property="og:description" content="本文须知：本文成功案例是配置jekins所在服务器配置打包环境，并非在jenkins中配置打包环境。关于为何不采用在jenkins中配置打包环境将会在文中具体讲解。最后因为是基于jekins所在服务器配置的打包环境，按照本文所诉，实现ios自动打包将更易成功。
+一.背景（重生之开局准备） 1.既然是ios项目实现自动打包，那么就必须对ios原来的打包方式及过程要有大概的了解，不同的ios项目其打包方式以及打包的一些参数都可能不相同（具体的可向开发人员询问清楚）。
+以本人为例的话：2、4、5点是重点
+1）.找iOS开发人员要证书和描述文件（打包需要这些。至于证书和描述文件是啥你可以有个大概的了解就行，比如证书的作用就是验证身份、应用程序签名等）
+2）.简单了解一下钥匙串（知道钥匙串是啥，作用，以及在钥匙串中如何导入导出证书）
+3）iOS开发人员使用的开发工具是啥。我的是Xcode。
+4）找ios开发人员打包一个ipa的包给你，里面的ExportOptions.plist将对你有大用。（如果条件允许的话问问他们是否有使用过命令或者脚本打包过，如果能要到将减少你的工作量。努力做个资源咖）
+5）找iOS开发人员观摩一下他们打包的过程，有些选项不同也会导致你的命令或脚本不同。
+例如：For Me
+如果勾选了对应的编译命令和导出ipa命令就应为（这只是命令，还要有正确配置好证书和描述文件，后面会阐述）
+如果没有勾选的话 至于其他涉及到的选项只要你找开发人员要到ExportOptions.plist文件就不用单独去设置了而是像上面一样通过-exportOptionsPlist一样直接设置好了。
+二.基本软件安装 软件安装网上有大量教程这里不再赘述。
+1.gitlab 2.jenkins
+3.Xcode(你需要xcode打包看看是否能打包，然后使用命令打包，然后使用脚本，最后才是jenkins打包，这样才能更容易定位问题，从最简单的开始，一步步来)
+4.本地git安装
+三.jekins实现ios自动打包的两种方式 1.插件安装
+你需要安装的插件主要有：git、 gitlab、Xcode integration、keychains and Provisioning ,这里就不详细举例了，上述列出的必不可少。 方式二：问题分析下载keychains and Provisioning后，无法上传login.keychains-db文件，重命名为login.keychains后仍然无法上传，方式一就诞生了，即采用命令的方式授权访问login.keychains钥匙串。（方式二具体实现待补充）
+方式一：在jekins所在服务器上配置ios的打包环境（推荐：方式二可能在新版jekins中存在钥匙串login.keychains无法上传的问题）
+1.双击你从开发人员那里拿到的证书，然后证书就会被添加到钥匙串里。如果出现证书不受信任，可查看
+iOS推送证书显示“此证书不受信任”_苹果手机邮箱证书显示不信任-CSDN博客
+2.把描述文件添加到正确位置。
+2.1 首先需要对描述文件重命名为 描述文件的UUID.mobileprovisiion
+对于如何获取UUID可以参考
+Xcode中描述文件的真实目录及查看描述文件的UUID_ios13.6 描述文件安装后存储路径-CSDN博客
+2.2 将重命名后的文件拷贝到 /Users/用户名称/Library/MobileDevice/Provisioning Profiles
+3.使用命令检查能否打包成功
+建议：先使用Xcode打包一遍看看是否能否打包，然后再使用命令打包
+双击xcodeproj文件就能使用xcode打开项目。可能你的项目根目录下是xcworkspace的类型文件，也没有关系
+执行下面命令，你需要cd 到项目根目录
+#ios编译前清理工程 xcodebuild clean -project iFoxESOP.xcodeproj \ #根目录下的xcodeproj文件 -scheme iFoxESOP \ -configuration Release #如果你的根目录是 xcworkspace类型文件 也没关系 -project 变为 -workspace xcodebuild clean -workspace iFoxESOP." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/fa2ce24ab5690f582617badaec1dc8ed/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-27T16:28:37+08:00" />
+<meta property="article:modified_time" content="2024-01-27T16:28:37+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">jenkins&#43;gitlab实现iOS自动打包的坎坷之路（本文包含CI\CD过程中的一些坑点以及一些理解及建议）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>本文须知：本文成功案例是配置jekins所在服务器配置打包环境，并非在jenkins中配置打包环境。关于为何不采用在jenkins中配置打包环境将会在文中具体讲解。最后因为是基于jekins所在服务器配置的打包环境，按照本文所诉，实现ios自动打包将更易成功。</p> 
+<h2>一.背景（重生之开局准备）</h2> 
+<p>1.既然是ios项目实现自动打包，那么就必须对ios原来的打包方式及过程要有大概的了解，不同的ios项目其打包方式以及打包的一些参数都可能不相同（具体的可向开发人员询问清楚）。</p> 
+<p>以本人为例的话：2、4、5点是重点</p> 
+<p>1）.找iOS开发人员要证书和描述文件（打包需要这些。至于证书和描述文件是啥你可以有个大概的了解就行，比如证书的作用就是验证身份、应用程序签名等）</p> 
+<p>2）.简单了解一下钥匙串（知道钥匙串是啥，作用，以及在钥匙串中如何导入导出证书）</p> 
+<p>3）iOS开发人员使用的开发工具是啥。我的是Xcode。</p> 
+<p>4）找ios开发人员打包一个ipa的包给你，里面的ExportOptions.plist将对你有大用。（如果条件允许的话问问他们是否有使用过命令或者脚本打包过，如果能要到将减少你的工作量。努力做个资源咖）</p> 
+<p>5）找iOS开发人员观摩一下他们打包的过程，有些选项不同也会导致你的命令或脚本不同。</p> 
+<p>例如：For Me</p> 
+<p><img alt="" height="212" src="https://images2.imgbox.com/ec/3f/ZBG6FRCm_o.png" width="655"></p> 
+<p>如果勾选了对应的编译命令和导出ipa命令就应为（这只是命令，还要有正确配置好证书和描述文件，后面会阐述）</p> 
+<p><img alt="" height="317" src="https://images2.imgbox.com/ec/b4/BehKmuJ7_o.png" width="702"></p> 
+<p>如果没有勾选的话 <img alt="" height="235" src="https://images2.imgbox.com/80/6d/Nnp3uEXP_o.png" width="629"></p> 
+<p>至于其他涉及到的选项只要你找开发人员要到ExportOptions.plist文件就不用单独去设置了而是像上面一样通过-exportOptionsPlist一样直接设置好了。</p> 
+<h2>二.基本软件安装 </h2> 
+<p>软件安装网上有大量教程这里不再赘述。</p> 
+<p>1.gitlab    </p> 
+<p>2.jenkins</p> 
+<p>3.Xcode(你需要xcode打包看看是否能打包，然后使用命令打包，然后使用脚本，最后才是jenkins打包，这样才能更容易定位问题，从最简单的开始，一步步来)</p> 
+<p>4.本地git安装</p> 
+<h2>三.jekins实现ios自动打包的两种方式</h2> 
+<p>1.插件安装</p> 
+<p>你需要安装的插件主要有：git、 gitlab、Xcode integration、keychains and Provisioning ,这里就不详细举例了，上述列出的必不可少。 </p> 
+<p>方式二：问题分析下载keychains and Provisioning后，无法上传login.keychains-db文件，重命名为login.keychains后仍然无法上传，方式一就诞生了，即采用命令的方式授权访问login.keychains钥匙串。（方式二具体实现待补充）</p> 
+<p><span style="color:#fe2c24;"> 方式一</span>：在jekins所在服务器上配置ios的打包环境（推荐：方式二可能在新版jekins中存在钥匙串login.keychains无法上传的问题）</p> 
+<p>1.双击你从开发人员那里拿到的证书，然后证书就会被添加到钥匙串里。如果出现证书不受信任，可查看</p> 
+<p><a href="https://blog.csdn.net/hezhi66327/article/details/129814263" title="iOS推送证书显示“此证书不受信任”_苹果手机邮箱证书显示不信任-CSDN博客">iOS推送证书显示“此证书不受信任”_苹果手机邮箱证书显示不信任-CSDN博客</a></p> 
+<p>2.把描述文件添加到正确位置。</p> 
+<blockquote> 
+ <p>2.1 首先需要对描述文件重命名为  描述文件的UUID.mobileprovisiion</p> 
+ <p>对于如何获取UUID可以参考</p> 
+ <p><a href="https://blog.csdn.net/potato512/article/details/78291089" title="Xcode中描述文件的真实目录及查看描述文件的UUID_ios13.6 描述文件安装后存储路径-CSDN博客">Xcode中描述文件的真实目录及查看描述文件的UUID_ios13.6 描述文件安装后存储路径-CSDN博客</a></p> 
+ <p>2.2  将重命名后的文件拷贝到  /Users/用户名称/Library/MobileDevice/Provisioning Profiles</p> 
+</blockquote> 
+<p>3.使用命令检查能否打包成功</p> 
+<p>建议：先使用Xcode打包一遍看看是否能否打包，然后再使用命令打包</p> 
+<p><img alt="" height="117" src="https://images2.imgbox.com/b8/0c/lPf1To1m_o.png" width="306">双击xcodeproj文件就能使用xcode打开项目。可能你的项目根目录下是xcworkspace的类型文件，也没有关系</p> 
+<p>执行下面命令，你需要cd 到项目根目录</p> 
+<pre><code class="hljs">#ios编译前清理工程
+xcodebuild clean -project iFoxESOP.xcodeproj \  #根目录下的xcodeproj文件
+                 -scheme iFoxESOP \    
+                 -configuration Release
+
+#如果你的根目录是 xcworkspace类型文件  也没关系 -project 变为  -workspace
+xcodebuild clean -workspace iFoxESOP.xcworkspace \  #根目录下的xcworkspace文件
+                 -scheme iFoxESOP \    
+                 -configuration Release</code></pre> 
+<p>执行编译和导出ipa文件命令，具体如下图。(下图是根目录是xcodeproj文件的情况的时候的命令，如果是xcworkspace类型文件的话，把-project 变为 -workspace就好)</p> 
+<p><span style="color:#fe2c24;">下面两张图开头已在开头详细说明了 </span></p> 
+<p><img alt="" height="317" src="https://images2.imgbox.com/72/9a/Uw69j8dC_o.png" width="702">或</p> 
+<p><img alt="" height="235" src="https://images2.imgbox.com/5c/ca/4nekYiyj_o.png" width="629"></p> 
+<p>4.如果命令可以打包成功了就可以配置Jenkins了。</p> 
+<blockquote> 
+ <p>1.新建任务以及从gitlab拉取到工作空间</p> 
+ <p>具体可以参考我的另外一篇文章，在这里面有提及到如何实现，以及拉取代码的坑</p> 
+ <p><a href="https://blog.csdn.net/weixin_54401017/article/details/135820419" title="jenkins+gitlab实现Android自动打包填坑之旅-CSDN博客">jenkins+gitlab实现Android自动打包填坑之旅-CSDN博客</a></p> 
+ <p>2.点击配置</p> 
+ <p><img alt="" height="528" src="https://images2.imgbox.com/71/38/bzy4nQNb_o.png" width="741"></p> 
+ <p>3.在build shell-&gt;选择执行shell</p> 
+ <p><img alt="" height="319" src="https://images2.imgbox.com/fe/e2/Ih58QzuU_o.png" width="640"></p> 
+ <p>4.esop.sh</p> 
+ <p><img alt="" height="837" src="https://images2.imgbox.com/dc/18/lyTF0zQT_o.png" width="1047"></p> 
+ <p>5.最后就可以点击立即构建了（自动打包就完成了）</p> 
+ <p><img alt="" height="547" src="https://images2.imgbox.com/7e/e1/MgtxKhOq_o.png" width="667"></p> 
+</blockquote> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/71b4753ce269a05281c408c529692640/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">前端开发实战基础——http、https 基础知识</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/ec735507d50f6e1dc9f1ba58304b9cf5/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【Vue】1-1、webpack的基本使用</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

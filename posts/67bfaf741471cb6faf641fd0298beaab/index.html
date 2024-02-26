@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>FPGA实战--等精度频率测量 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="FPGA实战--等精度频率测量" />
+<meta property="og:description" content="首先放置效果图： 本次试验中采用的是等精度测频率，等精度测频的原理是产生一个1s的高电平，在高电平中对被测方波进行计数，所测得数字即该波形频率。具体等精度测量原理请参考：http://www.elecfans.com/d/591858.html
+注意点：在1s高电平上升沿时，被测信号也需要是上升沿，才能进行准确计数，代码相对简单
+本次实验功能，对信号测频，将测得频率以二进制32位通过uart发送给pc，对于pc发送得数据，将复制返回。下面将主要代码贴上：
+顶层文件：Fre_measure.v
+module Fre_measure( input clk, input rst_n, input clk_measure, input uart_rx, output uart_tx ); wire[31:0] fre_cnt;	Time_1s time_1s( .clk (clk ), .rst_n (rst_n ), .flag_1s (flag_1s ) ); dff1 dff_1( .clk_measure (clk_measure ), .flag_1s (flag_1s ), .clk_match (clk_match ) ); Fre_cnt fre_cnt1( .clk_measure (clk_measure ), .rst_n (rst_n ), .clk_match (clk_match ), .fre_cnt (fre_cnt ) ); uart_test uart_test1( .clk (clk ), .rst_n (rst_n ), .uart_rx (uart_rx ), ." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/67bfaf741471cb6faf641fd0298beaab/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2018-12-11T20:19:09+08:00" />
+<meta property="article:modified_time" content="2018-12-11T20:19:09+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">FPGA实战--等精度频率测量</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2><span style="color:#f33b45;"><strong>      首先放置效果图：</strong></span></h2> 
+<p style="text-align:center;"><img alt="" class="has" height="583" src="https://images2.imgbox.com/0c/4b/Or9cj5GR_o.png" width="800"></p> 
+<p>          <span style="color:#3399ea;"><strong>本次试验中采用的是等精度测频率，等精度测频的原理是产生一个1s的高电平，在高电平中对被测方波进行计数，所测得数字即该波形频率。具体等精度测量原理请参考：<a href="http://www.elecfans.com/d/591858.html" rel="nofollow">http://www.elecfans.com/d/591858.html</a></strong></span></p> 
+<p><span style="color:#3399ea;"><strong>          </strong></span><span style="color:#f33b45;"><strong>注意点：在1s高电平上升沿时，被测信号也需要是上升沿，才能进行准确计数，代码相对简单</strong></span></p> 
+<p><span style="color:#f33b45;"><strong>          本次实验功能，对信号测频，将测得频率以二进制32位通过uart发送给pc，对于pc发送得数据，将复制返回。下面将主要代码贴上：</strong></span></p> 
+<p><span style="color:#f33b45;"><strong>顶层文件：Fre_measure.v</strong></span></p> 
+<pre class="has"><code class="language-cpp">module Fre_measure(
+                    input         clk,
+						  input         rst_n,
+						  input         clk_measure,
+						  input         uart_rx,
+						  
+						  output        uart_tx
+						);
+
+
+wire[31:0]                        fre_cnt;		
+
+						
+
+Time_1s time_1s( 
+                  .clk                (clk             ),
+						.rst_n              (rst_n           ),
+						.flag_1s            (flag_1s         )
+                );
+
+dff1 dff_1(
+                  .clk_measure        (clk_measure     ),
+						.flag_1s            (flag_1s         ),
+						.clk_match          (clk_match       )
+			 );
+			 
+Fre_cnt fre_cnt1(
+                  .clk_measure        (clk_measure     ),
+						.rst_n              (rst_n           ),
+						.clk_match          (clk_match       ),
+						.fre_cnt            (fre_cnt         )
+					  );
+					  
+uart_test uart_test1(
+                  .clk                (clk             ),
+						.rst_n              (rst_n           ),
+						.uart_rx            (uart_rx         ),
+						.fre_cnt            (fre_cnt         ),
+						.uart_tx            (uart_tx         )
+						   );
+
+
+endmodule</code></pre> 
+<p><span style="color:#f33b45;"><strong>匹配模块，将1s延时和被测信号匹配：dff.v</strong></span></p> 
+<pre class="has"><code class="language-cpp">module dff1(
+             input flag_1s,
+				 input clk_measure,
+				 
+				 output reg clk_match
+           );
+			  
+always@(posedge clk_measure)
+begin
+    clk_match &lt;= flag_1s;
+end
+
+endmodule
+</code></pre> 
+<p><span style="color:#f33b45;"><strong>频率计数模块：Fre_cnt.v</strong></span></p> 
+<pre class="has"><code>module Fre_cnt(
+                input                 clk_measure,
+					 input                 rst_n,
+					 input                 clk_match,
+					  
+					 output[31:0]          fre_cnt      
+              );
+				  
+reg   [31:0]   fre_cnt_r1 = 32'b0;
+reg   [31:0]   fre_cnt_r2 = 32'b0;
+
+
+always@(negedge clk_match)
+begin
+	fre_cnt_r2 &lt;= fre_cnt_r1;
+end	
+
+
+always@(posedge clk_measure or negedge rst_n)
+begin
+   if(!rst_n)
+	fre_cnt_r1 &lt;= 32'b0;
+	else if(clk_match)
+	fre_cnt_r1 &lt;= fre_cnt_r1 + 32'b1;
+	else
+	fre_cnt_r1 &lt;= 32'b0;
+end
+
+assign fre_cnt = fre_cnt_r2;
+
+endmodule</code></pre> 
+<p><span style="color:#f33b45;"><strong>0.5Hz方波产生（1s）高电平产生：Time_1s.v</strong></span></p> 
+<pre class="has"><code>module Time_1s(
+                input       clk,
+                input       rst_n,
+					 
+					 output reg  flag_1s=1'd0
+					 );
+
+					 
+reg   [27:0]   timer;
+
+
+
+always@(posedge clk or negedge rst_n)
+begin
+   if(!rst_n)
+   timer &lt;= 28'd0;
+   else if(timer == 28'd49_999_999)
+	begin
+	flag_1s &lt;= ~flag_1s;
+   timer &lt;= 28'd0;
+	end
+   else
+   timer &lt;= timer + 28'd1;
+end
+
+endmodul</code></pre> 
+<p><span style="color:#f33b45;"><strong>uart通信模块：uart_test.v</strong></span></p> 
+<pre class="has"><code>module uart_test(
+	input                        clk,
+	input                        rst_n,
+	input                        uart_rx,
+	input[31:0]                  fre_cnt, 	
+	output                       uart_tx
+);
+
+parameter                        CLK_FRE = 50;
+localparam                       IDLE =  0;
+localparam                       SEND =  1;  
+localparam                       WAIT =  2;   
+reg[7:0]                         tx_data;
+reg[7:0]                         tx_str;
+reg                              tx_data_valid;
+wire                             tx_data_ready;
+reg[7:0]                         tx_cnt;
+wire[7:0]                        rx_data;
+wire                             rx_data_valid;
+wire                             rx_data_ready;
+reg[31:0]                        wait_cnt;
+reg[3:0]                         state;
+
+assign rx_data_ready = 1'b1;
+
+always@(posedge clk or negedge rst_n)
+begin
+	if(rst_n == 1'b0)
+	begin
+		wait_cnt &lt;= 32'd0;
+		tx_data &lt;= 8'd0;
+		state &lt;= IDLE;
+		tx_cnt &lt;= 8'd0;
+		tx_data_valid &lt;= 1'b0;
+	end
+	else
+	case(state)
+		IDLE:
+			state &lt;= SEND;
+		SEND:
+		begin
+			wait_cnt &lt;= 32'd0;
+			tx_data &lt;= tx_str;
+
+			if(tx_data_valid == 1'b1 &amp;&amp; tx_data_ready == 1'b1 &amp;&amp; tx_cnt &lt; 8'd36)
+			begin
+				tx_cnt &lt;= tx_cnt + 8'd1; 
+			end
+			else if(tx_data_valid &amp;&amp; tx_data_ready)
+			begin
+				tx_cnt &lt;= 8'd0;
+				tx_data_valid &lt;= 1'b0;
+				state &lt;= WAIT;
+			end
+			else if(~tx_data_valid)
+			begin
+				tx_data_valid &lt;= 1'b1;
+			end
+		end
+		WAIT:
+		begin
+			wait_cnt &lt;= wait_cnt + 32'd1;
+
+			if(rx_data_valid == 1'b1)
+			begin
+				tx_data_valid &lt;= 1'b1;
+				tx_data &lt;= rx_data;  
+			end
+			else if(tx_data_valid &amp;&amp; tx_data_ready)
+			begin
+				tx_data_valid &lt;= 1'b0;
+			end
+			else if(wait_cnt &gt;= CLK_FRE * 1000000) 
+				state &lt;= SEND;
+		end
+		default:
+			state &lt;= IDLE;
+	endcase
+end
+
+//combinational logic
+//Send "HELLO ALINX\r\n"
+always@(*)
+begin
+	case(tx_cnt)
+
+		8'd0:  tx_str &lt;= fre_cnt[31]+8'd48;
+		8'd1:  tx_str &lt;= fre_cnt[30]+8'd48;
+		8'd2:  tx_str &lt;= fre_cnt[29]+8'd48;
+		8'd3:  tx_str &lt;= fre_cnt[28]+8'd48;
+		8'd4:  tx_str &lt;= fre_cnt[27]+8'd48;
+		8'd5:  tx_str &lt;= fre_cnt[26]+8'd48;
+		8'd6:  tx_str &lt;= fre_cnt[25]+8'd48;
+		8'd7:  tx_str &lt;= fre_cnt[24]+8'd48;
+		8'd8:  tx_str &lt;= fre_cnt[23]+8'd48;
+		8'd9:  tx_str &lt;= fre_cnt[22]+8'd48;
+		8'd10:  tx_str &lt;= fre_cnt[21]+8'd48;
+		8'd11:  tx_str &lt;= fre_cnt[20]+8'd48;
+		8'd12:  tx_str &lt;= fre_cnt[19]+8'd48;
+		8'd13:  tx_str &lt;= fre_cnt[18]+8'd48;
+		8'd14:  tx_str &lt;= fre_cnt[17]+8'd48;
+		8'd15:  tx_str &lt;= fre_cnt[16]+8'd48;
+		8'd16:  tx_str &lt;= fre_cnt[15]+8'd48;
+		8'd17:  tx_str &lt;= fre_cnt[14]+8'd48;
+		8'd18:  tx_str &lt;= fre_cnt[13]+8'd48;
+		8'd19:  tx_str &lt;= fre_cnt[12]+8'd48;
+		8'd20:  tx_str &lt;= fre_cnt[11]+8'd48;
+		8'd21:  tx_str &lt;= fre_cnt[10]+8'd48;
+		8'd22:  tx_str &lt;= fre_cnt[9]+8'd48;
+		8'd23:  tx_str &lt;= fre_cnt[8]+8'd48;
+		8'd24:  tx_str &lt;= fre_cnt[7]+8'd48;
+		8'd25:  tx_str &lt;= fre_cnt[6]+8'd48;
+		8'd26:  tx_str &lt;= fre_cnt[5]+8'd48;
+		8'd27:  tx_str &lt;= fre_cnt[4]+8'd48;
+		8'd28:  tx_str &lt;= fre_cnt[3]+8'd48;
+		8'd29:  tx_str &lt;= fre_cnt[2]+8'd48;
+		8'd30:  tx_str &lt;= fre_cnt[1]+8'd48;
+		8'd31:  tx_str &lt;= fre_cnt[0]+8'd48;
+		8'd32:  tx_str &lt;= " ";
+		8'd33:  tx_str &lt;= " ";
+		8'd34:  tx_str &lt;= " ";
+		8'd35:  tx_str &lt;= "\r";
+		8'd36:  tx_str &lt;= "\n";
+		default:tx_str &lt;= 8'd0;
+	endcase
+end
+
+
+
+uart_rx#
+(
+	.CLK_FRE(CLK_FRE),
+	.BAUD_RATE(115200)
+) uart_rx_inst
+(
+	.clk                        (clk                      ),
+	.rst_n                      (rst_n                    ),
+	.rx_data                    (rx_data                  ),
+	.rx_data_valid              (rx_data_valid            ),
+	.rx_data_ready              (rx_data_ready            ),
+	.rx_pin                     (uart_rx                  )
+);
+
+uart_tx#
+(
+	.CLK_FRE(CLK_FRE),
+	.BAUD_RATE(115200)
+) uart_tx_inst
+(
+	.clk                        (clk                      ),
+	.rst_n                      (rst_n                    ),
+	.tx_data                    (tx_data                  ),
+	.tx_data_valid              (tx_data_valid            ),
+	.tx_data_ready              (tx_data_ready            ),
+	.tx_pin                     (uart_tx                  )
+);
+endmodule</code></pre> 
+<p><span style="color:#f33b45;"><strong> 串口通信设置：波特率115200，8位数据位，1位停止位，无校验，下面是串口通信截图，系统时钟为50M，下图为测量数据，输出信号数据为49999950，误差50hz，误差精度为0.000001，理论测量最大应该可达到200M左右，但由于实验条件有限无法测试。10M以下几乎没误差，而且板子时钟频率越高则越精准。</strong></span></p> 
+<p style="text-align:center;"><img alt="" class="has" height="578" src="https://images2.imgbox.com/4c/92/7UqzpnT4_o.png" width="800"></p> 
+<h2> <span style="color:#f33b45;"><strong>     以上就是本次实战的主要内容，上述有误还请指出，如果需要原工程可留言，大家一起进步，一起实践~</strong></span></h2> 
+<p> </p> 
+<p><span style="color:#f33b45;"><strong>要工程的同学比较多，在这把下载链接贴上</strong></span></p> 
+<p><a href="https://download.csdn.net/download/VCA821/12899478">https://download.csdn.net/download/VCA821/12899478</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7211c9882c10cbf55f9e5dedb1e0d566/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">node-rsa 解密</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/704ddc02d699066b8183d2f1f6b920de/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">OpenCv-C&#43;&#43;-ORB特征检测与匹配</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

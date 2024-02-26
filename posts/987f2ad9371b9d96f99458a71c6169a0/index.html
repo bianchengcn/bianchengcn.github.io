@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Spring创建Bean源码 - 解析配置类： 延迟导入选择器DeferredImportSelector - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Spring创建Bean源码 - 解析配置类： 延迟导入选择器DeferredImportSelector" />
+<meta property="og:description" content="简介 DeferredImportSelector延迟导入选择器是Spring提供的一个扩展导入器，该导入器是ImportSelector的一个变体，该导入器是在处理配置类上@Import注解的时候注册的，当所有{@code @Configuration}配置类解析完成后才会运行所有被注册的DeferredImportSelector。
+该导入器的主要作用是，委托Group接口导入一组配置类。Springboot 的AutoConfigurationImportSelector实现了该接口，用于自动装配类的获取。请查看《Springboot源码-自动装配(一)：AutoConfigurationImportSelector》
+DeferredImportSelector接口 DeferredImportSelector继承自ImportSelector，扩展了getImportGroup方法，getImportGroup方法返回同一个Group类的DeferredImportSelector会被分到同一个组中。当所选导入是{@code @Conditional}时，这种类型的选择器可能特别有用，可能就是不同的Condition对应不同的DeferredImportSelector实现。
+/** * {@link ImportSelector} 的变体，在解析完所有 {@code @Configuration} bean后运行。 * 当所选导入是{@code @Conditional}时，这种类型的选择器可能特别有用。 * * &lt;p&gt;实现还可以扩展 {@link org.springframework.core.Ordered} 接口 * 或使用 {@link org.springframework.core.annotation.Order} 注解来指示相对于其他 {@link DeferredImportSelector DeferredImportSelectors} 的优先级。 * * &lt;p&gt;Springboot {@link org.springframework.boot.autoconfigure.AutoConfigurationImportSelector}实现了该接口，用于自动装配类的获取 */ public interface DeferredImportSelector extends ImportSelector { /** * 对不同导入选择器的导入结果进行分组的接口。 * * @return DeferredImportSelector所属的Group对象。 * @since 5.0 */ @Nullable default Class&lt;? extends Group&gt; getImportGroup() { return null; } } Group接口 group接口主要用于对DeferredImportSelector进行分组，遍历Group对应的DeferredImportSelector对象集合，依次执行Group的process方法处理对应的逻辑。然后利用selectImports方法将process处理后的结果已Entry的形式返回回来。Springboot自动装配类AutoConfigurationImportSelector实现了该process接口，主要用于读取Springboot的自动装配类。以下是Springboot实现该接口的具体类和方法。请看《Springboot源码-自动装配(一)：AutoConfigurationImportSelector》" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/987f2ad9371b9d96f99458a71c6169a0/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-02T11:38:02+08:00" />
+<meta property="article:modified_time" content="2023-08-02T11:38:02+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Spring创建Bean源码 - 解析配置类： 延迟导入选择器DeferredImportSelector</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_1"></a>简介</h3> 
+<p><code>DeferredImportSelector</code>延迟导入选择器是Spring提供的一个扩展导入器，该导入器是<code>ImportSelector</code>的一个变体，该导入器是在处理配置类上<code>@Import</code>注解的时候注册的，当所有<code>{@code @Configuration}</code>配置类解析完成后才会运行所有被注册的<code>DeferredImportSelector</code>。<br> 该导入器的主要作用是，委托<code>Group</code>接口导入一组配置类。Springboot 的<code>AutoConfigurationImportSelector</code>实现了该接口，用于自动装配类的获取。请查看<a href="https://www.yuque.com/666ya/svr8y8/mbd1f2md1aahpg2x" rel="nofollow">《Springboot源码-自动装配(一)：AutoConfigurationImportSelector》</a></p> 
+<h3><a id="DeferredImportSelector_4"></a>DeferredImportSelector接口</h3> 
+<p>DeferredImportSelector继承自ImportSelector，扩展了getImportGroup方法，getImportGroup方法返回同一个Group类的DeferredImportSelector会被分到同一个组中。当所选导入是{@code @Conditional}时，这种类型的选择器可能特别有用，可能就是不同的Condition对应不同的DeferredImportSelector实现。</p> 
+<pre><code class="prism language-java"><span class="token comment">/**
+ * {@link ImportSelector} 的变体，在解析完所有 {@code @Configuration} bean后运行。
+ * 当所选导入是{@code @Conditional}时，这种类型的选择器可能特别有用。
+ *
+ * &lt;p&gt;实现还可以扩展 {@link org.springframework.core.Ordered} 接口
+ * 或使用 {@link org.springframework.core.annotation.Order} 注解来指示相对于其他 {@link DeferredImportSelector DeferredImportSelectors} 的优先级。
+ * 
+ * &lt;p&gt;Springboot {@link org.springframework.boot.autoconfigure.AutoConfigurationImportSelector}实现了该接口，用于自动装配类的获取
+ */</span>
+<span class="token keyword">public</span> <span class="token keyword">interface</span> <span class="token class-name">DeferredImportSelector</span> <span class="token keyword">extends</span> <span class="token class-name">ImportSelector</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token comment">/**
+     * 对不同导入选择器的导入结果进行分组的接口。
+     *
+     * @return DeferredImportSelector所属的Group对象。
+     * @since 5.0
+     */</span>
+    <span class="token annotation punctuation">@Nullable</span>
+    <span class="token keyword">default</span> <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span> <span class="token keyword">extends</span> <span class="token class-name">Group</span><span class="token punctuation">&gt;</span></span> <span class="token function">getImportGroup</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="Group_30"></a>Group接口</h3> 
+<p>group接口主要用于对DeferredImportSelector进行分组，遍历Group对应的DeferredImportSelector对象集合，依次执行Group的process方法处理对应的逻辑。然后利用selectImports方法将process处理后的结果已Entry的形式返回回来。<strong>Springboot自动装配类AutoConfigurationImportSelector实现了该process接口，主要用于读取Springboot的自动装配类。以下是Springboot实现该接口的具体类和方法。请看</strong><a href="https://www.yuque.com/666ya/svr8y8/mbd1f2md1aahpg2x" rel="nofollow"><strong>《Springboot源码-自动装配(一)：AutoConfigurationImportSelector》</strong></a></p> 
+<pre><code class="prism language-java"><span class="token comment">/**
+ * 对不同导入选择器的导入结果进行分组的接口。
+ *
+ * 也就是说一个Group可以对应多个DeferredImportSelector，DeferredImportSelector的getImportGroup方法返回同一个Group类，则会将这些DeferredImportSelector对象分到同一个组中。
+ *
+ * &lt;p&gt; Springboot@{@link org.springframework.boot.autoconfigure.AutoConfigurationImportSelector.AutoConfigurationGroup}实现了该接口
+ * 用于获取所有的自动装配类
+ *
+ *
+ * @since 5.0
+ */</span>
+<span class="token keyword">interface</span> <span class="token class-name">Group</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token comment">/**
+     * 根据标注了@Import注解的配置类的注解元数据来执行DeferredImportSelector进行配置类的导入
+     *  
+     * &lt;p&gt;
+     * 1.Springboot自动装配类AutoConfigurationImportSelector实现了该process接口，主要用于读取Springboot的自动装配类。以下是Springboot实现该接口的具体类和方法
+     *
+     * @see org.springframework.boot.autoconfigure.AutoConfigurationImportSelector.AutoConfigurationGroup#process
+     * @param metadata 标注了@Import注解的配置类的注解元数据
+     */</span>
+    <span class="token keyword">void</span> <span class="token function">process</span><span class="token punctuation">(</span><span class="token class-name">AnnotationMetadata</span> metadata<span class="token punctuation">,</span> <span class="token class-name">DeferredImportSelector</span> selector<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">/**
+     * 返回包含导入配置类的全限定名和该配置类的注解元数据的{@link Entry}集合
+     */</span>
+    <span class="token class-name">Iterable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Entry</span><span class="token punctuation">&gt;</span></span> <span class="token function">selectImports</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+    <span class="token comment">/**
+     * 包含导入配置类的全限定名和该配置类的注解元数据的{@link Entry}
+     */</span>
+    <span class="token keyword">class</span> <span class="token class-name">Entry</span> <span class="token punctuation">{<!-- --></span>
+
+        <span class="token comment">//配置类的注解元数据</span>
+        <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">AnnotationMetadata</span> metadata<span class="token punctuation">;</span>
+
+        <span class="token comment">// 配置类的全限定名</span>
+        <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">String</span> importClassName<span class="token punctuation">;</span>
+
+        <span class="token keyword">public</span> <span class="token class-name">Entry</span><span class="token punctuation">(</span><span class="token class-name">AnnotationMetadata</span> metadata<span class="token punctuation">,</span> <span class="token class-name">String</span> importClassName<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>metadata <span class="token operator">=</span> metadata<span class="token punctuation">;</span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>importClassName <span class="token operator">=</span> importClassName<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token comment">/**
+         * Return the {@link AnnotationMetadata} of the importing
+         * {@link Configuration} class.
+         */</span>
+        <span class="token keyword">public</span> <span class="token class-name">AnnotationMetadata</span> <span class="token function">getMetadata</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>metadata<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token comment">/**
+         * Return the fully qualified name of the class to import.
+         */</span>
+        <span class="token keyword">public</span> <span class="token class-name">String</span> <span class="token function">getImportClassName</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>importClassName<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token annotation punctuation">@Override</span>
+        <span class="token keyword">public</span> <span class="token keyword">boolean</span> <span class="token function">equals</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Nullable</span> <span class="token class-name">Object</span> other<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token keyword">this</span> <span class="token operator">==</span> other<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>other <span class="token operator">==</span> <span class="token keyword">null</span> <span class="token operator">||</span> <span class="token function">getClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">!=</span> other<span class="token punctuation">.</span><span class="token function">getClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token class-name">Entry</span> entry <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">Entry</span><span class="token punctuation">)</span> other<span class="token punctuation">;</span>
+            <span class="token keyword">return</span> <span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>metadata<span class="token punctuation">.</span><span class="token function">equals</span><span class="token punctuation">(</span>entry<span class="token punctuation">.</span>metadata<span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> <span class="token keyword">this</span><span class="token punctuation">.</span>importClassName<span class="token punctuation">.</span><span class="token function">equals</span><span class="token punctuation">(</span>entry<span class="token punctuation">.</span>importClassName<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token annotation punctuation">@Override</span>
+        <span class="token keyword">public</span> <span class="token keyword">int</span> <span class="token function">hashCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>metadata<span class="token punctuation">.</span><span class="token function">hashCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span> <span class="token number">31</span> <span class="token operator">+</span> <span class="token keyword">this</span><span class="token punctuation">.</span>importClassName<span class="token punctuation">.</span><span class="token function">hashCode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token annotation punctuation">@Override</span>
+        <span class="token keyword">public</span> <span class="token class-name">String</span> <span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>importClassName<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="DeferredImportSelectorHandler_118"></a>DeferredImportSelectorHandler处理器</h3> 
+<ol><li>DeferredImportSelectorHandler利用handle方法收集所有的DeferredImportSelector封装成DeferredImportSelectorHolder放入到list集合中。</li><li>DeferredImportSelectorHandler利用process方法获取所有的导入类。</li></ol> 
+<blockquote> 
+ <p>代码详细逻辑如下：</p> 
+ <ol><li>利用handle收集所有的DeferredImportSelector封装成DeferredImportSelectorHolder放入到list集合中。</li><li>执行类的导入 
+   <ol><li>创建DeferredImportSelectorGroupingHandler对象</li><li>遍历所有的DeferredImportSelector对象，依次调用DeferredImportSelectorGroupingHandler的register方法向DeferredImportSelectorGroupingHandler中保存Group与该Group下所有DeferredImportSelector映射关系</li><li>执行DeferredImportSelectorGroupingHandler的processGroupImports方法进行类的导入</li></ol> </li></ol> 
+</blockquote> 
+<pre><code class="prism language-java"><span class="token keyword">private</span> <span class="token keyword">class</span> <span class="token class-name">DeferredImportSelectorHandler</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Nullable</span>
+    <span class="token keyword">private</span> <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">DeferredImportSelectorHolder</span><span class="token punctuation">&gt;</span></span> deferredImportSelectors <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">/**
+     * {@link DeferredImportSelector}的注册阶段
+     * 处理指定的{@link DeferredImportSelector}.
+     * 如果deferredImportSelector等于null，则说明{@link DeferredImportSelector}正在被收集，注册器将会将{@link DeferredImportSelector}注册到当前对象的list中
+     * 如果deferredImportSelector不等于null，如果{@link DeferredImportSelector}正在被处理，则{@link DeferredImportSelector}也会根据其{@link DeferredImportSelector.Group}立即进行处理。
+     *
+     * @param configClass    Import注解标注的配置类
+     * @param importSelector the selector to handle
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">handle</span><span class="token punctuation">(</span><span class="token class-name">ConfigurationClass</span> configClass<span class="token punctuation">,</span> <span class="token class-name">DeferredImportSelector</span> importSelector<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">DeferredImportSelectorHolder</span> holder <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">DeferredImportSelectorHolder</span><span class="token punctuation">(</span>configClass<span class="token punctuation">,</span> importSelector<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>deferredImportSelectors <span class="token operator">==</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">DeferredImportSelectorGroupingHandler</span> handler <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">DeferredImportSelectorGroupingHandler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            handler<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span>holder<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            handler<span class="token punctuation">.</span><span class="token function">processGroupImports</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>deferredImportSelectors<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>holder<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * {@link DeferredImportSelector}的执行阶段阶段
+     * 1.执行DeferredImportSelector的getImportSelector获取导入组Group
+     * 2.实例化获取到的导入组Group
+     * 3.执行导入组Group的getImports方法获取所有的导入的配置类
+     * 4.调用{@link ConfigurationClassParser#processImports(ConfigurationClass, SourceClass, Collection, Predicate, boolean)}方法处理配置类
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">process</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">DeferredImportSelectorHolder</span><span class="token punctuation">&gt;</span></span> deferredImports <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span>deferredImportSelectors<span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>deferredImportSelectors <span class="token operator">=</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>deferredImports <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token class-name">DeferredImportSelectorGroupingHandler</span> handler <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">DeferredImportSelectorGroupingHandler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                deferredImports<span class="token punctuation">.</span><span class="token function">sort</span><span class="token punctuation">(</span><span class="token constant">DEFERRED_IMPORT_COMPARATOR</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                deferredImports<span class="token punctuation">.</span><span class="token function">forEach</span><span class="token punctuation">(</span>handler<span class="token operator">::</span><span class="token function">register</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                handler<span class="token punctuation">.</span><span class="token function">processGroupImports</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span> <span class="token keyword">finally</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>deferredImportSelectors <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<h3><a id="DeferredImportSelectorGroupingHandler_179"></a>DeferredImportSelectorGroupingHandler处理器</h3> 
+<p><code>DeferredImportSelectorGroupingHandler</code>处理器主要用于接受<code>Group</code>和<code>DeferredImportSelector</code>的注册，然后将每一个Group与其对应的所有<code>DeferredImportSelector</code>的对应关系保存起来，然后调用<code>processGroupImports</code>方法遍历每一个<code>Group</code>，执行组内的所有<code>DeferredImportSelector</code>，来获取所有的导入类。获取到的导入类会再次通过<code>ConfigurationClassParser#processImports</code>方法进行处理。</p> 
+<pre><code class="prism language-java"><span class="token keyword">private</span> <span class="token keyword">class</span> <span class="token class-name">DeferredImportSelectorGroupingHandler</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Object</span><span class="token punctuation">,</span> <span class="token class-name">DeferredImportSelectorGrouping</span><span class="token punctuation">&gt;</span></span> groupings <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashMap</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">AnnotationMetadata</span><span class="token punctuation">,</span> <span class="token class-name">ConfigurationClass</span><span class="token punctuation">&gt;</span></span> configurationClasses <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">HashMap</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">/**
+     * 注册Group对象
+     *
+     * @param deferredImport DeferredImportSelector对象的包装器对象
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">register</span><span class="token punctuation">(</span><span class="token class-name">DeferredImportSelectorHolder</span> deferredImport<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">//获取DeferredImportSelector对应的导入Group对象，Springboot的自动配置类的导入就是基于该接口进行注册的</span>
+        <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span> <span class="token keyword">extends</span> <span class="token class-name">Group</span><span class="token punctuation">&gt;</span></span> group <span class="token operator">=</span> deferredImport<span class="token punctuation">.</span><span class="token function">getImportSelector</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getImportGroup</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">//将Group对象放入当前对象的Map中，后续交由下边的processGroupImports方法进行配置类的处理</span>
+        <span class="token class-name">DeferredImportSelectorGrouping</span> grouping <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span>groupings<span class="token punctuation">.</span><span class="token function">computeIfAbsent</span><span class="token punctuation">(</span>
+                <span class="token punctuation">(</span>group <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">?</span> group <span class="token operator">:</span> deferredImport<span class="token punctuation">)</span><span class="token punctuation">,</span>
+                key <span class="token operator">-&gt;</span> <span class="token keyword">new</span> <span class="token class-name">DeferredImportSelectorGrouping</span><span class="token punctuation">(</span><span class="token function">createGroup</span><span class="token punctuation">(</span>group<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        grouping<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>deferredImport<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>configurationClasses<span class="token punctuation">.</span><span class="token function">put</span><span class="token punctuation">(</span>deferredImport<span class="token punctuation">.</span><span class="token function">getConfigurationClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getMetadata</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+                deferredImport<span class="token punctuation">.</span><span class="token function">getConfigurationClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 调用processImports方法处理Group对象返回的所有导入配置类
+     */</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">processGroupImports</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">DeferredImportSelectorGrouping</span> grouping <span class="token operator">:</span> <span class="token keyword">this</span><span class="token punctuation">.</span>groupings<span class="token punctuation">.</span><span class="token function">values</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">Predicate</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> exclusionFilter <span class="token operator">=</span> grouping<span class="token punctuation">.</span><span class="token function">getCandidateFilter</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token comment">//获取所有的自动配置类,方式有：</span>
+            <span class="token comment">//1.又Springboot实现，功能为加载所有的自动配置类</span>
+            grouping<span class="token punctuation">.</span><span class="token function">getImports</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">forEach</span><span class="token punctuation">(</span>entry <span class="token operator">-&gt;</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token class-name">ConfigurationClass</span> configurationClass <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span>configurationClasses<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>entry<span class="token punctuation">.</span><span class="token function">getMetadata</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token comment">//处理所有的导入配置类</span>
+                    <span class="token function">processImports</span><span class="token punctuation">(</span>configurationClass<span class="token punctuation">,</span> <span class="token function">asSourceClass</span><span class="token punctuation">(</span>configurationClass<span class="token punctuation">,</span> exclusionFilter<span class="token punctuation">)</span><span class="token punctuation">,</span>
+                            <span class="token class-name">Collections</span><span class="token punctuation">.</span><span class="token function">singleton</span><span class="token punctuation">(</span><span class="token function">asSourceClass</span><span class="token punctuation">(</span>entry<span class="token punctuation">.</span><span class="token function">getImportClassName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> exclusionFilter<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+                            exclusionFilter<span class="token punctuation">,</span> <span class="token boolean">false</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">BeanDefinitionStoreException</span> ex<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token keyword">throw</span> ex<span class="token punctuation">;</span>
+                <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Throwable</span> ex<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">BeanDefinitionStoreException</span><span class="token punctuation">(</span>
+                            <span class="token string">"Failed to process import candidates for configuration class ["</span> <span class="token operator">+</span>
+                                    configurationClass<span class="token punctuation">.</span><span class="token function">getMetadata</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getClassName</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">"]"</span><span class="token punctuation">,</span> ex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * 实例化Group对象
+     *
+     * @param type Group的类
+     * @return 实例化Group对象
+     */</span>
+    <span class="token keyword">private</span> <span class="token class-name">Group</span> <span class="token function">createGroup</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Nullable</span> <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span> <span class="token keyword">extends</span> <span class="token class-name">Group</span><span class="token punctuation">&gt;</span></span> type<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span> <span class="token keyword">extends</span> <span class="token class-name">Group</span><span class="token punctuation">&gt;</span></span> effectiveType <span class="token operator">=</span> <span class="token punctuation">(</span>type <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">?</span> type <span class="token operator">:</span> <span class="token class-name">DefaultDeferredImportSelectorGroup</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> <span class="token class-name">ParserStrategyUtils</span><span class="token punctuation">.</span><span class="token function">instantiateClass</span><span class="token punctuation">(</span>effectiveType<span class="token punctuation">,</span> <span class="token class-name">Group</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span>
+                <span class="token class-name">ConfigurationClassParser</span><span class="token punctuation">.</span><span class="token keyword">this</span><span class="token punctuation">.</span>environment<span class="token punctuation">,</span>
+                <span class="token class-name">ConfigurationClassParser</span><span class="token punctuation">.</span><span class="token keyword">this</span><span class="token punctuation">.</span>resourceLoader<span class="token punctuation">,</span>
+                <span class="token class-name">ConfigurationClassParser</span><span class="token punctuation">.</span><span class="token keyword">this</span><span class="token punctuation">.</span>registry<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<h3><a id="DeferredImportSelector_247"></a>DeferredImportSelector持有器</h3> 
+<pre><code class="prism language-java"><span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">class</span> <span class="token class-name">DeferredImportSelectorHolder</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">ConfigurationClass</span> configurationClass<span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">DeferredImportSelector</span> importSelector<span class="token punctuation">;</span>
+
+    <span class="token keyword">public</span> <span class="token class-name">DeferredImportSelectorHolder</span><span class="token punctuation">(</span><span class="token class-name">ConfigurationClass</span> configClass<span class="token punctuation">,</span> <span class="token class-name">DeferredImportSelector</span> selector<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>configurationClass <span class="token operator">=</span> configClass<span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>importSelector <span class="token operator">=</span> selector<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token class-name">ConfigurationClass</span> <span class="token function">getConfigurationClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>configurationClass<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token class-name">DeferredImportSelector</span> <span class="token function">getImportSelector</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>importSelector<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<h3><a id="DeferredImportSelectorGrouping_270"></a>DeferredImportSelectorGrouping</h3> 
+<p>遍历Group集合，然后执行每一个Group中的每一个DeferredImportSelector获取导入类。</p> 
+<pre><code class="prism language-java"><span class="token keyword">private</span> <span class="token keyword">static</span> <span class="token keyword">class</span> <span class="token class-name">DeferredImportSelectorGrouping</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">DeferredImportSelector<span class="token punctuation">.</span>Group</span> group<span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">DeferredImportSelectorHolder</span><span class="token punctuation">&gt;</span></span> deferredImports <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token class-name">DeferredImportSelectorGrouping</span><span class="token punctuation">(</span><span class="token class-name">Group</span> group<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>group <span class="token operator">=</span> group<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">add</span><span class="token punctuation">(</span><span class="token class-name">DeferredImportSelectorHolder</span> deferredImport<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span>deferredImports<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>deferredImport<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * &lt;pre&gt;
+     * 1.实现1
+     * @see org.springframework.boot.autoconfigure.AutoConfigurationImportSelector.AutoConfigurationGroup#process
+     * 2.实现2
+     * @see org.springframework.boot.autoconfigure.AutoConfigurationImportSelector.AutoConfigurationGroup#selectImports
+     *
+     * &lt;/pre&gt;
+     * &lt;p&gt;
+     * &lt;p&gt;
+     * Return the imports defined by the group.
+     *
+     * @return each import with its associated configuration class
+     */</span>
+    <span class="token keyword">public</span> <span class="token class-name">Iterable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Group<span class="token punctuation">.</span>Entry</span><span class="token punctuation">&gt;</span></span> <span class="token function">getImports</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">DeferredImportSelectorHolder</span> deferredImport <span class="token operator">:</span> <span class="token keyword">this</span><span class="token punctuation">.</span>deferredImports<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token comment">/*
+             * 功能实现1：加载Springboot自动配置类
+             */</span>
+            <span class="token keyword">this</span><span class="token punctuation">.</span>group<span class="token punctuation">.</span><span class="token function">process</span><span class="token punctuation">(</span>deferredImport<span class="token punctuation">.</span><span class="token function">getConfigurationClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getMetadata</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+                    deferredImport<span class="token punctuation">.</span><span class="token function">getImportSelector</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">/*
+         * 功能实现1：对加载进来的Springboot自动配置类进行处理，包含过滤掉排除的自动配置类、对配置类进行排序
+         */</span>
+        <span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>group<span class="token punctuation">.</span><span class="token function">selectImports</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">public</span> <span class="token class-name">Predicate</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> <span class="token function">getCandidateFilter</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Predicate</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> mergedFilter <span class="token operator">=</span> <span class="token constant">DEFAULT_EXCLUSION_FILTER</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">DeferredImportSelectorHolder</span> deferredImport <span class="token operator">:</span> <span class="token keyword">this</span><span class="token punctuation">.</span>deferredImports<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">Predicate</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> selectorFilter <span class="token operator">=</span> deferredImport<span class="token punctuation">.</span><span class="token function">getImportSelector</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getExclusionFilter</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>selectorFilter <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                mergedFilter <span class="token operator">=</span> mergedFilter<span class="token punctuation">.</span><span class="token function">or</span><span class="token punctuation">(</span>selectorFilter<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span> mergedFilter<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/26dec25346c25edf5aed0199329fe10b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【数据库】DBeaver操作所有数据库管理工具使用详解</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/fd7d99c32070349acbb3dde8bdf4f772/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【深度学习】ubuntu18.04环境配置详细教程</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>操作系统（10）----死锁 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="操作系统（10）----死锁" />
+<meta property="og:description" content="目录
+一.死锁、饥饿、死循环的区别
+二.死锁产生的必要条件
+三.什么时候会发生死锁
+四.死锁的处理策略
+1.预防死锁
+（1）破坏互斥条件
+（2）破坏不剥夺条件
+（3）破坏请求和保持条件
+（4）破坏循环等待条件
+2.避免死锁
+（1）安全序列
+（2）银行家算法
+3.死锁的检测和解除
+（1）死锁的检测
+（2）死锁的解除
+一.死锁、饥饿、死循环的区别 死锁:各进程互相等待对方手里的资源，导致各进程都阻塞，无法向前推进的现象。
+饥饿:由于长期得不到想要的资源，某进程无法向前推进的现象。比如:在短进程优先(SPF)算法中，若有源源不断的短进程到来，则长进程将一直得不到处理机，从而发生长进程“饥饿”。
+死循环:某进程执行过程中一直跳不出某个循环的现象。有时是因为程序逻辑 bug 导致的，有时是程序员故意设计的。
+二.死锁产生的必要条件 产生死锁必须同时满足一下四个条件，只要其中任一条件不成立，死锁就不会发生。
+1.互斥条件:只有对必须互斥使用的资源的争抢才会导致死锁(如哲学家的筷子、打印机设备)像内存、扬声器这样可以同时让多个进程使用的资源是不会导致死锁的(因为进程不用阻塞等待这种资源)。
+2.不剥夺条件:进程所获得的资源在未使用完之前，不能由其他进程强行夺走，只能主动释放。
+3.请求和保持条件:进程已经保持了至少一个资源，但又提出了新的资源请求，而该资源又被其他进程占有，此时请求进程被阻塞，但又对自己已有的资源保持不放。
+4.循环等待条件:存在一种进程资源的循环等待链，链中的每一个进程已获得的资源同时被下一个进程所请求。
+注意：发生死锁时一定有循环等待，但是发生循环等待时未必死锁(循环等待是死锁的必要不充分条件)
+例如，哲学家问题中，若多出一个人，当这一人将筷子这一临界资源给3号哲学家时，就不会发生死锁。
+所以，如果同类资源数大于1，则即使有循环等待，也未必发生死锁。但如果系统中每类资源都只有一个，那循环等待就是死锁的充分必要条件了。
+三.什么时候会发生死锁 1.对系统资源的竞争。各进程对不可剥夺的资源(如打印机)的竞争可能引起死锁，对可剥夺的资源(CPU)的竞争是不会引起死锁的。
+2.进程推进顺序非法。请求和释放资源的顺序不当，也同样会导致死锁。例如，并发执行的进程P1、P2分别申请并占有了资源 R1、R2之后进程P1又紧接着申请资源R2，而进程P2又申请资源R1,两者会因为申请的资源被对方占有而阻塞，从而发生死锁。
+3.信号量的使用不当也会造成死锁。如生产者-消费者问题中，如果实现互斥的P操作在实现同步的P操作之前，就有可能导致死锁。(可以把互斥信号量、同步信号量也看做是一种抽象的系统资源)
+总之，对不可剥夺资源的不合理分配，可能导致死锁。
+对于生产者消费者问题不了解的可以先看一下我的这一篇：http://t.csdnimg.cn/cjZjT
+对生产者消费者问题的阐述如下：
+生产者、消费者问题
+系统中有一组生产者进程和一组消费者进程，生产者进程每次生产一个产品放入缓冲区，消费者进程每次从缓冲区中取出一个产品并使用。(注:这里的“产品”理解为某种数据)
+生产者、消费者共享一个初始为空、大小为n的缓冲区。
+对于生产者：
+缓冲区没满时，生产者才能继续生产，若缓冲区满时，生产者必须阻塞等待。
+消费者从缓冲区取走数据后，若此时有生产者处于阻塞状态，那么消费者进程应该唤醒生产者进程(阻塞态---&gt;就绪态)
+注：生产者进程只是回到了就绪态，这并不意味着生产者进程需要立即往缓冲区写数据
+对于消费者：
+缓冲区空时，消费者必须等待，缓冲区没空时，消费者才能取走数据（消费）
+当生产者写入数据，缓冲区不为空，就会唤醒消费者进程（阻塞态---&gt;就绪态）
+缓冲区：
+缓冲区是临界资源，各进程必须互斥地访问。
+假如两个进程并发地往缓冲区写入数据，两个进程挑选了同一块区域写入数据，那么后面进程写入的数据就会覆盖前面进程写入的数据。所以各进程必须互斥访问才不会导致数据覆盖等问题。
+PV操作题目分析步骤：
+例：系统中有一组生产者进程和一组消费者进程，生产者进程每次生产一个产品放入缓冲区，消费者进程每次从缓冲区中取出一个产品并使用。(注:这里的“产品”理解为某种数据)
+生产者、消费者共享一个初始为空、大小为n的缓冲区。
+1.找出题目中描述的各个进程，分析它们之间的同步、互斥关系。
+同步：当缓冲区没满时，生产者才能生产，否则堵塞等待，当缓冲区没空时，消费者才能消费，否则堵塞等待。
+互斥：对于临界资源，各进程必须互斥访问。
+2.根据各进程的操作流程确定P、V操作的大致顺序
+当缓冲区没空（即有产品）之后，可以执行V操作，在在消费者消费之前需要执行P操作。下面的案例同理。（前V后P）
+3.设置信号量，并根据题目条件确定信号量初值。(互斥信号量初值一般为1，同步信号量的初始值要看对应资源的初始值是多少)
+semaphore mutex=1; //互斥信号量，实现对缓冲区的互斥访问
+semaphore empty=n； //同步信号量，表示空闲缓冲区的数量
+semaphore full=0; //同步信号量，表示产品的数量，也即非空缓冲区的数量" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/cc2c9b750b98f6806e6c70f7acf66d2b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-02-01T13:50:47+08:00" />
+<meta property="article:modified_time" content="2024-02-01T13:50:47+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">操作系统（10）----死锁</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="%E4%B8%80.%E6%AD%BB%E9%94%81%E3%80%81%E9%A5%A5%E9%A5%BF%E3%80%81%E6%AD%BB%E5%BE%AA%E7%8E%AF%E7%9A%84%E5%8C%BA%E5%88%AB-toc" style="margin-left:80px;"><a href="#%E4%B8%80.%E6%AD%BB%E9%94%81%E3%80%81%E9%A5%A5%E9%A5%BF%E3%80%81%E6%AD%BB%E5%BE%AA%E7%8E%AF%E7%9A%84%E5%8C%BA%E5%88%AB" rel="nofollow">一.死锁、饥饿、死循环的区别</a></p> 
+<p id="%E4%BA%8C.%E6%AD%BB%E9%94%81%E4%BA%A7%E7%94%9F%E7%9A%84%E5%BF%85%E8%A6%81%E6%9D%A1%E4%BB%B6-toc" style="margin-left:80px;"><a href="#%E4%BA%8C.%E6%AD%BB%E9%94%81%E4%BA%A7%E7%94%9F%E7%9A%84%E5%BF%85%E8%A6%81%E6%9D%A1%E4%BB%B6" rel="nofollow">二.死锁产生的必要条件</a></p> 
+<p id="%E4%B8%89.%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E5%8F%91%E7%94%9F%E6%AD%BB%E9%94%81-toc" style="margin-left:80px;"><a href="#%E4%B8%89.%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E5%8F%91%E7%94%9F%E6%AD%BB%E9%94%81" rel="nofollow">三.什么时候会发生死锁</a></p> 
+<p id="%E5%9B%9B.%E6%AD%BB%E9%94%81%E7%9A%84%E5%A4%84%E7%90%86%E7%AD%96%E7%95%A5-toc" style="margin-left:80px;"><a href="#%E5%9B%9B.%E6%AD%BB%E9%94%81%E7%9A%84%E5%A4%84%E7%90%86%E7%AD%96%E7%95%A5" rel="nofollow">四.死锁的处理策略</a></p> 
+<p id="1.%E9%A2%84%E9%98%B2%E6%AD%BB%E9%94%81-toc" style="margin-left:120px;"><a href="#1.%E9%A2%84%E9%98%B2%E6%AD%BB%E9%94%81" rel="nofollow">1.预防死锁</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E7%A0%B4%E5%9D%8F%E4%BA%92%E6%96%A5%E6%9D%A1%E4%BB%B6-toc" style="margin-left:160px;"><a href="#%EF%BC%881%EF%BC%89%E7%A0%B4%E5%9D%8F%E4%BA%92%E6%96%A5%E6%9D%A1%E4%BB%B6" rel="nofollow">（1）破坏互斥条件</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E7%A0%B4%E5%9D%8F%E4%B8%8D%E5%89%A5%E5%A4%BA%E6%9D%A1%E4%BB%B6-toc" style="margin-left:160px;"><a href="#%EF%BC%882%EF%BC%89%E7%A0%B4%E5%9D%8F%E4%B8%8D%E5%89%A5%E5%A4%BA%E6%9D%A1%E4%BB%B6" rel="nofollow">（2）破坏不剥夺条件</a></p> 
+<p id="%EF%BC%883%EF%BC%89%E7%A0%B4%E5%9D%8F%E8%AF%B7%E6%B1%82%E5%92%8C%E4%BF%9D%E6%8C%81%E6%9D%A1%E4%BB%B6-toc" style="margin-left:160px;"><a href="#%EF%BC%883%EF%BC%89%E7%A0%B4%E5%9D%8F%E8%AF%B7%E6%B1%82%E5%92%8C%E4%BF%9D%E6%8C%81%E6%9D%A1%E4%BB%B6" rel="nofollow">（3）破坏请求和保持条件</a></p> 
+<p id="%EF%BC%884%EF%BC%89%E7%A0%B4%E5%9D%8F%E5%BE%AA%E7%8E%AF%E7%AD%89%E5%BE%85%E6%9D%A1%E4%BB%B6-toc" style="margin-left:160px;"><a href="#%EF%BC%884%EF%BC%89%E7%A0%B4%E5%9D%8F%E5%BE%AA%E7%8E%AF%E7%AD%89%E5%BE%85%E6%9D%A1%E4%BB%B6" rel="nofollow">（4）破坏循环等待条件</a></p> 
+<p id="2.%E9%81%BF%E5%85%8D%E6%AD%BB%E9%94%81-toc" style="margin-left:120px;"><a href="#2.%E9%81%BF%E5%85%8D%E6%AD%BB%E9%94%81" rel="nofollow">2.避免死锁</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E5%AE%89%E5%85%A8%E5%BA%8F%E5%88%97-toc" style="margin-left:160px;"><a href="#%EF%BC%881%EF%BC%89%E5%AE%89%E5%85%A8%E5%BA%8F%E5%88%97" rel="nofollow">（1）安全序列</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E9%93%B6%E8%A1%8C%E5%AE%B6%E7%AE%97%E6%B3%95-toc" style="margin-left:160px;"><a href="#%EF%BC%882%EF%BC%89%E9%93%B6%E8%A1%8C%E5%AE%B6%E7%AE%97%E6%B3%95" rel="nofollow">（2）银行家算法</a></p> 
+<p id="3.%E6%AD%BB%E9%94%81%E7%9A%84%E6%A3%80%E6%B5%8B%E5%92%8C%E8%A7%A3%E9%99%A4-toc" style="margin-left:120px;"><a href="#3.%E6%AD%BB%E9%94%81%E7%9A%84%E6%A3%80%E6%B5%8B%E5%92%8C%E8%A7%A3%E9%99%A4" rel="nofollow">3.死锁的检测和解除</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E6%AD%BB%E9%94%81%E7%9A%84%E6%A3%80%E6%B5%8B-toc" style="margin-left:160px;"><a href="#%EF%BC%881%EF%BC%89%E6%AD%BB%E9%94%81%E7%9A%84%E6%A3%80%E6%B5%8B" rel="nofollow">（1）死锁的检测</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E6%AD%BB%E9%94%81%E7%9A%84%E8%A7%A3%E9%99%A4-toc" style="margin-left:160px;"><a href="#%EF%BC%882%EF%BC%89%E6%AD%BB%E9%94%81%E7%9A%84%E8%A7%A3%E9%99%A4" rel="nofollow">（2）死锁的解除</a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h4>一.死锁、饥饿、死循环的区别</h4> 
+<p><strong>死锁</strong>:各进程互相等待对方手里的资源，导致各进程都阻塞，无法向前推进的现象。</p> 
+<p><strong>饥饿</strong>:由于长期得不到想要的资源，某进程无法向前推进的现象。比如:在短进程优先(SPF)算法中，若有源源不断的短进程到来，则长进程将一直得不到处理机，从而发生长进程“饥饿”。</p> 
+<p><strong>死循环</strong>:某进程执行过程中一直跳不出某个循环的现象。有时是因为程序逻辑  bug 导致的，有时是程序员故意设计的。</p> 
+<p><img alt="" height="320" src="https://images2.imgbox.com/58/c1/5Moq34o5_o.png" width="983"></p> 
+<p></p> 
+<h4 id="%E4%BA%8C.%E6%AD%BB%E9%94%81%E4%BA%A7%E7%94%9F%E7%9A%84%E5%BF%85%E8%A6%81%E6%9D%A1%E4%BB%B6">二.死锁产生的必要条件</h4> 
+<p>产生死锁必须同时满足一下四个条件，只要其中任一条件不成立，死锁就不会发生。</p> 
+<blockquote> 
+ <p><strong>1.互斥条件</strong>:只有对必须互斥使用的资源的争抢才会导致死锁(如哲学家的筷子、打印机设备)像内存、扬声器这样可以同时让多个进程使用的资源是不会导致死锁的(因为进程不用阻塞等待这种资源)。<br><strong>2.不剥夺条件</strong>:进程所获得的资源在未使用完之前，不能由其他进程强行夺走，只能主动释放。</p> 
+ <p><strong>3.请求和保持条件</strong>:进程已经保持了至少一个资源，但又提出了新的资源请求，而该资源又被其他进程占有，此时请求进程被阻塞，但又对自己已有的资源保持不放。</p> 
+ <p><strong>4.循环等待条件:</strong>存在一种进程资源的循环等待链，链中的每一个进程已获得的资源同时被下一个进程所请求。</p> 
+ <p><strong>注意：发生死锁时一定有循环等待，但是发生循环等待时未必死锁(循环等待是死锁的必要不充分条件)</strong></p> 
+ <p>例如，哲学家问题中，若多出一个人，当这一人将筷子这一临界资源给3号哲学家时，就不会发生死锁。</p> 
+ <p><strong>所以，如果同类资源数大于1，则即使有循环等待，也未必发生死锁。但如果系统中每类资源都只有一个，那循环等待就是死锁的充分必要条件了。</strong></p> 
+ <p><img alt="" height="304" src="https://images2.imgbox.com/00/6b/j3Q5AzJa_o.png" width="400"></p> 
+</blockquote> 
+<p></p> 
+<h4 id="%E4%B8%89.%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E5%8F%91%E7%94%9F%E6%AD%BB%E9%94%81">三.什么时候会发生死锁</h4> 
+<p><strong>1.对系统资源的竞争。</strong>各进程对不可剥夺的资源(如打印机)的竞争可能引起死锁，对可剥夺的资源(CPU)的竞争是不会引起死锁的。<br><strong>2.进程推进顺序非法。</strong>请求和释放资源的顺序不当，也同样会导致死锁。例如，并发执行的进程P1、P2分别申请并占有了资源 R1、R2之后进程P1又紧接着申请资源R2，而进程P2又申请资源R1,两者会因为申请的资源被对方占有而阻塞，从而发生死锁。<br><strong>3.信号量的使用不当也会造成死锁。</strong>如生产者-消费者问题中，如果实现互斥的P操作在实现同步的P操作之前，就有可能导致死锁。(可以把互斥信号量、同步信号量也看做是一种抽象的系统资源)</p> 
+<p><strong>总之，对不可剥夺资源的不合理分配，可能导致死锁。</strong></p> 
+<p>对于<strong>生产者消费者问题</strong>不了解的可以先看一下我的这一篇：<a href="http://t.csdnimg.cn/cjZjT" rel="nofollow" title="http://t.csdnimg.cn/cjZjT">http://t.csdnimg.cn/cjZjT</a></p> 
+<p><strong>对生产者消费者问题的阐述如下：</strong></p> 
+<p><strong>生产者、消费者问题</strong><br>  系统中有一组生产者进程和一组消费者进程，生产者进程每次生产一个产品放入缓冲区，消费者进程每次从缓冲区中取出一个产品并使用。(注:这里的“产品”理解为某种数据)</p> 
+<p>生产者、消费者共享一个初始为空、大小为n的缓冲区。</p> 
+<p><img alt="" height="383" src="https://images2.imgbox.com/72/09/jM6eTAJ5_o.png" width="1088"></p> 
+<blockquote> 
+ <p><strong>对于生产者：</strong></p> 
+ <p>缓冲区没满时，生产者才能继续生产，若缓冲区满时，生产者必须阻塞等待。</p> 
+ <p>消费者从缓冲区取走数据后，若此时有生产者处于阻塞状态，那么消费者进程应该唤醒生产者进程(阻塞态---&gt;就绪态)</p> 
+ <p>注：生产者进程只是回到了就绪态，这并不意味着生产者进程需要立即往缓冲区写数据</p> 
+ <p><strong>对于消费者：</strong></p> 
+ <p>缓冲区空时，消费者必须等待，缓冲区没空时，消费者才能取走数据（消费）</p> 
+ <p>当生产者写入数据，缓冲区不为空，就会唤醒消费者进程（阻塞态---&gt;就绪态）</p> 
+ <p><strong>缓冲区：</strong></p> 
+ <p>缓冲区是临界资源，各进程必须互斥地访问。</p> 
+ <p>假如两个进程并发地往缓冲区写入数据，两个进程挑选了同一块区域写入数据，<strong>那么后面进程写入的数据就会覆盖前面进程写入的数据。</strong>所以各进程必须互斥访问才不会导致数据覆盖等问题。</p> 
+ <p><img alt="" height="215" src="https://images2.imgbox.com/26/a2/wzeUpNMj_o.png" width="400"></p> 
+</blockquote> 
+<p><strong>PV操作题目分析步骤：</strong></p> 
+<blockquote> 
+ <p>例：系统中有一组生产者进程和一组消费者进程，生产者进程每次生产一个产品放入缓冲区，消费者进程每次从缓冲区中取出一个产品并使用。(注:这里的“产品”理解为某种数据)</p> 
+ <p><strong>生产者、消费者共享一个初始为空、大小为n的缓冲区。</strong></p> 
+ <p><strong>1.找出题目中描述的各个进程，分析它们之间的同步、互斥关系。</strong></p> 
+ <p>同步：当缓冲区没满时，生产者才能生产，否则堵塞等待，当缓冲区没空时，消费者才能消费，否则堵塞等待。</p> 
+ <p>互斥：对于临界资源，各进程必须互斥访问。</p> 
+ <p><strong>2.根据各进程的操作流程确定P、V操作的大致顺序</strong></p> 
+ <p>当缓冲区没空（即有产品）之后，可以执行V操作，在在消费者消费之前需要执行P操作。下面的案例同理。（前V后P）</p> 
+ <p><img alt="" height="209" src="https://images2.imgbox.com/50/bd/kyBKaSCF_o.png" width="841"><br><strong>3.设置信号量，并根据题目条件确定信号量初值。(互斥信号量初值一般为1，同步信号量的初始值要看对应资源的初始值是多少)</strong></p> 
+ <p>semaphore mutex=1;        //互斥信号量，实现对缓冲区的互斥访问<br> semaphore empty=n；     //同步信号量，表示空闲缓冲区的数量<br> semaphore full=0;            //同步信号量，表示产品的数量，也即非空缓冲区的数量</p> 
+ <p>代码实现如下：</p> 
+ <p><strong>这里需要注意的是：</strong></p> 
+ <p><strong>实现互斥</strong>是在同一进程中进行一对PV操作</p> 
+ <p><strong>实现进程的同步</strong>是在其中一个进程执行P操作，另一个进程执行V操作</p> 
+ <p>P表示对临界区上锁（mutex=0），V表示对临界区解锁（mutex=1）</p> 
+ <p><img alt="" height="489" src="https://images2.imgbox.com/92/82/rYGvLA9P_o.png" width="1200"></p> 
+ <p><strong>在这里能否改变相邻P、V操作的顺序（重要）：</strong></p> 
+ <p><img alt="" height="489" src="https://images2.imgbox.com/d9/45/dxeISPrf_o.png" width="1200"></p> 
+ <p>若此时缓冲区内已经放满产品，即empty=0，full=n。</p> 
+ <p>则生产者进程执行①，使mutex变为0，再执行②，由于已没有空闲缓冲区，因此生产者被阻塞。</p> 
+ <p>由于生产者阻塞，因此切换到消费者进程。消费者进程执行③，由于mutex为0，即生产者还没释放对临界资源的“锁”，因此消费者也被阻塞。</p> 
+ <p><strong>这就造成了生产者等待消费者释放空闲缓冲区，而消费者又等待生产者释放临界区的情况，生产者和消费者循环等待被对方唤醒，出现“死锁”。</strong></p> 
+ <p>同样的，若缓冲区中没有产品，即full=0，empty=n。按③④①的顺序执行就会发生死锁。<br><strong><span style="background-color:#ffd900;">因此，实现互斥的P操作一定要在实现同步的P操作之后</span></strong></p> 
+ <p><strong><span style="background-color:#ffd900;">V操作不会导致进程阻塞，因此两个V操作顺序可以交换</span></strong></p> 
+ <p><strong>两个红框执行语句能否放在PV操作间：</strong></p> 
+ <p><img alt="" height="334" src="https://images2.imgbox.com/fd/c0/Fg34HHH2_o.png" width="1042"></p> 
+ <p>逻辑上是可以的，但这会导致临界区代码更长，也就是对临界区上锁的时间更长，这样各进程交替使用临界资源的效率就会下降。</p> 
+</blockquote> 
+<p></p> 
+<h4 id="%E5%9B%9B.%E6%AD%BB%E9%94%81%E7%9A%84%E5%A4%84%E7%90%86%E7%AD%96%E7%95%A5">四.死锁的处理策略</h4> 
+<h5 id="1.%E9%A2%84%E9%98%B2%E6%AD%BB%E9%94%81"><strong>1.预防死锁</strong></h5> 
+<p>破坏死锁产生的四个必要条件中的一个或几个。</p> 
+<h6 id="%EF%BC%881%EF%BC%89%E7%A0%B4%E5%9D%8F%E4%BA%92%E6%96%A5%E6%9D%A1%E4%BB%B6">（1）破坏互斥条件</h6> 
+<p>互斥条件:只有对必须互斥使用的资源的争抢才会导致死锁。</p> 
+<p>如果把只能互斥使用的资源改造为允许共享使用，则系统不会进入死锁状态。比如:SPOOLing技术。操作系统可以采用 SPOOLing 技术把独占设备在逻辑上改造成共享设备。比如，用SPOOLing技术将打印机改造为共享设备。</p> 
+<p>普通的打印机设备是互斥资源：<br><img alt="" height="272" src="https://images2.imgbox.com/bf/2f/ijaDdZBL_o.png" width="400"></p> 
+<p>使用了SPOOLing技术的打印机</p> 
+<p><img alt="" height="185" src="https://images2.imgbox.com/e5/c7/Zs7gNoTl_o.png" width="500"></p> 
+<blockquote> 
+ <p>各进程发出的请求会首先被输出进程接收，当请求被接收并且响应后，这些进程就可以继续执行别的操作，之后输出进程会根据打印的请求依次打印输出文件。</p> 
+ <p><strong>所以，使用了SPooLing技术后，在各进程看来，自己对打印机资源的使用请求立即就被接收处理了，不需要再阻塞等待。</strong></p> 
+</blockquote> 
+<p><strong>该策略的缺点：</strong>并不是所有的资源都可以改造成可共享使用的资源。并且为了系统安全，很多地方还必须保护这种互斥性。因此，<strong>很多时候都无法破坏互斥条件。 </strong></p> 
+<h6 id="%EF%BC%882%EF%BC%89%E7%A0%B4%E5%9D%8F%E4%B8%8D%E5%89%A5%E5%A4%BA%E6%9D%A1%E4%BB%B6">（2）破坏不剥夺条件</h6> 
+<p><strong>不剥夺条件:进程所获得的资源在未使用完之前，不能由其他进程强行夺走，只能主动释放。</strong> </p> 
+<blockquote> 
+ <p>破坏不剥夺条件:<br><strong>方案一:</strong>当某个进程请求新的资源得不到满足时，它必须立即释放保持的所有资源，待以后需要时再重新申请。也就是说，即使某些资源尚未使用完，也需要主动释放，从而破坏了不可剥夺条件。<br><strong>方案二:</strong>当某个进程需要的资源被其他进程所占有的时候，可以由操作系统协助，将想要的资源强行剥夺。这种方式一般需要考虑各进程的优先级。(比如:剥夺调度方式，就是将处理机资源强行剥夺给优先级更高的进程使用)</p> 
+</blockquote> 
+<p><strong>该策略的缺点:</strong><br> 1.实现起来比较复杂。</p> 
+<p>2.释放已获得的资源可能造成前一阶段工作的失效。因此这种方法一般只适用于易保存和恢复状态<br> 的资源，如CPU。</p> 
+<p>3.反复地申请和释放资源会增加系统开销，降低系统吞吐量。</p> 
+<p>4.若采用方案一，意味着只要暂时得不到某个资源，之前获得的那些资源就都需要放弃，以后再重新申请。如果一直发生这样的情况，就会导致进程饥饿。</p> 
+<h6 id="%EF%BC%883%EF%BC%89%E7%A0%B4%E5%9D%8F%E8%AF%B7%E6%B1%82%E5%92%8C%E4%BF%9D%E6%8C%81%E6%9D%A1%E4%BB%B6">（3）破坏请求和保持条件</h6> 
+<p><strong>请求和保持条件:进程已经保持了至少一个资源</strong>，但又提出了新的资源<strong>请求</strong>，而该资源又被其他进程占有，此时请求进程被阻塞，但又对自己已有的资源<strong>保持</strong>不放。</p> 
+<blockquote> 
+ <p><strong>可以采用静态分配方法，</strong>即进程在运行前一次申请完它所需要的全部资源，在它的资源未满足前，不让它投入运行。一旦投入运行后，这些资源就一直归它所有，该进程就不会再请求别的任何资源。</p> 
+</blockquote> 
+<p><strong>该策略实现起来简单，但也有明显的缺点:</strong></p> 
+<p>有些资源可能只需要用很短的时间，因此如果进程的整个运行期间都一直保持着所有资源，就会造成严重的资源浪费，<strong>资源利用率极低。</strong>另外，该策略也有<strong>可能导致某些进程饥饿。</strong></p> 
+<p><strong>例如：</strong>若系统中有源源不断的A类进程与B类进程，那么资源1就总是分配给A类进程，资源2也总是分配给B类进程，只有资源1，资源2都空闲，才能分配给C类进程，所以这就导致了C类进程出现“饥饿”</p> 
+<p><img alt="" height="221" src="https://images2.imgbox.com/9d/1f/PB2sFKSr_o.png" width="500"></p> 
+<h6 id="%EF%BC%884%EF%BC%89%E7%A0%B4%E5%9D%8F%E5%BE%AA%E7%8E%AF%E7%AD%89%E5%BE%85%E6%9D%A1%E4%BB%B6">（4）破坏循环等待条件</h6> 
+<p>循环等待条件:<strong>存在一种进程资源的循环等待链</strong>，链中的每一个进程已获得的资源同时被下一个进程所请求。</p> 
+<blockquote> 
+ <p><strong>可采用顺序资源分配法。首先给系统中的资源编号，规定每个进程必须按编号递增的顺序请求资源同类资源(即编号相同的资源)一次申请完。</strong><br> 因为一个进程只有已占有小编号的资源时，才有资格申请更大编号的资源。按此规则，已持有大编号资源的进程不可能逆向地回来申请小编号的资源，从而就不会产生循环等待的现象。</p> 
+</blockquote> 
+<p><strong>例如：</strong>在任何一个时刻，总有一个进程拥有的资源编号是最大的（在这里是3号进程），那这个进程申请之后的资源必然畅通无阻（3号进程可以使用8，9，10号资源），因此，不可能出现所有进程都阻塞的死锁现象。</p> 
+<p><img alt="" height="238" src="https://images2.imgbox.com/2d/e1/r93DCvGs_o.png" width="500"></p> 
+<p><strong>该策略的缺点:</strong></p> 
+<p><strong>①不方便增加新的设备，因为可能需要重新分配所有的编号。</strong></p> 
+<p><strong>②进程实际使用资源的顺序可能和编号递增顺序不一致，会导致资源浪费。</strong>例如这里的3号进程，若想先使用7号资源，再使用5号资源，那么3号进程会先申请占用5号资源，一直到7号资源使用完毕，才能使用5号资源，所以会导致5号资源长时间空闲，从而导致系统资源的浪费。</p> 
+<p><img alt="" height="238" src="https://images2.imgbox.com/ba/a3/9ZGEtI02_o.png" width="500"></p> 
+<p><strong>③必须按规定次序申请资源，用户编程麻烦。</strong>例如上面的P3进程，用户需要先编写使用5号资源的代码，因为5号资源编号更小，再编写7号资源的代码，但若换一个系统，另一个系统中5号资源和7号资源的编号是相反的，那么这个代码就需要做出改变，即7号资源的代码需要放到5号资源之前。</p> 
+<h5></h5> 
+<h5 id="2.%E9%81%BF%E5%85%8D%E6%AD%BB%E9%94%81"><strong>2.避免死锁</strong></h5> 
+<p>用某种方法防止系统进入不安全状态，从而避免死锁(银行家算法)</p> 
+<h6 id="%EF%BC%881%EF%BC%89%E5%AE%89%E5%85%A8%E5%BA%8F%E5%88%97">（1）安全序列</h6> 
+<p>所谓安全序列，就是指如果系统按照这种序列分配资源，则每个进程都能顺利完成。只要能找出一个安全序列，系统就是<strong>安全状态</strong>。当然，<strong>安全序列可能有多个。</strong></p> 
+<p>如果分配了资源之后，系统中找不出任何一个安全序列，系统就进入了<strong>不安全状态</strong>。这就意味着之后可能所有进程都无法顺利的执行下去。当然，如果有进程提前归还了一些资源，那<strong>系统也有可能重新回到安全状态</strong>，不过我们在分配资源之前总是要考虑到最坏的情况。<br><strong>如果系统处于安全状态，就一定不会发生死锁，。如果系统进入不安全状态，就可能发生死锁(处于不安全状态未必就是发生了死锁，但发生死锁时一定是在不安全状态)</strong></p> 
+<p><strong>因此可以在资源分配之前预先判断这次分配是否会导致系统进入不安全状态，以此决定是否答应资源分配请求。这也是“银行家算法”的核心思想。</strong></p> 
+<h6 id="%EF%BC%882%EF%BC%89%E9%93%B6%E8%A1%8C%E5%AE%B6%E7%AE%97%E6%B3%95"><strong>（2）银行家算法</strong></h6> 
+<p><strong>银行家算法的核心思想在于</strong>：在进程提出资源申请时，先预判此次分配是否会导致系统进入不安全状态。如果会进入不安全状态，就暂时不答应这次请求，让该进程先阻塞等待。</p> 
+<blockquote> 
+ <p>资源总数为（10，5，7），进程如下，将（资源总数-已分配的资源）=剩余可用资源（3，3，2）</p> 
+ <p><img alt="" height="171" src="https://images2.imgbox.com/ab/44/naPavkLL_o.png" width="400"></p> 
+ <p>用这一数字与各进程需求对比，查看满足哪个进程的需求：</p> 
+ <p>如果优先把资源分配给P1，那P1一定是可以顺利执行结束的，等P1结束了就会归还资源。于是，资源数就可以增加到(2,0,0)+ (3,3,2)=(5,3,2)</p> 
+ <p><img alt="" height="148" src="https://images2.imgbox.com/0b/bd/F4V2WGET_o.png" width="400"></p> 
+ <p>接下来继续对比，发现此时可用资源能够满足P3进程需求，那P3一定是可以顺利执行结束的等P3结束了就会归还资源。于是，资源数就可以增加到(2,1,1)+(5,3,2)=(7,4,3)</p> 
+ <p><img alt="" height="148" src="https://images2.imgbox.com/04/ec/m5uDF3YI_o.png" width="400"></p> 
+ <p>如此重复，可以得到一个包含所有进程的安全序列：{P1,P3,P0,P2,P4}，该算法也被称为安全性算法。</p> 
+ <p>实际上可以更快速地找到一个安全序列：</p> 
+ <p>经对比发现，(3,3,2)可满足P1、P3，说明无论如何，这两个进程的资源需求一定是可以依次被满足的，因此P1、P3 一定可以顺利的执行完，并归还资源。可把P1、P3 先加入安全序列。(2,0,0)+(2,1,1)+(3,3,2)=(7,4,3)</p> 
+ <p>剩下的 P0、P2、P4 都可被满足。同理，这些进程都可以加入安全序列。<br><strong>于是，5个进程全部加入安全序列，说明此时系统处于安全状态，暂不可能发生死锁。</strong></p> 
+ <p></p> 
+</blockquote> 
+<blockquote> 
+ <p>资源总数为（10，5，7），如下图所示，剩余可用资源为（3，3，2）</p> 
+ <p><img alt="" height="174" src="https://images2.imgbox.com/80/bd/FbT2QR7I_o.png" width="400"></p> 
+ <p>经对比发现，(3,3,2)可满足P1、P3，说明无论如何，这两个进程的资源需求一定是可以依次被满足的，因此P1、P3 一定可以顺利的执行完，并归还资源。可把P1、P3 先加入安全序列。</p> 
+ <p>(2,0,0)+(2,1,1)+(3,3,2)=(7,4,3)</p> 
+ <p>剩下的 P0需要(8,4,3)，P2需要(6,5,0)，P4 需要(4,3,4)，任何一个进程都不能被完全满足于是，无法找到任何一个安全序列，<strong>说明此时系统处于不安全状态，有可能发生死锁。</strong></p> 
+</blockquote> 
+<p>假设系统中有n个进程，m种资源</p> 
+<p>每个进程在运行前先声明对各种资源的最大需求数，则可用一个n*m的矩阵(可用二维数组实现)表示所有进程对各种资源的最大需求数<strong>。称为最大需求矩阵 Max</strong>，Max[i,j]=K表示进程Pi最多需要K个资源Rj。同理，系统可以用一个n*m的分配<strong>矩阵 Allocation </strong>表示对所有进程的资源分配情况。<strong>Max-Allocation=Need 矩阵</strong>，表示各进程最多还需要多少各类资源。</p> 
+<p>另外，还要用<strong>一个长度为m的一维数组 Available </strong>表示当前系统中还有多少可用资源</p> 
+<p>某进程Pi向系统申请资源，可用一个<strong>长度为m的一维数组 <img alt="Request _{i}" class="mathcode" src="https://images2.imgbox.com/8d/dc/yUYfjo48_o.png"></strong>表示本次申请的各种资源量。</p> 
+<p><img alt="" height="446" src="https://images2.imgbox.com/32/11/RuzEyeCQ_o.png" width="300"></p> 
+<p>可用银行家算法预判本次分配是否会导致系统进入不安全状态:</p> 
+<blockquote> 
+ <p>① 如果 <img alt="Request_{i}[j]\leq Need[i,j](0\leq j\leq m)" class="mathcode" src="https://images2.imgbox.com/61/db/pefd1nbJ_o.png">便转向②;否则认为出错。</p> 
+ <p>因为它所需要的资源数已超过它所宣布的最大值</p> 
+ <p>② 如果 <img alt="Request_{i}[j]\leq Available[j](0\leq j\leq m)" class="mathcode" src="https://images2.imgbox.com/b6/66/OrKQbAYV_o.png">，便转向③;否则表示尚无足够资源，Pi必须等待。</p> 
+ <p>③ 系统试探着把资源分配给进程Pi，并修改相应的数据(并非真的分配，修改数值只是为了做预判):</p> 
+ <p>Available = Available - <strong><img alt="Request _{i}" class="mathcode" src="https://images2.imgbox.com/92/24/GCyKtwTz_o.png"></strong></p> 
+ <p><strong><img alt="Allocation[i,j]=Allocation[i,j]+Request_{i}[j]" class="mathcode" src="https://images2.imgbox.com/6e/e5/w4ig2HVG_o.png"></strong></p> 
+ <p><strong><img alt="Need[i,j]=Need[i,j]-Request_{i}[j]" class="mathcode" src="https://images2.imgbox.com/db/3b/u72uAwKD_o.png"></strong></p> 
+ <p>④操作系统执行安全性算法，检查此次资源分配后，系统是否处于安全状态。若安全，才正式分配;否则，恢复相应数据，让进程阻塞等待。</p> 
+ <p><strong>安全性算法步骤:</strong><br> 检查当前的剩余可用资源是否能满足某个进程的最大需求，如果可以，就把该进程加入安全序列并把该进程持有的资源全部回收。<br> 不断重复上述过程，看最终是否能让所有进程都加入安全序列。</p> 
+</blockquote> 
+<h5></h5> 
+<h5 id="3.%E6%AD%BB%E9%94%81%E7%9A%84%E6%A3%80%E6%B5%8B%E5%92%8C%E8%A7%A3%E9%99%A4"><strong>3.死锁的检测和解除</strong></h5> 
+<h6 id="%EF%BC%881%EF%BC%89%E6%AD%BB%E9%94%81%E7%9A%84%E6%A3%80%E6%B5%8B"><strong>（1）死锁的检测</strong></h6> 
+<p>允许死锁的发生，不过操作系统会负责检测出死锁的发生，然后采取某种措<br> 施解除死锁。</p> 
+<p>为了能对系统是否已发生了死锁进行检测，必须：</p> 
+<blockquote> 
+ <p>①用<strong>某种数据结构</strong>来保存资源的请求和分配信息。</p> 
+ <p>②提供<strong>一种算法</strong>，利用上述信息来检测系统是否已进入死锁状态。</p> 
+ <p>数据结构如下：</p> 
+ <p><img alt="" height="230" src="https://images2.imgbox.com/79/94/fK1ZKkyz_o.png" width="1200"></p> 
+ <p><strong>一般用矩形表示资源结点，矩形中的小圆代表该类资源的数量。</strong>在这里P1进程请求被分配一个R2资源，P2进程请求被分配一个R1资源。</p> 
+ <p><img alt="" height="212" src="https://images2.imgbox.com/7e/35/tNvuY8fK_o.png" width="400"></p> 
+ <p>分配边表示，系统已经给P1进程分配了2个R1资源，给P2进程分配了1个R2资源，1给R1资源</p> 
+ <p><img alt="" height="226" src="https://images2.imgbox.com/3c/33/iQGVhGrs_o.png" width="400"></p> 
+ <p>如果系统中剩余的可用资源数足够满足进程的需求，那么这个进程暂时是不会阻塞的，可以顺利地执行下去。</p> 
+ <p>如果这个进程执行结束了把资源归还系统，就可能使某些正在等待资源的进程被激活，并顺利地执行下去。</p> 
+ <p>相应的，这些被激活的进程执行完了之后又会归还一些资源，这样可能又会激活另外一些阻塞的进程。</p> 
+ <p>如果按上述过程分析，最终能消除所有边，就称这个图是<strong>可完全简化</strong>的。此时一定没有发生死锁<strong>(相当于能找到一个安全序列)</strong></p> 
+ <p><img alt="" height="220" src="https://images2.imgbox.com/40/73/xPytmIyi_o.png" width="400"></p> 
+ <p>如果最终不能消除所有边，那么此时就是发生了死锁。现在来看不能消除所有边的情况：</p> 
+ <p><img alt="" height="244" src="https://images2.imgbox.com/a2/40/kOAQMrwz_o.png" width="400"></p> 
+ <p>如图，P1进程向R2申请两个资源，但是R2已经分配出去两个资源了，所以P1进程阻塞，P2资源向R1申请一个资源，但是R1的资源也被全部分配出去，所以P2进程也被阻塞，可以顺利执行的只有P3，P3进程顺利执行后，会归还R2一个资源，但是P1进程需要两个R2资源，所以P1依旧阻塞，P2也依旧阻塞，到以下这一步，就不能继续消除了。</p> 
+ <p><strong>最终还连着边的那些进程就是处于死锁状态的进程。</strong></p> 
+ <p><img alt="" height="254" src="https://images2.imgbox.com/7a/8d/VxerjwGR_o.png" width="400"></p> 
+</blockquote> 
+<p><strong>总结：检测死锁的算法</strong></p> 
+<p>(1)在资源分配图中，找出既不阻塞又不是孤点的进程Pi(即找出一条有向边与它相连，且该有向边对应资源的申请数量小于等于系统中已有空闲资源数量。如下图中，R1没有空闲资源，R2有一个空闲资源。</p> 
+<p><img alt="" height="208" src="https://images2.imgbox.com/a2/3c/NxJUEK0z_o.png" width="400"></p> 
+<p>若所有的连接该进程的边均满足上述条件，则这个进程能继续运行直至完成，然后释放它所占有的所有资源)。消去它所有的请求边和分配变，使之称为孤立的结点。在下图中P1 是满足这一条件的进程结点，于是将P1的所有边消去。</p> 
+<p><img alt="" height="222" src="https://images2.imgbox.com/2f/14/LurLjsyr_o.png" width="400"></p> 
+<p>(2)进程 Pi所释放的资源，可以唤醒某些因等待这些资源而阻塞的进程，原来的阻塞进程可能变为非阻塞进程。在下图中，P2就满足这样的条件。根据(1)中的方法进行一系列简化后，若能消去途中所有的边，<strong>则称该图是可完全简化的</strong>。</p> 
+<p><img alt="" height="192" src="https://images2.imgbox.com/90/77/haeytI9A_o.png" width="400"></p> 
+<p><strong>死锁定理:</strong>如果某时刻系统的资源分配图是不可完全简化的，那么此时系统死锁。</p> 
+<h6 id="%EF%BC%882%EF%BC%89%E6%AD%BB%E9%94%81%E7%9A%84%E8%A7%A3%E9%99%A4">（2）死锁的解除</h6> 
+<p>一旦检测出死锁的发生，就应该立即解除死锁。</p> 
+<p><strong>注意:并不是系统中所有的进程都是死锁状态，用死锁检测算法化简资源分配图后，还连着边的那些进程就是死锁进程</strong></p> 
+<blockquote> 
+ <p><strong>①资源剥夺法。</strong>挂起(暂时放到外存上)某些死锁进程，并抢占它的资源，将这些资源分配给其他的死锁进程。但是应防止被挂起的进程长时间得不到资源而饥饿。</p> 
+ <p><strong>②撤销进程法(或称终止进程法)。</strong>强制撤销部分、甚至全部死锁进程，并剥夺这些进程的资源。这种方式的优点是实现简单，但所付出的代价可能会很大。因为有些进程可能已经运行了很长时间，已经接近结束了，一旦被终止可谓功亏一，以后还得从头再来。</p> 
+ <p><strong>③进程回退法。</strong>让一个或多个死锁进程回退到足以避免死锁的地步。这就要求系统要记录进程的历史信息，设置还原点。</p> 
+ <p><strong>那么如何决定对哪个进程进行以上操作：</strong></p> 
+ <p><strong>1.</strong>进程优先级(优先级低的可以先进行操作)</p> 
+ <p><strong>2.</strong>已执行多长时间（执行时间越长，回退或撤销的代价就会越高）</p> 
+ <p><strong>3.</strong>还要多久能完成（可以使马上结束的进程优先获得资源，尽快结束）</p> 
+ <p><strong>4.</strong>进程已经使用了多少资源（若进程持有很多资源，那么可以先剥夺这一进程的资源，以尽快解除死锁局面）。</p> 
+ <p><strong>5.</strong>进程是交互式的还是批处理式的（进程若是交互式的，撤销的话，用户方体验不佳，所以可以优先牺牲批处理式进程）</p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/463e1241cdd5194ac0d1e111a9fcf3fd/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Linux实验记录：使用Apache服务部署静态网站</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/a0f82dd663a2776f4982c675104dd0e4/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">接口自动化测试之预期结果的处理</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

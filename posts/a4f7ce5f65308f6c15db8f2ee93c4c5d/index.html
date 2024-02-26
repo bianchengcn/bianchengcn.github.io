@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>好奇怪，@Value不能获取最新的配置？ - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="好奇怪，@Value不能获取最新的配置？" />
+<meta property="og:description" content="前言 公司使用Apollo做配置中心，也没怎么具体了解过。只知道有配置使用时用@Value就能获取到了，而且还能自动刷新。遂一直以为@Value本身有自动刷新功能。
+直到有一天用nacos做配置中心。哎？我的配置怎么不能自动刷新了？@Value出问题了吗？
+我的controller 我的nacos配置 修改nacos配置 把account.name改为杜甫
+可以看到控制台也打印了refresh keys changed
+可是调用接口得到的值仍是更新前的
+后面才知道nacos要配合@RefreshScope使用才能自动刷新。Apollo的@Value自动刷新功能算是一个机制了。
+于是加上@RefreshScope试验一下
+先把nacos中的account.name配置改为李白，启动项目之后，再改为杜甫，然后调用接口获取account.name
+这次获取到的配置就是最新的了。
+为什么Apollo能实现@Value的自动刷新，而nacos需要配合@RefreshScope呢？
+本文旨在分析Apollo和nacos为什么能实现配置自动，和他们的实现方式有什么不同。
+先简单看一下Apollo为什么能实现@Value的自动更新
+Apollo的自动更新 Apollo的自动更新比较简单
+AutoUpdateConfigChangeListener#onChange
+AutoUpdateConfigChangeListener是一个监听器，监听ConfigChangeEvent事件。客户端会一直向远程拉取，当配置发生变化就会发布这个事件。
+可以看到通过springValueRegistry获取到了SpringValue的集合。SpringValue是Apollo维护的来更新spring中@Value值变化后的类。里面维护了@Value的占位符，bean，field等信息。通过继承BeanPostProcessor实现postProcessBeforeInitialization来维护起来的，这里不管他，只要知道他维护了@Value注释的字段和bean信息就行了。
+继续看updateSpringValue
+typescript复制代码private void updateSpringValue(SpringValue springValue) { try { //解析出表达式的值 Object value = resolvePropertyValue(springValue); //更新 springValue.update(value); logger.info(&#34;Auto update apollo changed value successfully, new value: {}, {}&#34;, value, springValue); } catch (Throwable ex) { logger.error(&#34;Auto update apollo changed value failed, {}&#34;, springValue.toString(), ex); } } 继续走springValue.update()方法
+我们这里挑一个看
+可以看到这里先获取bean(弱引用)，然后更新这个字段的值(Field.set()方法)。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/a4f7ce5f65308f6c15db8f2ee93c4c5d/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-05-19T11:57:32+08:00" />
+<meta property="article:modified_time" content="2023-05-19T11:57:32+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">好奇怪，@Value不能获取最新的配置？</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h3>前言</h3> 
+<p>公司使用Apollo做配置中心，也没怎么具体了解过。只知道有配置使用时用@Value就能获取到了，而且还能自动刷新。遂一直以为@Value本身有自动刷新功能。</p> 
+<p>直到有一天用nacos做配置中心。哎？我的配置怎么不能自动刷新了？<code>@Value</code>出问题了吗？</p> 
+<h4>我的controller</h4> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/ad/c2/AfB30Wc0_o.png"></p> 
+<h4>我的nacos配置</h4> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/a7/31/M5sNe9ZA_o.png"></p> 
+<h4>修改nacos配置</h4> 
+<p>把<code>account.name</code>改为杜甫</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/f9/ae/Y4CA5jPz_o.png"></p> 
+<p>可以看到控制台也打印了<code>refresh keys changed</code></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/e9/3c/RPbr8AJq_o.png"></p> 
+<p>可是调用接口得到的值仍是更新前的</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/63/6c/iyZJ0T0K_o.png"></p> 
+<p>后面才知道nacos要配合<code>@RefreshScope</code>使用才能自动刷新。Apollo的<code>@Value</code>自动刷新功能算是一个机制了。</p> 
+<p>于是加上<code>@RefreshScope</code>试验一下</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/88/4f/UllckrNr_o.png"></p> 
+<p>先把nacos中的<code>account.name</code>配置改为李白，启动项目之后，再改为杜甫，然后调用接口获取<code>account.name</code></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/ef/b4/Dr5fBaVU_o.png"></p> 
+<p>这次获取到的配置就是最新的了。</p> 
+<p>为什么Apollo能实现<code>@Value</code>的自动刷新，而nacos需要配合<code>@RefreshScope</code>呢？</p> 
+<p>本文旨在分析Apollo和nacos为什么能实现配置自动，和他们的实现方式有什么不同。</p> 
+<p>先简单看一下Apollo为什么能实现<code>@Value</code>的自动更新</p> 
+<h3>Apollo的自动更新</h3> 
+<p>Apollo的自动更新比较简单</p> 
+<p><code>AutoUpdateConfigChangeListener#onChange</code></p> 
+<p><code>AutoUpdateConfigChangeListener</code>是一个监听器，监听<code>ConfigChangeEvent</code>事件。客户端会一直向远程拉取，当配置发生变化就会发布这个事件。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/c3/36/qEcx3atj_o.png"></p> 
+<p>可以看到通过<code>springValueRegistry</code>获取到了<code>SpringValue</code>的集合。<code>SpringValue</code>是Apollo维护的来更新spring中<code>@Value</code>值变化后的类。里面维护了<code>@Value</code>的占位符，bean，field等信息。通过继承BeanPostProcessor实现<code>postProcessBeforeInitialization</code>来维护起来的，这里不管他，只要知道他维护了<code>@Value</code>注释的字段和bean信息就行了。</p> 
+<p>继续看updateSpringValue</p> 
+<pre><code>typescript复制代码private void updateSpringValue(SpringValue springValue) {
+    try {
+        //解析出表达式的值
+        Object value = resolvePropertyValue(springValue);
+        //更新
+        springValue.update(value);
+    
+        logger.info("Auto update apollo changed value successfully, new value: {}, {}", value,
+                    springValue);
+    } catch (Throwable ex) {
+        logger.error("Auto update apollo changed value failed, {}", springValue.toString(), ex);
+    }
+}
+</code></pre> 
+<p>继续走springValue.update()方法</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/bb/1f/x2NdaGyF_o.png"></p> 
+<p>我们这里挑一个看</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/74/87/yhiOVhwU_o.png"></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/34/85/LUblxJbr_o.png"></p> 
+<p>可以看到这里先获取bean(弱引用)，然后更新这个字段的值(<code>Field.set()</code>方法)。</p> 
+<h4>总结：</h4> 
+<p>Apollo自己维护了<code>@Value</code>的信息，当有变化时，Apollo直接更新使用<code>@Value</code>注解bean的字段值</p> 
+<h3>nacos的自动更新</h3> 
+<p>nacos的自动更新使用了spring的机制，因此比较复杂，所以nacos的自动更新机制我们详细看看。</p> 
+<p>在nacos-config的<code>spring.factoies</code>中,注入了<code>NacosConfigAutoConfiguration</code></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/3e/99/tH7iZASY_o.png"></p> 
+<p>在<code>NacosConfigAutoConfiguration</code>里面注入了一个<code>NacosContextRefresher</code>的Bean</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/95/a9/0YBo3hTX_o.png"></p> 
+<p>这个Bean实现了<code>ApplicationListener</code>，监听<code>ApplicationReadyEvent</code>事件，这个事件会在spring就绪后发布，也就是<code>SpringApplication#run()</code>的最后。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/da/35/OL1swTYM_o.png"></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/ea/c9/Q0WeGBD6_o.png"></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/0b/b8/ghQxypaM_o.png"></p> 
+<p>继续到<code>registerNacosListener</code>里，重点看一下画红圈的部分</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/55/0a/0xHz2q7O_o.png"></p> 
+<p><code>applicationContext.publishEvent</code>，这里发布了一个<code>RefreshEvent</code>事件，这个事件会由<code>RefreshEventListener</code>来处理，这个事件的处理我们下面说。</p> 
+<p>先来看<code>configService.addListener</code>。<code>configService</code>是nacos具体实现配置发布、更新、获取、删除的实现类，具体就是拼接url和参数调用远程的nacos服务。<code>addListener</code>就是添加监听器</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/8e/10/l9o1Bm02_o.png"></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/09/8d/HsoXfQRG_o.png"></p> 
+<p>到这里nacos添加上了配置更新的监听器，那么这个监听器是在哪触发的呢？</p> 
+<p>还是<code>ConfigService</code>，它的实现类<code>NacosConfigService</code>中的构造方法中。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/d4/b3/R3PiacGu_o.png"></p> 
+<p>在构造方法中，创建了<code>ClientWorker</code>。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/cf/18/PBU55aEn_o.png"></p> 
+<p>在<code>ClientWorker</code>会启动定时任务调用<code>checkConfigInfo()</code>。还创建了一个线程池赋值给executorService。</p> 
+<p>在<code>checkConfigInfo()</code>中会使用这个线程池执行任务</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/10/04/BJdpo3lp_o.png"></p> 
+<p>可以看到提交了<code>LongPollingRunnable</code>这个任务，继续看一下他的<code>run</code>方法</p> 
+<p>这个方法有点长，只截取一部分</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/47/07/CZU4Ojws_o.png"></p> 
+<p>可以看到如果 远程发现了有配置更新，就会更新缓存为最新值，<code>checkUpdateDataIds</code>和<code>getServerConfig</code>就是http请求nacos服务端获取数据，这里不展开了，感兴趣的可以自己看一下。</p> 
+<p>到此为止，我们动态更新的配置已经可以被nacos检测到了。那为什么<code>@Value</code>返回的值还是旧的呢。</p> 
+<p>这就要回到我们刚才略过的<code>applicationContext.publishEvent</code>，发布的<code>RefreshEvent</code>事件了。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/03/41/h9ztEbhA_o.png"></p> 
+<p><code>RefreshEventListener</code>监听<code>RefreshEvent</code>事件，在<code>RefreshEventListener</code>的<code>handle</code>里对事件做处理</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/f5/ac/gUfoDWTr_o.png"></p> 
+<p><code>refresh</code>方法就是能刷新配置的重点了。<code>refresh</code>方法里一共调用了两个方法我们一个一个来看</p> 
+<p>先看<code>refreshEnvironment</code></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/a2/e9/Prc7ayno_o.png"></p> 
+<p><code>refreshEnvironment</code>是一个更新配置的方法，可以看到是先获取到before(之前的配置)，然后用之后的配置更新配置。同样都是使用<code>this.context.getEnvironment().getPropertySources()</code>来获取配置，在中间调用了<code>addConfigFilesToEnvironment()</code>，为什么调用<code>addConfigFilesToEnvironment</code>之后就能获取到新的了呢？</p> 
+<p>在<code>addConfigFilesToEnvironment</code>中会创建一个新的spring上下文，最终会调用到<code>SpringApplication.run()</code>里(是不是很熟悉，又到了spring经典的<code>run</code>方法)。</p> 
+<p>在<code>run()</code>方法中有个<code>prepareContext()</code>，再往里调用<code>applyInitializers</code>。在<code>applyInitializers</code>里会遍历所有实现了<code>ApplicationContextInitializer</code>的接口(在Spring容器刷新之前执行的一个回调函数，通常用于向Spring容器中注入属性)，调用其中的<code>initialize</code>方法。</p> 
+<p>啊啊啊？这都哪到哪啊。这个关我自动刷新什么事？别急，这就有关联了。</p> 
+<p><code>PropertySourceBootstrapConfiguration</code>(也会由<code>spring.factories</code>注入)，这个类就实现了<code>ApplicationContextInitializer</code>(也就是向spring容器注入属性的接口)。所以在<code>prepareContext</code>的<code>applyInitializers</code>方法中就会调用它的<code>initialize</code>方法。</p> 
+<p>在<code>initialize</code>中会调用<code>PropertySourceLocator</code>接口的<code>locateCollection</code>。nacos的<code>NacosPropertySourceLocator</code>就实现了这个接口，会向nacos获取配置，这样nacos里的配置就是最新的了。再往下他会塞到<code>environment</code>里，这样<code>this.context.getEnvironment().getPropertySources()</code>就能获取到最新的配置了。</p> 
+<p>在<code>addConfigFilesToEnvironment</code>做完这些工作后就会把新创建的spring上下文关闭。</p> 
+<p>看到这好像大功告成了，但其实还有个问题，配置变了，bean里通过<code>@Value</code>获取到的值可没变。怎么把它的值给更新呢？spring选择了非常简便的方法，弄个新的出来。</p> 
+<p>继续看refresh里调用的<code>refreshAll()</code>方法</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/ca/cb/0oIbQxhh_o.png"></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/34/0c/SpOqSiw8_o.png"></p> 
+<p>这里的<code>this.cache</code>是<code>BeanLifecycleWrapperCache</code>，里边存放<code>BeanLifecycleWrapper</code>。<code>BeanLifecycleWrapper</code>里存放了bean的名称和<code>ObjectFactory</code>。<code>ObjectFactory</code>提供了一个<code>getObject()</code>方法，用于获取对象实例。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/fd/2d/MfWpgodg_o.png"></p> 
+<p>那代码把<code>cache</code>清空，把<code>BeanLifecycleWrapper</code>都销毁有什么用呢？我们先去看一下<code>BeanLifecycleWrapper</code>是怎么放进去的。</p> 
+<p>看一下<code>Scope</code>的实现类<code>GenericScope</code>的<code>get</code>方法</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/fc/27/VYM3r9cf_o.png"></p> 
+<p><code>get</code>方法创建了新的<code>BeanLifecycleWrapper</code>放入到<code>cache</code>里。注意这里的<code>cache.put()</code>最终调用的是<code>ConcurrentHashMap</code>的<code>putIfAbsent</code>，如果已有可就不放了。返回的即是<code>BeanLifecycleWrapper</code>的<code>getBean()</code>方法。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/03/e9/eqEQru0F_o.png"></p> 
+<p><code>getBean</code>就会调用<code>ObjectFactory</code>的<code>getObject</code>方法来获取对象。</p> 
+<p>那这个<code>get</code>方法在哪里被调用的呢，就是我们最熟悉的<code>doGetBean</code></p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/4f/25/wnxPbigM_o.png"></p> 
+<p>在<code>doGetBean</code>里会检测bean的<code>scope</code>，<code>scope</code>不是单例和原型的会走这个else里的逻辑。然后回去<code>scope</code>里调用<code>get</code>。标注了<code>@RefreshScope</code>注解的bean的<code>scope</code>为<code>refresh</code>，就会走这个else里的逻辑。</p> 
+<p>那逻辑就清楚了：在有值更新后，销毁scope里cache里的<code>BeanLifecycleWrapper</code>，当有请求到达bean的时候，<code>doGetBean</code>获取bean时，由于找不到原来的<code>BeanLifecycleWrapper</code>，又新建一个<code>BeanLifecycleWrapper</code>然后调用<code>getBean</code>,返回一个全新的bean，在新的bean里就有刷新的配置了。如果没有值更新，下次当有请求到达bean的时候，<code>doGetBean</code>获取bean时，<code>BeanLifecycleWrapper</code>仍存在，返回的bean仍是上次那个。</p> 
+<p>到这里，自动刷新才算完成了。最后我们大白话总结一下。</p> 
+<h4>总结</h4> 
+<p>nacos有任务去检查远程的配置和本地的配置是否一样，不一样的话就发布spring的事件，spring监听到后会创建一个新的上下文环境获取最新配置然后刷新配置，并且删除掉scope的缓存，使下次获取bean时重新创建一个新的bean，在新的bean中就会有刷新后的配置。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/f715f8581e1f430d95f406977e8af8b2/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">20230518 美国知乎 Quora 旗下 Poe.com 上可以免费Claude试用 7 天。</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/0e10f6f7597a517fda1f4fd6cb3f165f/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">HTTP状态码</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

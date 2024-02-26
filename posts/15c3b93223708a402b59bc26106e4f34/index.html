@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Spring-TX-Propagation-事务传播行为 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Spring-TX-Propagation-事务传播行为" />
+<meta property="og:description" content="Spring-Tx 传播行为 propagation提交异常捕获后异常required (rollbackOnly)do nothing / commitsetRollbackOnly / rollbacksetRollbackOnly / rollbackrequired_new (isNewTransaction)commit / commitrollback / rollbackrollback / commitcommit / rollbacknested (savePoint)releaseSavepoint / commitrollbackToSavepoint &amp; releaseSavepoint / rollbackrollbackToSavepoint &amp; releaseSavePoint / commit REQUIRED 如果当前没有事务，就新建一个事务，如果已经存在一个事务中，加入到这个事务中。 本质上是同一个事务 提交：什么也不做 异常传递：rollbackOnly = true 异常捕获：rollbackOnly = true REQUIRED_NEW 新建事务，如果当前存在事务，把当前事务挂起。 提交：isNewTx = true 提交 异常传递：rollback / rollback 异常捕获：rollback / commit 异常后捕：commit / rollback A、B不可操作同一条记录，因为处于不同事务中，会产生死锁。 NESTED 如果当前存在事务，则在嵌套事务内执行。如果当前没有事务，则执行与PROPAGATION_REQUIRED类似的操作。 提交：releaseSavepoint / commit 异常传递：rollbackToSavepoint &amp; releaseSavepoint / rollback 异常捕获：rollbackToSavepoint &amp; releaseSavepoint / commit A、B可操作同一条记录，因为处于同一个事务中。 SUPPORTS 支持当前事务，如果当前没有事务，就以非事务方式执行。 提交： 异常捕获： 异常传递： MANDATORY 使用当前的事务，如果当前没有事务，就抛出异常。 提交： 异常捕获： 异常传递： NOT_SUPPORTS 以非事务方式执行操作，如果当前存在事务，就把当前事务挂起。 提交： 异常捕获： 异常传递： NEVER 以非事务方式执行，如果当前存在事务，则抛出异常。 提交： 异常捕获： 异常传递： 核心代码-AOP // Standard transaction demarcation with getTransaction and commit/rollback calls." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/15c3b93223708a402b59bc26106e4f34/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-08-11T14:43:30+08:00" />
+<meta property="article:modified_time" content="2022-08-11T14:43:30+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Spring-TX-Propagation-事务传播行为</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="SpringTx_0"></a>Spring-Tx</h2> 
+<h3><a id="_2"></a>传播行为</h3> 
+<table><thead><tr><th>propagation</th><th>提交</th><th>异常</th><th>捕获</th><th>后异常</th></tr></thead><tbody><tr><td>required (rollbackOnly)</td><td>do nothing / commit</td><td>setRollbackOnly / rollback</td><td>setRollbackOnly / rollback</td><td></td></tr><tr><td>required_new (isNewTransaction)</td><td>commit / commit</td><td>rollback / rollback</td><td>rollback / commit</td><td>commit / rollback</td></tr><tr><td>nested (savePoint)</td><td>releaseSavepoint / commit</td><td>rollbackToSavepoint &amp; releaseSavepoint / rollback</td><td>rollbackToSavepoint &amp; releaseSavePoint / commit</td><td></td></tr></tbody></table> 
+<h4><a id="REQUIRED_10"></a>REQUIRED</h4> 
+<pre><code>如果当前没有事务，就新建一个事务，如果已经存在一个事务中，加入到这个事务中。
+本质上是同一个事务
+提交：什么也不做
+异常传递：rollbackOnly = true
+异常捕获：rollbackOnly = true
+</code></pre> 
+<h4><a id="REQUIRED_NEW_18"></a>REQUIRED_NEW</h4> 
+<pre><code>新建事务，如果当前存在事务，把当前事务挂起。
+提交：isNewTx = true 提交
+异常传递：rollback / rollback
+异常捕获：rollback / commit
+异常后捕：commit / rollback
+A、B不可操作同一条记录，因为处于不同事务中，会产生死锁。
+</code></pre> 
+<h4><a id="NESTED_27"></a>NESTED</h4> 
+<pre><code>如果当前存在事务，则在嵌套事务内执行。如果当前没有事务，则执行与PROPAGATION_REQUIRED类似的操作。
+提交：releaseSavepoint / commit 
+异常传递：rollbackToSavepoint &amp; releaseSavepoint / rollback
+异常捕获：rollbackToSavepoint &amp; releaseSavepoint / commit
+A、B可操作同一条记录，因为处于同一个事务中。
+</code></pre> 
+<h4><a id="SUPPORTS_35"></a>SUPPORTS</h4> 
+<pre><code>支持当前事务，如果当前没有事务，就以非事务方式执行。
+提交：
+异常捕获：
+异常传递：
+</code></pre> 
+<h4><a id="MANDATORY_42"></a>MANDATORY</h4> 
+<pre><code>使用当前的事务，如果当前没有事务，就抛出异常。
+提交：
+异常捕获：
+异常传递：
+</code></pre> 
+<h4><a id="NOT_SUPPORTS_49"></a>NOT_SUPPORTS</h4> 
+<pre><code>以非事务方式执行操作，如果当前存在事务，就把当前事务挂起。
+提交：
+异常捕获：
+异常传递：
+</code></pre> 
+<h4><a id="NEVER_56"></a>NEVER</h4> 
+<pre><code>以非事务方式执行，如果当前存在事务，则抛出异常。
+提交：
+异常捕获：
+异常传递：
+</code></pre> 
+<h3><a id="AOP_63"></a>核心代码-AOP</h3> 
+<pre><code class="prism language-java">    <span class="token comment">// Standard transaction demarcation with getTransaction and commit/rollback calls.</span>
+    <span class="token class-name">TransactionInfo</span> txInfo <span class="token operator">=</span> <span class="token function">createTransactionIfNecessary</span><span class="token punctuation">(</span>tm<span class="token punctuation">,</span>txAttr<span class="token punctuation">,</span>joinpointIdentification<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token class-name">Object</span> retVal <span class="token operator">=</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+    <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// This is an around advice: Invoke the next interceptor in the chain.</span>
+        <span class="token comment">// This will normally result in a target object being invoked.</span>
+        retVal<span class="token operator">=</span>invocation<span class="token punctuation">.</span><span class="token function">proceedWithInvocation</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span> <span class="token keyword">catch</span><span class="token punctuation">(</span><span class="token class-name">Throwable</span> ex<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// target invocation exception</span>
+        <span class="token function">completeTransactionAfterThrowing</span><span class="token punctuation">(</span>txInfo<span class="token punctuation">,</span>ex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">throw</span> ex<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span> <span class="token keyword">finally</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">cleanupTransactionInfo</span><span class="token punctuation">(</span>txInfo<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token function">commitTransactionAfterReturning</span><span class="token punctuation">(</span>txInfo<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> retVal<span class="token punctuation">;</span>
+</code></pre> 
+<h3><a id="_84"></a>回滚事务</h3> 
+<pre><code class="prism language-java">    <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">hasSavepoint</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Rolling back transaction to savepoint"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        status<span class="token punctuation">.</span><span class="token function">rollbackToHeldSavepoint</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isNewTransaction</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Initiating transaction rollback"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token function">doRollback</span><span class="token punctuation">(</span>status<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">hasTransaction</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isLocalRollbackOnly</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">||</span> <span class="token function">isGlobalRollbackOnParticipationFailure</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Participating transaction failed - marking existing transaction as rollback-only"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token function">doSetRollbackOnly</span><span class="token punctuation">(</span>status<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Participating transaction failed - letting transaction originator decide on rollback"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="01_114"></a>提交事务-01</h3> 
+<pre><code class="prism language-java">    <span class="token class-name">DefaultTransactionStatus</span> defStatus <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">DefaultTransactionStatus</span><span class="token punctuation">)</span> status<span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>defStatus<span class="token punctuation">.</span><span class="token function">isLocalRollbackOnly</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>defStatus<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Transactional code has requested rollback"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token function">processRollback</span><span class="token punctuation">(</span>defStatus<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">shouldCommitOnGlobalRollbackOnly</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> defStatus<span class="token punctuation">.</span><span class="token function">isGlobalRollbackOnly</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>defStatus<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Global transaction is marked as rollback-only but transactional code requested commit"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token function">processRollback</span><span class="token punctuation">(</span>defStatus<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">// Throw UnexpectedRollbackException only at outermost transaction boundary</span>
+        <span class="token comment">// or if explicitly asked to.</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isNewTransaction</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">||</span> <span class="token function">isFailEarlyOnGlobalRollbackOnly</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">UnexpectedRollbackException</span><span class="token punctuation">(</span><span class="token string">"Transaction rolled back because it has been marked as rollback-only"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">return</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token function">processCommit</span><span class="token punctuation">(</span>defStatus<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<h3><a id="02_140"></a>提交事务-02</h3> 
+<pre><code class="prism language-java">    <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isNewTransaction</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">||</span> <span class="token function">isFailEarlyOnGlobalRollbackOnly</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        globalRollbackOnly <span class="token operator">=</span> status<span class="token punctuation">.</span><span class="token function">isGlobalRollbackOnly</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">hasSavepoint</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Releasing transaction savepoint"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        status<span class="token punctuation">.</span><span class="token function">releaseHeldSavepoint</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isNewTransaction</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>status<span class="token punctuation">.</span><span class="token function">isDebug</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            logger<span class="token punctuation">.</span><span class="token function">debug</span><span class="token punctuation">(</span><span class="token string">"Initiating transaction commit"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token function">doCommit</span><span class="token punctuation">(</span>status<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="_159"></a>测试代码</h3> 
+<pre><code class="prism language-java"><span class="token keyword">package</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx</span><span class="token punctuation">;</span>
+
+<span class="token keyword">import</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service<span class="token punctuation">.</span></span><span class="token class-name">TxAService</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">lombok<span class="token punctuation">.</span>extern<span class="token punctuation">.</span>slf4j<span class="token punctuation">.</span></span><span class="token class-name">Slf4j</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>aop<span class="token punctuation">.</span>framework<span class="token punctuation">.</span>autoproxy<span class="token punctuation">.</span></span><span class="token class-name">InfrastructureAdvisorAutoProxyCreator</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>boot<span class="token punctuation">.</span></span><span class="token class-name">SpringApplication</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>boot<span class="token punctuation">.</span>autoconfigure<span class="token punctuation">.</span></span><span class="token class-name">SpringBootApplication</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>context<span class="token punctuation">.</span></span><span class="token class-name">ConfigurableApplicationContext</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">AnnotationTransactionAttributeSource</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">EnableTransactionManagement</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>event<span class="token punctuation">.</span></span><span class="token class-name">TransactionalEventListenerFactory</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>interceptor<span class="token punctuation">.</span></span><span class="token class-name">BeanFactoryTransactionAttributeSourceAdvisor</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>interceptor<span class="token punctuation">.</span></span><span class="token class-name">TransactionInterceptor</span><span class="token punctuation">;</span>
+
+<span class="token annotation punctuation">@Slf4j</span>
+<span class="token annotation punctuation">@EnableTransactionManagement</span>
+<span class="token annotation punctuation">@SpringBootApplication</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">SpringTxApplication</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">[</span><span class="token punctuation">]</span> args<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">ConfigurableApplicationContext</span> run <span class="token operator">=</span> <span class="token class-name">SpringApplication</span><span class="token punctuation">.</span><span class="token function">run</span><span class="token punctuation">(</span><span class="token class-name">SpringTxApplication</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> args<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 基础增强自动代理创建器</span>
+        <span class="token keyword">final</span> <span class="token class-name">InfrastructureAdvisorAutoProxyCreator</span> infrastructureAdvisorAutoProxyCreator <span class="token operator">=</span> run<span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span><span class="token class-name">InfrastructureAdvisorAutoProxyCreator</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">assert</span> <span class="token keyword">null</span> <span class="token operator">!=</span> infrastructureAdvisorAutoProxyCreator<span class="token punctuation">;</span>
+        <span class="token comment">// TransactionalEventListener ： https://blog.csdn.net/qq_41378597/article/details/105748703</span>
+        <span class="token keyword">final</span> <span class="token class-name">TransactionalEventListenerFactory</span> transactionalEventListenerFactory <span class="token operator">=</span> run<span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span><span class="token class-name">TransactionalEventListenerFactory</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">assert</span> <span class="token keyword">null</span> <span class="token operator">!=</span> transactionalEventListenerFactory<span class="token punctuation">;</span>
+        <span class="token comment">//</span>
+        <span class="token keyword">final</span> <span class="token class-name">AnnotationTransactionAttributeSource</span> annotationTransactionAttributeSource <span class="token operator">=</span> run<span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span><span class="token class-name">AnnotationTransactionAttributeSource</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">assert</span> <span class="token keyword">null</span> <span class="token operator">!=</span> annotationTransactionAttributeSource<span class="token punctuation">;</span>
+        <span class="token comment">// 事务AOP增强</span>
+        <span class="token keyword">final</span> <span class="token class-name">TransactionInterceptor</span> transactionInterceptor <span class="token operator">=</span> run<span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span><span class="token class-name">TransactionInterceptor</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">assert</span> <span class="token keyword">null</span> <span class="token operator">!=</span> transactionInterceptor<span class="token punctuation">;</span>
+        <span class="token comment">//</span>
+        <span class="token keyword">final</span> <span class="token class-name">BeanFactoryTransactionAttributeSourceAdvisor</span> beanFactoryTransactionAttributeSourceAdvisor <span class="token operator">=</span> run<span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span><span class="token class-name">BeanFactoryTransactionAttributeSourceAdvisor</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">assert</span> <span class="token keyword">null</span> <span class="token operator">!=</span> beanFactoryTransactionAttributeSourceAdvisor<span class="token punctuation">;</span>
+
+        <span class="token keyword">final</span> <span class="token class-name">TxAService</span> txAService <span class="token operator">=</span> run<span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span><span class="token class-name">TxAService</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txAService<span class="token punctuation">.</span><span class="token function">truncateTable</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         *
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_NoTx_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         *
+         */</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txAService<span class="token punctuation">.</span><span class="token function">required_commit_NoTx_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">/**
+         * commit / commit
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         * setRollbackOnly / rollback
+         */</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">/**
+         * setRollbackOnly / rollback
+         */</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">/**
+         * commit / commit
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_New_Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         * rollback / commit
+         */</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_New_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">/**
+         * rollback / commit
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_New_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         * commit / rollback
+         */</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txAService<span class="token punctuation">.</span><span class="token function">required_Ex_Required_New_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">/**
+         * releaseSavePoint / commit
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Nested_Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         * rollbackToSavePoint &amp; releaseSavePoint / rollback
+         */</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Nested_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token punctuation">}</span>
+        <span class="token comment">/**
+         * rollbackToSavePoint &amp; releaseSavePoint / commit
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Nested_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         * THIS 以下
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">/**
+         * Spring 以下
+         */</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span><span class="token string">"天地英雄气，千秋尚凛然"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="ServiceA_Interface_282"></a>ServiceA Interface</h3> 
+<pre><code class="prism language-java"><span class="token keyword">package</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service</span><span class="token punctuation">;</span>
+
+<span class="token comment">/**
+ * Description:
+ *
+ * @author Leon
+ * @since 2022/1/11 1:57 下午
+ */</span>
+<span class="token keyword">public</span> <span class="token keyword">interface</span> <span class="token class-name">TxAService</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">void</span> <span class="token function">truncateTable</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_Ex_Required_New_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// this 以下是</span>
+    <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid_this</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// Spring 以下是</span>
+    <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid_Spring</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="ServiceAImpl_Class_332"></a>ServiceAImpl Class</h3> 
+<pre><code class="prism language-java"><span class="token keyword">package</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service<span class="token punctuation">.</span>impl</span><span class="token punctuation">;</span>
+
+<span class="token keyword">import</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>dao<span class="token punctuation">.</span></span><span class="token class-name">MonkeyDao</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>mapper<span class="token punctuation">.</span></span><span class="token class-name">MonkeyMapper</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service<span class="token punctuation">.</span></span><span class="token class-name">TxAService</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service<span class="token punctuation">.</span></span><span class="token class-name">TxBService</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">lombok<span class="token punctuation">.</span>extern<span class="token punctuation">.</span>slf4j<span class="token punctuation">.</span></span><span class="token class-name">Slf4j</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>beans<span class="token punctuation">.</span>factory<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Autowired</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>stereotype<span class="token punctuation">.</span></span><span class="token class-name">Service</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Propagation</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Transactional</span><span class="token punctuation">;</span>
+
+<span class="token comment">/**
+ * Description:
+ *
+ * @author Leon
+ * @since 2022/1/11 1:57 下午
+ */</span>
+<span class="token annotation punctuation">@Service</span>
+<span class="token annotation punctuation">@Slf4j</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">TxAServiceImpl</span> <span class="token keyword">implements</span> <span class="token class-name">TxAService</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Autowired</span>
+    <span class="token keyword">private</span> <span class="token class-name">TxBService</span> txBService<span class="token punctuation">;</span>
+    <span class="token annotation punctuation">@Autowired</span>
+    <span class="token keyword">private</span> <span class="token class-name">MonkeyDao</span> monkeyDao<span class="token punctuation">;</span>
+    <span class="token annotation punctuation">@Autowired</span>
+    <span class="token keyword">private</span> <span class="token class-name">MonkeyMapper</span> monkeyMapper<span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Autowired</span>
+    <span class="token keyword">private</span> <span class="token class-name">TxAService</span> txAService<span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">truncateTable</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyMapper<span class="token punctuation">.</span><span class="token function">truncateTable</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)
+     * B TransactionInterceptor 不拦截，无事务增强
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_NoTx_commit_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_NoTx_commit</span><span class="token punctuation">(</span><span class="token string">"required_commit_NoTx_commit_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)
+     * B TransactionInterceptor 不拦截，无事务增强
+     * B 抛异常，捕获异常，向上传递。
+     * 在 A catch 处理程序中 根据 rollbackFor 配置决定是否回滚或提交
+     * 回滚：A ts(isNewTx = true) 回滚。继续抛出 异常。
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_NoTx_Ex_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_NoTx_Ex</span><span class="token punctuation">(</span><span class="token string">"required_commit_NoTx_Ex_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false)
+     * B 提交事务 ts(isNewTx = false)，不 commit
+     * A 开启事务 ts(isNewTx = true)，commit
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_commit_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_commit</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_commit_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false)
+     * B 抛异常
+     * 在 B catch 处理程序中 根据 rollbackFor 配置决定是否回滚或提交
+     * 回滚：B ts(isNewTx = false, ConnectionHolder::rollbackOnly = true), 继续抛出异常
+     * 提交：
+     * 在 A catch 处理程序中 根据 rollbackFor 配置决定是否回滚或提交
+     * 回滚：A ts(isNewTx = true, ConnectionHolder::rollbackOnly = true), 执行回滚逻辑。继续抛出异常
+     * 提交：
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Ex_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Ex</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Ex_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false)
+     * B 抛异常
+     * 在 B catch 处理程序中 根据 rollbackFor 配置决定是否回滚或提交
+     * 回滚：B ts(isNewTx = false, ConnectionHolder::rollbackOnly = true), 继续抛出异常
+     * 提交：
+     * 在 A catch 处理程序中 根据 rollbackFor 配置决定是否回滚或提交
+     * 回滚：A ts(isNewTx = true, ConnectionHolder::rollbackOnly = true), 执行回滚逻辑。继续抛出异常
+     * 提交：
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Ex_Caught_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Ex_Caught</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Ex_Caught_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Ex_Caught_B. error : {}"</span><span class="token punctuation">,</span> e<span class="token punctuation">.</span><span class="token function">getMessage</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false)(线程挂起资源时，清除connect。重新获取ts(isNewTx = true)，开启事务，重新获取connect）
+     * 提交：B con.commit();
+     * 提交：A con.commit();
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_New_Commit_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_New_Commit</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_New_Commit_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false)(线程挂起资源时，清除connect。重新获取ts(isNewTx = true)，开启事务，重新获取connect）
+     * 回滚：B con.rollback(); 继续向上传递异常
+     * 回滚：A con.rollback(); 继续向上传递异常
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_New_Ex_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_New_Ex</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_New_Ex_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false)(线程挂起资源时，清除connect。重新获取ts(isNewTx = true)，开启事务，重新获取connect）
+     * 提交：B con.commit();
+     * 回滚：A con.rollback(); 继续向上传递异常
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_New_Ex_Caught_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_New_Ex_Caught</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_New_Ex_Caught_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_New_Ex_Caught_B : {}"</span><span class="token punctuation">,</span> e<span class="token punctuation">.</span><span class="token function">getMessage</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false)(线程挂起资源时，清除connect。重新获取ts(isNewTx = true)，开启事务，重新获取connect）
+     * 提交：B con.commit();
+     * 回滚：A con.rollback(); 继续向上传递异常
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_Ex_Required_New_commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_Ex_Required_New_commit_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_Ex_Required_New_commit</span><span class="token punctuation">(</span><span class="token string">"required_Ex_Required_New_commit_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false, crateAndHoledSavePoint())
+     * 提交：B release savePoint
+     * 提交：A con.commit();
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Commit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Nested_Commit_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Nested_Commit</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Nested_Commit_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false, crateAndHeldSavePoint())
+     * 回滚：B rollbackTo/release savePoint 继续向上传递异常
+     * 回滚：A con.rollback();
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Nested_Ex_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Nested_Ex</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Nested_Ex_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * B 开启事务 ts(isNewTx = false, crateAndHeldSavePoint())
+     * 回滚：B rollbackTo/release savePoint (ConnectionHolder:rollbackOnly still is false) 继续向上传递异常
+     * A catch B ex
+     * 提交：A con.rollback();
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex_Caught</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Nested_Ex_Caught_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+            txBService<span class="token punctuation">.</span><span class="token function">required_commit_Required_Nested_Ex_Caught</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Nested_Ex_Caught_B"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">Exception</span> e<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            log<span class="token punctuation">.</span><span class="token function">info</span><span class="token punctuation">(</span><span class="token string">"required_commit_Required_Nested_Ex_Caught_B. error : {}"</span><span class="token punctuation">,</span> e<span class="token punctuation">.</span><span class="token function">getMessage</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * this.方法名调用是对象内部方法调用，不会通过Spring代理，不会被TransactionInterceptor事务拦截器增强，也就是事务不会起作用。
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">this</span><span class="token punctuation">.</span><span class="token function">required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid_this</span><span class="token punctuation">(</span><span class="token string">"required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid_this"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>NEVER<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_This_Any_propagation_commit_or_ex_or_caught_is_invalid_this</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/**
+     * A 开启事务 ts(isNewTx = true)(线程不带connect）
+     * Spring 开启事务 ts(isNewTx = false)
+     */</span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token string">"required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid_A"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        txAService<span class="token punctuation">.</span><span class="token function">required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid_Spring</span><span class="token punctuation">(</span><span class="token string">"required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid_Spring"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>NEVER<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_or_ex_catch_Spring_Any_propagation_commit_or_ex_or_caught_invalid_Spring</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="ServiceB_Interface_593"></a>ServiceB Interface</h3> 
+<pre><code class="prism language-java"><span class="token keyword">package</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service</span><span class="token punctuation">;</span>
+
+<span class="token comment">/**
+ * Description:
+ *
+ * @author Leon
+ * @since 2022/1/11 1:57 下午
+ */</span>
+<span class="token keyword">public</span> <span class="token keyword">interface</span> <span class="token class-name">TxBService</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex_Caught</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex_Caught</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_Ex_Required_New_commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex_Caught</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+       
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="ServiceBImpl_Class_632"></a>ServiceBImpl Class</h3> 
+<pre><code class="prism language-java"><span class="token keyword">package</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service<span class="token punctuation">.</span>impl</span><span class="token punctuation">;</span>
+
+<span class="token keyword">import</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>dao<span class="token punctuation">.</span></span><span class="token class-name">MonkeyDao</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">center<span class="token punctuation">.</span>leon<span class="token punctuation">.</span>springtx<span class="token punctuation">.</span>service<span class="token punctuation">.</span></span><span class="token class-name">TxBService</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>beans<span class="token punctuation">.</span>factory<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Autowired</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>stereotype<span class="token punctuation">.</span></span><span class="token class-name">Service</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Propagation</span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>springframework<span class="token punctuation">.</span>transaction<span class="token punctuation">.</span>annotation<span class="token punctuation">.</span></span><span class="token class-name">Transactional</span><span class="token punctuation">;</span>
+
+<span class="token comment">/**
+ * Description:
+ *
+ * @author Leon
+ * @since 2022/1/11 1:57 下午
+ */</span>
+<span class="token annotation punctuation">@Service</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">TxBServiceImpl</span> <span class="token keyword">implements</span> <span class="token class-name">TxBService</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token annotation punctuation">@Autowired</span>
+    <span class="token keyword">private</span> <span class="token class-name">MonkeyDao</span> monkeyDao<span class="token punctuation">;</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_NoTx_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Ex_Caught</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRES_NEW<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRES_NEW<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRES_NEW<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_New_Ex_Caught</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>REQUIRES_NEW<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_Ex_Required_New_commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>NESTED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Commit</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>NESTED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token annotation punctuation">@Transactional</span><span class="token punctuation">(</span>rollbackFor <span class="token operator">=</span> <span class="token class-name">Exception</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">,</span> propagation <span class="token operator">=</span> <span class="token class-name">Propagation</span><span class="token punctuation">.</span>NESTED<span class="token punctuation">)</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">required_commit_Required_Nested_Ex_Caught</span><span class="token punctuation">(</span><span class="token class-name">String</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        monkeyDao<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span> <span class="token operator">/</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a50e9ea69d1e9002582a58cfd31b29e5/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">uniApp运行到微信小程序</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/84a8afa6bf7a5ac86666e1ca3b45c6f8/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">微信小程序天气预报功能实现(支持自动定位,附源码)</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

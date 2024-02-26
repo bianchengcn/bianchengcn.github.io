@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Posts - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Posts" />
+<meta property="og:description" content="编程中国的博客" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="/posts/" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+	<link rel="alternate" type="application/rss+xml" href="/posts/index.xml" title="编程中国的博客">
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main list" role="main">
+	<header class="main__header">
+		<h1 class="main__title">Posts</h1>
+	</header><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/8a8f85a1865d21017affcad4994a6ee4/" rel="bookmark">
+			SpringBoot &#43; Redis 实现接口限流
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		一、思路 使用接口限流的主要目的在于提高系统的稳定性，防止接口被恶意打击（短时间内大量请求）。
+比如要求某接口在1分钟内请求次数不超过1000次，那么应该如何设计代码呢？
+下面讲两种思路，如果想看代码可直接翻到后面的代码部分。
+1.1 固定时间段（旧思路） 1.1.1 思路描述 该方案的思路是：使用Redis记录固定时间段内某用户IP访问某接口的次数，其中：
+Redis的key：用户IP + 接口方法名
+Redis的value：当前接口访问次数。
+当用户在近期内第一次访问该接口时，向Redis中设置一个包含了用户IP和接口方法名的key，value的值初始化为1（表示第一次访问当前接口）。同时，设置该key的过期时间（比如为60秒）。
+之后，只要这个key还未过期，用户每次访问该接口都会导致value自增1次。
+用户每次访问接口前，先从Redis中拿到当前接口访问次数，如果发现访问次数大于规定的次数（如超过1000次），则向用户返回接口访问失败的标识。
+1.1.2 思路缺陷 该方案的缺点在于，限流时间段是固定的。
+比如要求某接口在1分钟内请求次数不超过1000次，观察以下流程：
+可以发现，00:59和01:01之间仅仅间隔了2秒，但接口却被访问了1000+999=1999次，是限流次数（1000次）的2倍！
+所以在该方案中，限流次数的设置可能不起作用，仍然可能在短时间内造成大量访问。
+1.2 滑动窗口（新思路） 1.2.1 思路描述 为了避免出现方案1中由于键过期导致的短期访问量增大的情况，我们可以改变一下思路，也就是把固定的时间段改成动态的：
+假设某个接口在10秒内只允许访问5次。用户每次访问接口时，记录当前用户访问的时间点（时间戳），并计算前10秒内用户访问该接口的总次数。如果总次数大于限流次数，则不允许用户访问该接口。这样就能保证在任意时刻用户的访问次数不会超过1000次。
+如下图，假设用户在0:19时间点访问接口，经检查其前10秒内访问次数为5次，则允许本次访问。
+假设用户0:20时间点访问接口，经检查其前10秒内访问次数为6次（超出限流次数5次），则不允许本次访问。
+1.2.2 Redis部分的实现 1）选用何种 Redis 数据结构
+首先是需要确定使用哪个Redis数据结构。用户每次访问时，需要用一个key记录用户访问的时间点，而且还需要利用这些时间点进行范围检查。
+2）为何选择 zSet 数据结构
+为了能够实现范围检查，可以考虑使用Redis中的zSet有序集合。
+添加一个zSet元素的命令如下：
+ZADD [key] [score] [member] 它有一个关键的属性score，通过它可以记录当前member的优先级。
+于是我们可以把score设置成用户访问接口的时间戳，以便于通过score进行范围检查。key则记录用户IP和接口方法名，至于member设置成什么没有影响，一个member记录了用户访问接口的时间点。因此member也可以设置成时间戳。
+3）zSet 如何进行范围检查（检查前几秒的访问次数）
+思路是，把特定时间间隔之前的member都删掉，留下的member就是时间间隔之内的总访问次数。然后统计当前key中的member有多少个即可。
+① 把特定时间间隔之前的member都删掉。
+zSet有如下命令，用于删除score范围在[min~max]之间的member：
+Zremrangebyscore [key] [min] [max] 假设限流时间设置为5秒，当前用户访问接口时，获取当前系统时间戳为currentTimeMill，那么删除的score范围可以设置为：
+min = 0 max = currentTimeMill - 5 * 1000 相当于把5秒之前的所有member都删除了，只留下前5秒内的key。
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/8a8f85a1865d21017affcad4994a6ee4/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/5c7e5fa7707cc673b6f0229dbd1733b3/" rel="bookmark">
+			当我用Python采集全国加盟品牌详情信息，并进行可视化分析后发现了这些
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		表弟找我说想开个加盟店， 不知道什么品牌好，让我帮他参谋参谋。
+还好我会Python，分分钟就获取到了全国加盟品牌信息，稍加分析就筛选出了最适合他的品牌。
+话不多说，咱们直接分享干货！
+准备工作 开发环境
+python 3.8pycharmjupyter 模块使用
+requestsparselcsvpandaspyecharts 第三方模块需要手动安装，win + R 输入cmd 输入安装命令 pip install 模块名 (如果你觉得安装速度比较慢, 你可以切换国内镜像源)
+获取数据部分 流程步骤 明确需求 明确采集网址以及数据内容
+网址: http://www.*****.com/brandList （winshangdata 替换 删掉括号）
+数据: 每一个品牌基本信息
+1、抓包分析, 数据是请求那个链接可以得到
+开发者工具进行抓包 --&gt; F12 / FN+F12 / 鼠标右键点击检测选择network刷新网页搜索数据 2、如何才能获取多个数据
+对于单个数据包链接地址, 进行比较, 查看规律
+brandId --&gt; 品牌ID变化
+能不能在某一个数据包当中, 找到所有品牌ID --&gt; 列表页面抓包
+代码实现步骤 1、发送请求, 对于品牌ID的数据包发送请求
+2、获取数据, 获取服务器返回响应数据
+3、解析数据, 提取我们需要的内容 ==&gt; 品牌ID
+4、发送请求, 请求数据详情页
+5、获取数据, 获取服务器返回响应数据
+6、解析数据, 提取我们需要的内容 ==&gt; 品牌基本信息
+7、保存数据, 把数据保存到表格文件
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/5c7e5fa7707cc673b6f0229dbd1733b3/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/730705d4aa0207d8962749ae8dc8f110/" rel="bookmark">
+			echarts图表渐变色 &#43; 每个柱子不同颜色设置
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		echarts柱状图，默认所有柱子都是同一个颜色，显示效果差强人意，本文介绍如果修改成为每个柱子添加不同的颜色，以及如何添加渐变色，丰富图表的显示鲜果。先看效果：
+每个柱子颜色不同 每个柱子都有自己的渐变色
+1、为柱子设置不同颜色 方法一：series中的data属性设置为对象，value表示值，itemStyle.color可为每个子项设置不同样式，完整代码：
+import * as echarts from 'echarts'; var chartDom = document.getElementById('main'); var myChart = echarts.init(chartDom); var option; option = { tooltip: {}, legend: {}, xAxis: { data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] }, yAxis: {}, series: [ { name: 'Sale', type: 'bar', data: [ { value: 5, itemStyle: { color: '#FA897B' } }, { value: 20, itemStyle: { color: '#D0E6A5' } }, { value: 36, itemStyle: { color: '#4675C0' } }, { value: 10, itemStyle: { color: '#86E3CE' } }, { value: 10, itemStyle: { color: '#64A4D6' } }, { value: 20, itemStyle: { color: '#bdc2e8' } }, { value: 4, itemStyle: { color: '#FFA876' } } ] } ] }; //5, 20, 36, 10, 10, 20, 4 option &amp;&amp; myChart.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/730705d4aa0207d8962749ae8dc8f110/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/d262f2272bca7ce2bbfc6a4d98070df5/" rel="bookmark">
+			GAN系列之普通GAN
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		基础GAN详解 1.原理解析 在深度学习的大家庭中，可以将所有的模型粗略地分成两个派系，即生成式模型以及判别式模型，所谓的生成式模型，即是你输入一个sample，模型就会生成另外一个东西，比如最近大火的ChatGPT,Stable Diffusion，以及今天我们要讲的GAN等，都是生成式模型。
+而所谓的判别式模型，就是你输入一个sample,模型会给你一个预测概率，表示该sample是某个label的可能性。
+那么今天的重点内容，就是讲解GAN的原理。
+简而言之，GAN是由两个部分组成的，一个部分叫做生成器，专门生成假的数据，而另外一个是判别器，专门来识别你给的数据是来自真实样本还是生成器的假样本。
+他们两者相互博弈，直到达到所谓的纳什均衡。
+注： 什么是纳什均衡？
+定义：博弈的所有参与人都为了满足自己的个人利益而选择牺牲集体利益而导致的全体参与人都吃亏的均衡状态。
+在GAN中的意思就是，判别器既不能发现生成器生成的假数据是真数据还是假数据，而生成器也不能奈何判别器。
+2. 算法流程 讲解完了原理，相信很多人还是一头雾水，那么我们再来过一遍算法流程。
+请明确一点：生成器和判别器本质上是深度神经网络，所以不用关注它的模型架构，后面会有涉及，现在只需要知道它是神经网络
+首先随机采样噪声z，输入到生成器G生成器获得采样的噪声，然后就会生成一张图片生成器为了愚弄判别器，要求判别器判断该张生成出的图片与真实图像的误差越大越好。越大，那么我就能够越成功愚弄判别器了。判别器判断该张图片是真图片还是假图片，如果是真图片，就输出1，否则输出0判别器为了不被愚弄，要判别生成器生成出的图片是假图片，真实的样本输出是真图片，让真实的误差越小越好。直到判别器无法判别生成器生成的图片是真图片还是假图片为止，就达到了所谓的纳什均衡 公式如下:
+3. 代码解释 首先给出的是生成器的代码和判别器的代码：
+#生成器代码 class Generator(nn.Module): def __init__(self): super(Generator, self).__init__() def block(in_feat, out_feat, normalize=True): layers = [nn.Linear(in_feat, out_feat)] if normalize: layers.append(nn.BatchNorm1d(out_feat, 0.8)) layers.append(nn.LeakyReLU(0.2, inplace=True)) return layers self.model = nn.Sequential( *block(opt.latent_dim, 128, normalize=False), *block(128, 256), *block(256, 512), *block(512, 1024), nn.Linear(1024, int(np.prod(img_shape))), nn.Tanh() ) def forward(self, z): img = self.model(z) img = img.view(img.size(0), *img_shape) return img 而判别器的代码是:
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/d262f2272bca7ce2bbfc6a4d98070df5/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/88ee1e192584a903e574cbf270b117de/" rel="bookmark">
+			常见算法及其时间复杂度总结
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		提示：文章写完后，目录可以自动生成，如何生成可参考右边的帮助文档
+常见算法及其时间复杂度总结 前言一、O(1)二、O(logn)三、O(n)四、O(nlogn)五、O(n^2)六、O(n^3)七、O(2^n)八、O(n!)九、O(n^n^)总结 前言 记录一些常见算法时间复杂度
+O(1) &lt; O(logn) &lt; O(n) &lt; O(nlogn) &lt; O(n2 ) &lt; O(n3) &lt; O(2n) &lt; O(n!) &lt; O(nn)
+一、O(1) 常见算法：数组随机存取、固定大小的循环、获取链表的长度或头尾节点、简单算术运算或位运算（+、-、*、/、&amp;、|、~、^）、哈希散列表查找（unordered_map、unordered_set）
+数组随机存取：数组具有
+二、O(logn) 表示log2n
+常见算法：for或while以i*2或i/2进行变化、二分查找、平衡二叉树查找（map、set）、分治算法
+三、O(n) 常见算法：线性查找、以变量为迭代指标遍历、求和、计数、拷贝、阶乘算法、链表合并（max(m,n)）、计数排序、桶排序、广度优先搜索算法、深度优先搜索算法
+四、O(nlogn) 常见算法：堆排序、快速排序、归并排序、希尔排序、计数排序、基数排序、C+±std::sort()
+堆排序：大根堆、小根堆，属于二叉排序树/二叉搜索树/二叉查找树
+快速排序：自上而下将数据进行分治
+归并排序：自下而上将数据分治为小粒度，再进行合并
+C++标准库的std::sort()：通常是使用快速排序、归并排序或堆排序等。
+五、O(n^2) 常见算法：两层循环嵌套、冒泡排序、选择排序、插入排序、希尔排序、矩阵乘法朴素算法、求解线性方程组的高斯消元法
+冒泡排序：两层循环，外层i正常遍历0 ~ n-1，内层j从0 ~ n-1-i，内层每一轮使j+1处数据&gt;j处数据（如不满足则交换两位置数据）
+选择排序：两层循环，外层i正常遍历0 ~ n-1，内层j从i+1 ~ n，内层每轮确定一个最小的数的位置，将之与i处的数据交换
+插入排序：两层循环，外层i正常遍历1 ~ n-1，内层j从 i起往前遍历，确保j-1处的数据&lt;j处的数据（如不满足则交换两位置数据）
+六、O(n^3) 常见算法：三层循环嵌套、常规矩阵乘法、Floyd-Warshall 算法、求解线性方程组的高斯消元法
+七、O(2^n) 常见算法：斐波那契递归、递归组合生成算法、动态规划的指数级实现
+八、O(n!) 常见算法：全排列生成算法、旅行商问题暴力破解算法、递归字典序生成算法
+九、O(nn) 常见算法：暴力搜索算法、递归全排列算法、递归子集生成算法、递归布尔表达式求解算法
+总结 附上别处的总结图片对比参考：
+稳定的排序算法：冒泡排序、插入排序、归并排序、基数排序
+不稳定的排序算法：选择排序、快速排序、希尔排序、堆排序
+各排序算法优化：
+快速排序：
+快排若默认选取第一个/最后一个作为标定点则时间复杂度在基本有序的原始数据上接近O(n2)，此时可以选用随机标定点，时间复杂度为O(nlogn)对数据量低于20的递归部分采用插入排序 归并排序：
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/88ee1e192584a903e574cbf270b117de/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/4f88f925819e62a6b2bcc6141349d6d4/" rel="bookmark">
+			WEB集群——tomcat
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		1. 简述静态网页和动态网页的区别。
+2. 简述 Webl.0 和 Web2.0 的区别。
+3. 安装tomcat8，配置服务启动脚本，部署jpress应用。
+一、简述静态网页和动态网页的区别 （1）静态网页 1.什么是静态网页 请求响应信息，发给客户端进行处理，由浏览器进行解析，显示的页面称为静态页面
+在网站设计中，纯粹 HTML 格式的网页（可以包含图片、视频 JS ( 前端功能实现）、 CSS ( 样式）等）通常 被称为" 静态网页 "
+2.静态网页的优势 1. 访问的效率比较高
+2. 网页内容是固定不变的，因此，容易被搜索引擎收录
+3. 网页程序在用户浏览器端解析，当客户端向服务器请求数据时，服务器会直接从磁盘文件系统上返回数据（不做任何解析）
+3.静态网页的劣势 1. 网页页面交互性交差，因为不能与数据库配合
+2. 保存在网站服务器文件系统上的，是实实在在保存在服务器上的文件实体
+4.静态网页的特征 1. 处理文件类型：如.html、jpg、.gif、.mp4、.swf、.avi、.wmv、.flv等-
+2. 地址中不含有问号 " ？ " 或 &amp; 等特殊符号。
+3. 保存在网站服务器文件系统上的，是实实在在保存在服务器上的文件实体
+4. 页内容是固定不变的，因此，容易被搜索引擎收录
+5. 网页页面交互性交差，因为不能与数据库配合
+6. 网页程序在用户浏览器端解析，当客户端向服务器请求数据时，服务器会直接从磁盘文件系 统上返回数据（不做任何解析）
+（2）动态网页 1.什么是动态网页 所谓的动态网页是与静态网页相对而言的，也就是说，动态网页的 URL 后缀不是 .html、.htm 、 .xml 、 .shtml 、 .
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/4f88f925819e62a6b2bcc6141349d6d4/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/a37a6109e8d8eadd120d57b11dcc093d/" rel="bookmark">
+			CSS 变量由浅入深，提升效率必备知识！
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		CSS变量（又名自定义属性）已在Web浏览器中支持了近四年。 我一般也会根据项目情况使用它们。 它们非常有用且易于使用，但是前端开发人员通常可能会误用或误解它们。
+简介 CSS变量是在CSS文档中定义的值，其目的是可重用性并减少CSS值中的冗余。 下面是一个基本示例。
+.section { border: 2px solid #235ad1; } .section-title { color: #235ad1; } .section-title::before { content: ""; display: inline-block; width: 20px; height: 20px; background-color: #235ad1; } 在此代码段中，#235ad1使用了3次。 想象一下，对于一个大型项目，不同的CSS文件，如果哪天被要求更改颜色。 我们可以做的最好快的方式就是“查找并替换”。
+使用CSS变量，可以更快解决这个问题。 定义变量名需要用--开头。 首先，我们现在将在:root或&lt;html&gt;元素中定义变量。
+:root { --color-primary: #235ad1; } .section { border: 2px solid var(--color-primary); } .section-title { color: var(--color-primary); } .section-title::before { /* Other styles */ background-color: var(--color-primary); } 是不是比前面的干净得多？ --color-primary变量是全局变量，因为我们在:root元素中定义了它。 但是，我们还可以将变量范围限定到整个文档中的某些元素。
+命名变量 与编程语言命名变量相似，CSS 变量的有效命名应包含字母数字字符，下划线和破折号。 另外，值得一提的是 CSS 变量区分大小写。
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/a37a6109e8d8eadd120d57b11dcc093d/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/5ba06396cbcff1127d5115f4483d05d1/" rel="bookmark">
+			idea下载jar包，找不到问题
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		1、问题背景介绍：明明maven官网有这个jar包，但是dependency引入的时候就是引入不下来。
+2、问题解决：先去maven官网找到指定的版本 https://mvnrepository.com/
+此处随便找一个做例子，点击这个jar，下载好
+3、win+R---》cmd,打开命令管理器
+4、输入：mvn install:install-file -Dfile=刚下载的jar包的位置 -DgroupId=依赖里写的groupId -DartifactId=依赖里写的artifactId -Dversion=上面的version -Dpackaging=jar
+例如：mvn install:install-file -Dfile=C:\Users\lixiaopeng\Downloads\docx4j-export-fo-6.1.0.jar -DgroupId=org.docx4j -DartifactId=ooxml-schemas -Dversion=6.1.0 -Dpackaging=jar
+5、然后刷新idea重新引入jar就可以
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/fd7d99c32070349acbb3dde8bdf4f772/" rel="bookmark">
+			【深度学习】ubuntu18.04环境配置详细教程
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		【深度学习】ubuntu18.04环境配置详细教程 文章目录 【深度学习】ubuntu18.04环境配置详细教程前言一、Anaconda31.安装Anaconda32.卸载Anaconda3 二、cuda/cudnn1.安装合适的CUDA2.安装对应的CUDNN 总结 前言 最近在ubuntu18.04上配置深度学习所需的运行环境时踩了很多坑,在这期间查阅了很多资料和博客,于是想对安装过程进行总结,方便自己反复查阅以及分享经验避免大家重复踩坑。博主是用docker在ubuntu18.04容器上配置的深度学习运行环境,已经打包成docker的镜像文件分享给大家。
+预备:更新下ubuntu环境
+建议修改apt-get源
+# Ubuntu18.04系统的未安装gcc、g++等编译器 sudo apt install gcc g++ # update是更新软件列表 sudo apt-get update # upgrade是更新软件 sudo apt-get upgrade 一、Anaconda3 anaconda常用命令参考
+1.安装Anaconda3 【官方地址】
+页面拉倒底部,下载最新版本
+进入文件下载位置,bash执行安装:
+bash Anaconda3-2022.10-Linux-x86_64.sh 安装过程: 回车确认–&gt;跳过协议–&gt;yes–&gt;回车确认–&gt;yes
+安装完成: 打开命令终端有(base)的提示,表示正在使用conda基本版的环境。
+将conda列入环境变量
+# 修改.bashrc文件 sudo gedit ~/.bashrc # 加上anaconda3的路径 XXX/anaconda3/bin export PATH=/root/anaconda3/bin${PATH:+:${PATH}} # 激活环境变量 source ~/.bashrc 2.卸载Anaconda3 # 卸载Anaconda3只需把安装目录全部删除即可 pwd # eg: /root/anaconda3 sudo rm -r /xxxx/anaconda3 # eg: sudo rm -r /root/anaconda3 二、cuda/cudnn 博主的ubuntu18.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/fd7d99c32070349acbb3dde8bdf4f772/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/987f2ad9371b9d96f99458a71c6169a0/" rel="bookmark">
+			Spring创建Bean源码 - 解析配置类： 延迟导入选择器DeferredImportSelector
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		简介 DeferredImportSelector延迟导入选择器是Spring提供的一个扩展导入器，该导入器是ImportSelector的一个变体，该导入器是在处理配置类上@Import注解的时候注册的，当所有{@code @Configuration}配置类解析完成后才会运行所有被注册的DeferredImportSelector。
+该导入器的主要作用是，委托Group接口导入一组配置类。Springboot 的AutoConfigurationImportSelector实现了该接口，用于自动装配类的获取。请查看《Springboot源码-自动装配(一)：AutoConfigurationImportSelector》
+DeferredImportSelector接口 DeferredImportSelector继承自ImportSelector，扩展了getImportGroup方法，getImportGroup方法返回同一个Group类的DeferredImportSelector会被分到同一个组中。当所选导入是{@code @Conditional}时，这种类型的选择器可能特别有用，可能就是不同的Condition对应不同的DeferredImportSelector实现。
+/** * {@link ImportSelector} 的变体，在解析完所有 {@code @Configuration} bean后运行。 * 当所选导入是{@code @Conditional}时，这种类型的选择器可能特别有用。 * * &lt;p&gt;实现还可以扩展 {@link org.springframework.core.Ordered} 接口 * 或使用 {@link org.springframework.core.annotation.Order} 注解来指示相对于其他 {@link DeferredImportSelector DeferredImportSelectors} 的优先级。 * * &lt;p&gt;Springboot {@link org.springframework.boot.autoconfigure.AutoConfigurationImportSelector}实现了该接口，用于自动装配类的获取 */ public interface DeferredImportSelector extends ImportSelector { /** * 对不同导入选择器的导入结果进行分组的接口。 * * @return DeferredImportSelector所属的Group对象。 * @since 5.0 */ @Nullable default Class&lt;? extends Group&gt; getImportGroup() { return null; } } Group接口 group接口主要用于对DeferredImportSelector进行分组，遍历Group对应的DeferredImportSelector对象集合，依次执行Group的process方法处理对应的逻辑。然后利用selectImports方法将process处理后的结果已Entry的形式返回回来。Springboot自动装配类AutoConfigurationImportSelector实现了该process接口，主要用于读取Springboot的自动装配类。以下是Springboot实现该接口的具体类和方法。请看《Springboot源码-自动装配(一)：AutoConfigurationImportSelector》
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/987f2ad9371b9d96f99458a71c6169a0/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/26dec25346c25edf5aed0199329fe10b/" rel="bookmark">
+			【数据库】DBeaver操作所有数据库管理工具使用详解
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		文章来源：https://www.yingsoo.com/news/database/71844.html
+文章目录 引言一、关于 DBeaver二、安装 DBeaver三、管理数据源四、管理表01、查看表02、新增表五、执行 SQL六、外观配置七、总结 引言 作为一名开发者，免不了要和数据库打交道，于是我们就需要一款顺手的数据库管理工具。很长一段时间里，Navicat 都是我的首选，但最近更换了一台新电脑，之前的绿色安装包找不到了。
+于是就琢磨着，找一款免费的，功能和 Navicat 有一拼的数据库管理工具来替代。好朋友 macrozheng 给我推荐了 DBeaver，试用完后体验真心不错，于是就来给大家安利一波。
+一、关于 DBeaver DBeaver 是一个跨平台的数据库管理工具，支持 Windows、Linux 和 macOS。它有两个版本，企业版和社区版，对于个人开发者来说，社区版的功能已经足够强大。
+DBeaver 是由 Java 编写的，默认使用 JDK 11 进行编译。社区版基于 Apache-2.0 License 在 GitHub 上开源，目前已获得 24k+ 的星标。
+https://github.com/dbeaver/dbeaver
+DBeaver 支持几乎所有主流的数据库，包括关系型数据库和非关系数据库。
+二、安装 DBeaver 可以通过 DBeaver 官方下载安装包，也可以通过 GitHub 下载 release 版本。
+官方下载地址：https://dbeaver.io/download/
+根据自己电脑的操作系统下载对应的安装包，完整安装后，第一步要做的是配置 Maven 镜像，否则在后续下载数据库驱动的时候会非常的慢。
+因为 DBeaver 是基于 Maven 构建的，数据库驱动也就是链接数据库的 JDBC 驱动是通过 Maven 仓库下载的。选择「首选项」→「Maven」，添加阿里云镜像地址：
+https://developer.aliyun.com/mvn/guide
+和配置 Maven 镜像一样，如下图所示。
+配置完成后，记得把阿里云镜像仓库置顶。
+三、管理数据源 像使用 Navicat 一样，我们需要先建立连接，这里就以 MySQL 为例。点击「连接」小图标，选择数据库。
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/26dec25346c25edf5aed0199329fe10b/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/8fcf494b75eac1c81eb46825ba1fe801/" rel="bookmark">
+			Mybatis常用动态sql标签、注意事项及使用案例总结
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		目录
+1.Mybatis常用动态sql标签
+1. choose、when、otherwise(选择)
+2.where
+3.if
+4.trim
+5.for each 6. sql\include
+2. resultmap总结
+3. ${}与#{}的区别
+4. mybatis特殊符号的处理
+5. mybatis分页查询
+6. 分步查询懒加载
+7. mybatis缓存
+参考
+1.Mybatis常用动态sql标签 1. choose、when、otherwise(选择) 示例
+order by &lt;choose&gt; &lt;when test=" paramsMap.sort == &amp;quot;c&amp;quot; "&gt; i.sell_counts desc &lt;/when&gt; &lt;when test=" paramsMap.sort == &amp;quot;p&amp;quot; "&gt; tempSpec.price_discount asc &lt;/when&gt; &lt;otherwise&gt; i.item_name asc &lt;/otherwise&gt; &lt;/choose&gt; 通过不同的方式进行查询结果的排序，并设计默认排序方式；
+2.where where和if一般结合使用：
+a&gt; 若where标签中的if条件都不满足，则where标签没有任何功能，即不会添加where关键字
+b&gt;若where标签中的if条件满足，则where标签会自动添加where关键字，并将条件最前方多余的 and去掉
+注意：where标签不能去掉条件最后多余的and
+3.if WHERE ic.item_id = #{paramsMap.itemId} &lt;if test=" paramsMap.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/8fcf494b75eac1c81eb46825ba1fe801/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/b54fdeff370c51d41406b6cf7fccb755/" rel="bookmark">
+			为高性能计算构建，由亚马逊云科技Amazon Graviton3E驱动的最新实例正式可用
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		亚马逊云科技宣布两款基于最新一代自研芯片Amazon Graviton3E的新实例Amazon Elastic Compute Cloud（Amazon EC2）Hpc7g和Amazon EC2 C7gn正式可用。
+其中，Hpc7g实例专为计算和网络密集型高性能计算（HPC）工作负载而构建，让用户能够在多达数万个CPU核心的高性能计算集群中进行复杂的计算。C7gn实例基于具有网络加速功能的第五代Amazon Nitro，为网络密集型工作负载提供了超高的网络带宽、数据包转发性能和性价比。
+Amazon Hpc7g实例为大规模计算和网络密集型负载带来更高性价比
+如今很多领域都借助高性能计算来解决复杂的学术、科学和商业问题，而随着人工智能和自动驾驶汽车等新兴应用的发展，处理这些应用的高性能计算优化实例需要扩展到数万个甚至更多的CPU核心以进行复杂的计算。针对高性能计算工作负载，亚马逊云科技已经推出系列Amazon EC2网络优化型实例，包括C5n、R5n、M5n和C6gn，这些实例提供了超强的计算能力和服务器之间的高网络带宽，并可实现数千个CPU核心处理和交换数据。
+Hpc7g由新的Amazon Graviton3E芯片提供支持，让用户能够在多达数万个CPU核心的高性能计算集群中进行复杂的计算，为客户在Amazon EC2上的高性能计算工作负载（如计算流体动力学、天气模拟、基因组学和分子动力学等）提供了超高的性价比。Hpc7g与采用Graviton2的网络优化型实例C6gn相比，可提供超出两倍的浮点性能和200Gbps的专用Elastic Fabric Adapter（EFA）带宽，并且能源效率比同类的x86实例高出60%。
+Amazon EC2 Hpc7g实例现已在亚马逊云科技美国东部（弗吉尼亚州北部）区域正式可用，以按需、预留实例和Savings Plans形式提供。
+Amazon C7gn实例支持高达200Gbps的网络带宽
+当用户需要运行要求极其严苛的网络密集型工作负载时，网络优化型实例是亚马逊云科技用户的首选。亚马逊云科技最新推出的C7gn实例，拥有所有网络优化型Amazon EC2实例中最高的网络带宽和数据包处理能力，以及更低功耗。C7gn实例由Graviton3E提供支持，同时基于具有网络加速功能的第五代Nitro，能够为每个CPU提供高达2倍的网络带宽，将每秒数据包处理性能提升50%，并提供目前Amazon EC2实例中最低的EFA网络延迟。相比于上一代网络优化型实例C6gn，C7gn可提高多达25%的计算性能及2倍的加密性能。
+C7gn实例在亚马逊云科技美国东部（俄亥俄州、弗吉尼亚州北部）、美国西部（俄勒冈州）和欧洲地区（爱尔兰）区域正式可用，以按需、预留实例、Spot实例和Savings Plans形式提供。
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/f1d2fe2470e541d153c223b95c4de3aa/" rel="bookmark">
+			推荐几款实用的网盘资源搜索引擎
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		1.介绍 网盘搜索引擎是一个用于搜索互联网上各种网盘资源的工具。它能够帮助用户快速找到所需的文件，并提供下载链接。它可以搜索多个网盘站点，包括360安全网盘、360云盘、腾讯微云、阿里云盘等等。用户只需输入想要搜索的关键字，网盘搜索引擎就会自动搜索所有相关的网盘资源，并在搜索结果中显示文件名称、大小、上传时间等详细信息，让用户更方便地下载和分享文件
+2.网盘资源搜索引擎 2.1、凌风云 https://www.lingfengyun.com/
+2.2、大圣盘 https://www.dashengpan.com/#/main/search?restype=1
+2.3、盘搜搜 https://pansoso.com/
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/382df9c4b72ef0610f97e5011de2c213/" rel="bookmark">
+			线程与进程代码示例
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		import multiprocessing import concurrent.futures # 分割成list def data_split(batch_data, batch_num): split_data = [[] for _ in range(batch_num)] for i, data in enumerate(batch_data): split_data[i%batch_num].append(data) return split_data # 分割成dict ''' def data_split(self, batch_data, batch_num): split_data = [{} for _ in range(batch_num)] for i, data in enumerate(batch_data.items()): split_data[i%batch_num][data[0]] = data[1] return split_data ''' num_threads = multiprocessing.cpu_count() # 获取CPU核心数 batch_data = data_split(export_data, num_threads) executor = concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) for i in range(num_threads): executor.submit(err_vis.draw_all_info, batch_data[i]) # 关闭线程池 executor.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/382df9c4b72ef0610f97e5011de2c213/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/2d67c88f665f9883da70f1f22c1050c7/" rel="bookmark">
+			BJTU深度学习实验
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		实验一 1. 使用Tensor初始化一个1 × 3的矩阵M 和一个2× 1的矩阵N，对两矩阵进行减法操作（要求实现三种不同的形式），给出结果并分析三种方式的不同（如果出现报错，分析报错的原因），同时需要指出在计算过程中发生了什么。
+M=torch.rand(1,3)print(M)N=torch.rand(2,1)print(N)#减法形式一print(M-N)#减法形式二print(torch.sub(M,N))#减法形式三,inplace原地操作N.sub_(M)print(N) 2. ①利用Tensor创建两个大小分别3 × 2和4 × 2的随机数矩阵P和Q，要求服从均值为0，标准差0.01为的正态分布；②对第二步得到的矩阵Q进行形状变换得到Q的转置 QT；③ 对上述得到的矩阵P和矩阵QT求矩阵相乘。
+P=torch.normal(0.0,0.01,(3,2))print(P)Q=torch.normal(0.0,0.01,(4,2))print(Q)Qt = Q.t()print(Qt)print(torch.matmul(P,Qt)) 3. 要求动手从0实现softmax回归（只借助Tensor和Numpy相关的库）在Fashion-MNIST数据集上进行训练和测试，并从loss、训练集以及测试集上的准确率等多个角度对结果进行分析（要求从零实现交叉熵损失函数）。
+实验二 1.手动实现前馈神经网络解决上述回归、二分类、多分类任务
+2.利用torch.nn实现前馈神经网络解决上述回归、二分类、多分类任务
+3.在多分类实验的基础上使用至少三种不同的激活函数
+4.对多分类任务中的模型评估隐藏层层数和隐藏单元个数对实验结果的影响
+5.在多分类任务实验中分别手动实现和用torch.nn实现dropout
+6.在多分类任务实验中手动实现𝑳𝟐正则化
+7.对回归、二分类、多分类任务分别选择上述实验中效果最好的模型，采用10折交叉验证评估实验结果
+实验三 1.手写二维卷积的实现，并在至少一个数据集上进行实验，从训练时间、预测精度、Loss变化等角度分析实验结果（最好使用图表展示）。
+2.使用torch.nn实现二维卷积，并在至少一个数据集上进行实验，从训练时间、预测精度、Loss变化等角度分析实验结果（最好使用图表展示）。
+3.使用torch.nn实现空洞卷积，要求dilation满足HDC条件（如1，2，5）且要堆叠多层并在至少一个数据集上进行实验，从训练时间、预测精度、Loss变化等角度分析实验结果（最好使用图表展示）。
+4.实现给定结构的残差网络，在至少一个数据集上进行实验，从训练时间、预测精度、Loss 变化等角度分析实验结果（最好使用图表展示）。
+实验四 1.1.理解序列数据处理方法，补全面向对象编程中的缺失代码，并使用torch自带数据工具将数据封装为dataloader。
+2.分别采用手动方式以及调用接口方式实现RNN、LSTM和GRU，并在至少一种数据集上进行实验。
+大作业 微博情绪分类任务旨在识别微博中蕴含的情绪，输入是一条微博，输出是该微博所蕴含的情绪类别。在本次任务中，我们将微博按照其蕴含的情绪分为以下六个类别之一：积极、愤怒、悲伤、恐惧、惊奇和无情绪。
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/94ce0bd0adf657e57970183a6a401ec2/" rel="bookmark">
+			vs2019及以上版本使用ssh服务连接Linux系统
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		连接前的准备 在进行vs与Linux连接之前需要做一些必要的准备工作，首先需要有一个Linux虚拟机和vs要安装Linux模块向导
+Linux虚拟机安装 Linux虚拟机安装可以参考博客https://blog.csdn.net/weixin_64647426/article/details/129333981或其它文章
+vs安装Linux向导 打开vs，点击工具→选择获取工具和功能→找到Linux模块进行安装
+vs连接Linux系统 对Linux虚拟机更换下载源 这里推荐清华源，找到虚拟机对应的版本，将下面的内容复制
+https://mirrors.tuna.tsinghua.edu.cn/help/ubuntu/
+root权限打开/etc/apt/sources.list文件，进行替换
+替换完成后，执行sudo apt update和sudo apt-get update指令进行下载源更新
+安装ssh服务及编译调试相关工具 执行安装ssh服务端命令：sudo apt install openssh-server
+执行安装gcc、g++、及调试工具命令：sudo apt install gcc g++ gdb make
+安装完成后，先不要启动ssh服务，就算启动也可能会失败
+首先先执行命令sudo ssh-keygen -A生成ssh服务的密钥
+然后执行命令sudo /etc/init.d/ssh start启动ssh服务，启动后Windows会弹出防火墙警告允许即可
+到此，ssh服务已经启动，但是vs还是不能对Linux进行登录，还需要修改一下ssh服务的sshd_config文件
+修改sshd_config文件 root权限打开/etc/ssh/sshd_config文件，修改以下内容
+PasswordAuthentication yes #允许用户以密码形式登录 PermitRootLogin yes #允许用户以root权限登录 进行这些更改后，重新启动ssh服务器执行sudo service ssh restart命令
+vs连接Linux虚拟机 打开vs2019创建Linux项目，点击工具→选项→找到跨平台
+点击添加Linux系统，填写相关信息点击连接即可
+开机自启动ssh服务 设置Linux提权不需要密码 root权限打开/etc/sudoers文件，添加
+nvidia ALL=(ALL) NOPASSWD: ALL #用户提权不需要密码 如果sudoers文件不可修改，则使用chmod命令修改文件权限属性，修改完成后将sudoers文件恢复到原来的权限属性
+nvidia为Linux系统上非root用户的名字
+然后在root权限下执行下面命令
+echo "${USER} ALL=(ALL) NOPASSWD: NOPASSWD: ALL" &gt; /etc/sudoers.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/94ce0bd0adf657e57970183a6a401ec2/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/80db4f7442392fac2ba7d77074b75dc1/" rel="bookmark">
+			TortoiseGit安装与配置
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		注：在安装TortoiseGit之前我已经安装了git工具。
+二、Git的诞生及环境配置_tortoisegit安装包_朱嘉鼎的博客-CSDN博客
+1、TortoiseGit简介 TortoiseGit是基于TortoiseSVN的Git版本的Windows Shell界面。它是开源的，可以完全免费使用。
+TortoiseGit 支持你执行常规任务，例如commit、显示日志、区分两个版本、创建分支和标签、创建补丁等。
+2、TortoiseGit下载 (1)TortoiseGit官网。
+TortoiseGit – Windows Shell Interface to Git
+(2)点击Download。
+(3)下载相应的软件安装包和语言包。
+3、TortoiseGit安装 (1)双击安装包。
+(2)一路Next即可，配置均选择默认。
+(3)选择语言。
+(4)安装语言包。
+(5)语言包安装完后，点击Refresh(刷新)。选择相应的语言。
+(6)后续点击下一步及完成相应配置。
+4、TortoiseGit的配置 (1)鼠标右键TortoiseGit，设置。
+(2)点击常规设置→重启运行首次启动向导。
+(3)点击刷新，选择自己想要的语言。
+(3)重复点击下一页，出现如下页面配置用户信息。
+(4)密钥协议选择OpenSSH。
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/eaed8918f5e3dde384e6ce280be32e88/" rel="bookmark">
+			Vue输入内容/链接生成二维码
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		方式一：qrcode（无 icon 图标） npm i qrcodejs2 --save 完整代码
+&lt;template &gt; &lt;div class = "flex-box" &gt; &lt;div &gt;qrcode（无 icon 图标） &lt; /div &gt; &lt;div class = "qr-code" ref = "qrCodeUrl" &gt; &lt; /div &gt; &lt; /div &gt; &lt; /template &gt; &lt;script &gt; import QRCode from 'qrcodejs2'; export default { dat a() { return {}; }, methods: { / * 创建二维码 * / creatQrCode() { new QRCode(this.$refs.qrCodeUrl, { text: 'https://blog.csdn.net/AdminGuan', / / 二维码的内容 width: 150, height: 150, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/eaed8918f5e3dde384e6ce280be32e88/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/fc4e11da959ade1ad9486c80e418bb0f/" rel="bookmark">
+			java&#43;swing&#43;mysql 实现简单的班级管理系统
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		原文地址
+链接：https://pan.baidu.com/s/13S39GLMJHMpzySX5XB1mHQ
+提取码：n94a
+	</div>
+</article>
+</main>
+
+<div class="pagination">
+	<a class="pagination__item pagination__item--prev btn" href="/posts/page/49/">«</a>
+	<span class="pagination__item pagination__item--current">50/220</span>
+	<a class="pagination__item pagination__item--next btn" href="/posts/page/51/">»</a>
+</div>
+
+			</div>
+			
+
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

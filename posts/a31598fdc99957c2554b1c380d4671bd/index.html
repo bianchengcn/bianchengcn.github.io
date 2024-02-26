@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>ESP32连接BLE设备具体实现的说明 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="ESP32连接BLE设备具体实现的说明" />
+<meta property="og:description" content="文章目录 一、基础概念二、相关API参数与使用说明三、整体连接流程总结 本篇文章以ESP32C3平台作为主机连接血糖仪蓝牙设备的过程为例，对代码的实现进行分析与理解。
+一、基础概念 在上手撕代码之前，让我们准备好砍柴刀，先使用nRF Connect APP连接血糖仪对Gatt协议概念以及各层次进行理解，APP下载链接自行百度，这里就不贴出来了，废话不多说，打开手机蓝牙连接血糖仪蓝牙设备，左图为血糖仪的所有服务项，分别是Generic Access、Device Information、Unknown Service、Unknown Service四项服务（Service），右图是UUID为0x1000的Unknown Service服务项的内容，该服务有四个特征（Characteristic）Unknown Characteristic ，每个特征下又有许多属性，下面对涉及到的各个概念进行说明。
+Profile
+一个profile文件可以包含一个或者多个服务，一个profile文件包含需要的服务的信息或者为对等设备如何交互的配置文件的选项信息。一般一个设备就一个profileUUID
+UUID是“Universally Unique Identifier”的缩写，通用唯一识别码的意思。对于蓝牙设备，每个服务都有一个与它对应的UUID，蓝牙技术联盟SIG定义UUID共用了一个基本的UUID：0x0000xxxx-0000-1000-8000-00805F9B34FB。总共128位，为了进一步简化基本UUID，每一个蓝牙技术联盟定义的属性有一个唯一的16位UUID，以代替上面的基本UUID的‘x’部分。使用16位的UUID便于记忆和操作，技术联盟已定义好较多的标准服务UUID，同时，也允许厂商定义自己的UUID，以满足已定义服务外的功能实现Service
+一个服务包含一个或多个特性，这些特性是逻辑上相关的集合体。Characteristic
+一个特性至少包含2个属性：一个属性用于声明(又叫描述符)，一个属性用于存放特性的值。
+存放特性值的属性就是真正传输的数据，声明属性用来确定该特性是否可读写、是否可以发起通知（类似于向主机发起中断）等信息。
+比如，LED状态就是一个特性，该特性可读写。Properties
+特性的操作类型有：写、没有回应的写、读、通知、指示（有回应的通知）
+通过字面意思就可以理解，比如LED特性，需要写和读性质。如果设备有事件需要上报，比如按键等，就需要通知或者指示性质。通知就是上报完就没事了，指示的话还需要主机给个响应。Descriptors
+描述符就是用于声明的属性。 有一个特别的描述符值得特别地提起：客户端特性配置描述符(Client Characteristic Configuration Descriptor，CCCD)，其uuid为0x2901，画知识点，后面会考…这个描述符是给任何支持通知或指示功能的特性额外增加的。在CCCD中写入“1”使能通知功能，写入“2”使能指示功能，写入“0”同时禁止通知和指示功能。 其他概念
+角色
+GATT中也分为两个角色，GATT服务器和GATT客户端。
+提供属性的设备称为GATT服务器，访问GATT服务器而获得属性的设备称为GATT客户端。
+比如手机通过访问蓝牙设备的属性来控制设备LED，所以蓝牙设备就是GATT服务器，手机就是GATT客户端。属性
+属性是GATT服务器中最基本的单元。GATT服务器将其所有的属性组成一个属性表。
+1）一个属性包含句柄、UUID、值：
+2）句柄是属性在GATT表中的索引。我们一般用不到
+3）UUID是属性的ID，包含了属性值的类型等信息，可能有多个属性拥有同一个UUID
+关于GATT协议的一些基础知识 二、相关API参数与使用说明 下面是本例中用到的也是比较常用的API接口的说明
+注册设备APP Profile接口
+搜索服务（通过给定的服务UUID来搜索相应的服务，若搜索到服务，会进入回调函数中的搜索完成事件，搜索结果也会被保存下来到对应的数据结构，将Handle值等都记录下来） 获取属性数量（通过给定的起始Handle值，在起始Handle范围内搜索属性的数量）
+查找描述符（通过给定的描述符uuid来搜索结果） 查找特征（通过给定的特征uuid来搜索结果）
+注册通知（若特征有通知属性，则需要额外注册通知并且写通知的描述符CCCD（描述符UUID：0x2902））
+写特征描述符（通过这个API写描述符的值）
+读特征（顾名思义，读取对应handle特征的值）
+写特征（同上）
+具体官方文档的API说明
+三、整体连接流程 本例使用了gattc_multi_connect官方示例进行修改，官方示例完成了一个可以连接多个蓝牙设备的主机，主机连接设备的整体流程图如下：
+这里流程图已经把GATTC扫描连接的过程描述得很清楚了，现在让我们通过官方提供的接口来完成这些流程：
+1） Register Callbacks &amp; Register APP Profile
+//Register Callbacks： esp_gap_cb &amp;&amp; esp_gattc_cb esp_ble_gap_register_callback(esp_gap_cb); esp_ble_gattc_register_callback(esp_gattc_cb); //Register APP Profile： PROFILE_Bioland_BGM_APP_ID esp_ble_gattc_app_register(PROFILE_Bioland_BGM_APP_ID); 2）Set scan parameters" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/a31598fdc99957c2554b1c380d4671bd/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-05-13T14:23:58+08:00" />
+<meta property="article:modified_time" content="2023-05-13T14:23:58+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">ESP32连接BLE设备具体实现的说明</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_10" rel="nofollow">一、基础概念</a></li><li><a href="#API_40" rel="nofollow">二、相关API参数与使用说明</a></li><li><a href="#_66" rel="nofollow">三、整体连接流程</a></li><li><a href="#_252" rel="nofollow">总结</a></li></ul> 
+</div> 
+<p></p> 
+<hr> 
+<blockquote> 
+ <p>本篇文章以ESP32C3平台作为主机连接血糖仪蓝牙设备的过程为例，对代码的实现进行分析与理解。</p> 
+</blockquote> 
+<hr> 
+<h2><a id="_10"></a>一、基础概念</h2> 
+<p>在上手撕代码之前，让我们准备好砍柴刀，先使用nRF Connect APP连接血糖仪对Gatt协议概念以及各层次进行理解，APP下载链接自行百度，这里就不贴出来了，废话不多说，打开手机蓝牙连接血糖仪蓝牙设备，左图为血糖仪的所有服务项，分别是Generic Access、Device Information、Unknown Service、Unknown Service四项服务（Service），右图是UUID为0x1000的Unknown Service服务项的内容，该服务有四个特征（Characteristic）Unknown Characteristic ，每个特征下又有许多属性，下面对涉及到的各个概念进行说明。<br> <img src="https://images2.imgbox.com/d5/ec/PWPqoOQs_o.png" alt="在这里插入图片描述"></p> 
+<ul><li><strong>Profile</strong><br> 一个profile文件可以包含一个或者多个服务，一个profile文件包含需要的服务的信息或者为对等设备如何交互的配置文件的选项信息。一般一个设备就一个profile</li><li><strong>UUID</strong><br> UUID是“Universally Unique Identifier”的缩写，通用唯一识别码的意思。对于蓝牙设备，每个服务都有一个与它对应的UUID，蓝牙技术联盟SIG定义UUID共用了一个基本的UUID：0x0000xxxx-0000-1000-8000-00805F9B34FB。总共128位，为了进一步简化基本UUID，每一个蓝牙技术联盟定义的属性有一个唯一的16位UUID，以代替上面的基本UUID的‘x’部分。使用16位的UUID便于记忆和操作，技术联盟已定义好较多的标准服务UUID，同时，也允许厂商定义自己的UUID，以满足已定义服务外的功能实现</li><li><strong>Service</strong><br> 一个服务包含一个或多个特性，这些特性是逻辑上相关的集合体。</li><li><strong>Characteristic</strong><br> 一个特性至少包含2个属性：一个属性用于声明(又叫描述符)，一个属性用于存放特性的值。<br> 存放特性值的属性就是真正传输的数据，声明属性用来确定该特性是否可读写、是否可以发起通知（类似于向主机发起中断）等信息。<br> 比如，LED状态就是一个特性，该特性可读写。</li><li><strong>Properties</strong><br> 特性的操作类型有：<strong>写、没有回应的写、读、通知、指示（有回应的通知）</strong><br> 通过字面意思就可以理解，比如LED特性，需要写和读性质。如果设备有事件需要上报，比如按键等，就需要通知或者指示性质。通知就是上报完就没事了，指示的话还需要主机给个响应。</li><li><strong>Descriptors</strong><br> 描述符就是用于声明的属性。 有一个特别的描述符值得特别地提起：客户端特性配置描述符(Client Characteristic Configuration Descriptor，CCCD)，其uuid为0x2901，画知识点，后面会考…这个描述符是给任何支持通知或指示功能的特性额外增加的。在CCCD中写入“1”使能通知功能，写入“2”使能指示功能，写入“0”同时禁止通知和指示功能。</li></ul> 
+<p><strong>其他概念</strong></p> 
+<ul><li><strong>角色</strong><br> GATT中也分为两个角色，GATT服务器和GATT客户端。<br> 提供属性的设备称为GATT服务器，访问GATT服务器而获得属性的设备称为GATT客户端。<br> 比如手机通过访问蓝牙设备的属性来控制设备LED，所以蓝牙设备就是GATT服务器，手机就是GATT客户端。</li><li><strong>属性</strong><br> 属性是GATT服务器中最基本的单元。GATT服务器将其所有的属性组成一个属性表。<br> 1）一个属性包含句柄、UUID、值：<br> 2）句柄是属性在GATT表中的索引。我们一般用不到<br> 3）UUID是属性的ID，包含了属性值的类型等信息，可能有多个属性拥有同一个UUID<br> <a href="http://lijg.farbox.com/post/2016-03-12-nrf51822ru-men-jie-shao#toc_9" rel="nofollow">关于GATT协议的一些基础知识</a></li></ul> 
+<h2><a id="API_40"></a>二、相关API参数与使用说明</h2> 
+<p>下面是本例中用到的也是比较常用的API接口的说明</p> 
+<ul><li>注册设备APP Profile接口<br> <img src="https://images2.imgbox.com/3d/91/3O6Qvikw_o.png" alt="在这里插入图片描述"></li><li>搜索服务（通过给定的服务UUID来搜索相应的服务，若搜索到服务，会进入回调函数中的搜索完成事件，搜索结果也会被保存下来到对应的数据结构，将Handle值等都记录下来）</li></ul> 
+<p><img src="https://images2.imgbox.com/e9/86/yUT06n5E_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>获取属性数量（通过给定的起始Handle值，在起始Handle范围内搜索属性的数量）<br> <img src="https://images2.imgbox.com/e9/65/h8nACHwV_o.png" alt="在这里插入图片描述"></li><li>查找描述符（通过给定的描述符uuid来搜索结果）</li></ul> 
+<p><img src="https://images2.imgbox.com/08/35/QzXh2Gir_o.png" alt="在这里插入图片描述"></p> 
+<ul><li> <p>查找特征（通过给定的特征uuid来搜索结果）<br> <img src="https://images2.imgbox.com/8c/06/qd2TbPb4_o.png" alt="在这里插入图片描述"></p> </li><li> <p>注册通知（若特征有通知属性，则需要额外注册通知并且写通知的描述符CCCD（描述符UUID：0x2902））<br> <img src="https://images2.imgbox.com/2d/cb/2bXfO0El_o.png" alt="在这里插入图片描述"></p> </li><li> <p>写特征描述符（通过这个API写描述符的值）<br> <img src="https://images2.imgbox.com/e4/3e/4ER7pySX_o.png" alt="在这里插入图片描述"></p> </li><li> <p>读特征（顾名思义，读取对应handle特征的值）<br> <img src="https://images2.imgbox.com/56/ac/2QeM3oaE_o.png" alt="在这里插入图片描述"></p> </li><li> <p>写特征（同上）<br> <img src="https://images2.imgbox.com/07/96/dAVGP4e3_o.png" alt="在这里插入图片描述"><br> <a href="https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/bluetooth/esp_gattc.html" rel="nofollow">具体官方文档的API说明</a></p> </li></ul> 
+<h2><a id="_66"></a>三、整体连接流程</h2> 
+<p>本例使用了gattc_multi_connect官方示例进行修改，官方示例完成了一个可以连接多个蓝牙设备的主机，主机连接设备的整体流程图如下：<br> <img src="https://images2.imgbox.com/04/5b/O35gB0h0_o.jpg" alt="在这里插入图片描述"><br> 这里流程图已经把GATTC扫描连接的过程描述得很清楚了，现在让我们通过官方提供的接口来完成这些流程：</p> 
+<p>1） Register Callbacks &amp; Register APP Profile</p> 
+<pre><code class="prism language-c"> 	<span class="token comment">//Register Callbacks： esp_gap_cb &amp;&amp; esp_gattc_cb</span>
+	<span class="token function">esp_ble_gap_register_callback</span><span class="token punctuation">(</span>esp_gap_cb<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">esp_ble_gattc_register_callback</span><span class="token punctuation">(</span>esp_gattc_cb<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token comment">//Register APP Profile： PROFILE_Bioland_BGM_APP_ID</span>
+    <span class="token function">esp_ble_gattc_app_register</span><span class="token punctuation">(</span>PROFILE_Bioland_BGM_APP_ID<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>2）Set scan parameters</p> 
+<pre><code class="prism language-c">	<span class="token comment">//以下是esp_gap_cb回调函数中更新连接参数的事件，在这个事件中设置了扫描参数</span>
+ 	<span class="token keyword">case</span> ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT<span class="token operator">:</span>
+         <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"update connection params status = %d, min_int = %d, max_int = %d,conn_int = %d,latency = %d, timeout = %d"</span><span class="token punctuation">,</span>
+                  param<span class="token operator">-&gt;</span>update_conn_params<span class="token punctuation">.</span>status<span class="token punctuation">,</span>
+                  param<span class="token operator">-&gt;</span>update_conn_params<span class="token punctuation">.</span>min_int<span class="token punctuation">,</span>
+                  param<span class="token operator">-&gt;</span>update_conn_params<span class="token punctuation">.</span>max_int<span class="token punctuation">,</span>
+                  param<span class="token operator">-&gt;</span>update_conn_params<span class="token punctuation">.</span>conn_int<span class="token punctuation">,</span>
+                  param<span class="token operator">-&gt;</span>update_conn_params<span class="token punctuation">.</span>latency<span class="token punctuation">,</span>
+                  param<span class="token operator">-&gt;</span>update_conn_params<span class="token punctuation">.</span>timeout<span class="token punctuation">)</span><span class="token punctuation">;</span>
+     	  <span class="token keyword">break</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>3）Start scanning</p> 
+<pre><code class="prism language-c">    <span class="token comment">//当设置完连接参数进入设置完成事件开启GAP扫描    </span>
+    <span class="token keyword">case</span> ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT<span class="token operator">:</span> <span class="token punctuation">{<!-- --></span>
+         <span class="token comment">//the unit of the duration is second</span>
+         <span class="token class-name">uint32_t</span> duration <span class="token operator">=</span> <span class="token number">30</span><span class="token punctuation">;</span>
+         <span class="token function">esp_ble_gap_start_scanning</span><span class="token punctuation">(</span>duration<span class="token punctuation">)</span><span class="token punctuation">;</span>
+         <span class="token keyword">break</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+</code></pre> 
+<p>4）Get scan results</p> 
+<pre><code class="prism language-c"><span class="token keyword">case</span> ESP_GAP_BLE_SCAN_RESULT_EVT<span class="token operator">:</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">esp_ble_gap_cb_param_t</span> <span class="token operator">*</span>scan_result <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">esp_ble_gap_cb_param_t</span> <span class="token operator">*</span><span class="token punctuation">)</span>param<span class="token punctuation">;</span>
+        <span class="token keyword">switch</span> <span class="token punctuation">(</span>scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>search_evt<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">case</span> ESP_GAP_SEARCH_INQ_RES_EVT<span class="token operator">:</span>
+            <span class="token function">esp_log_buffer_hex</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>bda<span class="token punctuation">,</span> <span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"Searched Adv Data Len %d, Scan Response Len %d"</span><span class="token punctuation">,</span> scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>adv_data_len<span class="token punctuation">,</span> scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>scan_rsp_len<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            adv_name <span class="token operator">=</span> <span class="token function">esp_ble_resolve_adv_data</span><span class="token punctuation">(</span>scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>ble_adv<span class="token punctuation">,</span>
+                                                ESP_BLE_AD_TYPE_NAME_CMPL<span class="token punctuation">,</span> <span class="token operator">&amp;</span>adv_name_len<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"Searched Device Name Len %d"</span><span class="token punctuation">,</span> adv_name_len<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token function">esp_log_buffer_char</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> adv_name<span class="token punctuation">,</span> adv_name_len<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>Isconnecting<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">break</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>conn_device_a <span class="token operator">&amp;&amp;</span> conn_device_b <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>stop_scan_done<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+                stop_scan_done <span class="token operator">=</span> true<span class="token punctuation">;</span>
+                <span class="token function">esp_ble_gap_stop_scanning</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"all devices are connected"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">break</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>adv_name <span class="token operator">!=</span> <span class="token constant">NULL</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+                <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">strlen</span><span class="token punctuation">(</span>remote_device_name<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token operator">==</span> adv_name_len <span class="token operator">&amp;&amp;</span> <span class="token function">strncmp</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span><span class="token punctuation">)</span>adv_name<span class="token punctuation">,</span> remote_device_name<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> adv_name_len<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token keyword">if</span> <span class="token punctuation">(</span>conn_device_a <span class="token operator">==</span> false<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                        conn_device_a <span class="token operator">=</span> true<span class="token punctuation">;</span>
+                        <span class="token class-name">esp_bd_addr_t</span> bda<span class="token punctuation">;</span>
+                        <span class="token function">memcpy</span><span class="token punctuation">(</span>bda<span class="token punctuation">,</span> scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>bda<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token class-name">esp_bd_addr_t</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"bd_addr:%08x%04x"</span><span class="token punctuation">,</span><span class="token punctuation">(</span>bda<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">&lt;&lt;</span> <span class="token number">24</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span>bda<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">&lt;&lt;</span> <span class="token number">16</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span>bda<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span> <span class="token operator">&lt;&lt;</span> <span class="token number">8</span><span class="token punctuation">)</span> <span class="token operator">+</span> bda<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">,</span><span class="token punctuation">(</span>bda<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span> <span class="token operator">&lt;&lt;</span> <span class="token number">8</span><span class="token punctuation">)</span> <span class="token operator">+</span> bda<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        <span class="token function">esp_ble_gap_stop_scanning</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"%s"</span><span class="token punctuation">,</span> remote_device_name<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        <span class="token function">esp_ble_gattc_open</span><span class="token punctuation">(</span>gl_profile_tab<span class="token punctuation">[</span>PROFILE_Bioland_IT_APP_ID<span class="token punctuation">]</span><span class="token punctuation">.</span>gattc_if<span class="token punctuation">,</span> scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>bda<span class="token punctuation">,</span> scan_result<span class="token operator">-&gt;</span>scan_rst<span class="token punctuation">.</span>ble_addr_type<span class="token punctuation">,</span> true<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        Isconnecting <span class="token operator">=</span> true<span class="token punctuation">;</span>
+                    <span class="token punctuation">}</span>
+                    <span class="token keyword">break</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span>
+            <span class="token keyword">break</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><code>以上四个步骤是在esp_gap_cb这个回调函数中完成的，之后的流程就在你注册的APP Profile接口函数中完成</code></p> 
+<hr> 
+<p>那么接下来了解APP Profile接口函数的注册，在注册APP Profile接口函数之前先注册了esp_gattc_cb回调函数，所以APP Profile接口函数注册在回调函数中完成：</p> 
+<pre><code class="prism language-c"><span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">esp_gattc_cb</span><span class="token punctuation">(</span><span class="token class-name">esp_gattc_cb_event_t</span> event<span class="token punctuation">,</span> <span class="token class-name">esp_gatt_if_t</span> gattc_if<span class="token punctuation">,</span> <span class="token class-name">esp_ble_gattc_cb_param_t</span> <span class="token operator">*</span>param<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>event <span class="token operator">==</span> ESP_GATTC_REG_EVT<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>param<span class="token operator">-&gt;</span>reg<span class="token punctuation">.</span>status <span class="token operator">==</span> ESP_GATT_OK<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            gl_profile_tab<span class="token punctuation">[</span>param<span class="token operator">-&gt;</span>reg<span class="token punctuation">.</span>app_id<span class="token punctuation">]</span><span class="token punctuation">.</span>gattc_if <span class="token operator">=</span> gattc_if<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"Reg app failed, app_id %04x, status %d"</span><span class="token punctuation">,</span>
+                    param<span class="token operator">-&gt;</span>reg<span class="token punctuation">.</span>app_id<span class="token punctuation">,</span>
+                    param<span class="token operator">-&gt;</span>reg<span class="token punctuation">.</span>status<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">return</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">/* 定义了多少个PROFILE_NUM，这里就会注册多少个APP Profile接口函数 */</span>
+    <span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">int</span> idx<span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span>idx <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> idx <span class="token operator">&lt;</span> PROFILE_NUM<span class="token punctuation">;</span> idx<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>gattc_if <span class="token operator">==</span> ESP_GATT_IF_NONE <span class="token operator">||</span> <span class="token comment">/* ESP_GATT_IF_NONE, not specify a certain gatt_if, need to call every profile cb function */</span>
+                    gattc_if <span class="token operator">==</span> gl_profile_tab<span class="token punctuation">[</span>idx<span class="token punctuation">]</span><span class="token punctuation">.</span>gattc_if<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span>gl_profile_tab<span class="token punctuation">[</span>idx<span class="token punctuation">]</span><span class="token punctuation">.</span>gattc_cb<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    gl_profile_tab<span class="token punctuation">[</span>idx<span class="token punctuation">]</span><span class="token punctuation">.</span><span class="token function">gattc_cb</span><span class="token punctuation">(</span>event<span class="token punctuation">,</span> gattc_if<span class="token punctuation">,</span> param<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>其中gl_profile_tab[idx]定义了APP Profile接口函数的入口，即为gattc_profile_event_handler</p> 
+<pre><code class="prism language-c"><span class="token keyword">static</span> <span class="token keyword">struct</span> <span class="token class-name">gattc_profile_inst</span> gl_profile_tab<span class="token punctuation">[</span>PROFILE_NUM<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token punctuation">[</span>PROFILE_Bioland_BGM_APP_ID<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token punctuation">.</span>gattc_cb <span class="token operator">=</span> gattc_profile_event_handler<span class="token punctuation">,</span>
+        <span class="token punctuation">.</span>gattc_if <span class="token operator">=</span> ESP_GATT_IF_NONE<span class="token punctuation">,</span>      
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>那如何能够从esp_gap_cb函数跳转到APP Profile接口函数，那就用到了esp_gap_cb中得到扫描结果判断出连接设备后使用esp_ble_gattc_open()这个接口;这个接口完成后会触发跳转到对应设备的APP Profile接口函数中的ESP_GATTC_OPEN_EVT事件进行处理:</p> 
+<pre><code class="prism language-c"><span class="token keyword">case</span> ESP_GATTC_OPEN_EVT<span class="token operator">:</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>status <span class="token operator">!=</span> ESP_GATT_OK<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+            <span class="token comment">//open failed, ignore the first device, connect the second device</span>
+            <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"connect device failed, status %d"</span><span class="token punctuation">,</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>status<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            conn_device_a <span class="token operator">=</span> false<span class="token punctuation">;</span>
+            <span class="token comment">//start_scan();</span>
+            <span class="token keyword">break</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token function">memcpy</span><span class="token punctuation">(</span>gl_profile_tab<span class="token punctuation">[</span>PROFILE_Bioland_BGM_APP_ID<span class="token punctuation">]</span><span class="token punctuation">.</span>remote_bda<span class="token punctuation">,</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>remote_bda<span class="token punctuation">,</span> <span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        gl_profile_tab<span class="token punctuation">[</span>PROFILE_Bioland_BGM_APP_ID<span class="token punctuation">]</span><span class="token punctuation">.</span>conn_id <span class="token operator">=</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>conn_id<span class="token punctuation">;</span>
+        <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"ESP_GATTC_OPEN_EVT conn_id %d, if %d, status %d, mtu %d"</span><span class="token punctuation">,</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>conn_id<span class="token punctuation">,</span> gattc_if<span class="token punctuation">,</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>status<span class="token punctuation">,</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>mtu<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"REMOTE BDA:"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">esp_log_buffer_hex</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>remote_bda<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token class-name">esp_bd_addr_t</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">esp_err_t</span> mtu_ret <span class="token operator">=</span> <span class="token function">esp_ble_gattc_send_mtu_req</span> <span class="token punctuation">(</span>gattc_if<span class="token punctuation">,</span> p_data<span class="token operator">-&gt;</span>open<span class="token punctuation">.</span>conn_id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>mtu_ret<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+            <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"config MTU error, error code = %x"</span><span class="token punctuation">,</span> mtu_ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">break</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>此时已经连接上蓝牙设备，之后可以对蓝牙设备进行操作与协议数据的交互…</p> 
+<p>1）Configure MTU size &amp;&amp; Search service</p> 
+<pre><code class="prism language-c"><span class="token keyword">case</span> ESP_GATTC_CFG_MTU_EVT<span class="token operator">:</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>param<span class="token operator">-&gt;</span>cfg_mtu<span class="token punctuation">.</span>status <span class="token operator">!=</span> ESP_GATT_OK<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+            <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span><span class="token string">"Config mtu failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token function">ESP_LOGI</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"Status %d, MTU %d, conn_id %d"</span><span class="token punctuation">,</span> param<span class="token operator">-&gt;</span>cfg_mtu<span class="token punctuation">.</span>status<span class="token punctuation">,</span> param<span class="token operator">-&gt;</span>cfg_mtu<span class="token punctuation">.</span>mtu<span class="token punctuation">,</span> param<span class="token operator">-&gt;</span>cfg_mtu<span class="token punctuation">.</span>conn_id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">esp_ble_gattc_search_service</span><span class="token punctuation">(</span>gattc_if<span class="token punctuation">,</span> param<span class="token operator">-&gt;</span>cfg_mtu<span class="token punctuation">.</span>conn_id<span class="token punctuation">,</span> <span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//第三个参数是你想要搜索的ServiceUUID，若设置为NULL则搜索所有Service</span>
+        <span class="token keyword">break</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>2）Get characteristic</p> 
+<pre><code class="prism language-c"><span class="token comment">//通过0x1002uuid查找特征并存储搜索信息 </span>
+    <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"remote_handle.service_start_handle %d"</span><span class="token punctuation">,</span>remote_handle<span class="token punctuation">.</span>service_start_handle<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    status <span class="token operator">=</span> <span class="token function">esp_ble_gattc_get_char_by_uuid</span><span class="token punctuation">(</span> gattc_if<span class="token punctuation">,</span>
+                                             p_data<span class="token operator">-&gt;</span>search_cmpl<span class="token punctuation">.</span>conn_id<span class="token punctuation">,</span>
+                                             remote_handle<span class="token punctuation">.</span>service_start_handle<span class="token punctuation">,</span>
+                                             remote_handle<span class="token punctuation">.</span>service_end_handle<span class="token punctuation">,</span>
+                                             remote_filter_char_uuid_TX<span class="token punctuation">,</span>
+                                             char_elem_result_REMOTE_TX<span class="token punctuation">,</span>
+                                             <span class="token operator">&amp;</span>count<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"Txchar_by_uuid %d"</span><span class="token punctuation">,</span>count<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"status %d"</span><span class="token punctuation">,</span>status<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>status <span class="token operator">!=</span> ESP_GATT_OK<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+       <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"esp_ble_gattc_get_Txchar_by_uuid error"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span> 
+</code></pre> 
+<p>3）Register for notifications</p> 
+<pre><code class="prism language-c"><span class="token keyword">if</span> <span class="token punctuation">(</span>count <span class="token operator">&gt;</span> <span class="token number">0</span> <span class="token operator">&amp;&amp;</span> <span class="token punctuation">(</span>char_elem_result_REMOTE_TX<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span>properties <span class="token operator">&amp;</span> ESP_GATT_CHAR_PROP_BIT_NOTIFY<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+     <span class="token function">ESP_LOGE</span><span class="token punctuation">(</span>GATTC_TAG<span class="token punctuation">,</span> <span class="token string">"handle:%d"</span><span class="token punctuation">,</span>char_elem_result_REMOTE_TX<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span>char_handle<span class="token punctuation">)</span><span class="token punctuation">;</span>
+     remote_handle<span class="token punctuation">.</span>char_handle <span class="token operator">=</span> char_elem_result_REMOTE_TX<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span>char_handle<span class="token punctuation">;</span>
+     <span class="token function">esp_ble_gattc_register_for_notify</span> <span class="token punctuation">(</span>gattc_if<span class="token punctuation">,</span> gl_profile_tab<span class="token punctuation">[</span>PROFILE_Bioland_IT_APP_ID<span class="token punctuation">]</span><span class="token punctuation">.</span>remote_bda<span class="token punctuation">,</span> char_elem_result_REMOTE_TX<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span>char_handle<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span> 
+</code></pre> 
+<hr> 
+<h2><a id="_252"></a>总结</h2> 
+<p>以上就是ESP32C3作为主机连接蓝牙设备的基本流程，其实通过esp_gap_cb进行扫描广播与设备连接后，GATT协议的处理流程就是：<br> 1、搜索sevice uuid 得到结果信息存储到相应的数据结构<br> 2、搜索char uuid得到结果信息（handle、propertits、uuid）存储到相应的数据结构<br> 3、通过存储的结果数据结构来进行读写 通知注册 写入描述符值选择使能通知或指示</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0b8c294e8e55e4c14af720b2298f42ab/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">JavaScript-jQuery的使用 &#43; JS的案例</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/648d869331c74596e4303b73f6b106fe/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Manjaro的EFI系统分区迁移（通用Linux）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

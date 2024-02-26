@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>bootloader串口更新程序[瑕疵学习板] - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="bootloader串口更新程序[瑕疵学习板]" />
+<meta property="og:description" content="提示：文章写完后，目录可以自动生成，如何生成可参考右边的帮助文档
+文章目录 前言一、储备知识二、程序步骤2.程序展示 1.bootloader2.然后是主运行函数总结 前言 很久没有更新文章了。最近工作太忙，没有学习很多的知识，然后这两天不忙了，就学习了一下bootloader的程序升级，本文章是使用的STM32F103zet6这个硬件实现的
+，本文章的bootloader存在bug哈，本文章只是博主记录一下自己学习bootloader的心得。最终是能成功的用串口更新程序的。
+一、储备知识 在学习bootloader串口升级程序之前要知道stm32的flash和rom，flash就是掉电存储。用来存程序的。ROM是用来存单片机运行的数据的。
+然后stm32的程序是从0x8000000开始的，程序运行产生的数据是从0x20000000开始的。然后1 为0x80000，可以知道stm32f103zet6的flash是（0x80000）h=524288/1024=512K,ROM（0x10000）h=65536/1024=64K。
+STM32的主程序存储分为256页，每页占2K。
+二、程序步骤 //-------------------------------------------------------------------- //---------------------------bootloader_2分区设置-------------------------------- //bootloader 0x8000000~0x8004000 //16K //运行程序 0x8004000~0x800C000 //32K //48K //程序下载缓存区 0x800C000~0x8014000 //32K //80K //程序更新标志位 0x807FC00~0x8080000 //1K //-------------------------------------------------------------------- 这是程序的分区。
+我们的流程主要是
+bootloader程序
+运行程序
+主要就是串口更新程序将程序写到0x800C000里面去并且将程序更新标志位置1
+这里要注意程序烧录的地址哈，bootloader烧录到0x8000000，运行程序烧录到0x8004000里面去
+2.程序展示 首先是stm32内部flash的读写
+flash.c
+#include &#34;flash.h&#34; #include &#34;usart.h&#34; //STM32G030F6P6的内部FLASH //注意STm32G030F6P6有16页，每页2K uint32_t STMFLASH_ReadWord(uint32_t faddr) { return *(volatile uint32_t*)faddr; } void STMFLASH_Read(uint32_t ReadAddr,uint32_t *pBuffer,uint32_t NumToRead) //连续读取 { uint32_t i; for(i=0;i&lt;NumToRead;i&#43;&#43;) { pBuffer[i]=STMFLASH_ReadWord(ReadAddr);	//读取4个字节. ReadAddr&#43;=4;	//偏移4个字节.	} } HAL_StatusTypeDef flash_write(uint32_t address, uint64_t data) //指定页写入数据 { HAL_StatusTypeDef ret = HAL_OK; HAL_FLASH_Unlock(); //解锁Flash扫写权限 ret = HAL_FLASH_Program(TYPEPROGRAM_DOUBLEWORD, address , data); if(ret!" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/80678894563f6ce56b3dba536321376b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-29T15:01:38+08:00" />
+<meta property="article:modified_time" content="2023-08-29T15:01:38+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">bootloader串口更新程序[瑕疵学习板]</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <blockquote> 
+ <p>提示：文章写完后，目录可以自动生成，如何生成可参考右边的帮助文档</p> 
+</blockquote> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_7" rel="nofollow">前言</a></li><li><a href="#_12" rel="nofollow">一、储备知识</a></li><li><a href="#_17" rel="nofollow">二、程序步骤</a></li><li><ul><li><a href="#2_38" rel="nofollow">2.程序展示</a></li></ul> 
+  </li><li><a href="#1bootloader_424" rel="nofollow">1.bootloader</a></li><li><a href="#2_644" rel="nofollow">2.然后是主运行函数</a></li><li><a href="#_1168" rel="nofollow">总结</a></li></ul> 
+</div> 
+<p></p> 
+<hr> 
+<h2><a id="_7"></a>前言</h2> 
+<p>很久没有更新文章了。最近工作太忙，没有学习很多的知识，然后这两天不忙了，就学习了一下bootloader的程序升级，本文章是使用的STM32F103zet6这个硬件实现的<br> ，本文章的bootloader存在bug哈，本文章只是博主记录一下自己学习bootloader的心得。最终是能成功的用串口更新程序的。</p> 
+<hr> 
+<h2><a id="_12"></a>一、储备知识</h2> 
+<p><img src="https://images2.imgbox.com/ff/22/zmKd0Mle_o.png" alt="在这里插入图片描述"><br> 在学习bootloader串口升级程序之前要知道stm32的flash和rom，flash就是掉电存储。用来存程序的。ROM是用来存单片机运行的数据的。<br> 然后stm32的程序是从0x8000000开始的，程序运行产生的数据是从0x20000000开始的。然后<strong>1</strong> 为0x80000，可以知道stm32f103zet6的flash是（0x80000）h=524288/1024=512K,ROM（0x10000）h=65536/1024=64K。<br> STM32的主程序存储分为256页，每页占2K。</p> 
+<h2><a id="_17"></a>二、程序步骤</h2> 
+<p><img src="https://images2.imgbox.com/24/ee/iB0A1zrj_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-c"><span class="token comment">//--------------------------------------------------------------------</span>
+<span class="token comment">//---------------------------bootloader_2分区设置--------------------------------</span>
+<span class="token comment">//bootloader          0x8000000~0x8004000    //16K</span>
+<span class="token comment">//运行程序          0x8004000~0x800C000    //32K   //48K</span>
+<span class="token comment">//程序下载缓存区    0x800C000~0x8014000   //32K   //80K</span>
+<span class="token comment">//程序更新标志位    0x807FC00~0x8080000  //1K</span>
+<span class="token comment">//--------------------------------------------------------------------</span>
+</code></pre> 
+<p>这是程序的分区。<br> 我们的流程主要是<br> <strong>bootloader</strong>程序<br> <img src="https://images2.imgbox.com/49/8e/DiiyfmnH_o.png" alt="在这里插入图片描述"><br> <strong>运行程序</strong><br> 主要就是串口更新程序将程序写到0x800C000里面去并且将程序更新标志位置1<br> 这里要注意程序烧录的地址哈，bootloader烧录到0x8000000，运行程序烧录到0x8004000里面去<br> <img src="https://images2.imgbox.com/9f/19/XWjZv4LO_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="2_38"></a>2.程序展示</h3> 
+<p>首先是stm32内部flash的读写<br> <strong>flash.c</strong></p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"flash.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"usart.h"</span></span>
+<span class="token comment">//STM32G030F6P6的内部FLASH</span>
+<span class="token comment">//注意STm32G030F6P6有16页，每页2K</span>
+
+<span class="token class-name">uint32_t</span> <span class="token function">STMFLASH_ReadWord</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> faddr<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">return</span> <span class="token operator">*</span><span class="token punctuation">(</span><span class="token keyword">volatile</span> <span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span>faddr<span class="token punctuation">;</span> 
+<span class="token punctuation">}</span>
+<span class="token keyword">void</span> <span class="token function">STMFLASH_Read</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> ReadAddr<span class="token punctuation">,</span><span class="token class-name">uint32_t</span> <span class="token operator">*</span>pBuffer<span class="token punctuation">,</span><span class="token class-name">uint32_t</span> NumToRead<span class="token punctuation">)</span>   		<span class="token comment">//连续读取</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint32_t</span> i<span class="token punctuation">;</span>
+	<span class="token keyword">for</span><span class="token punctuation">(</span>i<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>i<span class="token operator">&lt;</span>NumToRead<span class="token punctuation">;</span>i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		pBuffer<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token operator">=</span><span class="token function">STMFLASH_ReadWord</span><span class="token punctuation">(</span>ReadAddr<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//读取4个字节.</span>
+		ReadAddr<span class="token operator">+=</span><span class="token number">4</span><span class="token punctuation">;</span>												<span class="token comment">//偏移4个字节.	</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+
+HAL_StatusTypeDef <span class="token function">flash_write</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> address<span class="token punctuation">,</span> <span class="token class-name">uint64_t</span> data<span class="token punctuation">)</span> <span class="token comment">//指定页写入数据</span>
+<span class="token punctuation">{<!-- --></span>
+    HAL_StatusTypeDef ret <span class="token operator">=</span> HAL_OK<span class="token punctuation">;</span>
+    <span class="token function">HAL_FLASH_Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>   <span class="token comment">//解锁Flash扫写权限</span>
+    ret <span class="token operator">=</span> <span class="token function">HAL_FLASH_Program</span><span class="token punctuation">(</span>TYPEPROGRAM_DOUBLEWORD<span class="token punctuation">,</span> address <span class="token punctuation">,</span> data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  	<span class="token keyword">if</span><span class="token punctuation">(</span>ret<span class="token operator">!=</span>HAL_OK<span class="token punctuation">)</span>
+  	<span class="token punctuation">{<!-- --></span>
+  		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash write error, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+  		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash write succeed, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  	<span class="token punctuation">}</span>
+    <span class="token function">HAL_FLASH_Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>     <span class="token comment">//上锁Flash扫写权限</span>
+
+    <span class="token keyword">return</span> ret<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+HAL_StatusTypeDef <span class="token function">flash_write_buff</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> address<span class="token punctuation">,</span> <span class="token class-name">uint64_t</span> data<span class="token punctuation">,</span><span class="token class-name">uint32_t</span> len<span class="token punctuation">)</span> <span class="token comment">//指定页写入数据</span>
+<span class="token punctuation">{<!-- --></span>
+    HAL_StatusTypeDef ret <span class="token operator">=</span> HAL_OK<span class="token punctuation">;</span>
+    <span class="token function">HAL_FLASH_Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>   <span class="token comment">//解锁Flash扫写权限</span>
+	  <span class="token keyword">for</span><span class="token punctuation">(</span><span class="token keyword">int</span> inss<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>inss<span class="token operator">&lt;</span>len<span class="token punctuation">;</span>inss<span class="token operator">+=</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+			
+			ret <span class="token operator">=</span> <span class="token function">HAL_FLASH_Program</span><span class="token punctuation">(</span>TYPEPROGRAM_DOUBLEWORD<span class="token punctuation">,</span> address <span class="token punctuation">,</span> data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+  	<span class="token keyword">if</span><span class="token punctuation">(</span>ret<span class="token operator">!=</span>HAL_OK<span class="token punctuation">)</span>
+  	<span class="token punctuation">{<!-- --></span>
+  		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash write error, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+  		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash write succeed, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  	<span class="token punctuation">}</span>
+    <span class="token function">HAL_FLASH_Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>     <span class="token comment">//上锁Flash扫写权限</span>
+
+    <span class="token keyword">return</span> ret<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span> <span class="token function">flash_page_erase</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> page<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">uint32_t</span> F <span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+     
+    FLASH_EraseInitTypeDef  FLash<span class="token punctuation">;</span>
+    <span class="token function">HAL_FLASH_Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+   	<span class="token comment">//__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR  | FLASH_FLAG_BSY |FLASH_SR_PGERR);</span>
+    FLash<span class="token punctuation">.</span>TypeErase<span class="token operator">=</span>FLASH_TYPEERASE_PAGES<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>Banks<span class="token operator">=</span>FLASH_BANK_1<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>PageAddress<span class="token operator">=</span>page<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>NbPages<span class="token operator">=</span><span class="token number">16</span><span class="token punctuation">;</span> <span class="token comment">//清除后面的16页，32K数据</span>
+    HAL_StatusTypeDef ret<span class="token operator">=</span><span class="token function">HAL_FLASHEx_Erase</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>FLash<span class="token punctuation">,</span> <span class="token operator">&amp;</span>F<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>ret<span class="token operator">!=</span>HAL_OK<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash erase error, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash erase succeed, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>		
+	<span class="token punctuation">}</span>
+    <span class="token function">HAL_FLASH_Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span> <span class="token function">flash_page_erase_one</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> page<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">uint32_t</span> F <span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+     
+    FLASH_EraseInitTypeDef  FLash<span class="token punctuation">;</span>
+    <span class="token function">HAL_FLASH_Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+   	<span class="token comment">//__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR  | FLASH_FLAG_BSY |FLASH_SR_PGERR);</span>
+    FLash<span class="token punctuation">.</span>TypeErase<span class="token operator">=</span>FLASH_TYPEERASE_PAGES<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>Banks<span class="token operator">=</span>FLASH_BANK_1<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>PageAddress<span class="token operator">=</span>page<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>NbPages<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span> <span class="token comment">//清除后面的16页，32K数据</span>
+    HAL_StatusTypeDef ret<span class="token operator">=</span><span class="token function">HAL_FLASHEx_Erase</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>FLash<span class="token punctuation">,</span> <span class="token operator">&amp;</span>F<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>ret<span class="token operator">!=</span>HAL_OK<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash erase error, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+    <span class="token function">HAL_FLASH_Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//擦除写入一起</span>
+<span class="token keyword">void</span> <span class="token function">flash_page_erase_common</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> address <span class="token punctuation">,</span><span class="token class-name">uint32_t</span> data<span class="token punctuation">)</span>  <span class="token comment">//擦除页</span>
+<span class="token punctuation">{<!-- --></span>
+	
+    <span class="token class-name">uint32_t</span> F<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+     
+
+    <span class="token function">HAL_FLASH_Unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//解锁Flash扫写权限</span>
+	  <span class="token comment">//清楚Flsh标志位</span>
+   	<span class="token comment">//__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR  | FLASH_FLAG_BSY |FLASH_SR_PGERR);</span>
+    FLASH_EraseInitTypeDef  FLash<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>TypeErase<span class="token operator">=</span>FLASH_TYPEERASE_PAGES<span class="token punctuation">;</span> <span class="token comment">//擦除模式</span>
+    <span class="token comment">//FLash.Banks=FLASH_BANK_1;     //擦除电压选择</span>
+    <span class="token comment">//FLash.PageAddress=(address - FLASH_BASE) / FLASH_PAGE_SIZE;  //从那页开始擦除 2K/页，一共16页</span>
+	  FLash<span class="token punctuation">.</span>PageAddress<span class="token operator">=</span> address<span class="token punctuation">;</span>
+    FLash<span class="token punctuation">.</span>NbPages<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span>  <span class="token comment">//一次擦除几页</span>
+    HAL_StatusTypeDef ret<span class="token operator">=</span><span class="token function">HAL_FLASHEx_Erase</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>FLash<span class="token punctuation">,</span> <span class="token operator">&amp;</span>F<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//擦除flash</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>ret<span class="token operator">!=</span>HAL_OK<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash erase error, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash erase succeed, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span> 
+	  
+    ret <span class="token operator">=</span> <span class="token function">HAL_FLASH_Program</span><span class="token punctuation">(</span>TYPEPROGRAM_DOUBLEWORD<span class="token punctuation">,</span> address <span class="token punctuation">,</span> data<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//写入flash</span>
+  	<span class="token keyword">if</span><span class="token punctuation">(</span>ret<span class="token operator">!=</span>HAL_OK<span class="token punctuation">)</span>
+  	<span class="token punctuation">{<!-- --></span>
+  		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash write error, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+  		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"flash write succeed, code=%d...\r\n"</span><span class="token punctuation">,</span>ret<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  	<span class="token punctuation">}</span>	
+	
+    <span class="token function">HAL_FLASH_Lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//FLash上锁</span>
+	
+<span class="token punctuation">}</span>
+
+<span class="token comment">//跳转到应用程序段</span>
+<span class="token comment">//appxaddr:用户代码起始地址.</span>
+<span class="token keyword">typedef</span> <span class="token keyword">void</span> <span class="token punctuation">(</span><span class="token operator">*</span>pFunction<span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span> 									
+pFunction Jump_To_Application<span class="token punctuation">;</span>  									<span class="token comment">// jump function</span>
+
+<span class="token keyword">void</span> <span class="token function">JumpToAPP</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> ApplicationAddress<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint32_t</span> JumpAddress <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>      									<span class="token comment">// JumpAddress</span>
+
+	<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span>ApplicationAddress<span class="token punctuation">)</span> <span class="token operator">&amp;</span> <span class="token number">0x2FFE0000</span><span class="token punctuation">)</span><span class="token operator">==</span><span class="token number">0x20000000</span><span class="token punctuation">)</span> <span class="token comment">// check if the stack is ok </span>
+	<span class="token punctuation">{<!-- --></span>
+		SCB<span class="token operator">-&gt;</span>VTOR <span class="token operator">=</span> FLASH_BASE <span class="token operator">|</span> ApplicationAddress<span class="token punctuation">;</span>				<span class="token comment">// redifine the vect table</span>
+		JumpAddress <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span>ApplicationAddress <span class="token operator">+</span> <span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		Jump_To_Application <span class="token operator">=</span><span class="token punctuation">(</span>pFunction<span class="token punctuation">)</span>JumpAddress<span class="token punctuation">;</span>
+		<span class="token function">__set_MSP</span><span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span>ApplicationAddress<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">Jump_To_Application</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"there is no image in app\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>		
+
+</code></pre> 
+<p><strong>flash.h</strong></p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifndef</span> <span class="token expression">__flash_H</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">__flash_H</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"main.h"</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">Flash_addr</span>  <span class="token expression"><span class="token number">0x807FC00</span></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">FLASH_BASEs</span> <span class="token expression"><span class="token number">0x8000000</span></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">FLASH_PAGE_SIZE</span> <span class="token expression"><span class="token number">2048</span></span></span>
+<span class="token keyword">typedef</span>  <span class="token keyword">void</span> <span class="token punctuation">(</span><span class="token operator">*</span>iapfun<span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>				<span class="token comment">//定义一个函数类型的参数</span>
+
+
+HAL_StatusTypeDef <span class="token function">flash_write</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> address<span class="token punctuation">,</span> <span class="token class-name">uint64_t</span> data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">flash_page_erase_common</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> address <span class="token punctuation">,</span><span class="token class-name">uint32_t</span> data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">flash_page_erase</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> page<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">flash_page_erase_one</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> page<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token class-name">uint32_t</span> <span class="token function">STMFLASH_ReadWord</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> faddr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">STMFLASH_Read</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> ReadAddr<span class="token punctuation">,</span><span class="token class-name">uint32_t</span> <span class="token operator">*</span>pBuffer<span class="token punctuation">,</span><span class="token class-name">uint32_t</span> NumToRead<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">iap_load_app</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span> appxaddr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+</code></pre> 
+<p><strong>usart.c</strong></p> 
+<pre><code class="prism language-c"><span class="token comment">/* USER CODE BEGIN Header */</span>
+<span class="token comment">/**
+  ******************************************************************************
+  * @file    usart.c
+  * @brief   This file provides code for the configuration
+  *          of the USART instances.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2023 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */</span>
+<span class="token comment">/* USER CODE END Header */</span>
+<span class="token comment">/* Includes ------------------------------------------------------------------*/</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"usart.h"</span></span>
+
+<span class="token comment">/* USER CODE BEGIN 0 */</span>
+
+<span class="token comment">/* USER CODE END 0 */</span>
+
+UART_HandleTypeDef huart1<span class="token punctuation">;</span>
+usart_buff usart_dat<span class="token punctuation">;</span>
+<span class="token comment">/* USART1 init function */</span>
+<span class="token class-name">uint32_t</span> buff_number<span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">MX_USART1_UART_Init</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+
+
+  huart1<span class="token punctuation">.</span>Instance <span class="token operator">=</span> USART1<span class="token punctuation">;</span>
+  huart1<span class="token punctuation">.</span>Init<span class="token punctuation">.</span>BaudRate <span class="token operator">=</span> <span class="token number">115200</span><span class="token punctuation">;</span>
+  huart1<span class="token punctuation">.</span>Init<span class="token punctuation">.</span>WordLength <span class="token operator">=</span> UART_WORDLENGTH_8B<span class="token punctuation">;</span>
+  huart1<span class="token punctuation">.</span>Init<span class="token punctuation">.</span>StopBits <span class="token operator">=</span> UART_STOPBITS_1<span class="token punctuation">;</span>
+  huart1<span class="token punctuation">.</span>Init<span class="token punctuation">.</span>Parity <span class="token operator">=</span> UART_PARITY_NONE<span class="token punctuation">;</span>
+  huart1<span class="token punctuation">.</span>Init<span class="token punctuation">.</span>Mode <span class="token operator">=</span> UART_MODE_TX_RX<span class="token punctuation">;</span>
+  huart1<span class="token punctuation">.</span>Init<span class="token punctuation">.</span>HwFlowCtl <span class="token operator">=</span> UART_HWCONTROL_NONE<span class="token punctuation">;</span>
+  huart1<span class="token punctuation">.</span>Init<span class="token punctuation">.</span>OverSampling <span class="token operator">=</span> UART_OVERSAMPLING_16<span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">HAL_UART_Init</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>huart1<span class="token punctuation">)</span> <span class="token operator">!=</span> HAL_OK<span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+    <span class="token function">Error_Handler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+	<span class="token function">HAL_UART_Receive_IT</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>huart1<span class="token punctuation">,</span><span class="token operator">&amp;</span>usart_dat<span class="token punctuation">.</span>szTemp<span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span> <span class="token function">HAL_UART_MspInit</span><span class="token punctuation">(</span>UART_HandleTypeDef<span class="token operator">*</span> uartHandle<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+
+  GPIO_InitTypeDef GPIO_InitStruct <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span><span class="token punctuation">(</span>uartHandle<span class="token operator">-&gt;</span>Instance<span class="token operator">==</span>USART1<span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+  <span class="token comment">/* USER CODE BEGIN USART1_MspInit 0 */</span>
+
+  <span class="token comment">/* USER CODE END USART1_MspInit 0 */</span>
+    <span class="token comment">/* USART1 clock enable */</span>
+    <span class="token function">__HAL_RCC_USART1_CLK_ENABLE</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token function">__HAL_RCC_GPIOA_CLK_ENABLE</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token comment">/**USART1 GPIO Configuration
+    PA9     ------&gt; USART1_TX
+    PA10     ------&gt; USART1_RX
+    */</span>
+    GPIO_InitStruct<span class="token punctuation">.</span>Pin <span class="token operator">=</span> GPIO_PIN_9<span class="token punctuation">;</span>
+    GPIO_InitStruct<span class="token punctuation">.</span>Mode <span class="token operator">=</span> GPIO_MODE_AF_PP<span class="token punctuation">;</span>
+    GPIO_InitStruct<span class="token punctuation">.</span>Speed <span class="token operator">=</span> GPIO_SPEED_FREQ_HIGH<span class="token punctuation">;</span>
+    <span class="token function">HAL_GPIO_Init</span><span class="token punctuation">(</span>GPIOA<span class="token punctuation">,</span> <span class="token operator">&amp;</span>GPIO_InitStruct<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    GPIO_InitStruct<span class="token punctuation">.</span>Pin <span class="token operator">=</span> GPIO_PIN_10<span class="token punctuation">;</span>
+    GPIO_InitStruct<span class="token punctuation">.</span>Mode <span class="token operator">=</span> GPIO_MODE_INPUT<span class="token punctuation">;</span>
+    GPIO_InitStruct<span class="token punctuation">.</span>Pull <span class="token operator">=</span> GPIO_NOPULL<span class="token punctuation">;</span>
+    <span class="token function">HAL_GPIO_Init</span><span class="token punctuation">(</span>GPIOA<span class="token punctuation">,</span> <span class="token operator">&amp;</span>GPIO_InitStruct<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		
+		<span class="token function">HAL_NVIC_SetPriority</span><span class="token punctuation">(</span>USART1_IRQn<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">HAL_NVIC_EnableIRQ</span><span class="token punctuation">(</span>USART1_IRQn<span class="token punctuation">)</span><span class="token punctuation">;</span> 
+
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span> <span class="token function">HAL_UART_MspDeInit</span><span class="token punctuation">(</span>UART_HandleTypeDef<span class="token operator">*</span> uartHandle<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+
+  <span class="token keyword">if</span><span class="token punctuation">(</span>uartHandle<span class="token operator">-&gt;</span>Instance<span class="token operator">==</span>USART1<span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+  <span class="token comment">/* USER CODE BEGIN USART1_MspDeInit 0 */</span>
+
+  <span class="token comment">/* USER CODE END USART1_MspDeInit 0 */</span>
+    <span class="token comment">/* Peripheral clock disable */</span>
+    <span class="token function">__HAL_RCC_USART1_CLK_DISABLE</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">/**USART1 GPIO Configuration
+    PA9     ------&gt; USART1_TX
+    PA10     ------&gt; USART1_RX
+    */</span>
+    <span class="token function">HAL_GPIO_DeInit</span><span class="token punctuation">(</span>GPIOA<span class="token punctuation">,</span> GPIO_PIN_9<span class="token operator">|</span>GPIO_PIN_10<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+  <span class="token comment">/* USER CODE BEGIN USART1_MspDeInit 1 */</span>
+
+  <span class="token comment">/* USER CODE END USART1_MspDeInit 1 */</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span> <span class="token function">USART1_IRQHandler</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token function">HAL_UART_IRQHandler</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>huart1<span class="token punctuation">)</span><span class="token punctuation">;</span>	
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span> <span class="token function">HAL_UART_RxCpltCallback</span><span class="token punctuation">(</span>UART_HandleTypeDef <span class="token operator">*</span>huart<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+  
+	<span class="token keyword">if</span><span class="token punctuation">(</span>huart<span class="token operator">-&gt;</span>Instance<span class="token operator">==</span>USART1<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>usart_dat<span class="token punctuation">.</span>nRec <span class="token operator">==</span><span class="token number">5415</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>	
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"size=%d\r\n"</span><span class="token punctuation">,</span>usart_dat<span class="token punctuation">.</span>nRec<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//打印数据</span>
+			<span class="token comment">//usart_dat.nRec =0;</span>
+			usart_dat<span class="token punctuation">.</span>download_flag <span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>usart_dat<span class="token punctuation">.</span>nRec<span class="token operator">&lt;</span><span class="token number">15</span><span class="token operator">*</span><span class="token number">1024</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>usart_dat<span class="token punctuation">.</span>nRec<span class="token operator">++</span><span class="token punctuation">]</span><span class="token operator">=</span>usart_dat<span class="token punctuation">.</span>szTemp<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token comment">//usart_dat.download_flag =1;</span>
+		<span class="token function">HAL_UART_Receive_IT</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>huart1<span class="token punctuation">,</span><span class="token operator">&amp;</span>usart_dat<span class="token punctuation">.</span>szTemp<span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	
+	
+	<span class="token punctuation">}</span>
+ 
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<p><strong>usart.h</strong></p> 
+<pre><code class="prism language-c"><span class="token comment">/* USER CODE BEGIN Header */</span>
+<span class="token comment">/**
+  ******************************************************************************
+  * @file    usart.h
+  * @brief   This file contains all the function prototypes for
+  *          the usart.c file
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2023 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */</span>
+<span class="token comment">/* USER CODE END Header */</span>
+<span class="token comment">/* Define to prevent recursive inclusion -------------------------------------*/</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifndef</span> <span class="token expression">__USART_H__</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">__USART_H__</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifdef</span> <span class="token expression">__cplusplus</span></span>
+<span class="token keyword">extern</span> <span class="token string">"C"</span> <span class="token punctuation">{<!-- --></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+
+<span class="token comment">/* Includes ------------------------------------------------------------------*/</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"main.h"</span></span>
+
+<span class="token comment">/* USER CODE BEGIN Includes */</span>
+
+<span class="token comment">/* USER CODE END Includes */</span>
+<span class="token keyword">typedef</span> <span class="token keyword">struct</span><span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">volatile</span> <span class="token keyword">unsigned</span> <span class="token keyword">char</span>  		szRx<span class="token punctuation">[</span><span class="token number">15</span><span class="token operator">*</span><span class="token number">1024</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token keyword">volatile</span> <span class="token keyword">unsigned</span> <span class="token keyword">char</span>  		szTx<span class="token punctuation">[</span><span class="token number">32</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token keyword">unsigned</span> <span class="token keyword">int</span> 					      nRec<span class="token punctuation">;</span>
+	<span class="token keyword">unsigned</span> <span class="token keyword">char</span>					      szTemp<span class="token punctuation">;</span>  
+	<span class="token keyword">unsigned</span> <span class="token keyword">short</span> 		          timeOut<span class="token punctuation">;</span>
+  <span class="token keyword">unsigned</span> <span class="token keyword">char</span>               download_flag<span class="token punctuation">;</span>	
+	
+<span class="token punctuation">}</span>usart_buff<span class="token punctuation">;</span>
+
+<span class="token keyword">extern</span> <span class="token class-name">uint32_t</span> buff_number<span class="token punctuation">;</span>
+<span class="token keyword">extern</span> usart_buff usart_dat<span class="token punctuation">;</span>
+<span class="token keyword">extern</span> UART_HandleTypeDef huart1<span class="token punctuation">;</span>
+
+<span class="token comment">/* USER CODE BEGIN Private defines */</span>
+
+<span class="token comment">/* USER CODE END Private defines */</span>
+
+<span class="token keyword">void</span> <span class="token function">MX_USART1_UART_Init</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">/* USER CODE BEGIN Prototypes */</span>
+
+<span class="token comment">/* USER CODE END Prototypes */</span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifdef</span> <span class="token expression">__cplusplus</span></span>
+<span class="token punctuation">}</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span> <span class="token comment">/* __USART_H__ */</span></span>
+
+
+</code></pre> 
+<h2><a id="1bootloader_424"></a>1.bootloader</h2> 
+<p>首先我们需要将flash下载程序选择0x8000000<br> <img src="https://images2.imgbox.com/57/45/qJmV2ibI_o.png" alt="在这里插入图片描述"><br> 然后是main.c源码<br> 这里下载地址要选择0x8004000<br> <img src="https://images2.imgbox.com/b1/21/SRJS4rta_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-c">
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"main.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"usart.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"gpio.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"stdio.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"flash.h"</span></span>
+<span class="token keyword">int</span> <span class="token function">fputc</span><span class="token punctuation">(</span><span class="token keyword">int</span> ch<span class="token punctuation">,</span>FILE <span class="token operator">*</span>f<span class="token punctuation">)</span> <span class="token comment">//串口4的重定向</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token function">HAL_UART_Transmit</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>huart1<span class="token punctuation">,</span><span class="token punctuation">(</span><span class="token class-name">uint8_t</span> <span class="token operator">*</span><span class="token punctuation">)</span><span class="token operator">&amp;</span>ch<span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">0xFFFF</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//hurat1为串口号，根据自己情况进行选择</span>
+	<span class="token keyword">return</span> ch<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+
+<span class="token comment">//--------------------------------------------------------------------</span>
+<span class="token comment">//---------------------------bootloader_2分区设置--------------------------------</span>
+<span class="token comment">//bootloader          0x8000000~0x8004000    //16K</span>
+<span class="token comment">//运行程序          0x8004000~0x800C000    //32K   //48K</span>
+<span class="token comment">//程序下载缓存区    0x800C000~0x8014000   //32K   //80K</span>
+<span class="token comment">//程序更新标志位    0x807FC00~0x8080000  //1K</span>
+<span class="token comment">//--------------------------------------------------------------------</span>
+
+<span class="token keyword">void</span> <span class="token function">SystemClock_Config</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token class-name">uint32_t</span> flash_read_dat<span class="token punctuation">[</span><span class="token number">1024</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">AppAddr</span>		<span class="token expression"><span class="token number">0x8004000</span></span></span>
+<span class="token class-name">uint32_t</span> AppAddr_write<span class="token operator">=</span><span class="token number">0x800C000</span><span class="token punctuation">;</span>
+<span class="token class-name">uint32_t</span> erase_count<span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">flashDataMove</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token keyword">int</span> j<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token function">flash_page_erase</span><span class="token punctuation">(</span>AppAddr<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//清除0x8004000以后的16页</span>
+	<span class="token keyword">for</span><span class="token punctuation">(</span>i<span class="token operator">=</span><span class="token number">16</span><span class="token punctuation">;</span>i<span class="token operator">&lt;</span><span class="token number">48</span><span class="token punctuation">;</span>i<span class="token operator">+=</span><span class="token number">2</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+
+		<span class="token keyword">for</span><span class="token punctuation">(</span>j<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>j<span class="token operator">&lt;</span><span class="token number">2048</span><span class="token punctuation">;</span>j<span class="token operator">+=</span><span class="token number">8</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token class-name">uint64_t</span> t<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token comment">//读取</span>
+			t<span class="token operator">=</span><span class="token operator">*</span><span class="token punctuation">(</span>__IO <span class="token class-name">uint64_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span>FLASH_BASE<span class="token operator">+</span><span class="token number">48</span><span class="token operator">*</span><span class="token number">1024</span><span class="token operator">+</span>j<span class="token operator">+</span><span class="token punctuation">(</span>i<span class="token operator">-</span><span class="token number">16</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">1024</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//FLASH_BASE		0x08000000</span>
+			<span class="token function">flash_write</span><span class="token punctuation">(</span>FLASH_BASE<span class="token operator">+</span>j<span class="token operator">+</span>i<span class="token operator">*</span><span class="token number">1024</span><span class="token punctuation">,</span>t<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"from addr=0x%x,dest addr=0x%x\r\n"</span><span class="token punctuation">,</span>FLASH_BASE<span class="token operator">+</span><span class="token number">48</span><span class="token operator">*</span><span class="token number">1024</span><span class="token operator">+</span>j<span class="token operator">+</span><span class="token punctuation">(</span>i<span class="token operator">-</span><span class="token number">16</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">1024</span><span class="token punctuation">,</span>FLASH_BASE<span class="token operator">+</span>j<span class="token operator">+</span>i<span class="token operator">*</span><span class="token number">1024</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"from sector=%d,dest sector=%d\r\n"</span><span class="token punctuation">,</span><span class="token number">48</span><span class="token operator">+</span>i<span class="token punctuation">,</span>i<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//unsigned char usart_d[8]={0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18};</span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+
+  <span class="token function">HAL_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+  <span class="token function">SystemClock_Config</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+  <span class="token function">MX_GPIO_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token function">MX_USART1_UART_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\r\n\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"	                                 \r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"  /\\  /\\__ _ _ __ ___   ___ ___ _ __ \r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">" / /_/ / _` | '_ ` _ \\ / __/ _ \\ '__|\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"/ __  / (_| | | | | | | (_|  __/ |   \r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\\/ /_/ \\__,_|_| |_| |_|\\___\\___|_|   \r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"                                     \r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"bootloader hardware inited...\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token comment">//flash_page_erase_common(Flash_addr,0xFA);	</span>
+	
+<span class="token comment">//	flash_page_erase(AppAddr);</span>
+<span class="token comment">//	STMFLASH_Read(AppAddrs,flash_read_dat,10);</span>
+<span class="token comment">//	flash_write(AppAddrs, 0x00FEFACE);</span>
+<span class="token comment">//	//printf("OUTPUT Flash data=0x%X\n",flash_read_dat[0]);		</span>
+<span class="token comment">//	 for(int ins=0;ins&lt;10;ins++){<!-- --></span>
+<span class="token comment">//			printf("OUTPUT Flash data=0x%X\n",flash_read_dat[ins]);			 </span>
+<span class="token comment">//	 }</span>
+	<span class="token function">STMFLASH_Read</span><span class="token punctuation">(</span>Flash_addr<span class="token punctuation">,</span>flash_read_dat<span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//读取下载标志位</span>
+<span class="token comment">//	</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"OUTPUT Flash data=0x%X\r\n"</span><span class="token punctuation">,</span>flash_read_dat<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	
+	
+	<span class="token comment">//flash_page_erase(AppAddr);</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>flash_read_dat<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">==</span><span class="token number">0xFA</span><span class="token punctuation">)</span><span class="token comment">//判断是否为0X08XXXXXX.</span>
+  <span class="token punctuation">{<!-- --></span>
+		  <span class="token function">flashDataMove</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//将下载的程序移植到运行程序里面</span>
+      <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"开始执行FLASH用户代码!!\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token function">flash_page_erase_common</span><span class="token punctuation">(</span>Flash_addr<span class="token punctuation">,</span><span class="token number">0x00</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//清空下载标志位		</span>
+      <span class="token function">JumpToAPP</span><span class="token punctuation">(</span>AppAddr<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//执行FLASH APP代码		 </span>
+  <span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+      <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"非FLASH应用程序,无法执行!\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>     
+	<span class="token punctuation">}</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>flash_read_dat<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">==</span><span class="token number">0x00</span><span class="token punctuation">)</span>	
+    <span class="token punctuation">{<!-- --></span>
+      <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"开始执行FLASH用户代码!!\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>			
+			<span class="token function">JumpToAPP</span><span class="token punctuation">(</span>AppAddr<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//执行FLASH APP代码			</span>
+		<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+      <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"非FLASH应用程序,无法执行!\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span> 			
+		<span class="token punctuation">}</span>
+		
+  <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+		 <span class="token comment">// 01 06  00 00 00 01 </span>
+		<span class="token comment">//4个字节发送文件大小（32位）</span>
+<span class="token comment">//		 if(usart_dat.szRx[0] == 01){<!-- --></span>
+<span class="token comment">//			 if(usart_dat.szRx[1] == 06){<!-- --></span>
+<span class="token comment">//				  buff_number=(usart_dat.szRx[2]&lt;&lt;24)+(usart_dat.szRx[3]&lt;&lt;16)+(usart_dat.szRx[4]&lt;&lt;8)+usart_dat.szRx[5];</span>
+
+<span class="token comment">//				 printf("file size=%d\r\n",buff_number);</span>
+<span class="token comment">//			 }</span>
+<span class="token comment">//			 usart_dat.nRec =0;</span>
+<span class="token comment">//		 }</span>
+		 <span class="token comment">//printf("hellow\r\n");</span>
+     <span class="token keyword">if</span><span class="token punctuation">(</span>usart_dat<span class="token punctuation">.</span>download_flag <span class="token operator">==</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span> <span class="token comment">//表示开始传输程序</span>
+			 usart_dat<span class="token punctuation">.</span>download_flag <span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+			 <span class="token keyword">int</span> ins<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token function">flash_page_erase</span><span class="token punctuation">(</span>AppAddr_write<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	    <span class="token keyword">for</span><span class="token punctuation">(</span>ins<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>ins<span class="token operator">&lt;</span>usart_dat<span class="token punctuation">.</span>nRec<span class="token punctuation">;</span>ins<span class="token operator">+=</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				<span class="token class-name">uint64_t</span> t<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+							   t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span> 
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token punctuation">]</span><span class="token punctuation">;</span>
+				<span class="token keyword">int</span> ret<span class="token operator">=</span><span class="token function">flash_write</span><span class="token punctuation">(</span>AppAddr_write<span class="token punctuation">,</span>t<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"addr=0x%X\r\n"</span><span class="token punctuation">,</span>AppAddr_write<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%s\r\n"</span><span class="token punctuation">,</span>ret<span class="token operator">==</span><span class="token number">0</span><span class="token operator">?</span><span class="token string">"OK"</span><span class="token operator">:</span><span class="token string">"Error"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        AppAddr_write<span class="token operator">=</span>AppAddr_write<span class="token operator">+</span><span class="token number">8</span><span class="token punctuation">;</span>				
+			<span class="token punctuation">}</span>
+			usart_dat<span class="token punctuation">.</span>nRec <span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token function">flash_page_erase_common</span><span class="token punctuation">(</span>Flash_addr<span class="token punctuation">,</span><span class="token number">0xFA</span><span class="token punctuation">)</span><span class="token punctuation">;</span>			
+			<span class="token comment">//AppAddr_write=AppAddr_write+0x800;			</span>
+		 <span class="token punctuation">}</span>
+		 <span class="token comment">//printf("size=%d\r\n",usart_dat.nRec);</span>
+  <span class="token punctuation">}</span>
+  <span class="token comment">/* USER CODE END 3 */</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">/**
+  * @brief System Clock Configuration
+  * @retval None
+  */</span>
+<span class="token keyword">void</span> <span class="token function">SystemClock_Config</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+  RCC_OscInitTypeDef RCC_OscInitStruct <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+  RCC_ClkInitTypeDef RCC_ClkInitStruct <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+
+  <span class="token comment">/** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>OscillatorType <span class="token operator">=</span> RCC_OSCILLATORTYPE_HSI<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>HSIState <span class="token operator">=</span> RCC_HSI_ON<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>HSICalibrationValue <span class="token operator">=</span> RCC_HSICALIBRATION_DEFAULT<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>PLL<span class="token punctuation">.</span>PLLState <span class="token operator">=</span> RCC_PLL_ON<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>PLL<span class="token punctuation">.</span>PLLSource <span class="token operator">=</span> RCC_PLLSOURCE_HSI_DIV2<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>PLL<span class="token punctuation">.</span>PLLMUL <span class="token operator">=</span> RCC_PLL_MUL8<span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">HAL_RCC_OscConfig</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>RCC_OscInitStruct<span class="token punctuation">)</span> <span class="token operator">!=</span> HAL_OK<span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+    <span class="token function">Error_Handler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  <span class="token comment">/** Initializes the CPU, AHB and APB buses clocks
+  */</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>ClockType <span class="token operator">=</span> RCC_CLOCKTYPE_HCLK<span class="token operator">|</span>RCC_CLOCKTYPE_SYSCLK
+                              <span class="token operator">|</span>RCC_CLOCKTYPE_PCLK1<span class="token operator">|</span>RCC_CLOCKTYPE_PCLK2<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>SYSCLKSource <span class="token operator">=</span> RCC_SYSCLKSOURCE_PLLCLK<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>AHBCLKDivider <span class="token operator">=</span> RCC_SYSCLK_DIV1<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>APB1CLKDivider <span class="token operator">=</span> RCC_HCLK_DIV2<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>APB2CLKDivider <span class="token operator">=</span> RCC_HCLK_DIV1<span class="token punctuation">;</span>
+
+  <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">HAL_RCC_ClockConfig</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>RCC_ClkInitStruct<span class="token punctuation">,</span> FLASH_LATENCY_1<span class="token punctuation">)</span> <span class="token operator">!=</span> HAL_OK<span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+    <span class="token function">Error_Handler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">/* USER CODE BEGIN 4 */</span>
+
+<span class="token comment">/* USER CODE END 4 */</span>
+
+<span class="token comment">/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */</span>
+<span class="token keyword">void</span> <span class="token function">Error_Handler</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+  <span class="token comment">/* USER CODE BEGIN Error_Handler_Debug */</span>
+  <span class="token comment">/* User can add his own implementation to report the HAL error return state */</span>
+  <span class="token function">__disable_irq</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+  <span class="token punctuation">}</span>
+  <span class="token comment">/* USER CODE END Error_Handler_Debug */</span>
+<span class="token punctuation">}</span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifdef</span>  <span class="token expression">USE_FULL_ASSERT</span></span>
+<span class="token comment">/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */</span>
+<span class="token keyword">void</span> <span class="token function">assert_failed</span><span class="token punctuation">(</span><span class="token class-name">uint8_t</span> <span class="token operator">*</span>file<span class="token punctuation">,</span> <span class="token class-name">uint32_t</span> line<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+  <span class="token comment">/* USER CODE BEGIN 6 */</span>
+  <span class="token comment">/* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */</span>
+  <span class="token comment">/* USER CODE END 6 */</span>
+<span class="token punctuation">}</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span> <span class="token comment">/* USE_FULL_ASSERT */</span></span>
+
+</code></pre> 
+<h2><a id="2_644"></a>2.然后是主运行函数</h2> 
+<p>主函数</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"main.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"spi.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"usart.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"gpio.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"w5500.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"stdio.h"</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"flash.h"</span></span>
+
+<span class="token class-name">uint32_t</span> flash_read_dat<span class="token punctuation">[</span><span class="token number">1024</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">AppAddr</span>		<span class="token expression"><span class="token number">0x8004000</span></span></span>
+<span class="token class-name">uint32_t</span> AppAddr_write<span class="token operator">=</span><span class="token number">0x800C000</span><span class="token punctuation">;</span>
+<span class="token class-name">uint32_t</span> erase_count<span class="token punctuation">;</span>
+
+<span class="token keyword">void</span> <span class="token function">System_Initialization</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//STM32系统初始化函数(初始化STM32时钟及外设)</span>
+<span class="token keyword">void</span> <span class="token function">Load_Net_Parameters</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">W5500_Initialization</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">W5500_Socket_Set</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">Process_Socket_Data</span><span class="token punctuation">(</span>SOCKET s<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">Process_Socket_Keep_Read_nData</span><span class="token punctuation">(</span>SOCKET s<span class="token punctuation">,</span><span class="token class-name">uint8_t</span><span class="token operator">*</span> Tx_Buff_datas<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">Process_Socket_Write_nData</span><span class="token punctuation">(</span>SOCKET s<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token class-name">uint8_t</span> Tx_Buff_Text<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token punctuation">{<!-- --></span><span class="token number">0xA0</span><span class="token punctuation">,</span><span class="token number">0xA0</span><span class="token punctuation">,</span><span class="token number">0xB0</span><span class="token punctuation">,</span><span class="token number">0xB0</span><span class="token punctuation">,</span><span class="token number">0xC0</span><span class="token punctuation">,</span><span class="token number">0xC0</span><span class="token punctuation">}</span><span class="token punctuation">;</span><span class="token comment">//测试的buffer</span>
+
+
+<span class="token keyword">static</span> <span class="token class-name">uint16_t</span> data<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+
+
+<span class="token keyword">unsigned</span> <span class="token keyword">char</span> Buff_test<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token string">"Hellow Modbus TCP\n"</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">SystemClock_Config</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+
+  <span class="token function">HAL_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token function">SystemClock_Config</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token function">MX_GPIO_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token function">MX_SPI1_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token function">MX_USART1_UART_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"W5500_Begin...\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token comment">/* USER CODE BEGIN 2 */</span>
+	<span class="token comment">//System_Initialization();	//STM32系统初始化函数(初始化STM32时钟及外设)</span>
+	<span class="token comment">//Load_Net_Parameters();		//装载网络参数	</span>
+	<span class="token comment">//W5500_Hardware_Reset();		//硬件复位W5500</span>
+	<span class="token comment">//W5500_Initialization();		//W5500初始货配置</span>
+	
+
+
+  <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+		<span class="token function">HAL_GPIO_TogglePin</span><span class="token punctuation">(</span>GPIOB<span class="token punctuation">,</span>GPIO_PIN_5<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">HAL_Delay</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"bootloader Tast OK...\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		
+    <span class="token keyword">if</span><span class="token punctuation">(</span>usart_dat<span class="token punctuation">.</span>download_flag <span class="token operator">==</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span> <span class="token comment">//表示开始传输程序</span>
+			 usart_dat<span class="token punctuation">.</span>download_flag <span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+			 <span class="token keyword">int</span> ins<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token function">flash_page_erase</span><span class="token punctuation">(</span>AppAddr_write<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	    <span class="token keyword">for</span><span class="token punctuation">(</span>ins<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>ins<span class="token operator">&lt;</span>usart_dat<span class="token punctuation">.</span>nRec<span class="token punctuation">;</span>ins<span class="token operator">+=</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				<span class="token class-name">uint64_t</span> t<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+							   t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span> 
+								 t<span class="token operator">=</span><span class="token punctuation">(</span>t<span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token operator">+</span>usart_dat<span class="token punctuation">.</span>szRx<span class="token punctuation">[</span>ins<span class="token punctuation">]</span><span class="token punctuation">;</span>
+				<span class="token keyword">int</span> ret<span class="token operator">=</span><span class="token function">flash_write</span><span class="token punctuation">(</span>AppAddr_write<span class="token punctuation">,</span>t<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"addr=0x%X\r\n"</span><span class="token punctuation">,</span>AppAddr_write<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%s\r\n"</span><span class="token punctuation">,</span>ret<span class="token operator">==</span><span class="token number">0</span><span class="token operator">?</span><span class="token string">"OK"</span><span class="token operator">:</span><span class="token string">"Error"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        AppAddr_write<span class="token operator">=</span>AppAddr_write<span class="token operator">+</span><span class="token number">8</span><span class="token punctuation">;</span>				
+			<span class="token punctuation">}</span>
+			usart_dat<span class="token punctuation">.</span>nRec <span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token function">flash_page_erase_common</span><span class="token punctuation">(</span>Flash_addr<span class="token punctuation">,</span><span class="token number">0xFA</span><span class="token punctuation">)</span><span class="token punctuation">;</span>			
+			<span class="token comment">//AppAddr_write=AppAddr_write+0x800;			</span>
+		 <span class="token punctuation">}</span>		
+		
+		
+<span class="token comment">//		W5500_Socket_Set();//W5500端口初始化配置</span>
+
+<span class="token comment">//		W5500_Interrupt_Process();//W5500中断处理程序框架</span>
+<span class="token comment">//		//printf("Read_Len=%d\r\n",Rx_Buffer);</span>
+<span class="token comment">//		//Read_W5500_SOCK_1Byte(0,)</span>
+<span class="token comment">//	  //printf("S_RECEIVE=0x%X\n",S0_Data);		</span>
+<span class="token comment">//		if((S0_Data &amp; S_RECEIVE) == S_RECEIVE)//如果Socket0接收到数据</span>
+<span class="token comment">//		{<!-- --></span>
+<span class="token comment">//			S0_Data&amp;=~S_RECEIVE;</span>
+<span class="token comment">//			//Process_Socket_Data(0);//W5500接收并发送接收到的数据</span>
+<span class="token comment">//			Process_Socket_Keep_Read_nData(0,Tx_Buff_Text);</span>
+<span class="token comment">//      //Process_Socket_Write_nData(0);</span>
+<span class="token comment">//		}</span>
+<span class="token comment">//		else //定时发送字符串</span>
+<span class="token comment">//		{<!-- --></span>
+<span class="token comment">//			if(S0_State == (S_INIT|S_CONN))</span>
+<span class="token comment">//			{<!-- --></span>
+<span class="token comment">//				S0_Data&amp;=~S_TRANSMITOK;</span>
+<span class="token comment">//				//memcpy(Tx_Buffer, "\r\n你好服务器,我是客户1!\r\n", 23);	</span>
+<span class="token comment">//				Process_Socket_Write_nData(0);</span>
+<span class="token comment">//				//Write_SOCK_Data_Buffer(0, Tx_Buffer, 23);//指定Socket(0~7)发送数据处理,端口0发送23字节数据</span>
+<span class="token comment">//			}</span>
+<span class="token comment">//		}</span>
+	<span class="token comment">//	Write_SOCK_Data_Buffer(0, Buff_test, sizeof(Buff_test));</span>
+
+		<span class="token comment">//HAL_Delay(500);</span>
+		<span class="token comment">//HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_13);</span>
+
+<span class="token comment">//		data++;</span>
+    <span class="token comment">/* USER CODE BEGIN 3 */</span>
+  <span class="token punctuation">}</span>
+  
+<span class="token punctuation">}</span>
+
+<span class="token comment">/**
+  * @brief System Clock Configuration
+  * @retval None
+  */</span>
+<span class="token keyword">void</span> <span class="token function">SystemClock_Config</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+  RCC_OscInitTypeDef RCC_OscInitStruct <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+  RCC_ClkInitTypeDef RCC_ClkInitStruct <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+
+  <span class="token comment">/** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>OscillatorType <span class="token operator">=</span> RCC_OSCILLATORTYPE_HSI<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>HSIState <span class="token operator">=</span> RCC_HSI_ON<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>HSICalibrationValue <span class="token operator">=</span> RCC_HSICALIBRATION_DEFAULT<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>PLL<span class="token punctuation">.</span>PLLState <span class="token operator">=</span> RCC_PLL_ON<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>PLL<span class="token punctuation">.</span>PLLSource <span class="token operator">=</span> RCC_PLLSOURCE_HSI_DIV2<span class="token punctuation">;</span>
+  RCC_OscInitStruct<span class="token punctuation">.</span>PLL<span class="token punctuation">.</span>PLLMUL <span class="token operator">=</span> RCC_PLL_MUL8<span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">HAL_RCC_OscConfig</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>RCC_OscInitStruct<span class="token punctuation">)</span> <span class="token operator">!=</span> HAL_OK<span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+    <span class="token function">Error_Handler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  <span class="token comment">/** Initializes the CPU, AHB and APB buses clocks
+  */</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>ClockType <span class="token operator">=</span> RCC_CLOCKTYPE_HCLK<span class="token operator">|</span>RCC_CLOCKTYPE_SYSCLK
+                              <span class="token operator">|</span>RCC_CLOCKTYPE_PCLK1<span class="token operator">|</span>RCC_CLOCKTYPE_PCLK2<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>SYSCLKSource <span class="token operator">=</span> RCC_SYSCLKSOURCE_PLLCLK<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>AHBCLKDivider <span class="token operator">=</span> RCC_SYSCLK_DIV1<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>APB1CLKDivider <span class="token operator">=</span> RCC_HCLK_DIV2<span class="token punctuation">;</span>
+  RCC_ClkInitStruct<span class="token punctuation">.</span>APB2CLKDivider <span class="token operator">=</span> RCC_HCLK_DIV1<span class="token punctuation">;</span>
+
+  <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">HAL_RCC_ClockConfig</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>RCC_ClkInitStruct<span class="token punctuation">,</span> FLASH_LATENCY_1<span class="token punctuation">)</span> <span class="token operator">!=</span> HAL_OK<span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+    <span class="token function">Error_Handler</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">/* USER CODE BEGIN 4 */</span>
+
+
+
+<span class="token comment">/*******************************************************************************
+* 函数名  : W5500_Initialization
+* 描述    : W5500初始货配置
+* 输入    : 无
+* 输出    : 无
+* 返回值  : 无
+* 说明    : 无
+*******************************************************************************/</span>
+<span class="token keyword">void</span> <span class="token function">W5500_Initialization</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token function">W5500_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//初始化W5500寄存器函数</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Detect_Gateway</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">==</span>TRUE<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Connect Success\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Connect Loser\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token punctuation">}</span>		<span class="token comment">//检查网关服务器 </span>
+	<span class="token function">Socket_Init</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//指定Socket(0~7)初始化,初始化端口0</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">/*******************************************************************************
+* 函数名  : Load_Net_Parameters
+* 描述    : 装载网络参数
+* 输入    : 无
+* 输出    : 无
+* 返回值  : 无
+* 说明    : 网关、掩码、物理地址、本机IP地址、端口号、目的IP地址、目的端口号、端口工作模式
+*******************************************************************************/</span>
+<span class="token keyword">void</span> <span class="token function">Load_Net_Parameters</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	Gateway_IP<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">192</span><span class="token punctuation">;</span><span class="token comment">//加载网关参数</span>
+	Gateway_IP<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">168</span><span class="token punctuation">;</span>
+	Gateway_IP<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+	Gateway_IP<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+
+	Sub_Mask<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">255</span><span class="token punctuation">;</span><span class="token comment">//加载子网掩码</span>
+	Sub_Mask<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">255</span><span class="token punctuation">;</span>
+	Sub_Mask<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">255</span><span class="token punctuation">;</span>
+	Sub_Mask<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+
+	Phy_Addr<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x08</span><span class="token punctuation">;</span><span class="token comment">//加载物理地址</span>
+	Phy_Addr<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x97</span><span class="token punctuation">;</span>
+	Phy_Addr<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x98</span><span class="token punctuation">;</span>
+	Phy_Addr<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0xBE</span><span class="token punctuation">;</span>
+	Phy_Addr<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x2F</span><span class="token punctuation">;</span>
+	Phy_Addr<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x7F</span><span class="token punctuation">;</span>
+
+	IP_Addr<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">192</span><span class="token punctuation">;</span><span class="token comment">//加载本机IP地址</span>
+	IP_Addr<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">168</span><span class="token punctuation">;</span>
+	IP_Addr<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span>
+	IP_Addr<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">17</span><span class="token punctuation">;</span>
+
+	S0_Port<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">0x13</span><span class="token punctuation">;</span><span class="token comment">//加载端口0的端口号5000 </span>
+	S0_Port<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">0x88</span><span class="token punctuation">;</span>
+
+<span class="token comment">//	S0_DIP[0]=192;//加载端口0的目的IP地址</span>
+<span class="token comment">//	S0_DIP[1]=168;</span>
+<span class="token comment">//	S0_DIP[2]=1;</span>
+<span class="token comment">//	S0_DIP[3]=190;</span>
+<span class="token comment">//	</span>
+<span class="token comment">//	S0_DPort[0] = 0x17;//加载端口0的目的端口号6000</span>
+<span class="token comment">//	S0_DPort[1] = 0x70;</span>
+
+	S0_Mode<span class="token operator">=</span>TCP_SERVER<span class="token punctuation">;</span><span class="token comment">//加载端口0的工作模式,TCP服务端模式</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">/*******************************************************************************
+* 函数名  : W5500_Socket_Set
+* 描述    : W5500端口初始化配置
+* 输入    : 无
+* 输出    : 无
+* 返回值  : 无
+* 说明    : 分别设置4个端口,根据端口工作模式,将端口置于TCP服务器、TCP客户端或UDP模式.
+*			从端口状态字节Socket_State可以判断端口的工作情况
+*******************************************************************************/</span>
+<span class="token keyword">void</span> <span class="token function">W5500_Socket_Set</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>S0_State<span class="token operator">==</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token comment">//端口0初始化配置</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>S0_Mode<span class="token operator">==</span>TCP_SERVER<span class="token punctuation">)</span><span class="token comment">//TCP服务器模式 </span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Socket_Listen</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token operator">==</span>TRUE<span class="token punctuation">)</span>
+				S0_State<span class="token operator">=</span>S_INIT<span class="token punctuation">;</span>
+			<span class="token keyword">else</span>
+				S0_State<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span> <span class="token keyword">if</span><span class="token punctuation">(</span>S0_Mode<span class="token operator">==</span>TCP_CLIENT<span class="token punctuation">)</span><span class="token comment">//TCP客户端模式 </span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Socket_Connect</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token operator">==</span>TRUE<span class="token punctuation">)</span>
+				S0_State<span class="token operator">=</span>S_INIT<span class="token punctuation">;</span>
+			<span class="token keyword">else</span>
+				S0_State<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span><span class="token comment">//UDP模式 </span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Socket_UDP</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token operator">==</span>TRUE<span class="token punctuation">)</span>
+				S0_State<span class="token operator">=</span>S_INIT<span class="token operator">|</span>S_CONN<span class="token punctuation">;</span>
+			<span class="token keyword">else</span>
+				S0_State<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">/*******************************************************************************
+* 函数名  : Process_Socket_Data
+* 描述    : W5500接收并发送接收到的数据
+* 输入    : s:端口号
+* 输出    : 无
+* 返回值  : 无
+* 说明    : 本过程先调用S_rx_process()从W5500的端口接收数据缓冲区读取数据,
+*			然后将读取的数据从Rx_Buffer拷贝到Temp_Buffer缓冲区进行处理。
+*			处理完毕，将数据从Temp_Buffer拷贝到Tx_Buffer缓冲区。调用S_tx_process()
+*			发送数据。
+*******************************************************************************/</span>
+<span class="token keyword">void</span> <span class="token function">Process_Socket_Data</span><span class="token punctuation">(</span>SOCKET s<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> len<span class="token punctuation">;</span>
+	<span class="token keyword">unsigned</span> <span class="token keyword">char</span> msg<span class="token punctuation">[</span><span class="token number">11</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token punctuation">{<!-- --></span><span class="token number">0x00</span><span class="token punctuation">,</span><span class="token number">0x00</span><span class="token punctuation">,</span><span class="token number">0x00</span> <span class="token punctuation">,</span><span class="token number">0x00</span><span class="token punctuation">,</span> <span class="token number">0x00</span><span class="token punctuation">,</span> <span class="token number">0x05</span><span class="token punctuation">,</span> <span class="token number">0x01</span><span class="token punctuation">,</span> <span class="token number">0x03</span><span class="token punctuation">,</span> <span class="token number">0x02</span><span class="token punctuation">,</span> <span class="token number">0x00</span><span class="token punctuation">,</span> <span class="token number">0x70</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+	
+	len<span class="token operator">=</span><span class="token keyword">sizeof</span><span class="token punctuation">(</span>msg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">unsigned</span> <span class="token keyword">short</span> size<span class="token punctuation">;</span>
+	size<span class="token operator">=</span><span class="token function">Read_SOCK_Data_Buffer</span><span class="token punctuation">(</span>s<span class="token punctuation">,</span> Rx_Buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Rx_len=%d\r\n"</span><span class="token punctuation">,</span>size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">memcpy</span><span class="token punctuation">(</span>Tx_Buffer<span class="token punctuation">,</span> Rx_Buffer<span class="token punctuation">,</span> size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//打印查询报文</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> j<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>j<span class="token operator">&lt;</span>size<span class="token punctuation">;</span>j<span class="token operator">++</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+		 <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"0x%02X "</span><span class="token punctuation">,</span>Tx_Buffer<span class="token punctuation">[</span>j<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token comment">//写响应报文</span>
+	<span class="token comment">//检验码</span>
+	msg<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">=</span>Tx_Buffer<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	msg<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">=</span>Tx_Buffer<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//协议</span>
+	msg<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x00</span><span class="token punctuation">;</span>
+	msg<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x00</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//数据包长度</span>
+	msg<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x00</span><span class="token punctuation">;</span>
+	msg<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x05</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//设备编号</span>
+	msg<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token operator">=</span>Tx_Buffer<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token comment">//功能码</span>
+	msg<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token operator">=</span>Tx_Buffer<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token comment">//数据长度</span>
+	msg<span class="token punctuation">[</span><span class="token number">8</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token number">0x02</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//低八位</span>
+	msg<span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">]</span><span class="token operator">=</span>data<span class="token operator">&amp;</span><span class="token number">0XFF</span><span class="token punctuation">;</span>
+	<span class="token comment">//高八位</span>
+	msg<span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">]</span><span class="token operator">=</span>data<span class="token operator">&gt;&gt;</span><span class="token number">8</span><span class="token punctuation">;</span>
+	
+	<span class="token function">memcpy</span><span class="token punctuation">(</span>Tx_Buffer<span class="token punctuation">,</span> msg<span class="token punctuation">,</span> len<span class="token punctuation">)</span><span class="token punctuation">;</span>	
+	<span class="token comment">//发送响应报文</span>
+	<span class="token function">Write_SOCK_Data_Buffer</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> Tx_Buffer<span class="token punctuation">,</span> len<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	data<span class="token operator">++</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">/*******************************************************************************
+* 函数名  : Process_Socket_Keep_Read_nData
+* 描述    : W5500接收并发送接收到的多个数据
+* 输入    : s:端口号
+* 输出    : 无
+* 返回值  : 无
+* 说明    : 本过程先调用S_rx_process()从W5500的端口接收数据缓冲区读取数据,
+*			然后将读取的数据从Rx_Buffer拷贝到Temp_Buffer缓冲区进行处理。
+*			处理完毕，将数据从Temp_Buffer拷贝到Tx_Buffer缓冲区。调用S_tx_process()
+*			发送数据。注意这里是发送多个数据(0x03),写一个数据是(0x06) 
+*******************************************************************************/</span>
+<span class="token keyword">void</span> <span class="token function">Process_Socket_Keep_Read_nData</span><span class="token punctuation">(</span>SOCKET s<span class="token punctuation">,</span><span class="token class-name">uint8_t</span><span class="token operator">*</span> Tx_Buff_datas<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint16_t</span> size<span class="token punctuation">;</span>
+	<span class="token class-name">uint8_t</span> Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">128</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token class-name">uint8_t</span> p<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>	
+	
+	size<span class="token operator">=</span><span class="token function">Read_SOCK_Data_Buffer</span><span class="token punctuation">(</span>s<span class="token punctuation">,</span> Rx_Buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">/*******************************************************************************	
+                             Modbus TCP
+主机保持读从机        实物协议    字节长度  从机地址 功能码  起始地址   读取线圈个数
+	            主机    05 95 00 00    00 06        01        03     00 00          00 01
+	                      实物协议    字节长度  从机地址 功能码  字节个数     上传数据
+	            从机    05 95 00 00    00 05        01        03       02           00 04
+0x03 读保持寄存器
+********************************************************************************/</span>	
+	<span class="token keyword">if</span><span class="token punctuation">(</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token operator">==</span><span class="token number">0x01</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span><span class="token comment">//判读是否是该从机寄存器地址</span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token operator">==</span><span class="token number">0x03</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span><span class="token comment">//主机读取从机保持读寄存器</span>
+<span class="token comment">//			printf("PC receive Data(0x03)=");</span>
+<span class="token comment">//			for(int i=0;i&lt;size;i++){<!-- --></span>
+<span class="token comment">//				printf("0x%X,",Rx_Buffer[i]);		</span>
+<span class="token comment">//			}</span>
+<span class="token comment">//			printf("\r\n");</span>
+			<span class="token comment">//判断发送的字节数量</span>
+			<span class="token class-name">uint16_t</span> Begin_addr<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">8</span><span class="token punctuation">]</span><span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">;</span><span class="token comment">//读取起始地址高八位</span>
+			Begin_addr<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">]</span><span class="token punctuation">;</span>	<span class="token comment">//读取起始地址低八位</span>
+			<span class="token class-name">uint16_t</span> End_addr<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">]</span><span class="token operator">&lt;&lt;</span><span class="token number">8</span><span class="token punctuation">;</span><span class="token comment">//读取结束地址高八位</span>
+			End_addr<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">11</span><span class="token punctuation">]</span><span class="token punctuation">;</span><span class="token comment">//读取结束地址低八位</span>
+			<span class="token class-name">uint16_t</span> RX_SUM<span class="token operator">=</span>End_addr<span class="token operator">-</span>Begin_addr<span class="token punctuation">;</span><span class="token comment">//主机读取多少个数据</span>
+			<span class="token class-name">uint16_t</span> RX_SUM_size<span class="token operator">=</span>RX_SUM<span class="token operator">*</span><span class="token number">2</span><span class="token punctuation">;</span>
+			<span class="token comment">//printf("PULL READ Data=%d\r\n",RX_SUM_size); </span>
+			<span class="token comment">//判断事务协议后的字节数量</span>
+			<span class="token class-name">uint16_t</span> start_size<span class="token operator">=</span><span class="token number">3</span><span class="token operator">+</span>RX_SUM_size<span class="token punctuation">;</span>
+				
+			<span class="token comment">//实物协议码</span>
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span> 
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>	
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">;</span> 	
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+			<span class="token comment">//下发长度</span>
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token operator">=</span>start_size<span class="token operator">&gt;&gt;</span><span class="token number">8</span><span class="token punctuation">;</span>
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token operator">=</span>start_size<span class="token punctuation">;</span>
+			<span class="token comment">//从机地址	</span>
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+			<span class="token comment">//功能码</span>
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+			<span class="token comment">//发送的字节长度</span>
+			Tx_Buffer_CP<span class="token punctuation">[</span><span class="token number">8</span><span class="token punctuation">]</span><span class="token operator">=</span>RX_SUM_size<span class="token punctuation">;</span>
+			p<span class="token operator">=</span><span class="token number">9</span><span class="token punctuation">;</span>
+			<span class="token keyword">for</span><span class="token punctuation">(</span><span class="token keyword">int</span> j<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>j<span class="token operator">&lt;</span>RX_SUM_size<span class="token punctuation">;</span>j<span class="token operator">++</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token punctuation">(</span>p<span class="token operator">+</span>j<span class="token punctuation">)</span><span class="token operator">%</span><span class="token number">2</span><span class="token operator">==</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span> <span class="token comment">//填充高8位</span>
+					Tx_Buffer_CP<span class="token punctuation">[</span>p<span class="token operator">+</span>j<span class="token punctuation">]</span><span class="token operator">=</span>Tx_Buff_datas<span class="token punctuation">[</span>j<span class="token punctuation">]</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>         <span class="token comment">//填充低8位</span>
+					Tx_Buffer_CP<span class="token punctuation">[</span>p<span class="token operator">+</span>j<span class="token punctuation">]</span><span class="token operator">=</span>Tx_Buff_datas<span class="token punctuation">[</span>j<span class="token punctuation">]</span><span class="token punctuation">;</span>  						
+				<span class="token punctuation">}</span> 		
+			<span class="token punctuation">}</span>		
+			<span class="token function">memcpy</span><span class="token punctuation">(</span>Tx_Buffer<span class="token punctuation">,</span> Tx_Buffer_CP<span class="token punctuation">,</span> p<span class="token operator">+</span>RX_SUM_size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token comment">//printf("size=%d\r\n",p+RX_SUM_size);</span>
+			<span class="token comment">//发送响应报文</span>
+			<span class="token function">Write_SOCK_Data_Buffer</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> Tx_Buffer<span class="token punctuation">,</span> p<span class="token operator">+</span>RX_SUM_size<span class="token punctuation">)</span><span class="token punctuation">;</span>	
+		<span class="token punctuation">}</span><span class="token keyword">else</span> <span class="token keyword">if</span><span class="token punctuation">(</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token operator">==</span><span class="token number">0x06</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span><span class="token comment">//主机写从机单一寄存器</span>
+<span class="token comment">/*******************************************************************************	
+                             Modbus TCP
+主机写单一从机        实物协议    字节长度  从机地址 功能码  寄存器地址   下发数据
+	            主机    31 C9 00 00     00 06       01       06       00 00          00 20
+	                      实物协议    字节长度  从机地址 功能码  寄存器地址   下发数据
+	            从机    31 C9 00 00     00 06       01       06       00 00          00 20
+0x06 写单一寄存器
+********************************************************************************/</span>						
+			<span class="token comment">//写地址</span>
+			<span class="token class-name">uint16_t</span> Write_addr<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">8</span><span class="token punctuation">]</span><span class="token operator">&gt;&gt;</span><span class="token number">8</span><span class="token punctuation">;</span>
+			Write_addr<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+			<span class="token comment">//写数据</span>
+			<span class="token class-name">uint16_t</span> Write_data<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">]</span><span class="token operator">&gt;&gt;</span><span class="token number">8</span><span class="token punctuation">;</span>
+			Write_data<span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">11</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Write_addr=0x%x,Write_data=0x%x\r\n"</span><span class="token punctuation">,</span>Write_addr<span class="token punctuation">,</span>Write_data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"PC receive Data(0x06)="</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">for</span><span class="token punctuation">(</span><span class="token keyword">int</span> w<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>w<span class="token operator">&lt;</span>size<span class="token punctuation">;</span>w<span class="token operator">++</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"0x%X,"</span><span class="token punctuation">,</span>Rx_Buffer<span class="token punctuation">[</span>w<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>		
+			<span class="token punctuation">}</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		  <span class="token keyword">for</span><span class="token punctuation">(</span><span class="token keyword">int</span> i<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>i<span class="token operator">&lt;</span>size<span class="token punctuation">;</span>i<span class="token operator">++</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				Tx_Buffer<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">;</span>			
+			<span class="token punctuation">}</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"0x06_data_size=%d\r\n"</span><span class="token punctuation">,</span>size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+ 			<span class="token function">Write_SOCK_Data_Buffer</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> Tx_Buffer<span class="token punctuation">,</span> size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+			<span class="token keyword">if</span><span class="token punctuation">(</span>Write_addr<span class="token operator">==</span><span class="token number">0x04</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span><span class="token punctuation">(</span>Write_data<span class="token operator">==</span><span class="token number">0x01</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+					<span class="token function">HAL_GPIO_WritePin</span><span class="token punctuation">(</span>GPIOB<span class="token punctuation">,</span>GPIO_PIN_5<span class="token punctuation">,</span>GPIO_PIN_SET<span class="token punctuation">)</span><span class="token punctuation">;</span>
+					
+				<span class="token punctuation">}</span><span class="token keyword">else</span> <span class="token keyword">if</span><span class="token punctuation">(</span>Write_data<span class="token operator">==</span><span class="token number">0x02</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+					<span class="token function">HAL_GPIO_WritePin</span><span class="token punctuation">(</span>GPIOB<span class="token punctuation">,</span>GPIO_PIN_5<span class="token punctuation">,</span>GPIO_PIN_RESET<span class="token punctuation">)</span><span class="token punctuation">;</span>									
+				<span class="token punctuation">}</span>				
+			<span class="token punctuation">}</span>
+
+			
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Not the address, but=0x%X,\r\n"</span><span class="token punctuation">,</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+
+<span class="token keyword">void</span> <span class="token function">Process_Socket_Write_nData</span><span class="token punctuation">(</span>SOCKET s<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint16_t</span> sizes<span class="token punctuation">;</span>	
+	
+	sizes<span class="token operator">=</span><span class="token function">Read_SOCK_Data_Buffer</span><span class="token punctuation">(</span>s<span class="token punctuation">,</span> Rx_Buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span><span class="token punctuation">(</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token operator">==</span><span class="token number">0x01</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span><span class="token comment">//判断从机地址</span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token operator">==</span><span class="token number">0x06</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span><span class="token comment">//写单一寄存器</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"PC receive Data(0x06)="</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">for</span><span class="token punctuation">(</span><span class="token keyword">int</span> w<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>w<span class="token operator">&lt;</span>sizes<span class="token punctuation">;</span>w<span class="token operator">++</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"0x%X,"</span><span class="token punctuation">,</span>Rx_Buffer<span class="token punctuation">[</span>w<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>		
+			<span class="token punctuation">}</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\r\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		  <span class="token keyword">for</span><span class="token punctuation">(</span><span class="token keyword">int</span> i<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>i<span class="token operator">&lt;</span>sizes<span class="token punctuation">;</span>i<span class="token operator">++</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+				Tx_Buffer<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token operator">=</span>Rx_Buffer<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">;</span>			
+			<span class="token punctuation">}</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"0x06_data_size=%d\r\n"</span><span class="token punctuation">,</span>sizes<span class="token punctuation">)</span><span class="token punctuation">;</span>
+ 			<span class="token function">Write_SOCK_Data_Buffer</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> Tx_Buffer<span class="token punctuation">,</span> sizes<span class="token punctuation">)</span><span class="token punctuation">;</span>      			
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Not the address, but=0x%X,\r\n"</span><span class="token punctuation">,</span>Rx_Buffer<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	
+	<span class="token punctuation">}</span>		
+	
+	
+<span class="token punctuation">}</span>
+
+
+<span class="token comment">/*******************************************************************************
+* 函数名  : System_Initialization
+* 描述    : STM32系统初始化函数(初始化STM32时钟及外设)
+* 输入    : 无
+* 输出    : 无
+* 返回    : 无 
+* 说明    : 无
+*******************************************************************************/</span>
+<span class="token keyword">void</span> <span class="token function">System_Initialization</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//RCC_Configuration();		//设置系统时钟为72MHZ(这个可以根据需要改)</span>
+  	<span class="token comment">//NVIC_Configuration();		//STM32中断向量表配配置</span>
+	<span class="token function">SPI_Configuration</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//W5500 SPI初始化配置(STM32 SPI1)</span>
+	<span class="token comment">//Timer2_Init_Config();		//Timer2初始化配置</span>
+	<span class="token function">W5500_GPIO_Configuration</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//W5500 GPIO初始化配置	</span>
+<span class="token punctuation">}</span>
+
+
+
+
+
+
+<span class="token comment">/* USER CODE END 4 */</span>
+
+<span class="token comment">/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */</span>
+<span class="token keyword">void</span> <span class="token function">Error_Handler</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+  <span class="token comment">/* USER CODE BEGIN Error_Handler_Debug */</span>
+  <span class="token comment">/* User can add his own implementation to report the HAL error return state */</span>
+  <span class="token function">__disable_irq</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+  <span class="token punctuation">{<!-- --></span>
+  <span class="token punctuation">}</span>
+  <span class="token comment">/* USER CODE END Error_Handler_Debug */</span>
+<span class="token punctuation">}</span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifdef</span>  <span class="token expression">USE_FULL_ASSERT</span></span>
+<span class="token comment">/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */</span>
+<span class="token keyword">void</span> <span class="token function">assert_failed</span><span class="token punctuation">(</span><span class="token class-name">uint8_t</span> <span class="token operator">*</span>file<span class="token punctuation">,</span> <span class="token class-name">uint32_t</span> line<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+  <span class="token comment">/* USER CODE BEGIN 6 */</span>
+  <span class="token comment">/* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */</span>
+  <span class="token comment">/* USER CODE END 6 */</span>
+<span class="token punctuation">}</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span> <span class="token comment">/* USE_FULL_ASSERT */</span></span>
+
+<span class="token comment">/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/</span>
+
+</code></pre> 
+<p><strong>效果展示</strong><br> <img src="https://images2.imgbox.com/8c/c4/Hop4EM9Y_o.png" alt="在这里插入图片描述"></p> 
+<hr> 
+<h2><a id="_1168"></a>总结</h2> 
+<p>这就是bootloader 的主要程序了。不是很难，这个程序后期还要完善。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9900bedef6abfe6aa2f9416ac80a5083/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">获取地理位置请求免费天气接口</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/a60f6a50fdf2463fa43a6482bf3ef9bb/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">js获取某月某年之后的日期</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Ceisum绘制雷达效果 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Ceisum绘制雷达效果" />
+<meta property="og:description" content="在绘制圆锥的基础上加上Primitive的材质渲染（GLSL语言）。
+//初始化雷达波 initRadarRiationWave() { // 雷达的高度 let length = 40000; let centerOnEllipsoid = Cesium.Cartesian3.fromDegrees(110, 26, length * 0.5); this.map.camera.flyToBoundingSphere(new Cesium.BoundingSphere(centerOnEllipsoid, length)); // 矩阵计算 let modelMatrix = Cesium.Matrix4.multiplyByTranslation( Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(110, 26)), new Cesium.Cartesian3(0.0, 0.0, length * 0.5), new Cesium.Matrix4() ); let geometry = new Cesium.CylinderGeometry({ length, topRadius: 0.0, bottomRadius: length * 0.3, vertexFormat: Cesium.MaterialAppearance.MaterialSupport.TEXTURED.vertexFormat }); // 创建GeometryInstance let geometryInstances = new Cesium.GeometryInstance({ geometry, modelMatrix, }); // 创建雷达图Primitive let radar = viewer.scene.primitives.add(new Cesium." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/5221b8085f4454fff273bddf8d6b2522/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-24T15:22:59+08:00" />
+<meta property="article:modified_time" content="2024-01-24T15:22:59+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Ceisum绘制雷达效果</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>在绘制圆锥的基础上加上Primitive的材质渲染（GLSL语言）。</p> 
+<pre><code>	//初始化雷达波
+		initRadarRiationWave() {
+			// 雷达的高度
+			let length = 40000;
+			let centerOnEllipsoid = Cesium.Cartesian3.fromDegrees(110, 26, length * 0.5);
+			this.map.camera.flyToBoundingSphere(new Cesium.BoundingSphere(centerOnEllipsoid, length));
+			// 矩阵计算
+			let modelMatrix = Cesium.Matrix4.multiplyByTranslation(
+				Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(110, 26)),
+				new Cesium.Cartesian3(0.0, 0.0, length * 0.5), new Cesium.Matrix4()
+			);
+			let geometry = new Cesium.CylinderGeometry({
+				length,
+				topRadius: 0.0,
+				bottomRadius: length * 0.3,
+				vertexFormat: Cesium.MaterialAppearance.MaterialSupport.TEXTURED.vertexFormat
+			});
+			// 创建GeometryInstance
+			let geometryInstances = new Cesium.GeometryInstance({
+				geometry,
+				modelMatrix,
+			});
+			// 创建雷达图Primitive
+			let radar = viewer.scene.primitives.add(new Cesium.Primitive({
+				geometryInstances,
+				appearance: new Cesium.MaterialAppearance({
+					material: new Cesium.Material({
+						fabric: {
+							uniforms: {
+								color: new Cesium.Color.fromCssColorString("rgba(238, 85, 34, 1)"),
+								rep: 15,
+								offset: 0,
+								thickness: 0.8,
+							},
+							source: `
+                            uniform vec4 color;
+                            uniform float rep;
+                            uniform float offset;
+                            uniform float thickness;
+                            czm_material czm_getMaterial(czm_materialInput materialInput)
+                            {
+                                czm_material material = czm_getDefaultMaterial(materialInput);
+                                float sp = 1.0/rep;
+                                vec2 st = materialInput.st;
+                                float dis = distance(st, vec2(0.5));
+                                float m = mod(dis + offset, sp);
+                                float a = step(sp*(1.0-thickness), m);
+                                material.diffuse = color.rgb;
+                                material.alpha = a * color.a * dis * 1.2;
+                                return material;
+                            }
+                        `
+						},
+						translucent: false
+					}),
+					faceForward: false,
+					closed: true
+				}),
+			}));
+			// 动态修改雷达材质中的offset变量，实现动态效果。 
+			viewer.scene.preUpdate.addEventListener(function () {
+				let offset = radar.appearance.material.uniforms.offset;
+				// 控制雷达波运动速度
+				offset -= 0.001;
+				if (offset &gt; 1.0) {
+					offset = 0.0;
+				}
+				radar.appearance.material.uniforms.offset = offset;
+			});
+		},</code></pre> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/53b84367fa82a6a454d885dee8893f51/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">K8S图像化工具rancher</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/a1f4e748eed381936aa004dc6fc8cf07/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">2022 大厂面试题汇总</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

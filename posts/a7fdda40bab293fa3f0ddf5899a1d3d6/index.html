@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>解决部分手机读取obb失败的问题 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="解决部分手机读取obb失败的问题" />
+<meta property="og:description" content="最近发现，有很小一部分海外的玩家在谷歌商店下载游戏之后，进游戏黑屏。从bugly上面查看报错日志，发现是读取obb文件失败了。谷歌商店规定超过100m的apk，需要分离obb上传。所以这种情况只会出现在谷歌商店的游戏包里面。
+我的项目里面读取obb是分成2种情况的，第一种，是unity本身的api读取，比如Resources.Load()方法。另一种，是通过java原始方法，找到obb文件的路径，然后通过getInputStream方法，把obb文件当作是zip包一样读取。
+经过多方面的排除，发现是某些特定的机型，在READ_EXTERNAL_STORAGE（读取外部存储）的权限禁止的情况下，会出现一个外部存储没挂载的情况，从Environment.getExternalStorageState()方法返回了&#34;unmounted&#34;。
+在这种情况下，getObbDir()得到的路径会访问不了，所以导致了obb文件加载不到。很神奇的是，如果不用obb，单纯用unity本身的Application.persistentDataPath，获取的路径是可操作的，这个路径按正常的理解，是在data/storage/emulated/0/Android/data/com.xxx.xxx/files下，而obb的路径一般是在data/storage/emulated/0/Android/obb/com.xxx.xxx下，难道是Android/data/不需要权限，而Android/obb/需要权限？
+带着这个疑问，我尝试着把Application.persistentDataPath在unity里面用OnGUI显示出来，然后分别打开和禁用READ_EXTERNAL_STORAGE权限。终于发现了问题的所在。
+当有读权限的时候，应用默认访问的路径是data/storage/emulated/0/Android/文件夹
+当读写权限被禁止的时候，storage目录被禁止访问，就是所谓的没有挂载，所以会分配了另外一个目录作为程序的默认访问目录：data/user/0/ 其中0是用户序号，据说安卓6.0之后支持多用户，所以有这个文件夹。
+Unity的api对obb读取方式应该是独立于正常资源的，persistentDataPath可以正常的获取到路径，但obb的路径估计还是通过getObbDir之类的方法得到的，所以导致了路径不能访问，加载obb失败了。
+我们一直讨论的都是某部分特殊的手机，正常的手机不会这样，正常手机在禁用了READ_EXTERNAL_STORAGE权限之后，还是能正常访问data/storage/emulated/0/Android/文件夹的，Environment.getExternalStorageState()获取也是&#34;mounted&#34;的。然后，这种问题当然只会出现在安卓6.0及以上的手机，因为6.0以下的手机不存在动态申请权限的操作。
+于是尝试获取权限去解决这个问题。正常的思路很简单，只需要在游戏启动的时候，判断一下是否拥有这个权限，如果没有权限就弹出动态权限申请的弹窗，让用户同意授权就行了。
+然而实际操作中，发现这部分的手机，在设置里面的权限授权状态如果是禁止的，那么他就根本不会弹出授权窗口，直接就返回了拒绝。这个情况，我个人的猜测是，安卓6.0以后的系统，对于权限一般会有允许，询问，禁止三种，然后在禁止的时候，一般会有个小选项，“禁止后不再提示”。但在出问题的手机系统里面，实际上是没有询问这种状态的，如果在设置里面禁止了，等同的效果是禁止后不再提示。
+所以，我们还是不能通过权限弹窗去解决这个问题。我们可以帮助玩家跳转到手机设置面板去，让玩家手动去修改设置。跳转的方法是：
+Intent myAppSettings = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse(“package:” &#43; getPackageName()));
+startActivityForResult(myAppSettings, REQUEST_APP_SETTINGS);
+但这种操作比较的不友好，玩家也不一定知道怎样操作。
+最终我们想达到的目的是让伤害降低到最小，让大部分正常的玩家还是可以通过权限弹窗去授权权限，让小部分不会弹窗的用户，跳转去手机设置面板。于是不能通过权限去直接判断是否需要弹窗。幸好之前我们在判断挂载方式的时候，发现了这种手机的特点是如果禁止读取外部存储权限时，挂载方式是&#34;unmounted&#34;的，所以我们可以通过挂载方式，先判断一下。如果发现了&#34;unmounted&#34;的，就先提示玩家去手动设置授权。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/a7fdda40bab293fa3f0ddf5899a1d3d6/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-03-16T10:05:25+08:00" />
+<meta property="article:modified_time" content="2020-03-16T10:05:25+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">解决部分手机读取obb失败的问题</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>      最近发现，有很小一部分海外的玩家在谷歌商店下载游戏之后，进游戏黑屏。从bugly上面查看报错日志，发现是读取obb文件失败了。谷歌商店规定超过100m的apk，需要分离obb上传。所以这种情况只会出现在谷歌商店的游戏包里面。<br>       我的项目里面读取obb是分成2种情况的，第一种，是unity本身的api读取，比如Resources.Load()方法。另一种，是通过java原始方法，找到obb文件的路径，然后通过getInputStream方法，把obb文件当作是zip包一样读取。<br>       经过多方面的排除，发现是某些特定的机型，在READ_EXTERNAL_STORAGE（读取外部存储）的权限禁止的情况下，会出现一个外部存储没挂载的情况，从Environment.getExternalStorageState()方法返回了"unmounted"。<br> 在这种情况下，getObbDir()得到的路径会访问不了，所以导致了obb文件加载不到。很神奇的是，如果不用obb，单纯用unity本身的Application.persistentDataPath，获取的路径是可操作的，这个路径按正常的理解，是在data/storage/emulated/0/Android/data/com.xxx.xxx/files下，而obb的路径一般是在data/storage/emulated/0/Android/obb/com.xxx.xxx下，难道是Android/data/不需要权限，而Android/obb/需要权限？<br>       带着这个疑问，我尝试着把Application.persistentDataPath在unity里面用OnGUI显示出来，然后分别打开和禁用READ_EXTERNAL_STORAGE权限。终于发现了问题的所在。<br> 当有读权限的时候，应用默认访问的路径是data/storage/emulated/0/Android/文件夹<br> 当读写权限被禁止的时候，storage目录被禁止访问，就是所谓的没有挂载，所以会分配了另外一个目录作为程序的默认访问目录：data/user/0/ 其中0是用户序号，据说安卓6.0之后支持多用户，所以有这个文件夹。<br>       Unity的api对obb读取方式应该是独立于正常资源的，persistentDataPath可以正常的获取到路径，但obb的路径估计还是通过getObbDir之类的方法得到的，所以导致了路径不能访问，加载obb失败了。<br>       我们一直讨论的都是某部分特殊的手机，正常的手机不会这样，正常手机在禁用了READ_EXTERNAL_STORAGE权限之后，还是能正常访问data/storage/emulated/0/Android/文件夹的，Environment.getExternalStorageState()获取也是"mounted"的。然后，这种问题当然只会出现在安卓6.0及以上的手机，因为6.0以下的手机不存在动态申请权限的操作。<br>       于是尝试获取权限去解决这个问题。正常的思路很简单，只需要在游戏启动的时候，判断一下是否拥有这个权限，如果没有权限就弹出动态权限申请的弹窗，让用户同意授权就行了。<br>       然而实际操作中，发现这部分的手机，在设置里面的权限授权状态如果是禁止的，那么他就根本不会弹出授权窗口，直接就返回了拒绝。这个情况，我个人的猜测是，安卓6.0以后的系统，对于权限一般会有允许，询问，禁止三种，然后在禁止的时候，一般会有个小选项，“禁止后不再提示”。但在出问题的手机系统里面，实际上是没有询问这种状态的，如果在设置里面禁止了，等同的效果是禁止后不再提示。<br>       所以，我们还是不能通过权限弹窗去解决这个问题。我们可以帮助玩家跳转到手机设置面板去，让玩家手动去修改设置。跳转的方法是：<br> Intent myAppSettings = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse(“package:” + getPackageName()));<br> startActivityForResult(myAppSettings, REQUEST_APP_SETTINGS);<br> 但这种操作比较的不友好，玩家也不一定知道怎样操作。<br>       最终我们想达到的目的是让伤害降低到最小，让大部分正常的玩家还是可以通过权限弹窗去授权权限，让小部分不会弹窗的用户，跳转去手机设置面板。于是不能通过权限去直接判断是否需要弹窗。幸好之前我们在判断挂载方式的时候，发现了这种手机的特点是如果禁止读取外部存储权限时，挂载方式是"unmounted"的，所以我们可以通过挂载方式，先判断一下。如果发现了"unmounted"的，就先提示玩家去手动设置授权。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/31903a8be56c1e1205d8cf5bf5461476/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">c#Winform主窗体和子窗体之间的传递</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/b7b7e92270e8557a3f93e0cb4c492d40/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">下载文件plus.downloader.createDownload</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

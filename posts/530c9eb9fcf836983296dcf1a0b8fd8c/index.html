@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>libssh2的简单应用 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="libssh2的简单应用" />
+<meta property="og:description" content="首先，libssh2.lib的这个库一定要有（下载地址提供：http://download.csdn.net/detail/wyc6668205/5651661）
+其次，介绍一下libssh2的官网：www.libssh2.org；虽然这个网站里面内容是全英文的，我想所有的计算机从事者都能看懂这里面写的内容，这里面提供了很多例子，比如FTP的，shell命令的等等，我在这里介绍一下shell命令的发送和接收返回数据。
+example里有个文件名叫exec.c 这个文件是实现shell命令的一个例子
+/* * Sample showing how to use libssh2 to execute a command remotely. * * The sample code has fixed values for host name, user name, password * and command to run. * * Run it like this: * * $ ./ssh2_exec 127.0.0.1 user password &#34;uptime&#34; * */ #include &#34;libssh2_config.h&#34; #include &lt;libssh2.h&gt; #ifdef HAVE_WINSOCK2_H #include &lt;winsock2.h&gt; #endif #ifdef HAVE_SYS_SOCKET_H #include &lt;sys/socket.h&gt; #endif #ifdef HAVE_NETINET_IN_H #include &lt;netinet/in." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/530c9eb9fcf836983296dcf1a0b8fd8c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2013-06-26T15:23:27+08:00" />
+<meta property="article:modified_time" content="2013-06-26T15:23:27+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">libssh2的简单应用</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><span style="font-size:12px"><span style="white-space:pre"></span>首先，libssh2.lib的这个库一定要有（下载地址提供：<a href="http://download.csdn.net/detail/wyc6668205/5651661">http://download.csdn.net/detail/wyc6668205/5651661</a>）</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>其次，介绍一下libssh2的官网：www.libssh2.org；虽然这个网站里面内容是全英文的，我想所有的计算机从事者都能看懂这里面写的内容，这里面提供了很多例子，比如FTP的，shell命令的等等，我在这里介绍一下shell命令的发送和接收返回数据。</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>example里有个文件名叫exec.c 这个文件是实现shell命令的一个例子</span></p> 
+<p></p> 
+<pre><code class="language-cpp"><span style="font-size:12px;">/*
+ * Sample showing how to use libssh2 to execute a command remotely.
+ *
+ * The sample code has fixed values for host name, user name, password
+ * and command to run.
+ *
+ * Run it like this:
+ *
+ * $ ./ssh2_exec 127.0.0.1 user password "uptime"
+ *
+ */ 
+ 
+#include "libssh2_config.h"
+#include &lt;libssh2.h&gt;
+ 
+#ifdef HAVE_WINSOCK2_H
+#include &lt;winsock2.h&gt;
+#endif
+#ifdef HAVE_SYS_SOCKET_H
+#include &lt;sys/socket.h&gt;
+#endif
+#ifdef HAVE_NETINET_IN_H
+#include &lt;netinet/in.h&gt;
+#endif
+#ifdef HAVE_SYS_SELECT_H
+#include &lt;sys/select.h&gt;
+#endif
+#ifdef HAVE_UNISTD_H
+#include &lt;unistd.h&gt;
+#endif
+#ifdef HAVE_ARPA_INET_H
+#include &lt;arpa/inet.h&gt;
+#endif
+ 
+#include &lt;sys/time.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;errno.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;ctype.h&gt;
+ 
+static int waitsocket(int socket_fd, LIBSSH2_SESSION *session)
+{
+    struct timeval timeout;
+    int rc;
+    fd_set fd;
+    fd_set *writefd = NULL;
+    fd_set *readfd = NULL;
+    int dir;
+ 
+    timeout.tv_sec = 10;
+    timeout.tv_usec = 0;
+ 
+    FD_ZERO(&amp;fd);
+ 
+    FD_SET(socket_fd, &amp;fd);
+ 
+    /* now make sure we wait in the correct direction */ 
+    dir = libssh2_session_block_directions(session);
+
+ 
+    if(dir &amp; LIBSSH2_SESSION_BLOCK_INBOUND)
+        readfd = &amp;fd;
+ 
+    if(dir &amp; LIBSSH2_SESSION_BLOCK_OUTBOUND)
+        writefd = &amp;fd;
+ 
+    rc = select(socket_fd + 1, readfd, writefd, NULL, &amp;timeout);
+ 
+    return rc;
+}
+ 
+int main(int argc, char *argv[])
+{
+    const char *hostname = "127.0.0.1";
+    const char *commandline = "uptime";
+    const char *username    = "user";
+    const char *password    = "password";
+    unsigned long hostaddr;
+    int sock;
+    struct sockaddr_in sin;
+    const char *fingerprint;
+    LIBSSH2_SESSION *session;
+    LIBSSH2_CHANNEL *channel;
+    int rc;
+    int exitcode;
+    char *exitsignal=(char *)"none";
+    int bytecount = 0;
+    size_t len;
+    LIBSSH2_KNOWNHOSTS *nh;
+    int type;
+ 
+#ifdef WIN32
+    WSADATA wsadata;
+    WSAStartup(MAKEWORD(2,0), &amp;wsadata);
+#endif
+    if (argc &gt; 1)
+        /* must be ip address only */ 
+        hostname = argv[1];
+ 
+    if (argc &gt; 2) {
+        username = argv[2];
+    }
+    if (argc &gt; 3) {
+        password = argv[3];
+    }
+    if (argc &gt; 4) {
+        commandline = argv[4];
+    }
+ 
+    rc = libssh2_init (0);
+
+    if (rc != 0) {
+        fprintf (stderr, "libssh2 initialization failed (%d)\n", rc);
+        return 1;
+    }
+ 
+    hostaddr = inet_addr(hostname);
+ 
+    /* Ultra basic "connect to port 22 on localhost"
+     * Your code is responsible for creating the socket establishing the
+     * connection
+     */ 
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+ 
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(22);
+    sin.sin_addr.s_addr = hostaddr;
+    if (connect(sock, (struct sockaddr*)(&amp;sin),
+                sizeof(struct sockaddr_in)) != 0) {
+        fprintf(stderr, "failed to connect!\n");
+        return -1;
+    }
+ 
+    /* Create a session instance */ 
+    session = libssh2_session_init();
+
+    if (!session)
+        return -1;
+ 
+    /* tell libssh2 we want it all done non-blocking */ 
+    libssh2_session_set_blocking(session, 0);
+
+ 
+    /* ... start it up. This will trade welcome banners, exchange keys,
+     * and setup crypto, compression, and MAC layers
+     */ 
+    while ((rc = libssh2_session_handshake(session, sock)) ==
+
+           LIBSSH2_ERROR_EAGAIN);
+    if (rc) {
+        fprintf(stderr, "Failure establishing SSH session: %d\n", rc);
+        return -1;
+    }
+ 
+    nh = libssh2_knownhost_init(session);
+
+    if(!nh) {
+        /* eeek, do cleanup here */ 
+        return 2;
+    }
+ 
+    /* read all hosts from here */ 
+    libssh2_knownhost_readfile(nh, "known_hosts",
+
+                               LIBSSH2_KNOWNHOST_FILE_OPENSSH);
+ 
+    /* store all known hosts to here */ 
+    libssh2_knownhost_writefile(nh, "dumpfile",
+
+                                LIBSSH2_KNOWNHOST_FILE_OPENSSH);
+ 
+    fingerprint = libssh2_session_hostkey(session, &amp;len, &amp;type);
+
+    if(fingerprint) {
+        struct libssh2_knownhost *host;
+#if LIBSSH2_VERSION_NUM &gt;= 0x010206
+        /* introduced in 1.2.6 */ 
+        int check = libssh2_knownhost_checkp(nh, hostname, 22,
+
+                                             fingerprint, len,
+                                             LIBSSH2_KNOWNHOST_TYPE_PLAIN|
+                                             LIBSSH2_KNOWNHOST_KEYENC_RAW,
+                                             &amp;host);
+#else
+        /* 1.2.5 or older */ 
+        int check = libssh2_knownhost_check(nh, hostname,
+
+                                            fingerprint, len,
+                                            LIBSSH2_KNOWNHOST_TYPE_PLAIN|
+                                            LIBSSH2_KNOWNHOST_KEYENC_RAW,
+                                            &amp;host);
+#endif
+        fprintf(stderr, "Host check: %d, key: %s\n", check,
+                (check &lt;= LIBSSH2_KNOWNHOST_CHECK_MISMATCH)?
+                host-&gt;key:"&lt;none&gt;");
+ 
+        /*****
+         * At this point, we could verify that 'check' tells us the key is
+         * fine or bail out.
+         *****/ 
+    }
+    else {
+        /* eeek, do cleanup here */ 
+        return 3;
+    }
+    libssh2_knownhost_free(nh);
+
+ 
+    if ( strlen(password) != 0 ) {
+        /* We could authenticate via password */ 
+        while ((rc = libssh2_userauth_password(session, username, password)) ==
+
+               LIBSSH2_ERROR_EAGAIN);
+        if (rc) {
+            fprintf(stderr, "Authentication by password failed.\n");
+            goto shutdown;
+        }
+    }
+    else {
+        /* Or by public key */ 
+        while ((rc = libssh2_userauth_publickey_fromfile(session, username,
+
+                                                         "/home/user/"
+                                                         ".ssh/id_rsa.pub",
+                                                         "/home/user/"
+                                                         ".ssh/id_rsa",
+                                                         password)) ==
+               LIBSSH2_ERROR_EAGAIN);
+        if (rc) {
+            fprintf(stderr, "\tAuthentication by public key failed\n");
+            goto shutdown;
+        }
+    }
+ 
+#if 0
+    libssh2_trace(session, ~0 );
+
+#endif
+ 
+    /* Exec non-blocking on the remove host */ 
+    while( (channel = libssh2_channel_open_session(session)) == NULL &amp;&amp;
+
+           libssh2_session_last_error(session,NULL,NULL,0) ==
+
+           LIBSSH2_ERROR_EAGAIN )
+    {
+        waitsocket(sock, session);
+    }
+    if( channel == NULL )
+    {
+        fprintf(stderr,"Error\n");
+        exit( 1 );
+    }
+    while( (rc = libssh2_channel_exec(channel, commandline)) ==
+
+           LIBSSH2_ERROR_EAGAIN )
+    {
+        waitsocket(sock, session);
+    }
+    if( rc != 0 )
+    {
+        fprintf(stderr,"Error\n");
+        exit( 1 );
+    }
+    for( ;; )
+    {
+        /* loop until we block */ 
+        int rc;
+        do
+        {
+            char buffer[0x4000];
+            rc = libssh2_channel_read( channel, buffer, sizeof(buffer) );
+
+            if( rc &gt; 0 )
+            {
+                int i;
+                bytecount += rc;
+                fprintf(stderr, "We read:\n");
+                for( i=0; i &lt; rc; ++i )
+                    fputc( buffer[i], stderr);
+                fprintf(stderr, "\n");
+            }
+            else {
+                if( rc != LIBSSH2_ERROR_EAGAIN )
+                    /* no need to output this for the EAGAIN case */ 
+                    fprintf(stderr, "libssh2_channel_read returned %d\n", rc);
+            }
+        }
+        while( rc &gt; 0 );
+ 
+        /* this is due to blocking that would occur otherwise so we loop on
+           this condition */ 
+        if( rc == LIBSSH2_ERROR_EAGAIN )
+        {
+            waitsocket(sock, session);
+        }
+        else
+            break;
+    }
+    exitcode = 127;
+    while( (rc = libssh2_channel_close(channel)) == LIBSSH2_ERROR_EAGAIN )
+
+        waitsocket(sock, session);
+ 
+    if( rc == 0 )
+    {
+        exitcode = libssh2_channel_get_exit_status( channel );
+
+        libssh2_channel_get_exit_signal(channel, &amp;exitsignal,
+
+                                        NULL, NULL, NULL, NULL, NULL);
+    }
+ 
+    if (exitsignal)
+        fprintf(stderr, "\nGot signal: %s\n", exitsignal);
+    else
+        fprintf(stderr, "\nEXIT: %d bytecount: %d\n", exitcode, bytecount);
+ 
+    libssh2_channel_free(channel);
+
+    channel = NULL;
+ 
+shutdown:
+ 
+    libssh2_session_disconnect(session,
+
+                               "Normal Shutdown, Thank you for playing");
+    libssh2_session_free(session);
+
+ 
+#ifdef WIN32
+    closesocket(sock);
+#else
+    close(sock);
+#endif
+    fprintf(stderr, "all done\n");
+ 
+    libssh2_exit();
+
+ 
+    return 0;
+}</span></code></pre> 
+<span style="font-size:12px"><span style="white-space:pre"> </span> 做windows连接linux服务器发送shell命令的主要方法有几个简单介绍下：</span> 
+<p></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>1.WSAStartup()，打开socket链接库</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>2.socket()，初始化一个socket套接字</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>3.connect()，连接到ssh服务器</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>4.libssh2_session_init()，初始化一个ssh连接</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>5.libssh2_session_handshake()，将socket和session握手通信</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>6.libssh2_userauth_password()，验证登陆</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>7.libssh2_channel_open_session()，打开通道</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>8.libssh2_channel_exec()，发送shell命令</span></p> 
+<p><span style="font-size:12px"><span style="white-space:pre"></span>9.libssh2_channel_read()，读取命令处理结果</span></p> 
+<p><span style="font-size:12px"><br> </span></p> 
+<p><span style="font-size:12px">这里的8.libssh2_channel_exec()，发送shell命令和心目中想象的不太一样，不能循环发送命令，发送第一次命令时，该命令执行，但是第二次再发送时会返回一个</span></p> 
+<p><span style="font-size:12px">名字叫LIBSSH2_ERROR_CHANNEL_REQUEST_DENIED的ERROR，也就是说这个函数只能发送一次shell命令就不能再用了，太麻烦了。</span></p> 
+<p><span style="font-size:12px"><br> </span></p> 
+<p><span style="font-size:12px">在这里这种需求怎么解决：</span></p> 
+<p><span style="font-size:12px">当调用完libssh2_channel_exec()时，将通道释放掉libssh2_channel_close()，然后再重新打开libssh2_channel_open()，再使用这个libssh2_channel_exec()发送shell命令。</span></p> 
+<p><span style="font-size:12px">但是在这里可能会出现一个问题，在libssh2_channel_open()的时候并没有把通道打开，调用libssh2_session_last_error()发现这个错误代码是LIBSSH2_ERROR_EAGAIN，在官方网站的解释是这不是一个错误，是一个阻塞的过程，也就是现在这个链接已经阻塞了，需要等等再打开。这也就是最上面那个waitsocket()的作用了。</span></p> 
+<p><span style="font-size:12px"><br> <br> <br> <br> <br> </span><br> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/dc61a3a9c3fa0482295d9c0abc7e2e6b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">判断周围是否有敌人的三种模式</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f112e69e77e2e5a3848d8d0054543e1e/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">解决Unable to connect to a repository at URL 禁止访问 （forbidden）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

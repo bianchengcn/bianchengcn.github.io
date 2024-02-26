@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>java实现base64及图片路径转换mat的方法 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="java实现base64及图片路径转换mat的方法" />
+<meta property="og:description" content="最近项目中涉及到了图像算法识别，涉及到传递mat，于是就有了这样的一篇博客 由于对外接口要求对方提供的是base64编码的jpg图像数据，但是算法需要的是Mat类型的数据，这样就需要引入opencv_java来实现这样的转换。
+实际上整个过程就需要几个步骤：
+1.实现base64的解码；
+2.将解码后的数据转换为BufferedImage；
+3.将BufferedImage转换为Mat类型数据；
+前两步都很好实现，难点在第三步上，我们就具体讲讲第三步的实现 1.首先，maven项目引入几个pom依赖：
+&lt;dependency&gt; &lt;groupId&gt;org.bytedeco&lt;/groupId&gt; &lt;artifactId&gt;javacv&lt;/artifactId&gt; &lt;version&gt;1.4.4&lt;/version&gt; &lt;/dependency&gt; &lt;!-- https://mvnrepository.com/artifact/org.bytedeco/javacpp --&gt; &lt;dependency&gt; &lt;groupId&gt;org.bytedeco&lt;/groupId&gt; &lt;artifactId&gt;javacpp&lt;/artifactId&gt; &lt;version&gt;1.4.4&lt;/version&gt; &lt;/dependency&gt; &lt;!-- https://mvnrepository.com/artifact/opencv/opencv --&gt; &lt;dependency&gt; &lt;groupId&gt;opencv&lt;/groupId&gt; &lt;artifactId&gt;opencv&lt;/artifactId&gt; &lt;version&gt;1.1.0&lt;/version&gt; &lt;/dependency&gt; &lt;!-- https://mvnrepository.com/artifact/org.bytedeco.javacpp-presets/opencv --&gt; &lt;!-- &lt;dependency&gt; &lt;groupId&gt;org.bytedeco.javacpp-presets&lt;/groupId&gt; &lt;artifactId&gt;opencv&lt;/artifactId&gt; &lt;version&gt;4.0.1-1.4.4&lt;/version&gt; &lt;/dependency&gt; --&gt; &lt;dependency&gt; &lt;groupId&gt;org.bytedeco.javacpp-presets&lt;/groupId&gt; &lt;artifactId&gt;opencv&lt;/artifactId&gt; &lt;version&gt;2.4.11-0.11&lt;/version&gt; &lt;/dependency&gt; &lt;!-- 需要自己安装配置opencv --&gt; &lt;dependency&gt; &lt;groupId&gt;org&lt;/groupId&gt; &lt;artifactId&gt;opencv&lt;/artifactId&gt; &lt;version&gt;2413&lt;/version&gt; &lt;/dependency&gt; 除最后一个pom依赖外，其余的应该都能够从maven仓库中下载得到。
+那我们就来讲下如何获得最后一个maven依赖。
+1.1）首先，我们来到opencv的官网：https://opencv.org/releases.html
+选择自己需要下载的平台及版本，因为要和公司算法做兼容，所以我选用的是2.4.13版本，window下安装配置极其简单，将下载得到的.exe文件解压缩，然后将到opencv\build\java下即可得到需要的jar包，再然后将jar包转换为maven库里的依赖就可以了。
+具体命令我就不放在这了，拿一个通用的模板命令挂在这，按自己实际去转换吧。
+mvn install:install-file -Dfile=XX.jar -DgroupId=org -DartifactId=opencv -Dversion=2413 -Dpackaging=jar 1.2）引入了pom依赖之后，windows下还需要opencv\build\java
+下需要的opencv的dll文件，将86（32位系统）或64（64位系统）下的
+opencv_java2413.dll文件引入到系统的jdk的bin目录下
+1.3）上边的是windows的例子，实际很多情况下代码是在GPU的linux服务器上运行的，那么就需要下载linux平台下的文件，在服务器上使用Cmake编译安装，安装之后得到的会是.so文件，将对应的.so文件移入到/usr/lib下即可。
+如果不移动就需要将将.so文件的具体路径放入到/etc/profile配置文件中，然后使用source命令更新系统配置。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/85fc77d3d8b6f6dc59ddfe1547cb4d06/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2019-11-06T13:48:02+08:00" />
+<meta property="article:modified_time" content="2019-11-06T13:48:02+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">java实现base64及图片路径转换mat的方法</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="mat_1"></a>最近项目中涉及到了图像算法识别，涉及到传递mat，于是就有了这样的一篇博客</h3> 
+<p>由于对外接口要求对方提供的是base64编码的jpg图像数据，但是算法需要的是Mat类型的数据，这样就需要引入opencv_java来实现这样的转换。<br> 实际上整个过程就需要几个步骤：<br> 1.实现base64的解码；<br> 2.将解码后的数据转换为BufferedImage；<br> 3.将BufferedImage转换为Mat类型数据；</p> 
+<h3><a id="_7"></a>前两步都很好实现，难点在第三步上，我们就具体讲讲第三步的实现</h3> 
+<p>1.首先，maven项目引入几个pom依赖：</p> 
+<pre><code>		&lt;dependency&gt;
+			&lt;groupId&gt;org.bytedeco&lt;/groupId&gt;
+			&lt;artifactId&gt;javacv&lt;/artifactId&gt;
+			&lt;version&gt;1.4.4&lt;/version&gt;
+		&lt;/dependency&gt;
+		&lt;!-- https://mvnrepository.com/artifact/org.bytedeco/javacpp --&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.bytedeco&lt;/groupId&gt;
+			&lt;artifactId&gt;javacpp&lt;/artifactId&gt;
+			&lt;version&gt;1.4.4&lt;/version&gt;
+		&lt;/dependency&gt;
+		&lt;!-- https://mvnrepository.com/artifact/opencv/opencv --&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;opencv&lt;/groupId&gt;
+			&lt;artifactId&gt;opencv&lt;/artifactId&gt;
+			&lt;version&gt;1.1.0&lt;/version&gt;
+		&lt;/dependency&gt;
+		&lt;!-- https://mvnrepository.com/artifact/org.bytedeco.javacpp-presets/opencv --&gt;
+		&lt;!-- &lt;dependency&gt; &lt;groupId&gt;org.bytedeco.javacpp-presets&lt;/groupId&gt; &lt;artifactId&gt;opencv&lt;/artifactId&gt; 
+			&lt;version&gt;4.0.1-1.4.4&lt;/version&gt; &lt;/dependency&gt; --&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.bytedeco.javacpp-presets&lt;/groupId&gt;
+			&lt;artifactId&gt;opencv&lt;/artifactId&gt;
+			&lt;version&gt;2.4.11-0.11&lt;/version&gt;
+		&lt;/dependency&gt;
+		&lt;!-- 需要自己安装配置opencv --&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org&lt;/groupId&gt;
+			&lt;artifactId&gt;opencv&lt;/artifactId&gt;
+			&lt;version&gt;2413&lt;/version&gt;
+		&lt;/dependency&gt;
+</code></pre> 
+<p>除最后一个pom依赖外，其余的应该都能够从maven仓库中下载得到。<br> 那我们就来讲下如何获得最后一个maven依赖。<br> 1.1）首先，我们来到opencv的官网：https://opencv.org/releases.html<br> 选择自己需要下载的平台及版本，因为要和公司算法做兼容，所以我选用的是2.4.13版本，window下安装配置极其简单，将下载得到的.exe文件解压缩，然后将到opencv\build\java下即可得到需要的jar包，再然后将jar包转换为maven库里的依赖就可以了。<br> 具体命令我就不放在这了，拿一个通用的模板命令挂在这，按自己实际去转换吧。</p> 
+<pre><code>mvn install:install-file -Dfile=XX.jar -DgroupId=org -DartifactId=opencv -Dversion=2413 -Dpackaging=jar
+</code></pre> 
+<p>1.2）引入了pom依赖之后，windows下还需要opencv\build\java<br> 下需要的opencv的dll文件，将86（32位系统）或64（64位系统）下的<br> opencv_java2413.dll文件引入到系统的jdk的bin目录下<br> 1.3）上边的是windows的例子，实际很多情况下代码是在GPU的linux服务器上运行的，那么就需要下载linux平台下的文件，在服务器上使用Cmake编译安装，安装之后得到的会是.so文件，将对应的.so文件移入到/usr/lib下即可。<br> 如果不移动就需要将将.so文件的具体路径放入到/etc/profile配置文件中，然后使用source命令更新系统配置。</p> 
+<h3><a id="_55"></a>准备工作都做完了，剩下的就是代码了</h3> 
+<p>首先，需要从系统的环境中加载需要的opencv文件<br> static {<!-- --><br> System.loadLibrary(Core.NATIVE_LIBRARY_NAME);<br> }<br> 其次，就是代码的具体实现了，包含了BufferedImage与mat（4.0.1版本支持双方互转，2413不支持mat转BufferedImage或者是支持的类与4.0.1版本不一致，具体的各位自己去探索吧）数据的互转及转opencv的rect方法。<br> 【注】代码是按照.jpg处理的，需要变更的东西还是各位按需求自定义吧。</p> 
+<pre><code>import java.awt.AlphaComposite;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+import javax.imageio.ImageIO;
+
+import org.opencv.core.Core;
+import org.opencv.core.CvType;
+import org.opencv.core.Mat;
+import org.opencv.core.Rect;
+
+import sun.misc.BASE64Decoder;
+
+public class Java2MatTools {
+/**
+	 * 加载文件 opencv_java401.dll(windows)/libopencv_java401.so文件
+	 * （windows将文件放到jdk的bin目录下;linux为了简单起见可以放到/usr/lib下面）
+	 */
+	static {
+		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+	}
+	/**
+	 * 路径图片转为base64
+	 * 
+	 * @param imagePath
+	 * @return
+	 * @throws IOException
+	 */
+	public static Mat imagePath2Mat(String imagePath) throws IOException {
+		// 注释部分模拟传入base64数据
+		BufferedImage image = ImageIO.read(new FileInputStream(imagePath));
+		Mat matImage = Java2MatTools.BufImg2Mat(image, BufferedImage.TYPE_3BYTE_BGR, CvType.CV_8UC3);// CvType.CV_8UC3
+		// 小型图片可以输出 查看下
+//		System.out.println(matImage.dump());
+//		mat = matImage.dump();
+		return matImage;
+	}
+	/**
+	 * base64转Mat
+	 * 
+	 * @param base64
+	 * @return
+	 * @throws IOException
+	 */
+	public static Mat base642Mat(String base64) throws IOException {
+		// 对base64进行解码
+		BASE64Decoder decoder = new BASE64Decoder();
+		byte[] origin = decoder.decodeBuffer(base64);
+		InputStream in = new ByteArrayInputStream(origin); // 将b作为输入流；
+		BufferedImage image = ImageIO.read(in);
+		Mat matImage = Java2MatTools.BufImg2Mat(image, BufferedImage.TYPE_3BYTE_BGR, CvType.CV_8UC3);// CvType.CV_8UC3
+		return matImage;
+	}
+	/**
+	 * 
+	 * @param base64
+	 * @throws IOException 
+	 */
+	public static Rect base642Rect(String base64) throws IOException {
+		BASE64Decoder decoder = new BASE64Decoder();
+		byte[] origin = decoder.decodeBuffer(base64);
+		InputStream in = new ByteArrayInputStream(origin); // 将b作为输入流；
+		BufferedImage image = ImageIO.read(in);
+		return new Rect(0,0,image.getWidth(),image.getHeight());
+	}
+	
+	/**
+	 * 
+	 * @param base64
+	 * @throws IOException 
+	 */
+	public static Rect BufferedImage2Rect(BufferedImage image) throws IOException {
+		return new Rect(0,0,image.getWidth(),image.getHeight());
+	}
+	/**
+	 * 
+	 * @param base64
+	 * @throws IOException 
+	 */
+	public static BufferedImage base642BufferedImage(String base64) throws IOException {
+		BASE64Decoder decoder = new BASE64Decoder();
+		byte[] origin = decoder.decodeBuffer(base64);
+		InputStream in = new ByteArrayInputStream(origin); // 将b作为输入流；
+		return ImageIO.read(in);
+	}
+
+	/**
+	 * BufferedImage转换成Mat
+	 * 
+	 * @param original 要转换的BufferedImage
+	 * @param imgType  bufferedImage的类型 如 BufferedImage.TYPE_3BYTE_BGR
+	 * @param matType  转换成mat的type 如 CvType.CV_8UC3
+	 */
+	public static Mat BufImg2Mat(BufferedImage original, int imgType, int matType) {
+		if (original == null) {
+			throw new IllegalArgumentException("original == null");
+		}
+
+		// Don't convert if it already has correct type
+		if (original.getType() != imgType) {
+
+			// Create a buffered image
+			BufferedImage image = new BufferedImage(original.getWidth(), original.getHeight(), imgType);
+
+			// Draw the image onto the new buffer
+			Graphics2D g = image.createGraphics();
+			try {
+				g.setComposite(AlphaComposite.Src);
+				g.drawImage(original, 0, 0, null);
+			} finally {
+				g.dispose();
+			}
+		}
+
+		byte[] pixels = ((DataBufferByte) original.getRaster().getDataBuffer()).getData();
+		Mat mat = Mat.eye(original.getHeight(), original.getWidth(), matType);
+		mat.put(0, 0, pixels);
+		return mat;
+	}
+
+	/**
+	 * Mat转换成BufferedImage
+	 * 
+	 * @param matrix        要转换的Mat
+	 * @param fileExtension 格式为 ".jpg", ".png", etc
+	 * @return
+	 *//*
+	public static BufferedImage Mat2BufImg(Mat matrix, String fileExtension) {
+		// convert the matrix into a matrix of bytes appropriate for
+		// this file extension
+		MatOfByte mob = new MatOfByte();
+		Imgcodecs.imencode(fileExtension, matrix, mob);
+		// convert the "matrix of bytes" into a byte array
+		byte[] byteArray = mob.toArray();
+		BufferedImage bufImage = null;
+		try {
+			InputStream in = new ByteArrayInputStream(byteArray);
+			bufImage = ImageIO.read(in);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return bufImage;
+	}*/
+
+	/**
+	 * Mat转换保存成Image
+	 * 
+	 * @param matrix        要转换的Mat
+	 * @param fileExtension 格式为 ".jpg", ".png", etc
+	 * 
+	 * @return
+	 */
+/*	public static void Mat2Img(Mat matrix, String fileExtension, String pathAndName) {
+		// convert the matrix into a matrix of bytes appropriate for
+		// this file extension
+		MatOfByte mob = new MatOfByte();
+		Imgcodecs.imencode(fileExtension, matrix, mob);
+		// convert the "matrix of bytes" into a byte array
+		byte[] byteArray = mob.toArray();
+
+		BufferedImage bufImage = null;
+		try {
+			InputStream in = new ByteArrayInputStream(byteArray);
+			bufImage = ImageIO.read(in);
+			writeImageFile(bufImage, pathAndName);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}*/
+
+	/**
+	 * 将bufferdimage转换为图片
+	 * 
+	 * @param bi
+	 * @param pathAndName
+	 * @throws IOException
+	 */
+	public static void writeImageFile(BufferedImage bi, String pathAndName) throws IOException {
+		File outputfile = new File(pathAndName);
+		ImageIO.write(bi, "jpg", outputfile);
+	}
+
+}
+
+</code></pre> 
+<p>ok，完事。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9f901356ec96dfbc7238afb365b47e05/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Python-变量类型</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/4ef6ffebc6b1150a80346bc3d5195acd/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【java】本地客户端内嵌浏览器3 - Swing 使用 Spring 框架 &#43; 打包项目 &#43; 转exe &#43; 源码</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

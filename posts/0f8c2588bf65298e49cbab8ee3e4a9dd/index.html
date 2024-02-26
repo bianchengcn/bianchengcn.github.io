@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Spring 异常处理器 源码分析总结 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Spring 异常处理器 源码分析总结" />
+<meta property="og:description" content=" 异常处理的作用
+可以拦截制定异常，并进行处理返回到制定页面。
+需求举例
+如我的需求当用户请求不存的页面时不能出现浏览器默认的404页面，而出现我自己定义的html也面。当出现A类异常时返回到a.html。出现B类异常返回带b.html。
+项目实例
+例如：当为我根本没有 ind123ex.html服务请求时。 如果我不自定义错误处理器。返回404页面 当自定义错误处理器，处理NoHandlerFoundException（404的异常）异常后返回制定的请求页面。当然你也可以拦截自定义的异常，返回到不同的页面。
+以下部分对Spring异常处理器执行和加载源码进行分析 1、DispatcherServlet这个前端配置器中初始化的策略对象如下图
+2、initHandlerExceptionResolvers为初始化异常处理类。 可以看到初始化异常处理集合是通过类型从上下文获取。并且通过sort对异常处理器集合排序。 排序的作用： 当发生异常时，根据异常处理器的顺序来处理异常，当有异常处理其能够处理当前异常信息时，就不再执行后面的异常处理器了。 3、异常处理信息排序 根据对象的 Order属性进行排序，如果不是Order对象类那么排序就靠后。
+4、执行异常处理，可以看到当发生异常时候，按顺序执行异常处理器（this.handlerExceptionResolvers）。当有异常处理器能够处理当前一场（exMv != null）。则后面的异常处理器都不会执行。
+5、默认异常顺序设置： 源代码在 org.springframework.web.servlet.config. AnnotationDrivenBeanDefinitionParser 类注释说明 可以看到 &lt;annotation-driven/&gt; 自动加载的异常处理 ，默认加载三个分别是（ ExceptionHandlerExceptionResolver、 ResponseStatusExceptionResolver、 DefaultHandlerExceptionResolver ）。 6、加载源代码分析。 在org.springframework.web.servlet.config.AnnotationDrivenBeanDefinitionParser 类中有分别加载上面三个异常处理器的代码如下。 ①、ExceptionHandlerExceptionResolver
+②、ResponseStatusExceptionResolver
+③、DefaultHandlerExceptionResolver
+可以看到三个异常加载器的Order分别为（0，1，2）。
+6、自定义异常处理器 （继承AbstractHandlerExceptionResolver【可设置顺序】或者HandlerExceptionResolver【不能设置顺序】）以及设置异常处理类的执行顺序
+7、如果考虑自定异常处理器比默认异常处理器的优先级高。那么一定要考虑设置 Order。 如果有什么错误的地方， 欢迎大家多多指正。 " />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/0f8c2588bf65298e49cbab8ee3e4a9dd/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2015-10-30T16:00:11+08:00" />
+<meta property="article:modified_time" content="2015-10-30T16:00:11+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Spring 异常处理器 源码分析总结</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-size:18px; color:#330033"><strong>异常处理的作用</strong></span></span></p> 
+<p><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">可以拦截制定异常，并进行处理返回到制定页面。</span></p> 
+<p><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-size:18px; color:#330033"><strong>需求举例</strong></span></span></p> 
+<p><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">如我的需求当用户请求不存的页面时不能出现浏览器默认的404页面，而出现我自己定义的html也面。当出现A类异常时返回到a.html。出现B类异常返回带b.html。</span></p> 
+<p><span style="font-family:微软雅黑; font-size:18px; color:#330033"><span style="line-height:21px"><strong>项目实例</strong></span></span></p> 
+<div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">
+  例如：当为我根本没有 
+ <span style="background-color:inherit; line-height:1.5">ind123ex.html服务请求时。</span> 
+</div> 
+<div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"> 
+ <span style="background-color:inherit; line-height:1.5">如果我不自定义错误处理器。返回404页面</span> 
+</div> 
+<div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"> 
+ <span style="background-color:inherit; line-height:1.5"><img src="https://images2.imgbox.com/f1/c0/36bUEYMg_o.png" alt=""><br> </span> 
+</div> 
+<div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"> 
+ <span style="background-color:inherit; line-height:1.5"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">当自定义错误处理器，处理</span><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">NoHandlerFoundException（404的异常）异常后返回制定的请求页面。当然你也可以拦截自定义的异常，返回到不同的页面。</span><br> </span> 
+</div> 
+<div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"> 
+ <span style="background-color:inherit; line-height:1.5"><img src="https://images2.imgbox.com/a2/12/BZjLzSsS_o.jpg" alt=""><br> </span> 
+</div> 
+<div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"> 
+ <span style="background-color:inherit; line-height:1.5"><br> </span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <strong><span style="font-size:24px">以下部分对Spring异常处理器执行和加载源码进行分析</span></strong> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><br> </strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; line-height:21px; widows:auto">1、</span><span style="font-family:微软雅黑; line-height:21px; widows:auto">DispatcherServlet这个前端配置器中初始化的策略对象如下图</span><br> </strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"><img src="https://images2.imgbox.com/e5/40/OKxLEtPS_o.png" alt=""><br> </span></strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; line-height:21px; widows:auto"></span></strong></span> 
+ <div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+  <span style="font-size:18px"><strong>2、<span style="line-height:1.5; background-color:inherit">initHandlerExceptionResolvers为初始化异常处理类。</span></strong></span> 
+ </div> 
+ <div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+  <span style="font-size:18px"><strong><span style="line-height:1.5; background-color:inherit"><br> </span></strong></span> 
+ </div> 
+ <div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+  <span style="line-height:1.5; background-color:inherit">可以看到初始化异常处理集合是通过类型从上下文获取。并且通过sort对异常处理器集合排序。</span> 
+ </div> 
+ <div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+  <span style="line-height:1.5; background-color:inherit"><br> </span> 
+ </div> 
+ <div style="font-family:微软雅黑; line-height:21px; widows:auto">
+   排序的作用：  
+  <span style="color:rgb(255,0,0); background-color:inherit">当发生异常时，根据异常处理器的顺序来处理异常，当有异常处理其能够处理当前异常信息时，就不再执行后面的异常处理器了。</span> 
+ </div> 
+ <img src="https://images2.imgbox.com/05/ed/ZF51ciDX_o.png" alt=""> 
+ <br> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <br> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto">3、异常处理信息排序  根据对象的 Order属性进行排序，如果不是Order对象类那么排序就靠后。</span><br> </span></strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><br> </span></span></strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><img src="https://images2.imgbox.com/ff/61/fcoDNIKj_o.png" alt=""><br> </span></span></strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><img src="https://images2.imgbox.com/62/72/l65yOBAM_o.png" alt=""><br> </span></span></strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><strong><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><br> </span></span></strong></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><span style="font-weight:bold"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto">4、执行异常处理，可以看到当发生异常时候，按顺序执行异常处理器（</span><span style="font-family:微软雅黑; line-height:1.5; widows:auto">this.handlerExceptionResolvers）。当有异常处理器能够处理当前一场（</span><span style="font-family:微软雅黑; line-height:1.5; widows:auto">exMv != null</span><span style="font-family:微软雅黑; line-height:1.5; widows:auto">）。则后面的异常处理器都不会执行。</span><br> </span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><span style="font-weight:bold"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><br> </span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><span style="font-weight:bold"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><img src="https://images2.imgbox.com/77/97/fBZ9K3X1_o.png" alt=""><br> </span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+ <span style="font-size:18px"><span style="font-weight:bold"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><br> </span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"></span></span></span></span> 
+ <div style="line-height:21px; font-family:微软雅黑; widows:auto"> 
+  <span style="font-size:18px"><strong>5、默认异常顺序设置：</strong></span> 
+ </div> 
+ <div style="line-height:21px; font-family:微软雅黑; widows:auto"> 
+  <span style="font-size:18px"><strong><br> </strong></span> 
+ </div> 
+ <div style="font-size:18px; line-height:21px; font-family:微软雅黑; widows:auto"> 
+  <br> 
+ </div> 
+ <div style="font-family:微软雅黑; widows:auto"> 
+  <div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">
+    源代码在 
+   <span style="background-color:inherit; line-height:1.5">org.springframework.web.servlet.config.</span> 
+   <span style="background-color:inherit; line-height:1.5">AnnotationDrivenBeanDefinitionParser</span> 
+  </div> 
+  <div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"> 
+   <span style="background-color:inherit; line-height:1.5">类注释说明</span> 
+  </div> 
+  <img src="https://images2.imgbox.com/38/19/N2R3tNHK_o.jpg" alt=""> 
+  <br> 
+ </div> 
+ <div style="font-family:微软雅黑; widows:auto"> 
+  <img src="https://images2.imgbox.com/18/08/JnbB5qub_o.jpg" alt=""> 
+  <br> 
+ </div> 
+ <div style="font-family:微软雅黑; widows:auto"> 
+  <div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">
+    可以看到 
+   <span style="line-height:1.5">&lt;annotation-driven/&gt; 自动加载的异常处理 ，默认加载三个分别是（</span> 
+   <span style="background-color:inherit; line-height:1.5">ExceptionHandlerExceptionResolver、</span> 
+   <span style="background-color:inherit; line-height:1.5">ResponseStatusExceptionResolver、</span> 
+   <span style="background-color:inherit; line-height:1.5">DefaultHandlerExceptionResolver</span> 
+   <span style="line-height:1.5">）。</span> 
+  </div> 
+  <div style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"> 
+   <span style="line-height:1.5"><br> </span> 
+  </div> 
+  <div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+   <span style="font-size:18px"><strong>6、加载源代码分析。</strong></span> 
+  </div> 
+  <div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+   <span style="font-size:18px"><br> </span> 
+  </div> 
+  <div style="font-family:微软雅黑; line-height:21px; widows:auto"> 
+   <span style="font-size:18px">       </span> 
+   <span style="font-size:14px">在org.springframework.web.servlet.config.AnnotationDrivenBeanDefinitionParser 类中有分别加载上面三个异常处理器的代码如下。</span> 
+  </div> 
+ </div> 
+ <br> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">①、</span><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">ExceptionHandlerExceptionResolver</span><br> </span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><img src="https://images2.imgbox.com/31/2c/hlMkHdXd_o.png" alt=""><br> </span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><br> </span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">②、</span><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">ResponseStatusExceptionResolver</span><br> </span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><img src="https://images2.imgbox.com/21/25/wjlNvRg7_o.png" alt=""><br> </span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><br> </span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">③、</span><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">DefaultHandlerExceptionResolver</span><img src="https://images2.imgbox.com/c9/6f/sLQFUbjq_o.png" alt=""><br> </span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><br> </span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">可以看到三个异常加载器的Order分别为（0，1，2）。</span><br> </span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"><br> </span></span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-size:18px">6、自定义异常处理器</span></span></span></span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-size:18px"><br> </span></span></span></span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto">（继承</span><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">AbstractHandlerExceptionResolver【可设置顺序】或者</span><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">HandlerExceptionResolver【不能设置顺序】</span><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto">）以及设置异常处理类的执行顺序</span><br> </span></span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:21px; widows:auto"><span style="font-family:微软雅黑; font-size:14px; line-height:1.5; widows:auto"><img src="https://images2.imgbox.com/1c/83/QLjEjkQ0_o.png" alt=""><br> </span></span></span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-size:18px">7<span style="font-family:微软雅黑; line-height:21px; widows:auto">、如果考虑自定异常处理器比默认异常处理器的优先级高。那么一定要考虑设置 Order。</span></span></span></span></span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-size:18px"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><br> </span></span></span></span></span></span></span></span></span></span> 
+</div> 
+<div style="font-family:微软雅黑; widows:auto"> 
+ <span style="font-weight:bold"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-family:微软雅黑; line-height:21px; widows:auto"><span style="font-family:微软雅黑; line-height:1.5; widows:auto"><span style="font-size:18px"><span style="font-family:微软雅黑; line-height:21px; widows:auto">如果有什么错误的地方， 欢迎大家多多指正。</span></span></span></span></span></span></span></span></span></span> 
+</div>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/50f94e2589b8d94c7777f83dde06bcb2/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">junit测试进阶</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/9efaa535469b64e6689f517702f36e34/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">ng-repeate 和ng-show的用法</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

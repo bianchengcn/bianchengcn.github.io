@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>LeNet跟LeNet5详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="LeNet跟LeNet5详解" />
+<meta property="og:description" content="1 LeNet结构 主要是为了手写数字识别
+具体结构讲解：从图中例子可得
+1 先传入一个灰度图像尺寸为1x28x28，通道数为1，尺寸为28x28的灰度图像
+2 第一层5x5卷积，经过公式 输入图像尺寸-卷积核尺寸&#43;2padding/步长&#43;1，（其中，因为是正方形，所以长宽都一样，直接一个式子得出）因为没有padding，输出特征图20个通道，24x24的尺寸。
+3 经过第二层Pooling层，计算方式同上，得到20x12x12
+4 在经过第三层5x5卷积，输出50x8x8，
+5 第四层Polling，得到50x4x4
+6 扁平化然后reshape为500x1的神经元用于全连接（也可以把上述得到的进行扁平化再进行一次全连接，800 -500）
+7 然后Relu激活函数
+8 全连接输出 10x1，代表十个数字的置信度
+9 使用softmax来计算输出的值的在0-9的概率
+（上述，其实上述每一层卷积都要使用Relu激活函数），下面代码复现再具体看
+2 代码复现 import torch import torch.nn as nn class LeNet(nn.Module): def __init__(self) -&gt; None: super().__init__() self.features = nn.Sequential( nn.Conv2d(in_channels=1, out_channels=20, kernel_size=5, stride=1, padding=0), nn.ReLU(), nn.MaxPool2d(kernel_size=(2, 2), stride=2), nn.Conv2d(in_channels=20, out_channels=50, kernel_size=5, stride=1, padding=0), nn.ReLU(), # nn.MaxPool2d(kernel_size=(2, 2), stride=2), nn.AdaptiveMaxPool2d((4, 4)) # 这个是为了不止让限制为28x28的输入图像 ) self.classify = nn." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d0df75caad9d4c076111491372be9eb1/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-27T20:35:13+08:00" />
+<meta property="article:modified_time" content="2024-01-27T20:35:13+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">LeNet跟LeNet5详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2>1 LeNet结构</h2> 
+<p><img alt="" height="613" src="https://images2.imgbox.com/51/56/z1n4Tx9V_o.png" width="978"></p> 
+<p>主要是为了手写数字识别</p> 
+<p>具体结构讲解：从图中例子可得</p> 
+<p>1 先传入一个灰度图像尺寸为1x28x28，通道数为1，尺寸为28x28的灰度图像</p> 
+<p>2 第一层5x5卷积，经过公式 输入图像尺寸-卷积核尺寸+2padding/步长+1，（其中，因为是正方形，所以长宽都一样，直接一个式子得出）因为没有padding，输出特征图20个通道，24x24的尺寸。</p> 
+<p>3 经过第二层Pooling层，计算方式同上，得到20x12x12</p> 
+<p>4 在经过第三层5x5卷积，输出50x8x8，</p> 
+<p>5 第四层Polling，得到50x4x4</p> 
+<p>6 扁平化然后reshape为500x1的神经元用于全连接（也可以把上述得到的进行扁平化再进行一次全连接，800 -500）</p> 
+<p>7 然后Relu激活函数</p> 
+<p>8 全连接输出 10x1，代表十个数字的置信度</p> 
+<p>9 使用softmax来计算输出的值的在0-9的概率</p> 
+<p>（上述，其实上述每一层卷积都要使用Relu激活函数），下面代码复现再具体看</p> 
+<h2>2 代码复现</h2> 
+<pre><code class="language-python">import torch
+import torch.nn as nn
+
+class LeNet(nn.Module):
+
+    def __init__(self) -&gt; None:
+        super().__init__()
+        
+        self.features = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=20, kernel_size=5, stride=1, padding=0),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2, 2), stride=2),
+            nn.Conv2d(in_channels=20, out_channels=50, kernel_size=5, stride=1, padding=0),
+            nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=(2, 2), stride=2),
+            nn.AdaptiveMaxPool2d((4, 4))  # 这个是为了不止让限制为28x28的输入图像
+        )
+
+        self.classify = nn.Sequential(
+            nn.Linear(50 * 4 * 4, 500),
+            nn.ReLU(),
+            nn.Linear(500, 10)
+        )
+    
+
+    def forward(self, x):
+        z = self.features(x)
+        z = z.view(-1, 800)
+        z = self.classify(z) 
+        return z
+    
+
+if __name__ == '__main__':
+    net = LeNet()
+    img = torch.randn(2, 1, 28, 28)
+    scores = net(img)
+    print(scores)
+    probs = torch.softmax(scores, dim=1)
+    print(probs)
+</code></pre> 
+<h2>3 LeNet5</h2> 
+<p>结构图</p> 
+<p><img alt="" height="380" src="https://images2.imgbox.com/fb/d9/A278Vpy3_o.png" width="1114"></p> 
+<h3>1 <span style="color:#000000;">C1层</span></h3> 
+<p><span style="color:#000000;">C1层是一个卷积层</span></p> 
+<p>将输入的1x32x32 通过5x5卷积，卷积成 6x28x28的feature map</p> 
+<p><img alt="" height="308" src="https://images2.imgbox.com/c8/c3/SLvy9B5f_o.png" width="400"></p> 
+<h3>2 <span style="color:#000000;">S2层</span></h3> 
+<p><img alt="" height="315" src="https://images2.imgbox.com/90/5f/2YQOn8JJ_o.png" width="345"></p> 
+<p><span style="color:#000000;">S2层是一个下采样层，对C1层的进行下采样,把</span>6x28x28池化成6x14x14</p> 
+<div> 
+ <span style="color:#000000;">和max pooling和average pooling不一样， 在C1中每个单元的4个输入相加， 乘以一个可训练参数w， 再加上一个可训练偏置b， 结果通过sigmoid函数计算得到最终池化之后的值</span> 
+</div> 
+<div></div> 
+<div> 
+ <span style="color:#000000;">就是说对于C1层，每个2x2的区域进行相加，类似如使用2x2卷积，步长为2，然后每个区域4个值乘以一个可训练参数w， 再加上一个可训练偏置b， 结果通过sigmoid函数计算得到最终池化之后的值</span> 
+</div> 
+<div></div> 
+<h3><span style="color:#000000;">3 C3层</span></h3> 
+<p><img alt="" height="287" src="https://images2.imgbox.com/ea/15/LzWokZLc_o.png" width="317"></p> 
+<p><span style="color:#000000;">C3层是一个卷积层，使用的是5x5卷积，把</span>6x14x14卷积成16x10x10</p> 
+<p>但是这个卷积跟平常卷积不一样，使用的是类似分组卷积的东西，不过也不一样，如下图</p> 
+<p><img alt="" height="252" src="https://images2.imgbox.com/c0/25/u7DiBA5l_o.png" width="709"></p> 
+<p>每次卷积核每次卷积不同的通道来提取特征，得到15个通道，比如第一个通道卷积他的前三层通道来输出第一个通道，以此类推</p> 
+<p></p> 
+<h3>4 <span style="color:#000000;">S4层</span></h3> 
+<p><img alt="" height="266" src="https://images2.imgbox.com/c3/71/inBalwrN_o.png" width="322"></p> 
+<p><span style="color:#000000;">S4层是一个下采样层 (和S2一样)，具体看S2,把</span>16x10x10下采样为16x5x5</p> 
+<h3>5 <span style="color:#000000;">C5层</span></h3> 
+<p><img alt="" height="249" src="https://images2.imgbox.com/e2/ee/GTMfQ4Ry_o.png" width="280"></p> 
+<p><span style="color:#000000;">C5层是一个卷积层，使用5x5卷积，把</span>16x5x5卷积成120x1x1，也就是用于下面全连接</p> 
+<p></p> 
+<h3><span style="color:#000000;">6 F6 F7层</span></h3> 
+<p><img alt="" height="213" src="https://images2.imgbox.com/25/5c/oXO483G1_o.png" width="311"></p> 
+<p><span style="color:#000000;">F6 7层是一个全连接层</span></p> 
+<p><span style="color:#000000;">把120x1最后全连接为10x1用来做置信度</span></p> 
+<p></p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/71f7cc0c43a027d25c744958099d36b6/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【报错栏】application.properties 配置文件中文乱码问题</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/e3eb106724c62b91bf10ec82ac98f4f2/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">体验 AutoGen Studio - 微软推出的友好多智能体协作框架</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

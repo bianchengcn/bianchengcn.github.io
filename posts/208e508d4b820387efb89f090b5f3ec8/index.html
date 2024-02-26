@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>深入理解 Vue 模板渲染：Vue 模板反编译 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="深入理解 Vue 模板渲染：Vue 模板反编译" />
+<meta property="og:description" content="vue 文件的构成 熟悉 vue 的同学应该都知道，vue 单文件模板中一般含有三个部分，template，script，style。
+但是在编译后的 js 文件中，我们却没法在代码中直接找到这三部分，如果我们想从编译后的 js 中获取原始模板，应该怎么做？
+vue 并非直接使用 template 进行渲染，而是需要把 template 编译成渲染函数，才能渲染。
+new Vue({ render:function () {}, staticRenderFns:[] }) 并且当一个 vue 单文件同时存在 template 标签和 render 函数时，render 函数优先生效。
+事实上编译工具也确实会把 vue 单文件模板编译成这种形式，style 会单独提取出来，绑定作用域作为标识，而 script 部分除了加入了 render 和 staticRenderFns 以外，基本不变。
+/* 作用域标识为 data-v-3fd7f12e */ .effect-mask[data-v-3fd7f12e] { opacity: 0; } // js 中肯定能找到对应的作用域标识，关联某个组件，上面的 css 就是这个组件的 style j = i(&#34;X/U8&#34;)(F.a, W, !1, Y, &#34;data-v-3fd7f12e&#34;, null).exports, 因此，我们如果想把一个编译后的单文件模板还原，主要的工作，就是把 render 和 staticRenderFns 中的模板从渲染函数还原成 template 模板。之后再把 script 引入的模块还原，根据作用域标识找回样式并格式化即可。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/208e508d4b820387efb89f090b5f3ec8/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-09-15T08:45:00+08:00" />
+<meta property="article:modified_time" content="2020-09-15T08:45:00+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">深入理解 Vue 模板渲染：Vue 模板反编译</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <div id="js_content"> 
+ <p><img src="https://images2.imgbox.com/6a/1d/VFujktrI_o.png"><br></p> 
+ <h3>vue 文件的构成</h3> 
+ <p style="text-align: justify">熟悉 vue 的同学应该都知道，vue 单文件模板中一般含有三个部分，template，script，style。</p> 
+ <p style="text-align: justify">但是在编译后的 js 文件中，我们却没法在代码中直接找到这三部分，如果我们想从编译后的 js 中获取原始模板，应该怎么做？</p> 
+ <p style="text-align: justify">vue 并非直接使用 template 进行渲染，而是需要把 template 编译成渲染函数，才能渲染。</p> 
+ <pre class="has"><code class="language-go">new Vue({
+    render:function () {},
+    staticRenderFns:[]
+})
+</code></pre> 
+ <p style="text-align: justify">并且当一个 vue 单文件同时存在 template 标签和 render 函数时，render 函数优先生效。</p> 
+ <p style="text-align: justify">事实上编译工具也确实会把 vue 单文件模板编译成这种形式，style 会单独提取出来，绑定作用域作为标识，而 script 部分除了加入了 render 和 staticRenderFns 以外，基本不变。</p> 
+ <pre class="has"><code class="language-go">/* 作用域标识为 data-v-3fd7f12e */
+.effect-mask[data-v-3fd7f12e] {
+    opacity: 0;
+}
+</code></pre> 
+ <pre class="has"><code class="language-go">// js 中肯定能找到对应的作用域标识，关联某个组件，上面的 css 就是这个组件的 style
+j = i("X/U8")(F.a, W, !1, Y, "data-v-3fd7f12e", null).exports,
+</code></pre> 
+ <p style="text-align: justify">因此，我们如果想把一个编译后的单文件模板还原，主要的工作，就是把 render 和 staticRenderFns 中的模板从渲染函数还原成 template 模板。之后再把 script 引入的模块还原，根据作用域标识找回样式并格式化即可。</p> 
+ <p style="text-align: justify">本文主要说明如何把 js 代码构成的渲染函数，还原成 template 模板。</p> 
+ <h3>处理 staticRenderFns</h3> 
+ <p style="text-align: justify">staticRenderFns 是 template 中的静态模板片段，片段是纯 html，不含变量和表达式。</p> 
+ <p style="text-align: justify">对于这种静态模板，我们通过构造上下文对渲染函数求值，就可以获取到想要的结果。</p> 
+ <p style="text-align: justify">staticRenderFns 格式如下：</p> 
+ <pre class="has"><code class="language-go">staticRenderFns: [function () {
+    var t = this.$createElement,
+        e = this._self._c || t;
+    return e("div", {
+        staticClass: "btn on"
+    }, [e("i", {
+        staticClass: "icon iconfont"
+    }), e("span", [this._v("下载")])])
+}]
+</code></pre> 
+ <p style="text-align: justify">我们可以构造一个类 StaticRender，实现 $createElement、_v、_self ，然后把 staticRenderFns 中的渲染函数挂载到 StaticRender 的实例上，这样渲染函数就可以正常执行。</p> 
+ <p style="text-align: justify">$createElement 的函数签名如下：</p> 
+ <pre class="has"><code class="language-go">// vue/types/vue.d.ts
+export interface CreateElement {
+  (tag?: string | Component&lt;any, any, any, any&gt; | AsyncComponent&lt;any, any, any, any&gt; | (() =&gt; Component), children?: VNodeChildren): VNode;
+  (tag?: string | Component&lt;any, any, any, any&gt; | AsyncComponent&lt;any, any, any, any&gt; | (() =&gt; Component), data?: VNodeData, children?: VNodeChildren): VNode;
+}
+</code></pre> 
+ <p style="text-align: justify">在 staticRenderFns 渲染函数中，我们可以认为 $createElement 第一个参数是节点标签名，第二个参数是节点属性对象，第三个参数是子节点数组，第二、三个参数可选，返回值是一个元素节点。</p> 
+ <p style="text-align: justify">_v 只有一个参数，返回一个文本节点。</p> 
+ <p style="text-align: justify">我们只要构造好这两个方法，就可以轻松获得节点树，然后把节点转换成 html。</p> 
+ <pre class="has"><code class="language-go">// 定义节点类型
+interface TextNode {
+    type:'text'
+    text:string
+}
+
+interface Element {
+    type:'element'
+    tag:string
+    attrMap?:{[key:string]:any}
+    children:Node[]
+}
+
+type Node = Element | TextNode 
+
+// 定义 StaticRender 类
+
+export class StaticRender {
+    _self = {}
+    renderFunc:()=&gt;Node  // 挂载的渲染函数
+    constructor (renderFunc:()=&gt;Node) {
+        this._self = {}
+        this.renderFunc = renderFunc
+    }
+    render () {  // 执行渲染函数，输出html
+        var root = this.renderFunc ()
+        var _html = this.toHtml(root)
+        return _html
+    }
+    toHtml (root:Node):string {
+        // 生成 html 
+    }
+    attrToString  (obj:{[key:string]:any}) {
+        // 格式化属性到字符串
+    }
+
+    _v  (str:string) {
+        return {
+            text:str,
+            type:'text'
+        }
+    }
+    $createElement (tag:string,attrMap:{[key:string]:any},children:Node[]) {
+        var _tag, _attrMap, _children;
+        _tag = tag;
+        if(Array.isArray(attrMap)){
+            _children = attrMap
+        }else{
+            _attrMap = attrMap
+        }
+        if(Array.isArray(children)){
+            _children = children
+        }
+        var ret = {
+            tag:_tag,
+            type:'element',
+            attrMap:_attrMap || {},
+            children:_children || []
+        }
+        return ret;
+    }
+}
+</code></pre> 
+ <p style="text-align: justify">执行求值，结果如下：</p> 
+ <pre class="has"><code class="language-go">&lt;div class="btn on"&gt;
+    &lt;i class="icon iconfont"&gt; &lt;/i&gt;
+    &lt;span&gt; 下载 &lt;/span&gt; 
+&lt;/div&gt;
+</code></pre> 
+ <p style="text-align: justify">staticRenderFns 生成的 html 片段我们之后还会用到。</p> 
+ <h3>处理 render</h3> 
+ <p style="text-align: justify">render 渲染函数包含大量的变量、表达式，例如 v-if、v-for 的内容。我们很难通过构造简单的上下文求值得到模板。</p> 
+ <h4>整体流程</h4> 
+ <p style="text-align: justify">编译和还原本质上都是把代码解析成语法树然后进行变换，再生成新的代码。</p> 
+ <p style="text-align: justify">vue 模板在编译时基本没有丢掉原始信息，因为我们可以做到比较精准的还原。</p> 
+ <p style="text-align: justify">并且由于 vue 模板涉及的语法特性较少，主体是声明式的 xml，只涉及少量的 js 表达式，并且只用到了部分 js 语言特性，还原起来相对比较容易。</p> 
+ <p style="text-align: justify">因此，对于 render，我们使用变换语法树的方法获得模板。</p> 
+ <img src="https://images2.imgbox.com/b8/1c/FKBMVG1o_o.png"> 
+ <figcaption>
+   流程图 
+ </figcaption> 
+ <p style="text-align: justify">从流程来看，我们需要解析器，变换器，生成器三个部分。</p> 
+ <p style="text-align: justify">解析器将渲染函数转换为 js 语法树。</p> 
+ <p style="text-align: justify">变换器将 js 语法树转换成 vue 模板语法树。</p> 
+ <p style="text-align: justify">生成器将 vue 模板语法树转换成 vue 模板字符串。</p> 
+ <h4>解析器</h4> 
+ <p style="text-align: justify">其中解析器属于比较大众化的需求，eslint、压缩/优化、代码高亮、类型检查等等都需要用到解析器，自然可以找到可用的轮子。</p> 
+ <p style="text-align: justify">把 js 代码转换成语法树我们可以使用 @typescript-eslint/typescript-estree。</p> 
+ <p style="text-align: justify">项目 estree<sup>[1]</sup> 则提供了各个版本 js 所定义的节点类型标准。</p> 
+ <p style="text-align: justify">一个 estree 节点的基本类型定义如下，包含类型、位置、长度等信息：</p> 
+ <pre class="has"><code class="language-go">interface BaseNode {
+    type:string
+    loc:{
+        end:{
+            line:number
+            start:number
+        },
+        start:{
+            line:number
+            start:number
+        }
+    },
+    range:[number,number]
+}
+</code></pre> 
+ <p style="text-align: justify">不同的节点类型会增加各自特有的属性，例如函数调用表达式的类型定义如下：</p> 
+ <pre class="has"><code class="language-go">interface CallExpressionBase extends BaseNode {
+    callee: LeftHandSideExpression;
+    arguments: Expression[];
+    typeParameters?: TSTypeParameterInstantiation;
+    optional: boolean;
+}
+
+interface CallExpression extends CallExpressionBase {
+    type: AST_NODE_TYPES.CallExpression;
+    optional: false;
+}
+</code></pre> 
+ <p style="text-align: justify">函数有调用者 callee 和参数 arguments 两个特有属性。</p> 
+ <p style="text-align: justify">完整的 js 语法树节点类型定义可以在 ts-estree.ts<sup>[2]</sup> 查阅。</p> 
+ <p style="text-align: justify">简单的 api 调用就可以获取到渲染函数的语法树。</p> 
+ <pre class="has"><code class="language-go">import { parse, TSESTreeOptions,AST } from "@typescript-eslint/typescript-estree"
+
+class Render {
+    options:TSESTreeOptions = {
+        errorOnUnknownASTType:true,
+        loc:true,
+        range:true,
+    }
+    ast:AST&lt;TSESTreeOptions&gt;
+    constructor (code:string,staticTpls:string[]) {
+        this.ast = parse(code, this.options);  // 获取语法树
+    }
+}
+</code></pre> 
+ <h4>变换器</h4> 
+ <p style="text-align: justify">有了 js 语法树节点类型定义，我们还需要 vue 模板的语法树节点类型定义，才能正确地完成转换。</p> 
+ <p style="text-align: justify">一个 vue 模板语法树节点类型定义如下：</p> 
+ <blockquote> 
+  <p style="text-align: justify">删减了非必要属性，完整版本可以查看 index.d.ts<sup>[3]</sup></p> 
+ </blockquote> 
+ <pre class="has"><code class="language-go">type ASTNode = ASTElement | ASTText | ASTExpression;
+
+interface ASTElement {
+  type: 1;
+  tag: string;
+  attrsList: { name: string; value: any }[];
+  attrsMap: Record&lt;string, any&gt;;
+  parent: ASTElement | undefined;
+  children: ASTNode[];
+}
+
+interface ASTText {
+  type: 3;
+  text: string;
+}
+
+interface ASTExpression {
+  type: 2;
+  expression: string;
+  text: string;
+  tokens: (string | Record&lt;string, any&gt;)[];
+}
+</code></pre> 
+ <h5>render 用到的特性</h5> 
+ <p style="text-align: justify">编写转换逻辑前，我们先来看看 render 渲染函数的基本形式，以及它用到了哪些 js 特性、我们需要处理哪些东西。</p> 
+ <p style="text-align: justify">此渲染函数包含了动态/静态属性，指令，v-for 列表，事件绑定等特性。</p> 
+ <pre class="has"><code class="language-go">function() {
+    var t = this
+        , e = t.$createElement
+        , i = t._self._c || e;
+    return i("transition", {
+        attrs: {  
+            name: "el-zoom"   // 属性
+        },
+        on: {   // 事件绑定
+            click: function(e) {
+                t.onClick();
+            }
+        }
+    }, [i("div", {   // 指令
+        directives: [{
+            name: "show",
+            rawName: "v-show",
+            value: t.visible,
+            expression: "visible"
+        }],
+        staticClass: "el-time-panel",
+        class: t.popperClass
+    },t._l(t.list, function(e, s) {  // v-for 列表
+    return i("ListPreview", {
+      key: s + "_" + e.id,   // 动态属性
+      attrs: {
+        spriteData: e,
+        playFlag: t.playing  // 动态属性
+      }
+    });
+  }))])
+}
+</code></pre> 
+ <p style="text-align: justify">render 渲染函数和 staticRenderFns 函数的格式一样，都是定义一个局部变量赋值为 $createElement 方法，定义一个局部变量赋值为 this。</p> 
+ <p style="text-align: justify">但是变量名并不是固定的，所以我们首先要分析出代表 $createElement 和 this 的变量。</p> 
+ <p style="text-align: justify">staticRenderFns 渲染函数中，this下只用到了 _v 方法，render 渲染函数中，this 下挂载了更多的内置方法，它们都以 _ 开头，我们主要需要处理的有：</p> 
+ <ul><li><p>_l：生成 v-for 结构</p></li><li><p>_e：生成空节点</p></li><li><p>_s：生成插值字符串</p></li><li><p>_m：生成静态 html 片段(staticRenderFns 中的 html 片段)</p></li><li><p>_v：生成文本节点</p></li></ul> 
+ <p style="text-align: justify">其他不常见的内置函数可以遇到后再完善，例如 _u、_p 等。</p> 
+ <blockquote> 
+  <p style="text-align: justify">完整的内置方法列表可以查阅 vue/render-helpers<sup>[4]</sup>，其生成逻辑在 vue/codegen<sup>[5]</sup></p> 
+ </blockquote> 
+ <blockquote> 
+  <p style="text-align: justify">vue/codegen<sup>[6]</sup> 可以认为是 vue 模板的生成规范。</p> 
+ </blockquote> 
+ <p style="text-align: justify">除此之外，this 下面还挂载了 vue 实例的 data 和 methods，这些都可以在模板中使用，也是我们要处理的对象。</p> 
+ <p style="text-align: justify">v-if 以三元表达式的方式呈现。</p> 
+ <h5>转换的基本思路</h5> 
+ <ol><li><p>从 js 语法树根节点开始遍历，先获取到 this 和 $createElement 对应的标识符</p></li></ol> 
+ <p style="text-align: justify">render 渲染函数内部一般不直接使用 this 和 $createElement，而是赋值给两个局部变量。这两个局部变量在渲染函数内会被大量使用，但是变量名并不是固定的，因此我们先要获取到变量名，在上面的渲染函数示例中，变量名分别为 t 和 i。</p> 
+ <p style="text-align: justify">在后面的遍历中，如果 t 作为参数出现在表达式中，我们要判断它是否是 this。如果 i 作为函数调用者出现，我们要判断它是否是 $createElement。</p> 
+ <p style="text-align: justify">然后，我们遍历到 return 语句处，它的节点类型是 ReturnStatement， ReturnStatement 的 argument 属性就是 return 后面跟着的表达式。</p> 
+ <p style="text-align: justify">这个表达式就是我们获取 vue 模板语法树的起点。</p> 
+ <pre class="has"><code class="language-go">interface ReturnStatement extends BaseNode {
+    type: AST_NODE_TYPES.ReturnStatement;
+    argument: Expression | null;
+}
+</code></pre> 
+ <ol><li><p>转换主体</p></li></ol> 
+ <p style="text-align: justify">入口表达式通常就是一个 $createElement 的函数调用表达式，但是也有可能是一个三元表达式。这是因为 v-if 可以出现在模板根节点。</p> 
+ <p style="text-align: justify">$createElement 的函数签名和 staticRenderFns 中的一样。</p> 
+ <pre class="has"><code class="language-go">// vue/types/vue.d.ts
+export interface CreateElement {
+  (tag?: string | Component&lt;any, any, any, any&gt; | AsyncComponent&lt;any, any, any, any&gt; | (() =&gt; Component), children?: VNodeChildren): VNode;
+  (tag?: string | Component&lt;any, any, any, any&gt; | AsyncComponent&lt;any, any, any, any&gt; | (() =&gt; Component), data?: VNodeData, children?: VNodeChildren): VNode;
+}
+
+</code></pre> 
+ <p style="text-align: justify">我们应把 $createElement 的函数调用表达式解析成一个 vue 语法树节点，tag 参数作为标签名，从 data 参数中获得属性对象，然后对其 children 参数递归解析，作为子节点。</p> 
+ <p style="text-align: justify">如果入口是一个三元表达式，三元表达式有如下定义：</p> 
+ <pre class="has"><code class="language-go">interface ConditionalExpression extends BaseNode {
+    type: AST_NODE_TYPES.ConditionalExpression;
+    test: Expression;
+    consequent: Expression;
+    alternate: Expression;
+}
+</code></pre> 
+ <p style="text-align: justify">test 解析为 v-if 的判断条件，consequent 解析为 v-if 内的节点，alternate 解析为 v-else 内的节点。</p> 
+ <p style="text-align: justify">我们一般最终会转换成</p> 
+ <pre class="has"><code class="language-go">&lt;template v-if = "testExp"&gt;&lt;/template&gt;
+&lt;template v-else&gt;&lt;/template&gt;
+</code></pre> 
+ <p style="text-align: justify">这是两个节点，为了保持解析方法的一致性和简单性，统一只返回一个节点。因此创建一个 wrap 节点，将这两个节点作为它的 children。</p> 
+ <pre class="has"><code class="language-go">// e1 为 v-if 解析后的节点，e2 为 v-else 解析后的节点
+function conditionElement(_e1:ASTNode,_e2:ASTNode){
+    var element:ASTElement  = {
+        tag:'$$condition_wrap',
+        type:1,
+        attrsList:[],
+        attrsMap:{},
+        children:[_e1,_e2],
+        parent:undefined
+    }
+    return element
+}
+
+</code></pre> 
+ <p style="text-align: justify">因为 wrap 节点造成不必要的过多嵌套，我们会在后续的优化环节把节点合并。</p> 
+ <ol><li><p>处理表达式</p></li></ol> 
+ <p style="text-align: justify">render 渲染函数中存在大量的表达式，例如指令属性中、绑定属性中、插值字符串。表达式种类繁多，处理表达式是转换的重要一环。</p> 
+ <p style="text-align: justify">处理表达式的整体思路就是把它转换成一个字符串返回，例如二元表达式的处理：</p> 
+ <pre class="has"><code class="language-go">function expToString ( _exp:TSESTree.Expression):string {
+    switch (_exp.type) {
+        case AST_NODE_TYPES.BinaryExpression:  // 例如  a === b 
+            if(_exp.operator == '==' || _exp.operator == '!=' || _exp.operator == '!==' || _exp.operator == '==='){ // == 就把左右互换
+                var ret = `${this.expToString(_exp.right)} ${_exp.operator} ${this.expToString(_exp.left)}`
+                return ret;
+            }else{
+                var ret = `${this.expToString(_exp.left)} ${_exp.operator} ${this.expToString(_exp.right)}`
+                return ret;
+            }
+        // ...
+    }
+}
+</code></pre> 
+ <p style="text-align: justify">把标识符和操作符正确地拼接在一起即可。</p> 
+ <p style="text-align: justify">至少有十几种表达式会出现在 render 渲染函数中，我们都需要处理。</p> 
+ <p style="text-align: justify">除此之外，部分表达式还需要一些额外处理，我们看如下渲染函数片段：</p> 
+ <pre class="has"><code class="language-go">i("transition", {
+    on: {   // 事件绑定
+        click: function(e) {
+            t.onClick();
+        }
+    }
+})
+</code></pre> 
+ <p style="text-align: justify">它的 vue 模板应该是这样的：</p> 
+ <pre class="has"><code class="language-go">&lt;transition @click="onClick()"&gt; &lt;/transition&gt;
+</code></pre> 
+ <p style="text-align: justify">模板中用的属性和方法都挂载在 this，也就是这里的 t 下。渲染函数需要用 t. 来调用，但是模板中不需要，所以我们需要把它去掉。</p> 
+ <p style="text-align: justify">但是我们碰到 t. 就去掉也不行，例如下面的情况：</p> 
+ <pre class="has"><code class="language-go">i("transition", {
+    on: {   // 事件绑定
+        click: function(t) {
+            t.onClick();
+        }
+    }
+})
+</code></pre> 
+ <p style="text-align: justify">参数里有 t，函数里的 t 显然不再是 this，它已经被参数中的 t 覆盖了，这时我们就需要保留 t。</p> 
+ <p style="text-align: justify">除此之外，我们还会遇到这种情况：</p> 
+ <pre class="has"><code class="language-go">i("transition", {
+    on: {   // 事件绑定
+        mousedown: function(i) {
+            i.stopPropagation(),
+            t.globalMouseDown(
+                arguments[0],
+                "r",
+                e
+            );
+        }
+    }
+})
+</code></pre> 
+ <p style="text-align: justify">它的 vue 模板应该是这样的：</p> 
+ <pre class="has"><code class="language-go">&lt;transition @mousedown="$event.stopPropagation(),globalMouseDown($event,'r',e)"&gt; &lt;/transition&gt;
+</code></pre> 
+ <p style="text-align: justify">或者</p> 
+ <pre class="has"><code class="language-go">&lt;transition @mousedown.stop="globalMouseDown($event,'r',e)"&gt; &lt;/transition&gt;
+</code></pre> 
+ <p style="text-align: justify"><code>$event</code> 是 vue 模板的特有参数，事件函数的第一个参数都可以写作 <code>$event</code>，我们同样需要在处理表达式时处理此种情况。</p> 
+ <p style="text-align: justify">我们需要根据函数参数处理函数内部的表达式，但是显然这跨越了几个节点层次，我们需要知道前几层节点的情况，我们可以引入上下文解决此问题。</p> 
+ <ol><li><p>上下文</p></li></ol> 
+ <p style="text-align: justify">函数有调用栈，我们同样用栈式结构生成上下文，为了保证不同节点间的上下文不会因为赋值互相干扰，我们引入 immutable， 使用不可变对象生成上下文。</p> 
+ <p style="text-align: justify">类型定义如下：</p> 
+ <pre class="has"><code class="language-go">import { List } from "immutable"
+type Context = {
+    [key:string]:string
+}
+type ContextStack = List&lt;Context&gt;
+</code></pre> 
+ <p style="text-align: justify">处理 $event 示例</p> 
+ <pre class="has"><code class="language-go">expToString ( _exp:TSESTree.Expression,_ctx:ContextStack):string {
+    switch (_exp.type) {
+        case AST_NODE_TYPES.FunctionExpression: // 节点类型为函数表达式节点
+            var params = _exp.params.map(node=&gt;{return this.parameterToString(node,_ctx)}) // 获取所有参数
+            if(params.length &gt; 0){
+                var eventId = params[0];
+                var nextCtx1 = _ctx.push({type:'eventId',value:eventId}) // 生成新的上下文
+                var bodyStr = this.statementToString(_exp.body,nextCtx1);
+                return bodyStr
+            }
+    }
+}
+</code></pre> 
+ <ol><li><p>处理内置函数</p></li></ol> 
+ <p style="text-align: justify">前面我们列出了一系列 _ 开头的内置函数，它们会影响节点的生成，我们都需要处理。</p> 
+ <ul><li><p>_l：生成 v-for 结构</p></li></ul> 
+ <p style="text-align: justify">一个 t._l 调用的基本形式如下：</p> 
+ <pre class="has"><code class="language-go">t._l(t.list, function(e, s) {
+    return i("Item", {
+      key: s + "_" + e.id,
+      attrs: {
+        data: e,
+        flag: t.playing
+      }
+    });
+})
+</code></pre> 
+ <p style="text-align: justify">转换后应为</p> 
+ <pre class="has"><code class="language-go">&lt;Item v-for="(e,s) in list" :key="s + '_' + e.id" :data="e" :flag="playing"&gt;&lt;/Item&gt;
+</code></pre> 
+ <p style="text-align: justify">我们需要从 _l 函数调用表达式的第一参数中获取到循环用的列表标识符，从第二个参数的函数表达式中获取到参数列表，从 return 语句中获取到循环用的元素节点。</p> 
+ <ul><li><p>_e：生成空节点</p></li></ul> 
+ <p style="text-align: justify">空节点都是可以去掉的，为了保持解析方法的一致性，返回一个标识为 $$null 的节点。</p> 
+ <pre class="has"><code class="language-go">function nonNode () {
+    var element:ASTElement  = {
+        tag:'$$null',
+        type:1,
+        attrsList:[],
+        attrsMap:{},
+        children:[],
+        parent:undefined
+    }
+    return element
+}
+</code></pre> 
+ <ul><li><p>_s：生成插值字符串 &amp; _v：生成文本节点</p></li></ul> 
+ <p style="text-align: justify">_s 可能出现在 _v 内部，因此一起处理。</p> 
+ <pre class="has"><code class="language-go">// t._v(t._s(t.title.length) + "/15") =&gt; _s(t.title.length) + "/15"  =&gt;  {<!-- -->{title.length + "/15"}}
+// t._v("保存") =&gt; "保存" =&gt; 保存
+function textNode (text:string) {
+    var re = /_s\((.*?)\)/g;  // 匹配 _s() 将 _s() 去掉，整体用 {<!-- -->{}} 包裹
+    if(re.test(text)){  // 处理 _s ，_s只会在 _v内部
+        text =`{<!-- -->{${text.replace(re,(_a:string,b:any)=&gt;{
+            return b
+        })}}}` 
+    }else{ // 去掉静态文本两侧的双引号
+        if(text.startsWith('"') &amp;&amp; text.endsWith('"')){
+            text = text.slice(1,-1)
+        }
+    }
+    var element:ASTElement  = {  // 简化类型，用 $$text 标识文本节点
+        tag:'$$text',
+        type:1,
+        attrsList:[],
+        attrsMap:{text:text},
+        children:[],
+        parent:undefined
+    }
+    return element
+}
+</code></pre> 
+ <ul><li><p>_m：生成静态 html 片段(staticRenderFns 中的 html 片段)</p></li></ul> 
+ <p style="text-align: justify"><em>m 一般以类似 <code>t._m(0)</code> 的形式出现，只有一个参数，参数为索引。我们之前解析的 staticRenderFns 数组中的索引，最终替换成之前生成好的 html片段即可。因此返回一个标识为 $$static</em>_ 加索引的节点。</p> 
+ <pre class="has"><code class="language-go">function staticNode (_exp:TSESTree.Expression) {
+    if(_exp.type == AST_NODE_TYPES.Literal){
+        var index = _exp.raw;
+        var tag = `$$static__${index}`
+        var element:ASTElement  = {
+            tag:tag,
+            type:1,
+            attrsList:[],
+            attrsMap:{},
+            children:[],
+            parent:undefined
+        }
+        return element
+    }else{
+        throw new Error("解析 static node 错误")
+    }
+}
+</code></pre> 
+ <ol><li><p>处理属性对象</p></li></ol> 
+ <p style="text-align: justify">属性都是键值对的形式，值主要就是表达式，我们之前已经处理过了。键的处理主要如下：</p> 
+ <p style="text-align: justify">键为 on 时，按绑定事件的格式处理。 键为 model 时，按 v-model 处理。 键为 directives 时，按指令格式处理。 键为 attrs 时，值是静态属性集合，需要拆开。 键为 staticClass、staticStyle 时，是静态类名和样式。 除此之外，如果值是个双引号包裹的字符串，则是静态属性，否则为绑定属性，属性名前加冒号。</p> 
+ <blockquote> 
+  <p style="text-align: justify">部分不常用的属性对象未列出，可以查阅 vue/codegen<sup>[7]</sup></p> 
+ </blockquote> 
+ <ol><li><p>优化</p></li></ol> 
+ <p style="text-align: justify">经过以上处理，我们已经得到了 vue 模板语法树，但是它还有冗余。有 _e 生成的空节点，还可能有 wrap 节点多层嵌套。</p> 
+ <p style="text-align: justify">生成出来的模板可能是这样的，因为 wrap 节点都会使用 template 标签：</p> 
+ <pre class="has"><code class="language-go">&lt;template&gt;
+    &lt;template&gt;
+        &lt;template&gt;
+
+        &lt;/template&gt;
+    &lt;/template&gt;
+&lt;/template&gt;
+</code></pre> 
+ <p style="text-align: justify">我们可以遍历 vue 模板语法树，删掉空节点，把多层 template 节点合并。</p> 
+ <p style="text-align: justify">每种类型的优化可以单独写成一个方法，例如：</p> 
+ <pre class="has"><code class="language-go">// 删除空节点
+function optimizeNode1(_root: ASTElement): ASTElement {
+    _root.children = _root.children.filter(child=&gt;{
+        if(child.type == 1 &amp;&amp; child.tag == '$$null' &amp;&amp; !child.attrsMap['v-if']){
+                return false
+        }else{
+            return true;
+        }
+    }).map(child=&gt;{
+        if(child.type == 1){
+            optimizeNode1(child)
+        }
+        return child;
+    })
+    return _root;
+}
+</code></pre> 
+ <p style="text-align: justify">然后各个优化方法依次调用即可。</p> 
+ <p style="text-align: justify">每个优化环节都重新遍历一遍节点并非一种高效的做法，如果优化方法能够支持流式处理，流水线模式能够大幅提高效率。</p> 
+ <h4>生成器</h4> 
+ <p style="text-align: justify">将 vue 模板语法树转换成字符串的过程并不复杂，需要注意点有：</p> 
+ <ul><li><p>将 $$static__ 节点替换成 staticRenderFns 中的 html 片段</p></li><li><p>区分自闭合标签</p></li><li><p>v-else 属性不需要值</p></li></ul> 
+ <p style="text-align: justify">最后可以用 js-beautify 库进行格式化。</p> 
+ <h3>实例</h3> 
+ <p style="text-align: justify">本文的完整代码在这里<sup>[8]</sup></p> 
+ <p style="text-align: justify">并且支持在线转换<sup>[9]</sup></p> 
+ <p style="text-align: justify">可以从含有 vue 模板的编译后代码中，例如，element-ui 官网下的 js<sup>[10]</sup> 中，用 $createElement 搜索渲染函数，然后按照以下格式输入到输入框，执行在线转换。</p> 
+ <pre class="has"><code class="language-go">{
+    render:function () {
+        var t = this.$createElement
+        //....
+    },
+    staticRenderFns: [function () {
+        var t = this.$createElement
+        //....
+    }]
+}
+</code></pre> 
+ <p style="text-align: justify">例如：</p> 
+ <pre class="has"><code class="language-go">{
+    render:function() {
+        var t = this
+        , e = t.$createElement
+        , i = t._self._c || e;
+        return i("transition", {
+            attrs: {
+                name: "el-zoom-in-top"
+            },
+            on: {
+                "after-leave": function(e) {
+                    t.$emit("dodestroy")
+                }
+            }
+        }, [i("div", {
+            directives: [{
+                name: "show",
+                rawName: "v-show",
+                value: t.visible,
+                expression: "visible"
+            }],
+            staticClass: "el-time-panel el-popper",
+            class: t.popperClass
+        }, [i("div", {
+            staticClass: "el-time-panel__content",
+            class: {
+                "has-seconds": t.showSeconds
+            }
+        }, [i("time-spinner", {
+            ref: "spinner",
+            attrs: {
+                "arrow-control": t.useArrow,
+                "show-seconds": t.showSeconds,
+                "am-pm-mode": t.amPmMode,
+                date: t.date
+            },
+            on: {
+                change: t.handleChange,
+                "select-range": t.setSelectionRange
+            }
+        })], 1), i("div", {
+            staticClass: "el-time-panel__footer"
+        }, [i("button", {
+            staticClass: "el-time-panel__btn cancel",
+            attrs: {
+                type: "button"
+            },
+            on: {
+                click: t.handleCancel
+            }
+        }, [t._v(t._s(t.t("el.datepicker.cancel")))]), i("button", {
+            staticClass: "el-time-panel__btn",
+            class: {
+                confirm: !t.disabled
+            },
+            attrs: {
+                type: "button"
+            },
+            on: {
+                click: function(e) {
+                    t.handleConfirm()
+                }
+            }
+        }, [t._v(t._s(t.t("el.datepicker.confirm")))])])])])
+    }
+}
+</code></pre> 
+ <p style="text-align: justify">点击转换，输出：</p> 
+ <pre class="has"><code class="language-go">
+&lt;template&gt;
+    &lt;transition name="el-zoom-in-top" @after-leave="$emit('dodestroy')"&gt;
+        &lt;div v-show="visible" class="el-time-panel el-popper" :class="popperClass"&gt;
+            &lt;div class="el-time-panel__content" :class="{ 'has-seconds':showSeconds}"&gt;
+                &lt;time-spinner ref="spinner" :arrow-control="useArrow" :show-seconds="showSeconds" :am-pm-mode="amPmMode" :date="date" @change="handleChange" @select-range="setSelectionRange"&gt;
+                &lt;/time-spinner&gt;
+            &lt;/div&gt;
+            &lt;div class="el-time-panel__footer"&gt;
+                &lt;button class="el-time-panel__btn cancel" type="button" @click="handleCancel"&gt;
+                    {<!-- -->{t("el.datepicker.cancel")}}
+                &lt;/button&gt;
+                &lt;button class="el-time-panel__btn" :class="{ confirm:!disabled}" type="button" @click="handleConfirm()"&gt;
+                    {<!-- -->{t("el.datepicker.confirm")}}
+                &lt;/button&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+    &lt;/transition&gt;
+&lt;/template&gt;
+</code></pre> 
+ <p style="text-align: justify">和 element-ui 源码对比，逻辑完全一致。</p> 
+ <h4>参考资料</h4> 
+ <p>[1] </p> 
+ <p style="text-align: justify">estree: <em>https://github.com/estree/estree</em></p> 
+ [2] <p style="text-align: justify">ts-estree.ts: <em>https://github.com/typescript-eslint/typescript-eslint/blob/master/packages/types/src/ts-estree.ts</em></p> 
+ [3] <p style="text-align: justify">index.d.ts: <em>https://github.com/vuejs/vue/blob/dev/packages/vue-template-compiler/types/index.d.ts</em></p> 
+ [4] <p style="text-align: justify">vue/render-helpers: <em>https://github.com/vuejs/vue/tree/dev/src/core/instance/render-helpers/index.js</em></p> 
+ [5] <p style="text-align: justify">vue/codegen: <em>https://github.com/vuejs/vue/tree/dev/src/compiler/codegen/index.js</em></p> 
+ [6] <p style="text-align: justify">vue/codegen: <em>https://github.com/vuejs/vue/tree/dev/src/compiler/codegen/index.js</em></p> 
+ [7] <p style="text-align: justify">vue/codegen: <em>https://github.com/vuejs/vue/tree/dev/src/compiler/codegen/index.js</em></p> 
+ [8] <p style="text-align: justify">这里: <em>https://github.com/mk33mk333/vue-template-transform</em></p> 
+ [9] <p style="text-align: justify">在线转换: <em>https://mk33mk333.github.io/vue-template-transform/index.html</em></p> 
+ [10] <p style="text-align: justify">js: <em>https://element.eleme.io/element-ui.0216a22.js</em></p> 
+ <hr> 
+ <p style="text-align: left">如果你觉得这篇内容对你有价值，请点赞，并关注我们的<strong>官网 </strong>(https://wecteam.io/) 和我们的微信公众号 (WecTeam) ，每周都有优质文章推送～</p> 
+ <p style="text-align: center"><br>最后</p> 
+ <ul><li><p>欢迎加我微信(winty230)，拉你进技术群，长期交流学习...<br></p></li><li><p>欢迎关注「前端Q」,认真学前端，做个专业的技术人...</p></li></ul> 
+ <p><img src="https://images2.imgbox.com/79/8b/fZRwPwmN_o.png"></p> 
+ <p><img src="https://images2.imgbox.com/d7/ad/Ji8yD13k_o.png"></p> 
+ <p>点个<strong>在看</strong>支持我吧</p> 
+ <p><img src="https://images2.imgbox.com/59/f7/6mRXANk6_o.png"></p> 
+</div>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/d5f2d9df2bf4bb427e43af56d99fc796/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">非科班进大厂必备算法，没压中找我拿红包</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/5aaf0dccb1f3b29e791b5b6e35d77a3c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">项目从github转移到gitee</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

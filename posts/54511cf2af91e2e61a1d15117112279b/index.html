@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Redis锁过期了，任务没执行完，怎么处理？自己动手实现加解锁逻辑 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Redis锁过期了，任务没执行完，怎么处理？自己动手实现加解锁逻辑" />
+<meta property="og:description" content="相信在日常开发中，基于 Redis 天然支持分布式锁，大家在线上分布式项目中都使用过 Redis 锁。本文主要针对某些异常场景下，加锁代码执行时间超过了加锁时间，导致任务还没执行完，但是锁已经释放的问题进行讲解并给出实践代码。本文版本说明如下：
+Spring Boot 版本 3.0.2演示项目地址：github.com/wayn111/new… github地址：github.com/wayn111 欢迎大家关注，点个star 一、过期时间 一般情况下我们加锁时，都会指定过期时间参数，当任务执行时间超过了锁过期时间，下一个任务进来时就会获取到锁，造成异常。
+针对过期时间常见有两种处理方法：
+自动续期：锁快到期时，通过定时任务自动续期加锁不设置过期时间：任务不执行完，锁就不会过期 这里博主给出自己的分析：
+第一种方案：当设置了过期时间后，如果还执行自动续期操作，那么这个锁的实际过期时间就与我们在加锁时设置的过期时间不符合，产生了逻辑上的冲突！所以博主认为自动续期操作对已经设置了过期时间的锁不适用。
+第二种方案：加锁不设置过期时间的话，理论上好像是可以解决这个问题，任务不执行完，锁就不会释放。但是实际针对一些极端异常场景下，如果任务执行过程中，服务器宕机、网络断连等都可能造成锁释放不了，比如加锁成功了，执行中发生了宕机，程序直接没了，但是锁还在，另一个任务就一直获取不到锁。
+综合来看：博主认为如果加锁代码需要添加过期时间，其实不需要进行自动续期操作。当我们需要确保当前任务没执行完，下一个任务一定不能获取到锁时，可以不设置过期时间。
+那怎么避免第二种方案中，异常场景下，锁一直未释放的问题嘞？
+答案是在加锁成功时，如果没有指定过期时间，则给一个默认过期时间比如三十秒，通过定时任务给我们的锁进行自动续期，这样就既可以解决锁一直未释放的问题，又能保证下一任务获取不到当前任务的锁。
+二、 代码实践 2.1 加锁 首先看加锁操作，如果不指定过期时间，则会指定默认过期时间，通过 lua 脚本加锁
+private String buildLuaLockScript() { return &#34;&#34;&#34; local key = KEYS[1] local value = ARGV[1] local time_out = ARGV[2] local result = redis.call(&#39;setnx&#39;, key, value) if tonumber(result) == 1 then redis.call(&#39;expire&#39;, key, time_out) return 1; else return 0; end &#34;&#34;&#34;; } 复制代码 成功后，启动一个定时任务每隔 默认过期时间 / 3 秒后执行一次续期操作" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/54511cf2af91e2e61a1d15117112279b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-02-27T11:28:34+08:00" />
+<meta property="article:modified_time" content="2023-02-27T11:28:34+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Redis锁过期了，任务没执行完，怎么处理？自己动手实现加解锁逻辑</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>相信在日常开发中，基于 Redis 天然支持分布式锁，大家在线上分布式项目中都使用过 Redis 锁。本文主要针对某些异常场景下，加锁代码执行时间超过了加锁时间，导致任务还没执行完，但是锁已经释放的问题进行讲解并给出实践代码。本文版本说明如下：</p> 
+<ul><li><code>Spring Boot</code> 版本 3.0.2</li><li>演示项目地址：<a href="https://link.juejin.cn/?target=https%3A%2F%2Fgithub.com%2Fwayn111%2Fnewbee-mall-pro" rel="nofollow" title="github.com/wayn111/new…">github.com/wayn111/new…</a> </li><li>github地址：<a href="https://link.juejin.cn/?target=https%3A%2F%2Fgithub.com%2Fwayn111" rel="nofollow" title="github.com/wayn111">github.com/wayn111</a> 欢迎大家关注，点个star</li></ul> 
+<h2>一、过期时间</h2> 
+<p>一般情况下我们加锁时，都会指定过期时间参数，当任务执行时间超过了锁过期时间，下一个任务进来时就会获取到锁，造成异常。</p> 
+<p>针对过期时间常见有两种处理方法：</p> 
+<ul><li>自动续期：锁快到期时，通过定时任务自动续期</li><li>加锁不设置过期时间：任务不执行完，锁就不会过期</li></ul> 
+<p>这里博主给出自己的分析：</p> 
+<p>第一种方案：当设置了过期时间后，如果还执行自动续期操作，那么这个锁的实际过期时间就与我们在加锁时设置的过期时间不符合，产生了逻辑上的冲突！所以博主认为自动续期操作对已经设置了过期时间的锁不适用。</p> 
+<p>第二种方案：加锁不设置过期时间的话，理论上好像是可以解决这个问题，任务不执行完，锁就不会释放。但是实际针对一些极端异常场景下，如果任务执行过程中，服务器宕机、网络断连等都可能造成锁释放不了，比如加锁成功了，执行中发生了宕机，程序直接没了，但是锁还在，另一个任务就一直获取不到锁。</p> 
+<p>综合来看：博主认为如果加锁代码需要添加过期时间，其实不需要进行自动续期操作。当我们需要确保当前任务没执行完，下一个任务一定不能获取到锁时，可以不设置过期时间。</p> 
+<p>那怎么避免第二种方案中，异常场景下，锁一直未释放的问题嘞？</p> 
+<p>答案是在加锁成功时，如果没有指定过期时间，则给一个默认过期时间比如三十秒，通过定时任务给我们的锁进行自动续期，这样就既可以解决锁一直未释放的问题，又能保证下一任务获取不到当前任务的锁。</p> 
+<h2>二、 代码实践</h2> 
+<h3>2.1 加锁</h3> 
+<p>首先看加锁操作，如果不指定过期时间，则会指定默认过期时间，通过 <code>lua</code> 脚本加锁</p> 
+<pre><code>private String buildLuaLockScript() {
+    return """
+            local key = KEYS[1]
+            local value = ARGV[1]
+            local time_out = ARGV[2]
+            local result = redis.call('setnx', key, value)
+            if tonumber(result) == 1 then
+                redis.call('expire', key, time_out)
+                return 1;
+            else
+                return 0;
+            end
+            """;
+}
+复制代码</code></pre> 
+<p>成功后，启动一个定时任务每隔 <code>默认过期时间 / 3</code> 秒后执行一次续期操作</p> 
+<pre><code>@Autowired
+public RedisTemplate redisTemplate;
+public static final Integer DEFAULT_TIME_OUT = 30;
+private ThreadLocal&lt;String&gt; stringThreadLocal = new ThreadLocal&lt;&gt;();
+private ThreadLocal&lt;ExecutorService&gt; executorServiceThreadLocal = new ThreadLocal&lt;&gt;();
+
+/**
+ * 加锁，不指定过期时间
+ *
+ * @param key key名称
+ * @return boolean
+ */
+public boolean lock(String key) {
+    return lock(key, null);
+}
+
+/**
+ * 加锁
+ *
+ * @param key     key名称
+ * @param timeout 过期时间
+ * @return boolean
+ */
+public boolean lock(String key, Integer timeout) {
+    Integer timeoutTmp = timeout;
+    if (timeout == null) {
+        timeoutTmp = DEFAULT_TIME_OUT;
+    }
+    String nanoId = IdUtil.nanoId();
+    stringThreadLocal.set(nanoId);
+    RedisScript&lt;Long&gt; redisScript = new DefaultRedisScript&lt;&gt;(buildLuaLockScript(), Long.class);
+    Long execute = (Long) redisTemplate.execute(redisScript, Collections.singletonList(key), nanoId, timeoutTmp);
+    boolean flag = execute != null &amp;&amp; execute == 1;
+    if (flag &amp;&amp; timeout &lt;= 0) {
+        ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+        executorServiceThreadLocal.set(scheduledExecutorService);
+        scheduledExecutorService.scheduleWithFixedDelay(() -&gt; {
+            RedisScript&lt;Long&gt; renewRedisScript = new DefaultRedisScript&lt;&gt;(buildLuaRenewScript(), Long.class);
+            Long result = (Long) redisTemplate.execute(renewRedisScript, Collections.singletonList(key), nanoId, DEFAULT_TIME_OUT);
+            if (result != null &amp;&amp; result == 2) {
+                ThreadUtil.shutdownAndAwaitTermination(scheduledExecutorService);
+            }
+        }, 0, 10, TimeUnit.SECONDS);
+    }
+    return flag;
+}
+
+复制代码</code></pre> 
+<p><code>lua</code> 续期脚本如下：</p> 
+<pre><code>private String buildLuaRenewScript() {
+    return """
+            local key = KEYS[1]
+            local value = ARGV[1]
+            local timeout = ARGV[2]
+            local result = redis.call('get', key)
+            if result ~= value then
+                return 2;
+            end
+            local ttl = redis.call('ttl', key)
+            if tonumber(ttl) &lt; tonumber(timeout) / 2 then
+                redis.call('expire', key, timeout)
+                return 1;
+            else
+                return 0;
+            end
+            """;
+}
+复制代码</code></pre> 
+<p>当发现锁过期剩余时间小于默认超时时间时，重新赋值过期时间。</p> 
+<h3>2.1 释放锁：</h3> 
+<pre><code>public boolean unLock(final String key) {
+    String nanoId = stringThreadLocal.get();
+    RedisScript&lt;Long&gt; redisScript = new DefaultRedisScript&lt;&gt;(buildLuaUnLockScript(), Long.class);
+    Long execute = (Long) redisTemplate.execute(redisScript, Collections.singletonList(key), nanoId);
+    boolean flag = execute != null &amp;&amp; execute == 1;
+    if (flag) {
+        if (executorServiceThreadLocal.get() != null) {
+            ThreadUtil.shutdownAndAwaitTermination(executorServiceThreadLocal.get());
+        }
+    }
+    return flag;
+}
+private String buildLuaUnLockScript() {
+    return """
+            local key = KEYS[1]
+            local value = ARGV[1]
+            local result = redis.call('get', key)
+            if result ~= value then
+                return 0;
+            else
+                redis.call('del', key)
+            end
+            return 1;
+            """;
+}
+复制代码</code></pre> 
+<p>到这里我们就全部完成了不设置超时时间的自动续期以及锁释放操作。</p> 
+<h2>三、总结</h2> 
+<p>简而言之，博主认为对于主动设置了过期时间的锁不应该再进行续期操作，我们通过加锁时不设置过期时间（指定默认超时时间），添加自动续期逻辑，可以比较完美的解决锁过期但是任务没执行完的问题。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/fe37768dc67b5e4022580823727a1fad/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【数据结构】时间复杂度</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/591b4b7f0a9fc0a68284108722de280e/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">使用非对称加密(RSA) 实现前端加密后端解密</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

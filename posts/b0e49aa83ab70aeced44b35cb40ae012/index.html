@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>OpenWrt：通过tftp下载程序 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="OpenWrt：通过tftp下载程序" />
+<meta property="og:description" content="搭建tftp服务器 TFTP（Trivial File Transfer Protocol，简单文件传输协议），是一个基于UDP协议实现的用于在客户机和服务器之间进行简单文件传输的协议，适合于开销不大、不复杂的应用场合。tftp协议专门为小文件传输而设计，只能从服务器上获取文件，或者向服务器写入文件，不能列出目录，也不能进行认证。
+在嵌入式Linux开发中，TFTP协议在很多场合都被用到，甚至是必不可少的，特别是在内核调试阶段，在U-Boot下通过tftp协议从服务器上加载内核并运行，既方便又快捷。
+一般的发行版默认都没有安装tftp服务以及tftp服务器。tftp服务依赖于网络守护进程服务程序，可选择安装inetd或者升级版的xinetd，然后安装tftp和tftp-server，接着修改或者创建/etc/xinetd.d/tftp配置文件，最后重启xinetd，启动tftp服务。
+安装xinetd：
+$ sudo apt-get install xinetd 安装tftp和tftpd：
+$ sudo apt-get install tftp tftpd 或者安装tftp的增强版本tftp-hpa：
+$ sudo apt-get install tftp-hpa tftpd-hpa 建立/etc/default/tftpd-hpa文件，写入如下内容：
+# /etc/default/tftpd-hpa TFTP_USERNAME=&#34;tftp&#34; TFTP_DIRECTORY=&#34;/opt/tftpboot&#34; TFTP_ADDRESS=&#34;:69&#34; TFTP_OPTIONS=&#34;--secure&#34; 其中TFTP_DIRECTORY设置的/var/tftpboot目录是tftp服务器的目录，设置其访问权限为777：
+$ sudo mkdir -pv /opt/tftpboot/ $ sudo chmod 777 /opt/tftpboot/ 启动或者重启tftpd-hpa服务：
+$ sudo service tftpd-hpa start // 或者restart 在tftpboot目录下创建一个test.txt文件，启动另外一个终端，输入：
+$ tftp 127.0.0.1 tftp&gt; get test.txt # 获取test.txt文件 tftp&gt; q # 退出tftp 在终端输入ls命令，可以看到当前目录下获取到的test.txt文件。
+开发板烧录程序 启动板子，系统打印如下日志：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b0e49aa83ab70aeced44b35cb40ae012/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2017-10-29T07:34:06+08:00" />
+<meta property="article:modified_time" content="2017-10-29T07:34:06+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">OpenWrt：通过tftp下载程序</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <div class="article fmt article__content"> 
+ <h2>搭建<code>tftp</code>服务器</h2> 
+ <p><code>TFTP</code>（<code>Trivial File Transfer Protocol</code>，简单文件传输协议），是一个基于<code>UDP</code>协议实现的用于在客户机和服务器之间进行简单文件传输的协议，适合于开销不大、不复杂的应用场合。<code>tftp</code>协议专门为小文件传输而设计，只能从服务器上获取文件，或者向服务器写入文件，不能列出目录，也不能进行认证。</p> 
+ <p>在嵌入式<code>Linux</code>开发中，TFTP协议在很多场合都被用到，甚至是必不可少的，特别是在内核调试阶段，在<code>U-Boot</code>下通过<code>tftp</code>协议从服务器上加载内核并运行，既方便又快捷。</p> 
+ <p>一般的发行版默认都没有安装<code>tftp</code>服务以及<code>tftp</code>服务器。<code>tftp</code>服务依赖于网络守护进程服务程序，可选择安装<code>inetd</code>或者升级版的<code>xinetd</code>，然后安装<code>tftp</code>和<code>tftp-server</code>，接着修改或者创建<code>/etc/xinetd.d/tftp</code>配置文件，最后重启<code>xinetd</code>，启动<code>tftp</code>服务。</p> 
+ <p>安装<code>xinetd</code>：</p> 
+ <pre><code>$ sudo apt-get install xinetd</code></pre> 
+ <p>安装<code>tftp</code>和<code>tftpd</code>：</p> 
+ <pre><code>$ sudo apt-get install tftp tftpd</code></pre> 
+ <p>或者安装<code>tftp</code>的增强版本<code>tftp-hpa</code>：</p> 
+ <pre><code>$ sudo apt-get install tftp-hpa tftpd-hpa</code></pre> 
+ <p>建立<code>/etc/default/tftpd-hpa</code>文件，写入如下内容：</p> 
+ <pre><code># /etc/default/tftpd-hpa
+
+TFTP_USERNAME="tftp"
+TFTP_DIRECTORY="/opt/tftpboot"
+TFTP_ADDRESS=":69"
+TFTP_OPTIONS="--secure"</code></pre> 
+ <p>其中<code>TFTP_DIRECTORY</code>设置的<code>/var/tftpboot</code>目录是<code>tftp</code>服务器的目录，设置其访问权限为<code>777</code>：</p> 
+ <pre><code>$ sudo mkdir -pv  /opt/tftpboot/
+$ sudo chmod 777 /opt/tftpboot/</code></pre> 
+ <p>启动或者重启<code>tftpd-hpa</code>服务：</p> 
+ <pre><code>$ sudo service tftpd-hpa start   // 或者restart</code></pre> 
+ <p>在<code>tftpboot</code>目录下创建一个<code>test.txt</code>文件，启动另外一个终端，输入：</p> 
+ <pre><code>$ tftp 127.0.0.1
+tftp&gt; get test.txt     # 获取test.txt文件
+tftp&gt; q                # 退出tftp</code></pre> 
+ <p>在终端输入<code>ls</code>命令，可以看到当前目录下获取到的<code>test.txt</code>文件。</p> 
+ <h2>开发板烧录程序</h2> 
+ <p>启动板子，系统打印如下日志：</p> 
+ <pre><code>U-Boot 1.1.3 (May 31 2017 - 12:06:08)
+
+Board: Ralink APSoC DRAM:  128 MB
+relocate_code Pointer at: 87f60000
+******************************
+Software System Reset Occurred
+******************************
+flash manufacture id: c2, device id 20 18
+find flash: MX25L12805D
+============================================ 
+Ralink UBoot Version: 4.3.0.0
+-------------------------------------------- 
+ASIC 7628_MP (Port5&lt;-&gt;None)
+DRAM component: 1024 Mbits DDR, width 16
+DRAM bus: 16 bit
+Total memory: 128 MBytes
+Flash component: SPI Flash
+Date:May 31 2017  Time:12:06:08
+============================================ 
+icache: sets:512, ways:4, linesz:32 ,total:65536
+dcache: sets:256, ways:4, linesz:32 ,total:32768 
+
+ ##### The CPU freq = 575 MHZ #### 
+ estimate memory size =128 Mbytes
+RESET MT7628 PHY!!!!!!
+Please choose the operation: 
+   1: Load system code to SDRAM via TFTP. 
+   2: Load system code then write to Flash via TFTP. 
+   3: Boot system code via Flash (default).
+   4: Entr boot command line interface.
+   7: Load Boot Loader code then write to Flash via Serial. 
+   9: Load Boot Loader code then write to Flash via TFTP. </code></pre> 
+ <p>出现如上界面后，按下<code>1</code>。如果我们不能保证编译出来的固件是没有问题的，那么这个是最好的选项，因为它只会下载到内存运行而不会影响<code>flash</code>里的代码。</p> 
+ <p>设置相应的<code>IP</code>地址和文件名，按下回车健就可以下载了：</p> 
+ <pre><code>1: System Load Linux to SDRAM via TFTP. 
+ Please Input new ones /or Ctrl-C to discard
+        Input device IP (192.168.1.1) ==:192.168.0.100
+        Input server IP (192.168.1.100) ==:192.168.0.103
+        Input Linux Kernel filename () ==:uImage
+
+ netboot_common, argc= 3 
+
+ NetTxPacket = 0x87FB3380 
+
+ KSEG1ADDR(NetTxPacket) = 0xA7FB3380 
+
+ NetLoop,call eth_halt ! 
+
+ NetLoop,call eth_init ! 
+Trying Eth0 (10/100-M)
+
+ Waitting for RX_DMA_BUSY status Start... done
+
+
+ ETH_STATE_ACTIVE!! 
+TFTP from server 192.168.0.103; our IP address is 192.168.0.100
+Filename 'uImage'.
+
+ TIMEOUT_COUNT=10,Load address: 0x80a00000
+Loading: Got ARP REPLY, set server/gtwy eth addr (58:00:e3:4b:48:01)
+Got it
+#################################################################
+         #################################################################
+         ###############################################################Got ARP REQUEST, return our IP
+##
+         ############################
+done
+Bytes transferred = 1139143 (1161c7 hex)
+NetBootFileXferSize= 001161c7
+Erasing SPI Flash...
+.
+Writing to SPI Flash...
+.
+done</code></pre> 
+ <p>下载完毕后，系统就会自行运行起来，打印如下信息：</p> 
+ <pre><code>Automatic boot of image at addr 0x80A00000 ...
+## Booting image at 80a00000 ...
+   Image Name:   MIPS OpenWrt Linux-3.18.75
+   Image Type:   MIPS Linux Kernel Image (lzma compressed)
+   Data Size:    1139079 Bytes =  1.1 MB
+   Load Address: 80000000
+   Entry Point:  80000000
+   Verifying Checksum ... OK
+   Uncompressing Kernel Image ... OK
+No initrd
+## Transferring control to Linux (at address 80000000) ...
+## Giving linux memsize in MB, 128
+
+Starting kernel ...
+
+[    0.000000] Linux version 3.18.75 (txgcwm@E470) (gcc version 4.8.3 (OpenWrt/Linaro GCC 4.8-2014.04 r49389) ) #5 Sun Oct 22 17:39:20 CST 2017
+[    0.000000] Board has DDR2
+[    0.000000] Analog PMU set to hw control
+[    0.000000] Digital PMU set to hw control
+[    0.000000] SoC Type: MediaTek MT7628AN ver:1 eco:2
+[    0.000000] bootconsole [early0] enabled
+[    0.000000] CPU0 revision is: 00019655 (MIPS 24KEc)
+[    0.000000] Determined physical RAM map:
+[    0.000000]  memory: 08000000 @ 00000000 (usable)
+[    0.000000] Initrd not found or empty - disabling initrd
+[    0.000000] Zone ranges:
+[    0.000000]   Normal   [mem 0x00000000-0x07ffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x00000000-0x07ffffff]
+[    0.000000] Initmem setup node 0 [mem 0x00000000-0x07ffffff]
+[    0.000000] Primary instruction cache 64kB, VIPT, 4-way, linesize 32 bytes.
+[    0.000000] Primary data cache 32kB, 4-way, PIPT, no aliases, linesize 32 bytes
+[    0.000000] No valid device tree found, continuing without
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 32512
+[    0.000000] Kernel command line:  rootfstype=squashfs,jffs2
+[    0.000000] PID hash table entries: 512 (order: -1, 2048 bytes)
+[    0.000000] Dentry cache hash table entries: 16384 (order: 4, 65536 bytes)
+[    0.000000] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes)
+[    0.000000] Writing ErrCtl register=0000aa00
+[    0.000000] Readback ErrCtl register=0000aa00
+[    0.000000] Memory: 126372K/131072K available (2520K kernel code, 127K rwdata, 516K rodata, 156K init, 186K bss, 4700K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=32, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] NR_IRQS:256
+[    0.000000] Kernel panic - not syncing: Failed to find ralink,mt7620a-sysc node
+[    0.000000] ---[ end Kernel panic - not syncing: Failed to find ralink,mt7620a-sysc node</code></pre> 
+ <p>可惜了，这次编译的系统并没有正常运行起来，但<code>tftp</code>功能正确运行起来了。</p> 
+ <p>再次重启的时候，按下<code>4</code>，进入到<code>uboot</code>环境，观察一下环境变量，我们发现第一次的设置它已保存下来了，信息如下：</p> 
+ <pre><code>MT7628 # printenv
+bootcmd=tftp
+bootdelay=1
+baudrate=115200
+ethaddr="00:AA:BB:CC:DD:10"
+tested=1
+filesize=1161c7
+fileaddr=80A00000
+ipaddr=192.168.0.100
+serverip=192.168.0.103
+autostart=no
+bootfile=uImage
+stdin=serial
+stdout=serial
+stderr=serial
+
+Environment size: 226/4092 bytes</code></pre> 
+ <h2>参考文章</h2> 
+ <p><a href="https://www.2cto.com/os/201203/122887.html" rel="nofollow">ubuntu下搭建tftp服务器</a><br><a href="http://www.linuxidc.com/Linux/2013-07/87366.htm" rel="nofollow">Ubuntu下搭建tftp服务器最简单方法</a></p> 
+</div>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1c76d92b876b724ee0c973b626807b68/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">解决多浏览器的兼容问题</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/04f179e2e5e628753a9dbbb02c5b33b1/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">HTML5新增标签有哪些你知道吗？</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

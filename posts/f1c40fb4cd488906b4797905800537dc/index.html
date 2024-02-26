@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MySQL进阶【十二】—— 深挖Innodb事务的多版本控制（MVCC）的实现原理 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MySQL进阶【十二】—— 深挖Innodb事务的多版本控制（MVCC）的实现原理" />
+<meta property="og:description" content="什么是多版本控制 多版本并发控制（Multi-Version Concurrency Control）是MySQL的InnoDB引擎实现隔离级别的一种具体方式。用于实现提交读和可重复读。
+多版本控制的优势 同一行数据平时发生读写请求时，会上锁阻塞住。但mvcc用更好的方式去处理读—写请求，做到在发生读—写请求冲突时不用加锁。这个读是指的快照读，而不是当前读，当前读是一种加锁操作，是悲观锁。 当前读 它读取的数据库记录，都是当前最新的版本，会对当前读取的数据进行加锁，防止其他事务修改数据。是悲观锁的一种操作。
+如下操作都是当前读： select lock in share mode (共享锁)select for update (排他锁)update (排他锁)insert (排他锁)delete (排他锁)串行化事务隔离级别 快照读 快照读的实现是基于多版本并发控制，即MVCC，既然是多版本，那么快照读读到的数据不一定是当前最新的数据，有可能是之前历史版本的数据。
+如下操作是快照读 不加锁的select操作（注：事务级别不是串行化） MVCC 解决了哪些并发问题 mvcc用来解决读—写冲突的无锁并发控制，就是为事务分配单向增长的事务id。为每个数据修改保存一个版本，版本与用回滚指针（roll_pointer）相连。
+解决问题如下：
+并发读-写时：可以做到读操作不阻塞写操作，同时写操作也不会阻塞读操作。解决脏读、不可重复读等事务隔离问题，但不能解决上面的写-写 更新丢失问题。大大提高了并发性 实现原理 隐藏列 通过在每一张表上添加三个隐藏列，来实现不同的版本
+trx_id 表示最近一次对本记录行作修改（insert | update）的事务ID。至于delete操作，InnoDB认为是一个update操作，不过会更新一个另外的删除位，将行表示为deleted。并非真正删除。roll_pointer 回滚指针，指向当前记录行 在 undo log 中上一个版本的数据deleted_bit 删除标记位，因Innodb将delete认为是一次update，所以需要一个删除标记位，标记数据是否删除 Readview (重要) Readview 是mvcc是先多版本控制的关键，通过生成Readview很好的实现了版本之间的隔离，生成Readview时，会将当前活跃的事务id放入Readview中
+结构 low_limit_id : 当前活跃事务的最小IDup_limit_id ：当前活跃事务的最大IDtrx_ids ： 当前活跃事务的ID数组creator_trx_id ：当前创建事务的id号（也可能是试图的ID号） undo_log 一行数据在undo_log中的版本链
+大多数对数据的变更操作包括 insert/update/delete，在InnoDB里，undo log分为如下两类： ①insert undo log : 事务对insert新记录时产生的undo log, 只在事务回滚时需要, 并且在事务提交后就可以立即丢弃。②update undo log : 事务对记录进行delete和update操作时产生的undo log，不仅在事务回滚时需要，快照读也需要，只有当数据库所使用的快照中不涉及该日志记录，对应的回滚日志才会被purge线程删除。 Purge线程：为了实现InnoDB的MVCC机制，更新或者删除操作都只是设置一下旧记录的deleted_bit，并不真正将旧记录删除。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/f1c40fb4cd488906b4797905800537dc/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-10-08T09:48:16+08:00" />
+<meta property="article:modified_time" content="2020-10-08T09:48:16+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MySQL进阶【十二】—— 深挖Innodb事务的多版本控制（MVCC）的实现原理</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>什么是多版本控制</h3> 
+<blockquote> 
+ <p>多版本并发控制（Multi-Version Concurrency Control）是MySQL的InnoDB引擎实现隔离级别的一种具体方式。用于实现提交读和可重复读。</p> 
+</blockquote> 
+<h3><a id="_2"></a>多版本控制的优势</h3> 
+<ul><li>同一行数据平时发生读写请求时，会上锁阻塞住。但<strong>mvcc用更好的方式去处理读—写请求，做到在发生读—写请求冲突时不用加锁。</strong></li><li>这个读是指的<strong>快照读</strong>，而不是<strong>当前读</strong>，当前读是一种加锁操作，是悲观锁。</li></ul> 
+<h5><a id="_5"></a>当前读</h5> 
+<blockquote> 
+ <p>它读取的数据库记录，都是当前最新的版本，会对当前读取的数据进行加锁，防止其他事务修改数据。是悲观锁的一种操作。</p> 
+</blockquote> 
+<ul><li>如下操作都是当前读： 
+  <ul><li>select lock in share mode (共享锁)</li><li>select for update (排他锁)</li><li>update (排他锁)</li><li>insert (排他锁)</li><li>delete (排他锁)</li><li>串行化事务隔离级别</li></ul> </li></ul> 
+<h5><a id="_15"></a>快照读</h5> 
+<blockquote> 
+ <p>快照读的实现是基于多版本并发控制，即MVCC，既然是多版本，那么快照读读到的数据不一定是当前最新的数据，有可能是之前历史版本的数据。</p> 
+</blockquote> 
+<ul><li>如下操作是快照读 
+  <ul><li>不加锁的select操作（注：事务级别不是串行化）</li></ul> </li></ul> 
+<h3><a id="MVCC__19"></a>MVCC 解决了哪些并发问题</h3> 
+<blockquote> 
+ <p>mvcc用来解决读—写冲突的无锁并发控制，就是为事务分配单向增长的事务id。为每个数据修改保存一个版本，版本与用回滚指针（roll_pointer）相连。</p> 
+</blockquote> 
+<ul><li> <p><strong>解决问题如下</strong>：</p> 
+  <ul><li>并发读-写时：可以做到读操作不阻塞写操作，同时写操作也不会阻塞读操作。</li><li>解决脏读、不可重复读等事务隔离问题，但不能解决上面的写-写 更新丢失问题。</li><li><strong>大大提高了并发性</strong></li></ul> </li></ul> 
+<h3><a id="_26"></a>实现原理</h3> 
+<h5><a id="_27"></a>隐藏列</h5> 
+<blockquote> 
+ <p>通过在每一张表上添加三个隐藏列，来实现不同的版本<br> <img src="https://images2.imgbox.com/af/c9/Uxh5qsWn_o.png" alt="在这里插入图片描述"></p> 
+</blockquote> 
+<ul><li>trx_id 表示最近一次对本记录行作修改（insert | update）的事务ID。至于delete操作，InnoDB认为是一个update操作，不过会更新一个另外的删除位，将行表示为deleted。并非真正删除。</li><li>roll_pointer 回滚指针，指向当前记录行 在 undo log 中上一个版本的数据</li><li>deleted_bit 删除标记位，因Innodb将delete认为是一次update，所以需要一个删除标记位，标记数据是否删除</li></ul> 
+<h5><a id="Readview__33"></a>Readview (重要)</h5> 
+<blockquote> 
+ <p>Readview 是mvcc是先多版本控制的关键，通过生成Readview很好的实现了版本之间的隔离，生成Readview时，会将当前活跃的事务id放入Readview中<br> <img src="https://images2.imgbox.com/23/80/OBO5Cgvm_o.png" alt="在这里插入图片描述"></p> 
+</blockquote> 
+<ul><li>结构 
+  <ul><li>low_limit_id : 当前活跃事务的最小ID</li><li>up_limit_id ：当前活跃事务的最大ID</li><li>trx_ids ： 当前活跃事务的ID数组</li><li>creator_trx_id ：当前创建事务的id号（也可能是试图的ID号）</li></ul> </li></ul> 
+<h5><a id="undo_log_41"></a>undo_log</h5> 
+<blockquote> 
+ <p>一行数据在undo_log中的版本链<br> <img src="https://images2.imgbox.com/d4/93/EpF0ZlMn_o.png" alt="在这里插入图片描述"></p> 
+</blockquote> 
+<ul><li>大多数对数据的变更操作包括 insert/update/delete，在InnoDB里，undo log分为如下两类： 
+  <ul><li>①insert undo log : 事务对insert新记录时产生的undo log, 只在事务回滚时需要, 并且在事务提交后就可以立即丢弃。</li><li>②update undo log : 事务对记录进行delete和update操作时产生的undo log，不仅在事务回滚时需要，快照读也需要，只有当数据库所使用的快照中不涉及该日志记录，对应的回滚日志才会被purge线程删除。</li><li> 
+    <blockquote> 
+     <p>Purge线程：为了实现InnoDB的MVCC机制，更新或者删除操作都只是设置一下旧记录的deleted_bit，并不真正将旧记录删除。<br> 为了节省磁盘空间，InnoDB有专门的purge线程来清理deleted_bit为true的记录。purge线程自己也维护了一个read view，如果某个记录的deleted_bit为true，并且DB_TRX_ID相对于purge线程的read view可见，那么这条记录一定是可以被安全清除的。</p> 
+    </blockquote> </li></ul> </li></ul> 
+<h5><a id="_50"></a>可见性比较</h5> 
+<blockquote> 
+ <p>使用Readview和undo_log的版本链，通过比较判断是否可见<br> <img src="https://images2.imgbox.com/6e/72/STqbli3f_o.png" alt="在这里插入图片描述"></p> 
+</blockquote> 
+<ul><li>用trx_id 与 low_limit_id 比较，trx_id &lt; low_limit_id;说明事务已提交</li><li>用trx_id 与 up_limit_id 比较，trx_id &gt;= up_limit_id ;说明事务未提交，不可见</li><li>用 trx_id 分别与low_limit_id、up_limit_id比较；low_limit_id &lt;= trx_id &lt; up_limit_id时；再判断 trx_id 是否在 trx_ids数组中；如果存在，说明事务未提交，不可见；如果不存在说明事务已提交，可见。</li></ul> 
+<h5><a id="_56"></a>示例</h5> 
+<p><img src="https://images2.imgbox.com/89/47/SMhatVv7_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>可重复读级别下 
+  <ul><li>此时生成的readview结构 ： low_limit_id:101,up_limit_id:108,trx_ids[101,104,108],trx_id:105</li><li>108版本，刚好等于up_limit_id，符合第2条，108版本不可见</li><li>101版本，不满足小于low_limit_id的条件，但是101存在于trx_ids，101版本不可见</li><li>102版本，102版本大于low_limit_id切小于up_limit_id。但是102不存在于trx_ids，102版本可见</li></ul> </li></ul> 
+<h3><a id="MVCC_64"></a>可重复读和读已提交的MVCC有何不同</h3> 
+<ul><li>可重复读级别：同一个事务内readview只生成一次，即事务开始后的第一条select语句，后面的所有查询都使用前面生成的readview</li><li>读已提交级别：同一个事务内readview会生成多次，即事务开始后的每一天select语句，都重新生成一个readview，因每次生成的readview不同，就出现了每次select读到的内容不一致</li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1fe9b9b2d6826fdcc105eb4ff822afb6/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">MySQL进阶【十一】—— Innodb 事务的两阶段提交</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/15b630dffe0e1710a3cd295cee748acd/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Nacos启动出现 failed to req API:/nacos/v1/ns/instance after all servers。。。。</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

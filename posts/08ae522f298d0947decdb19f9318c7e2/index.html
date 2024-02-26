@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>4.SpringBoot&#43;Shiro免密登录 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="4.SpringBoot&#43;Shiro免密登录" />
+<meta property="og:description" content="一、查看原有的代码
+首先我们看一下Shiro原有的账号密码登录关键代码，分析一下该如何改造，
+Subject currentUser = ShiroKit.getSubject(); UsernamePasswordToken token = new UsernamePasswordToken(username, password.toCharArray()); 从这两行代码看出，我们需要重写一个获得Token的方法。
+二、改造
+1.新建一个枚举类，这个也可以不建立，因为我这边的系统免密登录和账号密码登录的情况有存在，所以我加了一个枚举类进行判断，用户具体执行哪一个登录方法。
+枚举类具体代码如下：
+package com.stylefeng.guns.core.shiro.secretfree; /** * 登录类型枚举类 */ public enum LoginType { PASSWORD(&#34;password&#34;), // 密码登录 NOPASSWD(&#34;nopassword&#34;); // 免密登录 private String code;// 状态值 private LoginType(String code) { this.code = code; } public String getCode() { return code; } } 2.新建自定义的UserRealem类继承AuthorizingRealm
+package com.stylefeng.guns.core.shiro; import com.stylefeng.guns.core.shiro.ShiroUser; import com.stylefeng.guns.core.shiro.factory.IShiro; import com.stylefeng.guns.core.shiro.factory.ShiroFactroy; import com.stylefeng.guns.core.shiro.secretfree.CustomeToken; import com.stylefeng.guns.core.util.ToolUtil; import com.stylefeng.guns.modular.system.model.User; import com.stylefeng.guns.modular.system.service.IUserService; import org." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/08ae522f298d0947decdb19f9318c7e2/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-24T10:45:50+08:00" />
+<meta property="article:modified_time" content="2023-07-24T10:45:50+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">4.SpringBoot&#43;Shiro免密登录</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>一、查看原有的代码</p> 
+<p>首先我们看一下Shiro原有的账号密码登录关键代码，分析一下该如何改造，</p> 
+<pre><code class="language-java">   Subject currentUser = ShiroKit.getSubject();
+   UsernamePasswordToken token = new UsernamePasswordToken(username, password.toCharArray());</code></pre> 
+<p>从这两行代码看出，我们需要重写一个获得Token的方法。</p> 
+<p>二、改造</p> 
+<p>1.新建一个枚举类，这个也可以不建立，因为我这边的系统免密登录和账号密码登录的情况有存在，所以我加了一个枚举类进行判断，用户具体执行哪一个登录方法。</p> 
+<p>枚举类具体代码如下：</p> 
+<pre><code class="language-java">package com.stylefeng.guns.core.shiro.secretfree;
+
+/**
+ * 登录类型枚举类
+ */
+public enum LoginType {
+    PASSWORD("password"), // 密码登录
+    NOPASSWD("nopassword"); // 免密登录
+    private String code;// 状态值
+
+    private LoginType(String code) {
+        this.code = code;
+    }
+
+    public String getCode() {
+        return code;
+    }
+}</code></pre> 
+<p>2.新建自定义的UserRealem类继承AuthorizingRealm</p> 
+<pre><code class="language-java">package com.stylefeng.guns.core.shiro;
+
+import com.stylefeng.guns.core.shiro.ShiroUser;
+import com.stylefeng.guns.core.shiro.factory.IShiro;
+import com.stylefeng.guns.core.shiro.factory.ShiroFactroy;
+import com.stylefeng.guns.core.shiro.secretfree.CustomeToken;
+import com.stylefeng.guns.core.util.ToolUtil;
+import com.stylefeng.guns.modular.system.model.User;
+import com.stylefeng.guns.modular.system.service.IUserService;
+import org.apache.shiro.authc.*;
+import org.apache.shiro.authz.AuthorizationInfo;
+import org.apache.shiro.authz.SimpleAuthorizationInfo;
+import org.apache.shiro.realm.AuthorizingRealm;
+import org.apache.shiro.subject.PrincipalCollection;
+import org.apache.shiro.util.ByteSource;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+public class UserRealm extends AuthorizingRealm {
+
+    @Autowired
+    private IUserService userService;
+
+    @Override
+    protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principals) {
+   
+
+        IShiro shiroFactory = ShiroFactroy.me();
+        ShiroUser shiroUser = (ShiroUser) principals.getPrimaryPrincipal();
+        List&lt;Integer&gt; roleList = shiroUser.getRoleList();
+
+        Set&lt;String&gt; permissionSet = new HashSet&lt;&gt;();
+        Set&lt;String&gt; roleNameSet = new HashSet&lt;&gt;();
+
+        for (Integer roleId : roleList) {
+            List&lt;String&gt; permissions = shiroFactory.findPermissionsByRoleId(roleId);
+            if (permissions != null) {
+                for (String permission : permissions) {
+                    if (ToolUtil.isNotEmpty(permission)) {
+                        permissionSet.add(permission);
+                    }
+                }
+            }
+            String roleName = shiroFactory.findRoleNameByRoleId(roleId);
+            roleNameSet.add(roleName);
+        }
+
+        SimpleAuthorizationInfo info = new SimpleAuthorizationInfo();
+        info.addStringPermissions(permissionSet);
+        info.addRoles(roleNameSet);
+        return info;
+
+
+    }
+
+    @Override
+    protected AuthenticationInfo doGetAuthenticationInfo(
+            AuthenticationToken authcToken) throws AuthenticationException {
+
+        //增加免密登录功能，使用自定义token
+        CustomeToken token = (CustomeToken) authcToken;
+        IShiro shiroFactory = ShiroFactroy.me();
+        String loginId = (String)token.getPrincipal();
+
+        //先判斷 这个token还是否有效
+        
+
+        User user = userService.getByAccount(loginId);
+
+        if(user == null) {
+            throw new UnknownAccountException();
+        }
+
+        if(user.getStatus() != 1) {
+            throw new LockedAccountException();
+        }
+
+     
+       // User user = shiroFactory.user(token.getUsername());
+        ShiroUser shiroUser = shiroFactory.shiroUser(user);
+        SimpleAuthenticationInfo authenticationInfo = shiroFactory.info(shiroUser, user, getName());
+
+
+        return authenticationInfo;
+
+    }
+
+    /**
+     为了防止出现AuthenticationException 异常覆盖的问题，每个realm中加入support方法
+     */
+    @Override
+    public boolean supports(AuthenticationToken var1){
+        return var1 instanceof CustomeToken;
+    }
+
+}
+</code></pre> 
+<p>3.修改ShiroUser 类的代码</p> 
+<pre><code class="language-java">package com.stylefeng.guns.core.shiro;
+
+import java.io.Serializable;
+import java.util.List;
+
+/**
+ * 自定义Authentication对象，使得Subject除了携带用户的登录名外还可以携带更多信息
+ *
+ * 
+ */
+public class ShiroUser implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    public Integer id;          // 主键ID
+    public String account;      // 账号
+    public String name;         // 姓名
+    public Integer deptId;      // 部门id
+    public List&lt;Integer&gt; roleList; // 角色集
+    public String deptName;        // 部门名称
+    public List&lt;String&gt; roleNames; // 角色名称集
+
+
+    private String station;//岗位
+    private String spaccount;//上级工号
+    private String spname;//上级姓名
+    private Integer astauts;//考核/非考核  1考核 2非考核
+    private String view;//有权查看的人员
+
+    public String getView() {
+        return view;
+    }
+
+    public void setView(String view) {
+        this.view = view;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getAccount() {
+        return account;
+    }
+
+    public void setAccount(String account) {
+        this.account = account;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Integer getDeptId() {
+        return deptId;
+    }
+
+    public void setDeptId(Integer deptId) {
+        this.deptId = deptId;
+    }
+
+    public List&lt;Integer&gt; getRoleList() {
+        return roleList;
+    }
+
+    public void setRoleList(List&lt;Integer&gt; roleList) {
+        this.roleList = roleList;
+    }
+
+    public String getDeptName() {
+        return deptName;
+    }
+
+    public void setDeptName(String deptName) {
+        this.deptName = deptName;
+    }
+
+    public List&lt;String&gt; getRoleNames() {
+        return roleNames;
+    }
+
+    public void setRoleNames(List&lt;String&gt; roleNames) {
+        this.roleNames = roleNames;
+    }
+
+
+    //新增字段
+    public String getStation() {
+        return station;
+    }
+
+    public void setStation(String station) {
+        this.station = station;
+    }
+
+    public String getSpaccount() {
+        return spaccount;
+    }
+
+    public void setSpaccount(String spaccount) {
+        this.spaccount = spaccount;
+    }
+
+    public String getSpname() {
+        return spname;
+    }
+
+    public void setSpname(String spname) {
+        this.spname = spname;
+    }
+
+    public Integer getAstauts() {
+        return astauts;
+    }
+
+    public void setAstauts(Integer astauts) {
+        this.astauts = astauts;
+    }
+
+    @Override
+    public String toString() {
+        return "ShiroUser{" +
+                "id=" + id +
+                ", account='" + account + '\'' +
+                ", name='" + name + '\'' +
+                ", deptId=" + deptId +
+                ", roleList=" + roleList +
+                ", deptName='" + deptName + '\'' +
+                ", roleNames=" + roleNames +
+                ", station='" + station + '\'' +
+                ", spaccount='" + spaccount + '\'' +
+                ", spname='" + spname + '\'' +
+                ", astauts=" + astauts +
+                '}';
+    }
+}
+</code></pre> 
+<p>4.修改ShiroDBRealm类的代码</p> 
+<pre><code class="language-java">package com.stylefeng.guns.core.shiro;
+
+import com.stylefeng.guns.core.shiro.factory.IShiro;
+import com.stylefeng.guns.core.shiro.factory.ShiroFactroy;
+import com.stylefeng.guns.core.util.ToolUtil;
+import com.stylefeng.guns.modular.system.model.User;
+import org.apache.shiro.authc.*;
+import org.apache.shiro.authc.credential.CredentialsMatcher;
+import org.apache.shiro.authc.credential.HashedCredentialsMatcher;
+import org.apache.shiro.authz.AuthorizationInfo;
+import org.apache.shiro.authz.SimpleAuthorizationInfo;
+import org.apache.shiro.crypto.hash.Md5Hash;
+import org.apache.shiro.realm.AuthorizingRealm;
+import org.apache.shiro.subject.PrincipalCollection;
+import org.apache.shiro.util.ByteSource;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+public class ShiroDbRealm extends AuthorizingRealm {
+
+    /**
+     * 登录认证
+     */
+    @Override
+    protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authcToken)
+            throws AuthenticationException {
+        IShiro shiroFactory = ShiroFactroy.me();
+        //免密登陆新增代码
+        //CustomeToken token = (CustomeToken) authcToken;
+
+
+
+        UsernamePasswordToken token = (UsernamePasswordToken) authcToken;
+
+        User user = shiroFactory.user(token.getUsername());
+        ShiroUser shiroUser = shiroFactory.shiroUser(user);
+
+        //原先的代码
+        SimpleAuthenticationInfo info = shiroFactory.info(shiroUser, user, super.getName());
+
+        return info;
+
+  
+
+    }
+
+    /**
+     * 权限认证
+     */
+    @Override
+    protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principals) {
+        IShiro shiroFactory = ShiroFactroy.me();
+        ShiroUser shiroUser = (ShiroUser) principals.getPrimaryPrincipal();
+        List&lt;Integer&gt; roleList = shiroUser.getRoleList();
+
+        Set&lt;String&gt; permissionSet = new HashSet&lt;&gt;();
+        Set&lt;String&gt; roleNameSet = new HashSet&lt;&gt;();
+
+        for (Integer roleId : roleList) {
+            List&lt;String&gt; permissions = shiroFactory.findPermissionsByRoleId(roleId);
+            if (permissions != null) {
+                for (String permission : permissions) {
+                    if (ToolUtil.isNotEmpty(permission)) {
+                        permissionSet.add(permission);
+                    }
+                }
+            }
+            String roleName = shiroFactory.findRoleNameByRoleId(roleId);
+            roleNameSet.add(roleName);
+        }
+
+        SimpleAuthorizationInfo info = new SimpleAuthorizationInfo();
+        info.addStringPermissions(permissionSet);
+        info.addRoles(roleNameSet);
+        return info;
+    }
+
+    /**
+     * 设置认证加密方式
+     */
+    @Override
+    public void setCredentialsMatcher(CredentialsMatcher credentialsMatcher) {
+
+        HashedCredentialsMatcher md5CredentialsMatcher = new HashedCredentialsMatcher();
+        md5CredentialsMatcher.setHashAlgorithmName(ShiroKit.hashAlgorithmName);
+        md5CredentialsMatcher.setHashIterations(ShiroKit.hashIterations);
+        super.setCredentialsMatcher(md5CredentialsMatcher);
+
+
+    }
+
+    /**
+     为了防止出现AuthenticationException 异常覆盖的问题，每个realm中加入support方法
+     */
+    @Override
+    public boolean supports(AuthenticationToken var1){
+        return var1 instanceof UsernamePasswordToken;
+    }
+}
+</code></pre> 
+<p>5.修改Login的具体方法</p> 
+<pre><code class="language-java">  Subject currentUser = ShiroKit.getSubject();
+        //增加免密登录功能，使用自定义token
+        CustomeToken customeToken = new CustomeToken(username);
+        currentUser.login(customeToken);
+
+
+        ShiroUser shiroUser = ShiroKit.getUser();
+        super.getSession().setAttribute("shiroUser", shiroUser);
+        super.getSession().setAttribute("username", shiroUser.getAccount());
+
+
+        //登录日志记录
+        //LogManager.me().executeLog(LogTaskFactory.loginLog(shiroUser.getId(), getIp()));
+
+        ShiroKit.getSession().setAttribute("sessionFlag", true);</code></pre> 
+<p>6.到此，Shiro免密登录改造完成。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a19cb0f2579a0393ccc58f2f48250894/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【Linux】gdb安装、执行与调试</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/381208bbd05bc4b7eeef7b1ecaf172ef/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">vue项目之使用md5加密密码</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

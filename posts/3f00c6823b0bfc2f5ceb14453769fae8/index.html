@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Ceph部署 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Ceph部署" />
+<meta property="og:description" content="目录
+1、存储基础
+2、Ceph 简介
+3、Ceph 优势
+4、Ceph 架构
+5、Ceph 核心组件
+6、OSD 存储后端
+7、Ceph 数据的存储过程
+8、Ceph 版本发行生命周期
+-------------------- 基于 ceph-deploy 部署 Ceph 集群 --------------------
+//部署 Ceph 集群
+//资源池 Pool 管理 1、存储基础 //单机存储设备
+●DAS（直接附加存储，是直接接到计算机的主板总线上去的存储）
+IDE、SATA、SCSI、SAS、USB 接口的磁盘
+所谓接口就是一种存储设备驱动下的磁盘设备，提供块级别的存储
+●NAS（网络附加存储，是通过网络附加到当前主机文件系统之上的存储）
+NFS、CIFS、FTP
+文件系统级别的存储，本身就是一个做好的文件系统，通过nfs接口在用户空间输出后，客户端基于内核模块与远程主机进行网络通信，把它转为好像本地文件系统一样来使用，这种存储服务是没办法对它再一次格式化创建文件系统块的
+●SAN（存储区域网络）
+SCSI协议（只是用来传输数据的存取操作，物理层使用SCSI线缆来传输）、FCSAN（物理层使用光纤来传输）、iSCSI（物理层使用以太网来传输）
+也是一种网络存储，但不同之处在于SAN提供给客户端主机使用的接口是块级别的存储
+#单机存储的问题
+●存储处理能力不足
+传统的IDE的IO值是100次/秒，SATA固态磁盘500次/秒，固态硬盘达到2000-4000次/秒。即使磁盘的IO能力再大数十倍，也不够抗住网站访问高峰期数十万、数百万甚至上亿用户的同时访问，这同时还要受到主机网络IO能力的限制。
+●存储空间能力不足
+单块磁盘的容量再大，也无法满足用户的正常访问所需的数据容量限制。
+●单点故障问题
+单机存储数据存在单点故障问题
+//商业存储解决方案
+EMC、NetAPP、IBM、DELL、华为、浪潮
+//分布式存储（软件定义的存储 SDS）
+Ceph、TFS、FastDFS、MooseFS（MFS）、HDFS、GlusterFS（GFS）
+存储机制会把数据分散存储到多个节点上，具有高扩展性、高性能、高可用性等优点。
+#分布式存储的类型
+●块存储（例如硬盘，一般是一个存储被一个服务器挂载使用，适用于容器或虚拟机存储卷分配、日志存储、文件存储）
+就是一个裸设备，用于提供没有被组织过的存储空间，底层以分块的方式来存储数据
+●文件存储（例如NFS，解决块存储无法共享问题，可以一个存储被多个服务器同时挂载，适用于目录结构的存储、日志存储）
+是一种数据的组织存放接口，一般是建立在块级别的存储结构之上，以文件形式来存储数据，而文件的元数据和实际数据是分开存储的
+●对象存储（例如OSS，一个存储可以被多服务同时访问，具备块存储的高速读写能力，也具备文件存储共享的特性，适用图片存储、视频存储）
+基于API接口提供的文件存储，每一个文件都是一个对象，且文件大小各不相同的，文件的元数据和实际数据是存放在一起的
+2、Ceph 简介 Ceph使用C&#43;&#43;语言开发，是一个开放、自我修复和自我管理的开源分布式存储系统。具有高扩展性、高性能、高可靠性的优点。
+Ceph目前已得到众多云计算厂商的支持并被广泛应用。RedHat及OpenStack，Kubernetes都可与Ceph整合以支持虚拟机镜像的后端存储。
+粗略估计，我国70%—80%的云平台都将Ceph作为底层的存储平台，由此可见Ceph俨然成为了开源云平台的标配。目前国内使用Ceph搭建分布式存储系统较为成功的企业有华为、阿里、中兴、华三、浪潮、中国移动、网易、乐视、360、星辰天合存储、杉岩数据等。 3、Ceph 优势 ●高扩展性：去中心化，支持使用普通X86服务器，支持上千个存储节点的规模，支持TB到EB级的扩展。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/3f00c6823b0bfc2f5ceb14453769fae8/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-26T09:02:38+08:00" />
+<meta property="article:modified_time" content="2024-01-26T09:02:38+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Ceph部署</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="-toc" style="margin-left:120px;"></p> 
+<p id="1%E3%80%81%E5%AD%98%E5%82%A8%E5%9F%BA%E7%A1%80-toc" style="margin-left:120px;"><a href="#1%E3%80%81%E5%AD%98%E5%82%A8%E5%9F%BA%E7%A1%80" rel="nofollow">1、存储基础</a></p> 
+<p id="2%E3%80%81Ceph%20%E7%AE%80%E4%BB%8B-toc" style="margin-left:120px;"><a href="#2%E3%80%81Ceph%20%E7%AE%80%E4%BB%8B" rel="nofollow">2、Ceph 简介</a></p> 
+<p id="3%E3%80%81Ceph%20%E4%BC%98%E5%8A%BF-toc" style="margin-left:120px;"><a href="#3%E3%80%81Ceph%20%E4%BC%98%E5%8A%BF" rel="nofollow">3、Ceph 优势</a></p> 
+<p id="4%E3%80%81Ceph%20%E6%9E%B6%E6%9E%84-toc" style="margin-left:120px;"><a href="#4%E3%80%81Ceph%20%E6%9E%B6%E6%9E%84" rel="nofollow">4、Ceph 架构</a></p> 
+<p id="5%E3%80%81Ceph%20%E6%A0%B8%E5%BF%83%E7%BB%84%E4%BB%B6-toc" style="margin-left:120px;"><a href="#5%E3%80%81Ceph%20%E6%A0%B8%E5%BF%83%E7%BB%84%E4%BB%B6" rel="nofollow">5、Ceph 核心组件</a></p> 
+<p id="6%E3%80%81OSD%20%E5%AD%98%E5%82%A8%E5%90%8E%E7%AB%AF-toc" style="margin-left:120px;"><a href="#6%E3%80%81OSD%20%E5%AD%98%E5%82%A8%E5%90%8E%E7%AB%AF" rel="nofollow">6、OSD 存储后端</a></p> 
+<p id="7%E3%80%81Ceph%20%E6%95%B0%E6%8D%AE%E7%9A%84%E5%AD%98%E5%82%A8%E8%BF%87%E7%A8%8B-toc" style="margin-left:120px;"><a href="#7%E3%80%81Ceph%20%E6%95%B0%E6%8D%AE%E7%9A%84%E5%AD%98%E5%82%A8%E8%BF%87%E7%A8%8B" rel="nofollow">7、Ceph 数据的存储过程</a></p> 
+<p id="8%E3%80%81Ceph%20%E7%89%88%E6%9C%AC%E5%8F%91%E8%A1%8C%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F-toc" style="margin-left:120px;"><a href="#8%E3%80%81Ceph%20%E7%89%88%E6%9C%AC%E5%8F%91%E8%A1%8C%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F" rel="nofollow">8、Ceph 版本发行生命周期</a></p> 
+<p id="--------------------%20%E5%9F%BA%E4%BA%8E%20ceph-deploy%20%E9%83%A8%E7%BD%B2%20Ceph%20%E9%9B%86%E7%BE%A4%20---------------------toc" style="margin-left:120px;"><a href="#--------------------%20%E5%9F%BA%E4%BA%8E%20ceph-deploy%20%E9%83%A8%E7%BD%B2%20Ceph%20%E9%9B%86%E7%BE%A4%20--------------------" rel="nofollow">-------------------- 基于 ceph-deploy 部署 Ceph 集群 --------------------</a></p> 
+<p id="%2F%2F%E9%83%A8%E7%BD%B2%20Ceph%20%E9%9B%86%E7%BE%A4-toc" style="margin-left:120px;"><a href="#%2F%2F%E9%83%A8%E7%BD%B2%20Ceph%20%E9%9B%86%E7%BE%A4" rel="nofollow">//部署 Ceph 集群</a></p> 
+<p id="%2F%2F%E8%B5%84%E6%BA%90%E6%B1%A0%20Pool%20%E7%AE%A1%E7%90%86%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0-toc" style="margin-left:80px;"><a href="#%2F%2F%E8%B5%84%E6%BA%90%E6%B1%A0%20Pool%20%E7%AE%A1%E7%90%86%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0" rel="nofollow">//资源池 Pool 管理        </a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h5 id="1%E3%80%81%E5%AD%98%E5%82%A8%E5%9F%BA%E7%A1%80">1、存储基础</h5> 
+<p>//单机存储设备<br> ●DAS（直接附加存储，是直接接到计算机的主板总线上去的存储）<br> IDE、SATA、SCSI、SAS、USB 接口的磁盘<br> 所谓接口就是一种存储设备驱动下的磁盘设备，提供块级别的存储</p> 
+<p>●NAS（网络附加存储，是通过网络附加到当前主机文件系统之上的存储）<br> NFS、CIFS、FTP<br> 文件系统级别的存储，本身就是一个做好的文件系统，通过nfs接口在用户空间输出后，客户端基于内核模块与远程主机进行网络通信，把它转为好像本地文件系统一样来使用，这种存储服务是没办法对它再一次格式化创建文件系统块的</p> 
+<p>●SAN（存储区域网络）<br> SCSI协议（只是用来传输数据的存取操作，物理层使用SCSI线缆来传输）、FCSAN（物理层使用光纤来传输）、iSCSI（物理层使用以太网来传输）<br> 也是一种网络存储，但不同之处在于SAN提供给客户端主机使用的接口是块级别的存储</p> 
+<p><br> #单机存储的问题<br> ●存储处理能力不足<br> 传统的IDE的IO值是100次/秒，SATA固态磁盘500次/秒，固态硬盘达到2000-4000次/秒。即使磁盘的IO能力再大数十倍，也不够抗住网站访问高峰期数十万、数百万甚至上亿用户的同时访问，这同时还要受到主机网络IO能力的限制。</p> 
+<p>●存储空间能力不足<br> 单块磁盘的容量再大，也无法满足用户的正常访问所需的数据容量限制。</p> 
+<p>●单点故障问题<br> 单机存储数据存在单点故障问题</p> 
+<p><br> //商业存储解决方案<br> EMC、NetAPP、IBM、DELL、华为、浪潮</p> 
+<p><br> //分布式存储（软件定义的存储 SDS）<br> Ceph、TFS、FastDFS、MooseFS（MFS）、HDFS、GlusterFS（GFS）<br> 存储机制会把数据分散存储到多个节点上，具有高扩展性、高性能、高可用性等优点。</p> 
+<p>#分布式存储的类型<br> ●块存储（例如硬盘，一般是一个存储被一个服务器挂载使用，适用于容器或虚拟机存储卷分配、日志存储、文件存储）<br> 就是一个裸设备，用于提供没有被组织过的存储空间，底层以分块的方式来存储数据</p> 
+<p>●文件存储（例如NFS，解决块存储无法共享问题，可以一个存储被多个服务器同时挂载，适用于目录结构的存储、日志存储）<br> 是一种数据的组织存放接口，一般是建立在块级别的存储结构之上，以文件形式来存储数据，而文件的元数据和实际数据是分开存储的</p> 
+<p>●对象存储（例如OSS，一个存储可以被多服务同时访问，具备块存储的高速读写能力，也具备文件存储共享的特性，适用图片存储、视频存储）<br> 基于API接口提供的文件存储，每一个文件都是一个对象，且文件大小各不相同的，文件的元数据和实际数据是存放在一起的</p> 
+<h5 id="2%E3%80%81Ceph%20%E7%AE%80%E4%BB%8B"><br> 2、Ceph 简介</h5> 
+<p>Ceph使用C++语言开发，是一个开放、自我修复和自我管理的开源分布式存储系统。具有高扩展性、高性能、高可靠性的优点。</p> 
+<p>Ceph目前已得到众多云计算厂商的支持并被广泛应用。RedHat及OpenStack，Kubernetes都可与Ceph整合以支持虚拟机镜像的后端存储。<br> 粗略估计，我国70%—80%的云平台都将Ceph作为底层的存储平台，由此可见Ceph俨然成为了开源云平台的标配。目前国内使用Ceph搭建分布式存储系统较为成功的企业有华为、阿里、中兴、华三、浪潮、中国移动、网易、乐视、360、星辰天合存储、杉岩数据等。 </p> 
+<h5 id="3%E3%80%81Ceph%20%E4%BC%98%E5%8A%BF"><br> 3、Ceph 优势</h5> 
+<p>●高扩展性：去中心化，支持使用普通X86服务器，支持上千个存储节点的规模，支持TB到EB级的扩展。<br> ●高可靠性：没有单点故障，多数据副本，自动管理，自动修复。<br> ●高性能：摒弃了传统的集中式存储元数据寻址的方案，采用 CRUSH 算法，数据分布均衡，并行度高。<br> ●功能强大：Ceph是个大一统的存储系统，集块存储接口（RBD）、文件存储接口（CephFS）、对象存储接口（RadosGW）于一身，因而适用于不同的应用场景。</p> 
+<h5 id="4%E3%80%81Ceph%20%E6%9E%B6%E6%9E%84"><br> 4、Ceph 架构</h5> 
+<p>自下向上，可以将Ceph系统分为四个层次:<br> ●RADOS 基础存储系统（Reliab1e，Autonomic，Distributed object store，即可靠的、自动化的、分布式的对象存储）<br> RADOS是Ceph最底层的功能模块，是一个无限可扩容的对象存储服务，能将文件拆解成无数个对象（碎片）存放在硬盘中，大大提高了数据的稳定性。它主要由OSD和Monitor两个组件组成，OSD和Monitor都可以部署在多台服务器中，这就是ceph分布式的由来，高扩展性的由来。</p> 
+<p>●LIBRADOS 基础库<br> Librados提供了与RADOS进行交互的方式，并向上层应用提供Ceph服务的API接口，因此上层的RBD、RGW和CephFS都是通过Librados访问的，目前提供PHP、Ruby、Java、Python、Go、C和C++支持，以便直接基于RADOS（而不是整个Ceph）进行客户端应用开发。</p> 
+<p>●高层应用接口：包括了三个部分<br> 1）对象存储接口 RGW（RADOS Gateway）<br> 网关接口，基于Librados开发的对象存储系统，提供S3和Swift兼容的RESTful API接口。</p> 
+<p>2）块存储接口 RBD（Reliable Block Device）<br> 基于Librados提供块设备接口，主要用于Host/VM。</p> 
+<p>3）文件存储接口 CephFS（Ceph File System）<br> Ceph文件系统，提供了一个符合POSIX标准的文件系统，它使用Ceph存储集群在文件系统上存储用户数据。基于Librados提供的分布式文件系统接口。</p> 
+<p>●应用层：基于高层接口或者基础库Librados开发出来的各种APP，或者Host、VM等诸多客户端</p> 
+<h5 id="5%E3%80%81Ceph%20%E6%A0%B8%E5%BF%83%E7%BB%84%E4%BB%B6"><br> 5、Ceph 核心组件</h5> 
+<p>Ceph是一个对象式存储系统，它把每一个待管理的数据流（如文件等数据）切分为一到多个固定大小（默认4兆）的对象数据（Object），并以其为原子单元（原子是构成元素的最小单元）完成数据的读写。</p> 
+<p>●OSD（Object Storage Daemon，守护进程 ceph-osd）<br> 是负责物理存储的进程，一般配置成和磁盘一一对应，一块磁盘启动一个OSD进程。主要功能是存储数据、复制数据、平衡数据、恢复数据，以及与其它OSD间进行心跳检查，负责响应客户端请求返回具体数据的进程等。通常至少需要3个OSD来实现冗余和高可用性。</p> 
+<p>●PG（Placement Group 归置组）<br> PG 是一个虚拟的概念而已，物理上不真实存在。它在数据寻址时类似于数据库中的索引：Ceph 先将每个对象数据通过HASH算法固定映射到一个 PG 中，然后将 PG 通过 CRUSH 算法映射到 OSD。</p> 
+<p>●Pool<br> Pool 是存储对象的逻辑分区，它起到 namespace 的作用。每个 Pool 包含一定数量（可配置）的 PG。Pool 可以做故障隔离域，根据不同的用户场景统一进行隔离。</p> 
+<p>#Pool中数据保存方式支持两种类型：<br> ●多副本（replicated）：类似 raid1，一个对象数据默认保存 3 个副本，放在不同的 OSD<br> ●纠删码（Erasure Code）：类似 raid5，对 CPU 消耗稍大，但是节约磁盘空间，对象数据保存只有 1 个副本。由于Ceph部分功能不支持纠删码池，此类型存储池使用不多</p> 
+<p>#Pool、PG 和 OSD 的关系：<br> 一个Pool里有很多个PG；一个PG里包含一堆对象，一个对象只能属于一个PG；PG有主从之分，一个PG分布在不同的OSD上（针对多副本类型）</p> 
+<p>●Monitor（守护进程 ceph-mon）<br> 用来保存OSD的元数据。负责维护集群状态的映射视图（Cluster Map：OSD Map、Monitor Map、PG Map 和 CRUSH Map），维护展示集群状态的各种图表， 管理集群客户端认证与授权。一个Ceph集群通常至少需要 3 或 5 个（奇数个）Monitor 节点才能实现冗余和高可用性，它们通过 Paxos 协议实现节点间的同步数据。</p> 
+<p>●Manager（守护进程 ceph-mgr）<br> 负责跟踪运行时指标和 Ceph 集群的当前状态，包括存储利用率、当前性能指标和系统负载。为外部监视和管理系统提供额外的监视和接口，例如 zabbix、prometheus、 cephmetrics 等。一个 Ceph 集群通常至少需要 2 个 mgr 节点实现高可用性，基于 raft 协议实现节点间的信息同步。</p> 
+<p>●MDS（Metadata Server，守护进程 ceph-mds）<br> 是 CephFS 服务依赖的元数据服务。负责保存文件系统的元数据，管理目录结构。对象存储和块设备存储不需要元数据服务；如果不使用 CephFS 可以不安装。</p> 
+<h5 id="6%E3%80%81OSD%20%E5%AD%98%E5%82%A8%E5%90%8E%E7%AB%AF"><br> 6、OSD 存储后端</h5> 
+<p>OSD 有两种方式管理它们存储的数据。在 Luminous 12.2.z 及以后的发行版中，默认（也是推荐的）后端是 BlueStore。在 Luminous 发布之前， 默认是 FileStore， 也是唯一的选项。<br> ●Filestore<br> FileStore是在Ceph中存储对象的一个遗留方法。它依赖于一个标准文件系统（只能是XFS)，并结合一个键/值数据库（传统上是LevelDB，现在BlueStore是RocksDB），用于保存和管理元数据。<br> FileStore经过了良好的测试，在生产中得到了广泛的应用。然而，由于它的总体设计和对传统文件系统的依赖，使得它在性能上存在许多不足。</p> 
+<p>●Bluestore<br> BlueStore是一个特殊用途的存储后端，专门为OSD工作负载管理磁盘上的数据而设计。BlueStore 的设计是基于十年来支持和管理 Filestore 的经验。BlueStore 相较于 Filestore，具有更好的读写性能和安全性。</p> 
+<p>#BlueStore 的主要功能包括：<br> 1）BlueStore直接管理存储设备，即直接使用原始块设备或分区管理磁盘上的数据。这样就避免了抽象层的介入（例如本地文件系统，如XFS)，因为抽象层会限制性能或增加复杂性。<br> 2）BlueStore使用RocksDB进行元数据管理。RocksDB的键/值数据库是嵌入式的，以便管理内部元数据，包括将对象名称映射到磁盘上的块位置。<br> 3）写入BlueStore的所有数据和元数据都受一个或多个校验和的保护。未经验证，不会从磁盘读取或返回给用户任何数据或元数据。<br> 4）支持内联压缩。数据在写入磁盘之前可以选择性地进行压缩。<br> 5）支持多设备元数据分层。BlueStore允许将其内部日志（WAL预写日志）写入单独的高速设备（如SSD、NVMe或NVDIMM)，以提高性能。如果有大量更快的可用存储，则可以将内部元数据存储在更快的设备上。<br> 6）支持高效的写时复制。RBD和CephFS快照依赖于在BlueStore中有效实现的即写即复制克隆机制。这将为常规快照和擦除编码池（依赖克隆实现高效的两阶段提交）带来高效的I/O。</p> 
+<h5 id="7%E3%80%81Ceph%20%E6%95%B0%E6%8D%AE%E7%9A%84%E5%AD%98%E5%82%A8%E8%BF%87%E7%A8%8B"><br> 7、Ceph 数据的存储过程</h5> 
+<p>1）客户端从 mon 获取最新的 Cluster Map</p> 
+<p>2）在 Ceph 中，一切皆对象。Ceph 存储的数据都会被切分成为一到多个固定大小的对象（Object）。Object size 大小可以由管理员调整，通常为 2M 或 4M。<br> 每个对象都会有一个唯一的 OID，由 ino 与 ono 组成：<br> ●ino ：即是文件的 FileID，用于在全局唯一标识每一个文件<br> ●ono ：则是分片的编号<br> 比如：一个文件 FileID 为 A，它被切成了两个对象，一个对象编号0，另一个编号1，那么这两个文件的 oid 则为 A0 与 A1。<br> OID 的好处是可以唯一标示每个不同的对象，并且存储了对象与文件的从属关系。由于 Ceph 的所有数据都虚拟成了整齐划一的对象，所以在读写时效率都会比较高。</p> 
+<p>3）通过对 OID 使用 HASH 算法得到一个16进制的特征码，用特征码与 Pool 中的 PG 总数取余，得到的序号则是 PGID 。<br> 即 Pool_ID + HASH(OID) % PG_NUM 得到 PGID</p> 
+<p>4）PG 会根据设置的副本数量进行复制，通过对 PGID 使用 CRUSH 算法算出 PG 中目标主和次 OSD 的 ID，存储到不同的 OSD 节点上（其实是把 PG 中的所有对象存储到 OSD 上）。<br> 即通过 CRUSH(PGID) 得到将 PG 中的数据存储到各个 OSD 组中<br> CRUSH 是 Ceph 使用的数据分布算法，类似一致性哈希，让数据分配到预期的地方。</p> 
+<h5 id="8%E3%80%81Ceph%20%E7%89%88%E6%9C%AC%E5%8F%91%E8%A1%8C%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F"><br> 8、Ceph 版本发行生命周期</h5> 
+<p>Ceph从Nautilus版本（14.2.0）开始，每年都会有一个新的稳定版发行，预计是每年的3月份发布，每年的新版本都会起一个新的名称（例如，“Mimic”）和一个主版本号（例如，13代表Mimic，因为“M”是字母表的第13个字母）。</p> 
+<p>版本号的格式为 x.y.z，x 表示发布周期（例如，13 代表 Mimic，17 代表 Quincy），y 表示发布版本类型，即<br> ● x.0.z ：y等于 0，表示开发版本<br> ● x.1.z ：y等于 1，表示发布候选版本（用于测试集群）<br> ● x.2.z ：y等于 2，表示稳定/错误修复版本（针对用户）</p> 
+<p><br> 9、Ceph 集群部署</p> 
+<p>目前 Ceph 官方提供很多种部署 Ceph 集群的方法，常用的分别是 ceph-deploy，cephadm 和 二进制：<br> ●ceph-deploy ：一个集群自动化部署工具，使用较久，成熟稳定，被很多自动化工具所集成，可用于生产部署。</p> 
+<p>●cephadm ：从 Octopus 和较新的版本版本后使用 cephadm 来部署 ceph 集群，使用容器和 systemd 安装和管理 Ceph 集群。目前不建议用于生产环境。</p> 
+<p>●二进制：手动部署，一步步部署 Ceph 集群，支持较多定制化和了解部署细节，安装难度较大。</p> 
+<h5 id="--------------------%20%E5%9F%BA%E4%BA%8E%20ceph-deploy%20%E9%83%A8%E7%BD%B2%20Ceph%20%E9%9B%86%E7%BE%A4%20--------------------"><br> -------------------- 基于 ceph-deploy 部署 Ceph 集群 --------------------</h5> 
+<p>//Ceph 生产环境推荐：<br> 1、存储集群全采用万兆网络<br> 2、集群网络（cluster-network，用于集群内部通讯）与公共网络（public-network，用于外部访问Ceph集群）分离<br> 3、mon、mds 与 osd 分离部署在不同主机上（测试环境中可以让一台主机节点运行多个组件）<br> 4、OSD 使用 SATA 亦可<br> 5、根据容量规划集群<br> 6、至强E5 2620 V3或以上 CPU，64GB或更高内存<br> 7、集群主机分散部署，避免机柜的电源或者网络故障</p> 
+<p><br> //Ceph 环境规划<br> 主机名                Public网络                Cluster网络                角色<br> admin                192.168.80.10                                    admin（管理节点负责集群整体部署）、client<br> node01                192.168.80.11            192.168.100.11            mon、mgr、osd（/dev/sdb、/dev/sdc、/dev/sdd）<br> node02                192.168.80.12            192.168.100.12            mon、mgr、osd（/dev/sdb、/dev/sdc、/dev/sdd）<br> node03                192.168.80.13            192.168.100.13            mon、osd（/dev/sdb、/dev/sdc、/dev/sdd）<br> client                192.168.80.14                                    client</p> 
+<p><br> //环境准备<br> 可选步骤：创建 Ceph 的管理用户<br> useradd cephadm<br> passwd cephadm</p> 
+<p>visudo<br> cephadm ALL=(root) NOPASSWD:ALL</p> 
+<p><br> 1、关闭 selinux 与防火墙<br> systemctl disable --now firewalld<br> setenforce 0<br> sed -i 's/enforcing/disabled/' /etc/selinux/config</p> 
+<p><br> 2、根据规划设置主机名<br> hostnamectl set-hostname admin<br> hostnamectl set-hostname node01<br> hostnamectl set-hostname node02<br> hostnamectl set-hostname node03<br> hostnamectl set-hostname client</p> 
+<p><br> 3、配置 hosts 解析<br> cat &gt;&gt; /etc/hosts &lt;&lt; EOF<br> 192.168.80.10 admin<br> 192.168.80.11 node01<br> 192.168.80.12 node02<br> 192.168.80.13 node03<br> 192.168.80.14 client<br> EOF</p> 
+<p><br> 4、安装常用软件和依赖包<br> yum -y install epel-release<br> yum -y install yum-plugin-priorities yum-utils ntpdate python-setuptools python-pip gcc gcc-c++ autoconf libjpeg libjpeg-devel libpng libpng-devel freetype freetype-devel libxml2 libxml2-devel zlib zlib-devel glibc glibc-devel glib2 glib2-devel bzip2 bzip2-devel zip unzip ncurses ncurses-devel curl curl-devel e2fsprogs e2fsprogs-devel krb5-devel libidn libidn-devel openssl openssh openssl-devel nss_ldap openldap openldap-devel openldap-clients openldap-servers libxslt-devel libevent-devel ntp libtool-ltdl bison libtool vim-enhanced python wget lsof iptraf strace lrzsz kernel-devel kernel-headers pam-devel tcl tk cmake ncurses-devel bison setuptool popt-devel net-snmp screen perl-devel pcre-devel net-snmp screen tcpdump rsync sysstat man iptables sudo libconfig git bind-utils tmux elinks numactl iftop bwm-ng net-tools expect snappy leveldb gdisk python-argparse gperftools-libs conntrack ipset jq libseccomp socat chrony sshpass</p> 
+<p><br> 5、在 admin 管理节点配置 ssh 免密登录所有节点<br> ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa<br> sshpass -p 'abc1234' ssh-copy-id -o StrictHostKeyChecking=no root@admin<br> sshpass -p 'abc1234' ssh-copy-id -o StrictHostKeyChecking=no root@node01<br> sshpass -p 'abc1234' ssh-copy-id -o StrictHostKeyChecking=no root@node02<br> sshpass -p 'abc1234' ssh-copy-id -o StrictHostKeyChecking=no root@node03</p> 
+<p><br> 6、配置时间同步<br> systemctl enable --now chronyd<br> timedatectl set-ntp true                    #开启 NTP<br> timedatectl set-timezone Asia/Shanghai        #设置时区<br> chronyc -a makestep                            #强制同步下系统时钟<br> timedatectl status                            #查看时间同步状态<br> chronyc sources -v                            #查看 ntp 源服务器信息<br> timedatectl set-local-rtc 0                    #将当前的UTC时间写入硬件时钟</p> 
+<p>#重启依赖于系统时间的服务<br> systemctl restart rsyslog <br> systemctl restart crond</p> 
+<p>#关闭无关服务<br> systemctl disable --now postfix</p> 
+<p><br> 7、配置 Ceph yum源<br> wget https://download.ceph.com/rpm-nautilus/el7/noarch/ceph-release-1-1.el7.noarch.rpm --no-check-certificate</p> 
+<p>rpm -ivh ceph-release-1-1.el7.noarch.rpm --force</p> 
+<p><br> 8、执行完上面所有的操作之后重启所有主机（可选）<br> sync<br> reboot</p> 
+<h5 id="%2F%2F%E9%83%A8%E7%BD%B2%20Ceph%20%E9%9B%86%E7%BE%A4"><br> //部署 Ceph 集群</h5> 
+<p>1、为所有节点都创建一个 Ceph 工作目录，后续的工作都在该目录下进行<br> mkdir -p /etc/ceph</p> 
+<p><br> 2、安装 ceph-deploy 部署工具<br> cd /etc/ceph<br> yum install -y ceph-deploy</p> 
+<p>ceph-deploy --version</p> 
+<p><br> 3、在管理节点为其它节点安装 Ceph 软件包<br> #ceph-deploy 2.0.1 默认部署的是 mimic 版的 Ceph，若想安装其他版本的 Ceph，可以用 --release 手动指定版本<br> cd /etc/ceph<br> ceph-deploy install --release nautilus node0{1..3} admin</p> 
+<p>#ceph-deploy install 本质就是在执行下面的命令：<br> yum clean all<br> yum -y install epel-release<br> yum -y install yum-plugin-priorities<br> yum -y install ceph-release ceph ceph-radosgw</p> 
+<p>#也可采用手动安装 Ceph 包方式，在其它节点上执行下面的命令将 Ceph 的安装包都部署上：<br> sed -i 's#download.ceph.com#mirrors.tuna.tsinghua.edu.cn/ceph#' /etc/yum.repos.d/ceph.repo<br> yum install -y ceph-mon ceph-radosgw ceph-mds ceph-mgr ceph-osd ceph-common ceph</p> 
+<p><br> 4、生成初始配置<br> #在管理节点运行下述命令，告诉 ceph-deploy 哪些是 mon 监控节点<br> cd /etc/ceph<br> ceph-deploy new --public-network 192.168.80.0/24 --cluster-network 192.168.100.0/24 node01 node02 node03</p> 
+<p>#命令执行成功后会在 /etc/ceph 下生成配置文件<br> ls /etc/ceph<br> ceph.conf                    #ceph的配置文件<br> ceph-deploy-ceph.log        #monitor的日志<br> ceph.mon.keyring            #monitor的密钥环文件</p> 
+<p><br> 5、在管理节点初始化 mon 节点<br> cd /etc/ceph<br> ceph-deploy mon create node01 node02 node03            #创建 mon 节点，由于 monitor 使用 Paxos 算法，其高可用集群节点数量要求为大于等于 3 的奇数台</p> 
+<p>ceph-deploy --overwrite-conf mon create-initial        #配置初始化 mon 节点，并向所有节点同步配置<br>                                                     # --overwrite-conf 参数用于表示强制覆盖配置文件</p> 
+<p>ceph-deploy gatherkeys node01                        #可选操作，向 node01 节点收集所有密钥</p> 
+<p>#命令执行成功后会在 /etc/ceph 下生成配置文件<br> ls /etc/ceph<br> ceph.bootstrap-mds.keyring            #引导启动 mds 的密钥文件<br> ceph.bootstrap-mgr.keyring            #引导启动 mgr 的密钥文件<br> ceph.bootstrap-osd.keyring            #引导启动 osd 的密钥文件<br> ceph.bootstrap-rgw.keyring            #引导启动 rgw 的密钥文件<br> ceph.client.admin.keyring            #ceph客户端和管理端通信的认证密钥，拥有ceph集群的所有权限<br> ceph.conf<br> ceph-deploy-ceph.log<br> ceph.mon.keyring</p> 
+<p>#在 mon 节点上查看自动开启的 mon 进程<br> ps aux | grep ceph<br> root        1823  0.0  0.2 189264  9216 ?        Ss   19:46   0:00 /usr/bin/python2.7 /usr/bin/ceph-crash<br> ceph        3228  0.0  0.8 501244 33420 ?        Ssl  21:08   0:00 /usr/bin/ceph-mon -f --cluster ceph --id node03 --setuser ceph --setgroupceph<br> root        3578  0.0  0.0 112824   988 pts/1    R+   21:24   0:00 grep --color=auto ceph</p> 
+<p>#在管理节点查看 Ceph 集群状态<br> cd /etc/ceph<br> ceph -s<br>   cluster:<br>     id:     7e9848bb-909c-43fa-b36c-5805ffbbeb39<br>     health: HEALTH_WARN<br>             mons are allowing insecure global_id reclaim<br>  <br>   services:<br>     mon: 3 daemons, quorum node01,node02,node03<br>     mgr: no daemons active<br>     osd: 0 osds: 0 up, 0 in<br>  <br>   data:<br>     pools:   0 pools, 0 pgs<br>     objects: 0 objects, 0 B<br>     usage:   0 B used, 0 B / 0 B avail<br>     pgs:</p> 
+<p>#查看 mon 集群选举的情况<br> ceph quorum_status --format json-pretty | grep leader<br> "quorum_leader_name": "node01",</p> 
+<p>#扩容 mon 节点<br> ceph-deploy mon add &lt;节点名称&gt;</p> 
+<p><br> 6、部署能够管理 Ceph 集群的节点（可选）<br> #可实现在各个节点执行 ceph 命令管理集群<br> cd /etc/ceph<br> ceph-deploy --overwrite-conf config push node01 node02 node03        #向所有 mon 节点同步配置，确保所有 mon 节点上的 ceph.conf 内容必须一致</p> 
+<p>ceph-deploy admin node01 node02 node03            #本质就是把 ceph.client.admin.keyring 集群认证文件拷贝到各个节点</p> 
+<p>#在 mon 节点上查看<br> ls /etc/ceph<br> ceph.client.admin.keyring  ceph.conf  rbdmap  tmpr8tzyc</p> 
+<p>cd /etc/ceph<br> ceph -s</p> 
+<p><br> 7、部署 osd 存储节点<br> #主机添加完硬盘后不要分区，直接使用<br> lsblk <br> NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT<br> sda      8:0    0   60G  0 disk <br> ├─sda1   8:1    0  500M  0 part /boot<br> ├─sda2   8:2    0    4G  0 part [SWAP]<br> └─sda3   8:3    0 55.5G  0 part /<br> sdb      8:16   0   20G  0 disk <br> sdc      8:32   0   20G  0 disk <br> sdd      8:48   0   20G  0 disk </p> 
+<p>#如果是利旧的硬盘，则需要先擦净（删除分区表）磁盘（可选，无数据的新硬盘可不做）<br> cd /etc/ceph<br> ceph-deploy disk zap node01 /dev/sdb<br> ceph-deploy disk zap node02 /dev/sdb<br> ceph-deploy disk zap node03 /dev/sdb</p> 
+<p>#添加 osd 节点<br> ceph-deploy --overwrite-conf osd create node01 --data /dev/sdb<br> ceph-deploy --overwrite-conf osd create node02 --data /dev/sdb<br> ceph-deploy --overwrite-conf osd create node03 --data /dev/sdb</p> 
+<p>#查看 ceph 集群状态<br> ceph -s<br>   cluster:<br>     id:     7e9848bb-909c-43fa-b36c-5805ffbbeb39<br>     health: HEALTH_WARN<br>             no avtive mgr<br>  <br>   services:<br>     mon: 3 daemons, quorum node01,node02,node03 (age 119m)<br>     mgr: no daemons active<br>     osd: 3 osds: 3 up (since 35s), 3 in (since 35s)<br>  <br>   data:<br>     pools:   0 pools, 0 pgs<br>     objects: 0 objects, 0 B<br>     usage:   3.0 GiB used, 57 GiB / 60 GiB avail<br>     pgs: </p> 
+<p><br> ceph osd stat<br> ceph osd tree<br> rados df<br> ssh root@node01 systemctl status ceph-osd@0<br> ssh root@node02 systemctl status ceph-osd@1<br> ssh root@node03 systemctl status ceph-osd@2</p> 
+<p>ceph osd status    #查看 osd 状态，需部署 mgr 后才能执行<br> +----+--------+-------+-------+--------+---------+--------+---------+-----------+<br> | id |  host  |  used | avail | wr ops | wr data | rd ops | rd data |   state   |<br> +----+--------+-------+-------+--------+---------+--------+---------+-----------+<br> | 0  | node01 | 1025M | 18.9G |    0   |     0   |    0   |     0   | exists,up |<br> | 1  | node02 | 1025M | 18.9G |    0   |     0   |    0   |     0   | exists,up |<br> | 2  | node03 | 1025M | 18.9G |    0   |     0   |    0   |     0   | exists,up |<br> +----+--------+-------+-------+--------+---------+--------+---------+-----------+</p> 
+<p>ceph osd df    #查看 osd 容量，需部署 mgr 后才能执行<br> ID CLASS WEIGHT  REWEIGHT SIZE   RAW USE DATA    OMAP META  AVAIL  %USE VAR  PGS STATUS <br>  0   hdd 0.01949  1.00000 20 GiB 1.0 GiB 1.8 MiB  0 B 1 GiB 19 GiB 5.01 1.00   0     up <br>  1   hdd 0.01949  1.00000 20 GiB 1.0 GiB 1.8 MiB  0 B 1 GiB 19 GiB 5.01 1.00   0     up <br>  2   hdd 0.01949  1.00000 20 GiB 1.0 GiB 1.8 MiB  0 B 1 GiB 19 GiB 5.01 1.00   0     up <br>                     TOTAL 60 GiB 3.0 GiB 5.2 MiB  0 B 3 GiB 57 GiB 5.01                 <br> MIN/MAX VAR: 1.00/1.00  STDDEV: 0</p> 
+<p><br> #扩容 osd 节点<br> cd /etc/ceph<br> ceph-deploy --overwrite-conf osd create node01 --data /dev/sdc<br> ceph-deploy --overwrite-conf osd create node02 --data /dev/sdc<br> ceph-deploy --overwrite-conf osd create node03 --data /dev/sdc<br> ceph-deploy --overwrite-conf osd create node01 --data /dev/sdd<br> ceph-deploy --overwrite-conf osd create node02 --data /dev/sdd<br> ceph-deploy --overwrite-conf osd create node03 --data /dev/sdd</p> 
+<p>添加 OSD 中会涉及到 PG 的迁移，由于此时集群并没有数据，因此 health 的状态很快就变成 OK，如果在生产环境中添加节点则会涉及到大量的数据的迁移。</p> 
+<p><br> 8、部署 mgr 节点<br> #ceph-mgr守护进程以Active/Standby模式运行，可确保在Active节点或其ceph-mgr守护进程故障时，其中的一个Standby实例可以在不中断服务的情况下接管其任务。根据官方的架构原则，mgr至少要有两个节点来进行工作。<br> cd /etc/ceph<br> ceph-deploy mgr create node01 node02</p> 
+<p>ceph -s<br>   cluster:<br>     id:     7e9848bb-909c-43fa-b36c-5805ffbbeb39<br>     health: HEALTH_WARN<br>             mons are allowing insecure global_id reclaim<br>  <br>   services:<br>     mon: 3 daemons, quorum node01,node02,node03<br>     mgr: node01(active, since 10s), standbys: node02<br>     osd: 0 osds: 0 up, 0 in<br>  </p> 
+<p>#解决 HEALTH_WARN 问题：mons are allowing insecure global_id reclaim问题：<br> 禁用不安全模式：ceph config set mon auth_allow_insecure_global_id_reclaim false</p> 
+<p>#扩容 mgr 节点<br> ceph-deploy mgr create &lt;节点名称&gt;</p> 
+<p><br> 9、开启监控模块<br> #在 ceph-mgr Active节点执行命令开启<br> ceph -s | grep mgr</p> 
+<p>yum install -y ceph-mgr-dashboard</p> 
+<p>cd /etc/ceph</p> 
+<p>ceph mgr module ls | grep dashboard</p> 
+<p>#开启 dashboard 模块<br> ceph mgr module enable dashboard --force</p> 
+<p>#禁用 dashboard 的 ssl 功能<br> ceph config set mgr mgr/dashboard/ssl false</p> 
+<p>#配置 dashboard 监听的地址和端口<br> ceph config set mgr mgr/dashboard/server_addr 0.0.0.0<br> ceph config set mgr mgr/dashboard/server_port 8000</p> 
+<p>#重启 dashboard<br> ceph mgr module disable dashboard<br> ceph mgr module enable dashboard --force</p> 
+<p>#确认访问 dashboard 的 url<br> ceph mgr services</p> 
+<p>#设置 dashboard 账户以及密码<br> echo "12345678" &gt; dashboard_passwd.txt<br> ceph dashboard set-login-credentials admin -i dashboard_passwd.txt<br>   或<br> ceph dashboard ac-user-create admin administrator -i dashboard_passwd.txt</p> 
+<p>浏览器访问：http://192.168.80.11:8000 ，账号密码为 admin/12345678</p> 
+<h4 id="%2F%2F%E8%B5%84%E6%BA%90%E6%B1%A0%20Pool%20%E7%AE%A1%E7%90%86%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0%C2%A0"><br> //资源池 Pool 管理        </h4> 
+<p>上面我们已经完成了 Ceph 集群的部署，但是我们如何向 Ceph 中存储数据呢？首先我们需要在 Ceph 中定义一个 Pool 资源池。Pool 是 Ceph 中存储 Object 对象抽象概念。我们可以将其理解为 Ceph 存储上划分的逻辑分区，Pool 由多个 PG 组成；而 PG 通过 CRUSH 算法映射到不同的 OSD 上；同时 Pool 可以设置副本 size 大小，默认副本数量为 3。</p> 
+<p>Ceph 客户端向 monitor 请求集群的状态，并向 Pool 中写入数据，数据根据 PGs 的数量，通过 CRUSH 算法将其映射到不同的 OSD 节点上，实现数据的存储。 这里我们可以把 Pool 理解为存储 Object 数据的逻辑单元；当然，当前集群没有资源池，因此需要进行定义。</p> 
+<p>#创建一个 Pool 资源池，其名字为 mypool，PGs 数量设置为 64，设置 PGs 的同时还需要设置 PGP（通常PGs和PGP的值是相同的）：<br> PG (Placement Group)，pg 是一个虚拟的概念，用于存放 object，PGP(Placement Group for Placement purpose)，相当于是 pg 存放的一种 osd 排列组合<br> cd /etc/ceph<br> ceph osd pool create mypool 64 64</p> 
+<p>#查看集群 Pool 信息</p> 
+<p>ceph osd pool ls    或    rados lspools<br> ceph osd lspools</p> 
+<p>#查看资源池副本的数量<br> ceph osd pool get mypool size</p> 
+<p>#查看 PG 和 PGP 数量<br> ceph osd pool get mypool pg_num<br> ceph osd pool get mypool pgp_num</p> 
+<p>#修改 pg_num 和 pgp_num 的数量为 128<br> ceph osd pool set mypool pg_num 128<br> ceph osd pool set mypool pgp_num 128</p> 
+<p>ceph osd pool get mypool pg_num<br> ceph osd pool get mypool pgp_num</p> 
+<p>#修改 Pool 副本数量为 2<br> ceph osd pool set mypool size 2</p> 
+<p>ceph osd pool get mypool size</p> 
+<p>#修改默认副本数为 2<br> vim ceph.conf<br> ......<br> osd_pool_default_size = 2</p> 
+<p>ceph-deploy --overwrite-conf config push node01 node02 node03</p> 
+<p>#删除 Pool 资源池<br> 1）删除存储池命令存在数据丢失的风险，Ceph 默认禁止此类操作，需要管理员先在 ceph.conf 配置文件中开启支持删除存储池的操作<br> vim ceph.conf<br> ......<br> [mon]<br> mon allow pool delete = true</p> 
+<p>2）推送 ceph.conf 配置文件给所有 mon 节点<br> ceph-deploy --overwrite-conf config push node01 node02 node03</p> 
+<p>3）所有 mon 节点重启 ceph-mon 服务<br> systemctl restart ceph-mon.target</p> 
+<p>4）执行删除 Pool 命令<br> ceph osd pool rm pool01 pool01 --yes-i-really-really-mean-it</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/d27f0a74bda5081d085fd1e423aefdcf/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">微信小程序canvas手写签字</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3cfe834eb947cf1979789a8805f8bf07/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">引领未来：云原生在产品、架构与商业模式中的创新与应用</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Posts - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Posts" />
+<meta property="og:description" content="编程中国的博客" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="/posts/" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+	<link rel="alternate" type="application/rss+xml" href="/posts/index.xml" title="编程中国的博客">
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main list" role="main">
+	<header class="main__header">
+		<h1 class="main__title">Posts</h1>
+	</header><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/104954ec386383ac0fe835fcbee79b17/" rel="bookmark">
+			YOLO系列之YOLO V1
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		 文章目录 1.写在前面2. 模型介绍3.原理讲解4.写在最后 1.写在前面 这是我发布的目标检测系列论文之二，前面一个章节，我们已经讨论过了目标检测系列中最基础的东西，常见指标以及相关的一些概念。那么本次，我将介绍一下YOLO系列的初代版本，YOLO V1
+论文链接点击直达
+2. 模型介绍 前面我们已经说过了，One-Stage算法具有实时检测的FPS，实用性特别的好，因此作为YOLO系列的第一代版本，论文的名字就已经说明了一切You only Look Once
+我们先来看一下效果：
+再来看看YOLO V1在当时的性能如何？
+我们可以看到YOLO在损失比较小mAP的情况下，带来了极大的FPS增益效果，因此在当时还是引发了不小的轰动，所以我们来看看他是怎么实现的吧！
+3.原理讲解 那么作者是怎么做的呢？首先我们来看一张图片：
+这张图像很好得诠释了YOLO V1的模型，它先把图像resize成448x448的大小，然后将这个图像分割成SxS的大小，也就是说哈，我拿一个刀，将图像切成一个个的豆腐块。
+再之后，每个豆腐块（网格）需要预测B个bounding box(论文中指出，B=2)，除了预测位置信息之外，还要预测一个confidence参数，表示该候选框能有多大的把握框中了物体。
+这里可能有小伙伴就迷糊了，你一个豆腐块你怎么预测候选框(bounding box)呢？其实意思是这样的，就是你可以理解成以豆腐块为中心，画B个框出来，然后如果有物体就逐步调整和Ground truth最大IOU的那个框，直到这个框和ground truth 的IOU最大。还是不理解就看下面的图：
+A,B这两个格子是SxS格子中的任意两个，以A为中心，画出了一个绿色一个黄色连个框框，同样B也是如此。之后我们发现。，B这个格子里好像没有物体欸，那么他的confidence必然很低，那么我们不管他，我们看A这个格子，直观上看，确实是框中了物体，所以他的confidence必然高。那么我们继续看，明显绿色这个框要比黄色这个框要好，因为啥？因为绿色框和Ground Truth的IOU高呀！那么我们就舍弃黄色的框，保留绿色的框。
+那么明白了之后，我们就要分析每个豆腐块会预测出多少个数字了，这很重要！
+首先，对于一个豆腐块，我要知道候选框的框框左上角的x,y值，以及这个框的宽和高吧
+然后刚才说了，还要有一个置信度吧，表示这个框有多大可能圈中了物体
+并且每个豆腐块产出B个框，如图，粉色和橙红色的框。
+那么就有B*5个数了，然后这个豆腐块还要预测我框出的是什么类别，因为pascal voc数据集一共有20个类别，那么我们还要带上20个类别概率，表示当前框框框中的是当前类别的概率是多少。就像这样：
+好了，接下来我们来讨论一下是如何调整候选框，使得候选框的IOU最大的呢？这时候不得不提到它的损失函数：
+首先我们看位置误差。
+如图：对于这个函数，当时小物体的时候，你移动非常小的距离，他变化的很快，但是对于大物体，你移动比较大的距离，他变得很小。不敏感。
+然后我们再来看看置信误差，这里为什么含有obj的误差和不含obj的误差分开来算呢？
+这是因为呀，在图像中，一般前景比较少，背景比较多，那如果两者一起算了，很容易出现负样本过多，正负比例不均衡！所以要加一个 λ n o o b j \lambda_{noobj} λnoobj​作为惩罚因子！
+最后的分类误差就是简单的MSE Loss，在这里不再赘述。
+总结一下：
+一共有SxS个格子，然后每个格子会画两个框根据置信度，看看哪些框圈中了物体再比较框和Grouth Truth 的IOU大小，保留大的通过Loss逐步调整候选框的大小 4.写在最后 这次我们分析了yolo 的第一个版本，他虽然有诸多优点，比如快速简单，但是还是存在如下缺点：
+每个Cell（豆腐块）只预测一个类别，如果重叠那么就无解小物体效果检测很一般，候选框长宽比可选但是单一 
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/4c3fef910c8095b290edf05dc3627fc0/" rel="bookmark">
+			【Android】【移动应用开发】基础知识
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		文章目录 一. AndroidMainifest.xml文件的结构二. Android的四大组件(一) Activity(活动)(二) BroadcastReceiver(广播接收器)(三) Service(服务)(四) ContentProvider(内容提供者) 三. 基础界面组件与布局(一) 组件共用属性(二) 文本显示组件【TextView】(三) 按钮组件【Button】1. 按钮点击监听事件 (四) 线性布局【LinearLayout】(五) 编辑框组件【EditText】(六) 图像显示组件【ImageView】(七) 相对布局【RelativeLayout】1. 设置组件与组件之间的关系和位置的相关属性2. 设置组件与组件之间对齐方式的相关属性3. 设置组件与父组件之间对齐方式的相关属性4. 设置组件方向的相关属性 (八) 单选按钮【RadioButton】1. 单选按钮监听事件 (九) 复选框组件【CheckBox](十) 下拉列表框【Spinner】1. 下拉列表步骤及事件监听 (十一) 评分条【RatingBar】1. 星级进度改变时监听事件 (十二) 帧布局【FrameLayout】1.【TabHost】组件2. 定义布局文件3. 选项卡标签位置放置4. TabSpec常用方法5. 考试系统案例 (十三) 表格布局【TableLayout】 四. 高级界面组件与布局(一) Adapter适配器基础1. ListAdapter2. BaseAdapter3. ArrayAdapter1) Android 系统提供的布局资源及功能说明 4. SimpleAdapter5. SimpleCuisorAdapter (二) 显示模板【ListView】1. ListView 设置监听事件 (三) Intent触发器1. IntentFilter2. 显式Intent3. 隐式Intent4. 取消程序名称显示5. Intent调用其他常用组件6. Intent传递数据 (四) 碎片化组件【Fragment】1. Fragment 布局文件的创建 (五) View的左右滑屏切换【ViewPager】1.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/4c3fef910c8095b290edf05dc3627fc0/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/c90df23a594af76d6908ab97f5956b95/" rel="bookmark">
+			【Python】界面设计——GUI编程之【PyQt5】
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		文章目录 一. PyQt5基础(一) 窗口显示(二) PyQt5程序结构分析1. 导入需要的包和模块2. 创建一个应用程序对象3. 控件的操作3.1 创建控件3.2 设置控件3.3 展示控件 4. 应用程序的执行，进入到消息循环 (三) 窗口属性设置 二. Pycham活动模板设置(一) PyQt5的过程性代码结构模板(二) PyQt5的面向对象代码结构模板1. 主模块代码结构模板2. 控件设置模块代码结构模板 三. QObject(一) 对象名称，属性1. API2. 应用场景3. 案例演示组件选择器ID选择器组件ID选择器组件属性值选择器 (二) 父子对象的操作1. API2. 应用场景 (三) 信号处理1. 信号与槽机制1) 基本概念2) 基本使用介绍连接方式及特性 2. API信号 3. 应用场景 (四) 类型判定1. API2. 应用场景 (五) 对象删除(六) 定时器 四. Qwidget(一) 功能作用1. 大小位置的获取2. 大小位置的设置3. 最大和最小大小的获取4. 最大和最小大小的设置5. 内容边距6. 鼠标相关操作1）设置鼠标形状2）鼠标跟踪 7. 事件1）监听显示和关闭事件2）监听移动事件3）监听调整大小事件4）监听鼠标事件5）监听键盘事件6）监听焦点事件7）监听拖拽事件8）监听绘制事件9）监听改变事件10）监听右键菜单11）监听输入法 8. 父子关系9. 层级控制10. 顶层窗口相关操作1）窗口状态2）最大化最小化3）窗口标志 11. 交互状态1）组件是否可用2）组件是否显示 / 隐藏3）是否编辑4）窗口关闭 11. 信息提示1）状态提示2）工具提示3）问号提示 12. 焦点控制1）单个组件角度2）父组件角度 三.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/c90df23a594af76d6908ab97f5956b95/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/fc5fc13b72172703706090eca330e368/" rel="bookmark">
+			【数据库】基础知识【MySql】
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		《关系数据库标准语言MySQL》 一. 关键词索引 关键词语义insert插入(增)delete删除(删)select查询(查)update更新/修改(改) 二. 数据定义 操作对象创建删除修改模式create schemadrop schema表create tabledrop tablealter table视图create viewdrop view索引create indexdrop indexalter index (一) 模式的定义与删除 Ⅰ. 定义模式 create schema&lt;模式名&gt;authorization&lt;用户名&gt;; //例：为用户zhang创建一个模式test. create schema test authorization zhang ; Ⅱ. 删除模式 drop schema&lt;模式名&gt;&lt;cascade|restrict&gt;; //例：删除模式test. drop schema test cascade //该语句删除了test模式,同时，该模式中已经定义的表也&gt;被删除了 选择了cascade，表示在删除模式的同时把模式中所有的数据库对象全部删除；选择了restrict，只有在该模式中没有任何下属对象时才能执行删除语句； (二) 基本表的定义，删除与修改 Ⅰ. 定义基本表 create table&lt;表名&gt;(&lt;列名&gt;&lt;数据类型&gt;[列级完整性约束条件][,&lt;列名&gt;&lt;数据类型&gt;[列级完整性约束条件]] …… [,&lt;表级完整性约束条件&gt;]); //例：建立一个“学生”表Student. create table Student /*学号*/(Sno char(9) primary key,	/*列级完整性约束条件，Sno是主码*/ /*姓名*/Sname char(20) unique, /*Sname取唯一值*/ /*性别*/Ssex char(2), /*年龄*/Sage smallint, /*专业*/Sdept char(20)); //例：建立一个“课程”表Course. create table Course /*课程号*/(Cno char(4) primary key, /*列级完整性约束条件，Cno是主码*/ /*课程名*/Cname char(40) not null, /*列级完整性约束条件，Cname不能取空值*/ /*先行课*/Cpno char(4), /*学分*/Ccredit smallint, foreign key(Cpno) references Course(Cno)	/*表级完整性约束条件，Cpno是外码，被参照表是Course，被参照列是Cno*/ ); //例：建立一个学生选课表SC.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/fc5fc13b72172703706090eca330e368/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/80846a3e7886e7c7235b34937bdabb17/" rel="bookmark">
+			Java学习星球，Java学习路线
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		目录 一、Java学习路线二、学习计划三、为何会有Java学习星球？四、加入星球后，你可以得到什么？五、如何加入Java学习星球？六、打卡挑战 大家好，我是哪吒，一个靠着热情攀登至C站巅峰的中年男子，CSDN粉丝40万+，2022CSDN博客之星Top1，2021CSDN博客之星Top2，8年开发管理经验，目前就职于某一线大厂，专注Java硬核干货分享，立志做到Java赛道全网Top N。
+最近有很多小伙伴参加了我的新星计划2023·第1期【Java】赛道报名入口！。
+目前已有200+人参与活动，空前火爆。很多小伙伴问我如何才能写出好文章、Java的学习路线、如何才能学好Java、有没有Java经典面试题分享，能不能分享一些学习资料、简历模板。
+一、Java学习路线 力荐学习资料。
+Java学习路线总结，搬砖工逆袭Java架构师
+Java基础教程系列
+Java基础教程系列（进阶篇
+Spring Boot 进阶实战
+目前已经更新了Java知识体系的大部分知识点，还在持续的更新中。
+数据库基础教程系列、SSM基础教程系列、微服务基础教程系列、中间件基础教程系列都在规划中，欢迎持续关注，共同成长。
+先买先学，买到就是赚到，永不降价。
+二、学习计划 很多小伙伴反馈：
+空有一腔热血，每天学习20个小时，坚持了两个月，还停在Java基础，感觉什么都会了，又感觉什么都不会，迷迷糊糊；每天都想着要好好学习Java，两个月过去了，还没开始；三天打鱼，两天晒网，哎，一地鸡毛；… 下面分享一下零基础小白的学习内容，以下内容，半年内全部学完，找一份工作应该没问题。
+不过你说你想进阿里、百度，抱歉，哪吒无能为力。
+下面是Java工程师的学习路线分享
+努力学、使劲卷，一年精通Java不是梦。
+三、为何会有Java学习星球？ 无门槛的微信群难免会鱼龙混杂，问题和质量都无法得到保证，而且一些关键问题经常被淹没，且没有沉淀价值。
+随着添加我微信的人日益增多，向我提问的人也越来越多，随便回答一下就太不负责任了；不回答也不是很好；如果都仔细回答，我也有自己的工作并且确实很忙，真的有点心有余而力不足！所以我才会建立这么一个渠道来沉淀我的经验和有价值的内容，以及给各位好友提供一个坚持学习的平台。
+在Java学习星球中，主要包括和群里的小伙伴一起学习Java、坚持读书打卡、视频打卡、刷题打卡吗，陪伴学习，共同优秀。
+四、加入星球后，你可以得到什么？ 1、制定你自己的学习目标，球友互相监督完成，循序渐进，玩转Java；
+2、每日打卡、读书打卡、视频学习打卡、刷题打卡，陪伴学习，共同优秀；
+3、每日免费阅读星主CSDN的付费文章，目前已700+订阅；
+4、获取Java学习路线、海量Java学习资料、200+电子书、海量大厂面试题；
+5、不定期分享Java知识、编程技巧、学习方法、个人心得、时间管理；
+6、星球每周读书日，技术书籍送不停；
+7、星球每月会员日，外设周边免费送；
+▊ 一句话，陪伴学习，共同优秀。
+五、如何加入Java学习星球？ 付费的东西，你才会懂得珍惜。
+一杯咖啡钱，让你的学习不再孤单，让你的学习不再迷茫。
+一个人可以走得很快，一群人才能走得更远。
+文末公众号【哪吒编程】回复【星球】，就可以获取限量折扣优惠券。
+有很多小伙伴订阅了我的CSDN付费专栏，已经全部订阅（目前3个）的，可免费直接加入。
+我坚信，我们一定可以将【Java学习星球】做大做强，做到Java赛道全网Top N。
+六、打卡挑战 每天由星主指定免费阅读付费专栏文章，一起学习打卡，遇到问题，发到群里，一起讨论学习，比一个人学习效率高的多。
+坚持每日学习打卡，养成持续学习、持续成长的好习惯。
+成功秘诀只有一个，那就是卷，督促和鞭策自己，永不放弃。
+Java学习路线总结，搬砖工逆袭Java架构师
+10万字208道Java经典面试题总结(附答案)
+Java基础教程系列
+Java基础教程系列（进阶篇）
+▊ 淘宝交付之道
+阿里巴巴大淘宝技术这支强大的研发团队是淘宝、天猫的技术支柱，面对不同时期的挑战，已沉淀出一套基于价值、持续高效交付的方法论和实践经验，现在，大淘宝技术将自己在互联网最前沿摸爬滚打的一线经验，汇集成了一本极具时代意义的软件交付百科全书。
+《淘宝交付之道》是一部汇聚和浓缩了淘宝20年软件交付方法与经验的著作，由阿里巴巴集团大淘宝技术部历时36个月撰写而成，得到了阿里巴巴合伙人程立的高度评价。
+这本书围绕软件价值交付的全生命周期展开，完整讲解了淘宝高效交付的体系化建设，从目标确定到需求拆分，从高效开发的技术架构、研发流程到工具平台建设，再到完善的全链路质量保障和用户体验保障实践，最后用横向的项目管理串连起全链路交付的每个环节，实现价值的高效流动。
+▊ 主要内容
+全书具体内容从如下8个维度展开：
+（1）目标与需求管理：
+淘宝的战略目标管理、项目目标管理以及不同类型的需求管理流程；
+（2）高效开发：
+确保淘宝内部的软件开发工作能够高效进行的各种技术架构；
+（3）高效质量保障：
+在业务和系统飞速演进的过程中，如何从手工测试到自动化平台工具，不断寻求更高效、更全面的质量保障方案；
+（4）用户体验保障：
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/80846a3e7886e7c7235b34937bdabb17/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/c64ead29331d3aa3370d84ab3fba2d49/" rel="bookmark">
+			文件上传漏洞（一） upload-labs靶场练习
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		upload-labs靶场练习 1.环境搭建2.关卡解析2.1 less-1 - 基于前端JS的检测2.2 less-2 - MIME头认证2.3 less-3 php3,4,5扩展解析2.4 less-4 .htaccess文件绕过2.5 less-5 点空点空绕过2.6 less-6 大小写文件名混淆2.7 less-7 空格绕过2.8 less-8 小圆点绕过2.9 less-9 Win文件流特性绕过2.10 less-10 点空桡过2.11 less-11 文件名置空 双写绕过2.12 less-12 get传参中的00截断2.13 less-13 post传参中的00截断2.14 less-14 文件包含结合文件上传2.15 less 15-16 文件包含结合文件上传2.16 less-17 文件包含与二次渲染的绕过2.17 less-18 竞争型漏洞 3.总结 文件上传漏洞的目标就是向服务器上传一些服务器可以解析的恶意文件，这类文件可以达到与攻击者建立连接并执行恶意命令的作用(又名webshell)。其危害之大，早已引起业界的关注。
+本文将通过对upload-labs的练习，重现一些绕过手法，当然也是对文件上传漏洞基础部分的一个系统总结。
+1.环境搭建 这里大家可以直接访问作者的github进行下载：
+https://github.com/c0ny1/upload-labs
+完事按照说明文档进行安装即可，不得不说，真心感谢作者为我们提供这么优秀的平台进行练习与学习。这里就厚脸皮的贴上作者的脑图了：
+上图为大体的绕过思路，现在不理解没关系，我们一起去做一遍就明白了。
+2.关卡解析 2.1 less-1 - 基于前端JS的检测 最早期的检测，当然也是最弱的。我们先来查看页面内的过滤语句：
+function checkFile() { var file = document.getElementsByName('upload_file')[0].value; if (file == null || file == "") { alert("
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/c64ead29331d3aa3370d84ab3fba2d49/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/166b247fbccdb6d5bc737f74773ea86e/" rel="bookmark">
+			【Linux】GDB的安装与使用
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		安装 安装gdb的具体步骤如下：
+1、查看当前gdb安装情况
+rpm -qa | grep gdb 如果有，则可以先删除：
+rpm -e --nodeps 文件名 如果没有，则进行下一步。
+2、下载gdb源码包或者直接apt安装。
+apt命令安装：
+sudo apt install gdb 源码包安装：
+在linux中输入： wget http://ftp.gnu.org/gnu/gdb/gdb-7.10.1.tar.gz 解压： tar -zxvf gdb-7.10.1.tar.gz 进入gdb目录： cd gdb-7.10.1 输入命令： ./configure make make install 3、查看是否安装成功
+gdb -v 使用 编写一段简单的C语言程序
+#include &lt;stdio.h&gt; int main() { int i = 0; for(i = 0;i&lt;10;++i) { printf("%d ",i); } printf("\n"); return 0; } 生产debug版本的可执行程序：
+gcc test.c -o test_g -g 注意：所有的调试代码操作必须在debug版本下执行
+使用下面的命令可以查看调试信息：
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/166b247fbccdb6d5bc737f74773ea86e/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/9297030e2cf0ae44087641df2cfe51c8/" rel="bookmark">
+			25. K 个一组翻转链表(Java)，详细注释
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		给你链表的头节点 head ，每 k 个节点一组进行翻转，请你返回修改后的链表。
+k 是一个正整数，它的值小于或等于链表的长度。如果节点总数不是 k 的整数倍，那么请将最后剩余的节点保持原有顺序。
+你不能只是单纯的改变节点内部的值，而是需要实际进行节点交换。
+示例 1：
+输入：head = [1,2,3,4,5], k = 2
+输出：[2,1,4,3,5]
+示例 2：
+输入：head = [1,2,3,4,5], k = 3
+输出：[3,2,1,4,5]
+图解思路：
+代码：
+/** * Definition for singly-linked list. * public class ListNode { * int val; * ListNode next; * ListNode() {} * ListNode(int val) { this.val = val; } * ListNode(int val, ListNode next) { this.val = val; this.next = next; } * } */ class Solution { public ListNode reverseKGroup(ListNode head, int k) { // 创建大链表的伪头节点 ListNode dummy = new ListNode(0); dummy.
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/9297030e2cf0ae44087641df2cfe51c8/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/db48a506e586091c41bd461f3844ef0c/" rel="bookmark">
+			定时器输出比较&amp;输入捕获
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		1.1 定时器的输出比较功能
+1.1.1 什么意思？
+所谓的输出比较就是计数器的值与比较寄存器的值进行比较，大于输出一种电平，小于输出另一种电平。
+选择PWM1模式的时候，计数器的值小于设置的值输出有效电平（低电平有效），大于就是无效电平。
+怎么让它们与灯关联上？？输出比较通道的概念
+PB0在原理图上连接的是LED3，在引脚映射上描述是可以作为定时器3的通道3，如果我使用定时器3的通道3作为PWM输出，LED3就会接收到PWM输出的波形。
+LED3会显示成什么样子？？PWM是有效电平和无效电平的一个占比，灯是低电平有效，高电平无效，如果有效电平时间长灯亮度高，有效时间短灯暗。
+配置示例：
+如果我们改变占空比（PWM）就可以实现灯慢慢亮，慢慢灭，怎么调节？？改变比较寄存器里面的值。
+我们这里选择使用每次更新后改变比较寄存器的值。
+总结：
+1）什么是PWM？有效电平和无效电平的占空比
+2）什么是输出比较？大于（比较寄存器）的极性是什么，小于极性又是什么
+3）实现PWM输出配置有哪些？定时器配置好，PWM模式选择、极性选择、通道选择、比较寄存器的值，通道对应引脚映射。
+1.2 定时器的输入捕获功能
+1.2.1 什么是输入捕获？
+字面意思捕获输入的信号，怎么捕获？为什么要捕获？？检测通道上的高低电平变化，可以及时快速的获取到通道上的状态。
+找一个现象学习这种功能，我们这里使用按键去测试，按键按下被捕获，松手又会捕获，计算两次之间的时间，得到按下的时长。
+​​​​​​​1.2.2 配置输入捕获
+在库函数中可以看到如下函数。
+这个函数需要的配置参数如下：从上到下分别是通道选择、捕获边沿设置、寄存器映射、分频设置、滤波等级设置。 我们根据之前的了解，将它们进行如下设置即可使用了（定时器3的配置不变，加上下面代码再启动就可以了）。
+设置完成之后，我们进行测试，这里先测试是否能够捕获到上升沿和下降沿。
+测试是完全没问题的，按键按下可以检测到，松手也能检测到（按下输出一次，松手又是一次）。 但是，这样检测不及时，最好还是开中断去做，所以我们把定时器3的中断打开。 然后在中断中放置同样的代码进行测试，发现也是没有问题的，可以正常检测。
+​​​​​​​
+1.2.3 按下到松手的时长计算
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/62167d5a6f9460448b065abb2dc749dd/" rel="bookmark">
+			【MyBatis-Plus】记录一次挺蠢的BUG。。。ServiceImpl＜M extends BaseMapper＜T＞, T＞，其他类注入后不生效
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		 首先我继承了ServiceImpl&lt;M extends BaseMapper, T&gt;。
+然后我发现我再其他地方注入调用这个类的方法的时候，用不了ServiceImpl里面封装好的一些方法。
+可以发现上图里面并没有ServiceImpl里面自带的方法。
+找了半天没找到答案，网上也没有找到类似的情况。。。。。
+后面我发现是我自己蠢蛋了 = =。extend是放在实现类里面的，我注入的时候是注入的接口，所以没有生效 
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/6dddd1d190b3678cee8d6071434bc5e9/" rel="bookmark">
+			vue 可视化表单设计器 自定义组件
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		有一款基于vue的可视化表单编辑器，直接双击或者拖拽组件，便可以创建一个表单，非常方便。今天为大家介绍这款编辑器：
+官方地址：Variant Form - 可视化低代码表单
+github地址：https://github.com/vform666/variant-form
+1.1界面图片
+1.如何使用？ 两种使用方法。
+第一种，直接引用。正如github上所示，直接安装整个插件使用。
+1.1.1 安装：
+npm i vform-builds 1.1.2 项目中使用：
+/ ******* 引入并全局注册VForm组件 *******/ import Vue from 'vue' import App from './App.vue' import ElementUI from 'element-ui' //引入element-ui库 import VForm from 'vform-builds' //引入VForm库 import 'element-ui/lib/theme-chalk/index.css' //引入element-ui样式 import 'vform-builds/dist/VFormDesigner.css' //引入VForm样式 Vue.config.productionTip = false Vue.use(ElementUI) //全局注册element-ui Vue.use(VForm) //全局注册VForm(同时注册了v-form-designer和v-form-render组件) new Vue({ render: h =&gt; h(App), }).$mount('#app') 1.1.3 使用编辑组件
+&lt;template&gt; &lt;v-form-designer&gt;&lt;/v-form-designer&gt; &lt;/template&gt; &lt;script&gt; export default { data() { return { } } } &lt;/script&gt; &lt;style lang="
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/6dddd1d190b3678cee8d6071434bc5e9/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/681f1ce6f9304e9bd9933af6feeada3d/" rel="bookmark">
+			Ubuntu16安装MySQL
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		Ubuntu16.04下使用以下命令即可进行MySQL的安装：
+apt-get install mysql-server
+上述命令会安装以下包： apparmor mysql-client-5.7 mysql-common mysql-server mysql-server-5.7 mysql-server-core-5.7 因此无需再安装mysql-client等。安装过程会提示设置mysql root用户的密码，设置完成后等待自动安装即可。默认安装完成就启动了MySQL的。
+启动和关闭的MySQL服务器： service mysql start service mysql stop 确认是否启动成功： sudo netstat -tap | grep mysql 配置MySQL的允许远程访问：
+1.首先编辑文件/etc/mysql/mysql.conf.d/mysqld.cnf：编辑配置文件就输入命令 sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf
+2.进入配置文件后
+注释掉bind-address = 127.0.0.1：
+在[mysqld]后添加skip-grant-tables（使用 set password for设置密码无效，且此后登录无需键入密码，在设置完密码后需要去掉,修改登录密码：update mysql.user set authentication_string=password("your_password") where user = 'root' and host='localhost';）
+3.开启远程连接数据库服务开始授权客户端连接，非超级管理员用户启动需要加sudo否则会报错
+mysql -u root -p密码
+4.回车后开始授权：
+use mysql;
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY '远程连接密码' WITH GRANT OPTION;
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/681f1ce6f9304e9bd9933af6feeada3d/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/72a593c0c10a33c518dca184eaca0825/" rel="bookmark">
+			网络 | 网络层讲解 | IP协议 | 分片处理与网段划分
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		文章目录 前言IP报文格式分片处理分片对传输层的影响 网段划分路由转发中的路由表 正向代理与反向代理 前言 tcp作为传输层的典型协议，保证了报文传输的可靠性，使每份报文完整的传输。在传输层之下的网络层解决的是传输能力的问题，它使得数据可以发送到对方主机，负责数据的路由，与传输层的区别在于：网络层侧重于能不能，而传输层侧重于好不好
+并且我们还要区分一些概念，避免被绕晕
+数据段（segment）：传输层的传输单元，由传输层报头和应用层报文构成数据报（datagram）：网络层的传输单元，由网络层报头和传输层数据段构成，需要根据链路层的MTU进行分片和重组数据帧（frame）：链路层的传输单元，由链路层报头，报尾，网络层数据报构成数据包（packet）：是一个通用的术语，可以指任何一种传输单元，但通常指的是网络层及以上的传输单元 IP报文格式 4位版本：表示IP协议的版本号，IPV4和IPV6，一般是IPV44位首部长度：表示IP报文中报头的大小，以4字节为基本单位。20字节是基本报头的长度，有的报文可能携带选项，这时我们可以先读取20字节的报头，得到整个报头的大小，将报头和有效载荷区别开8位服务类型：表示IP报头中提供的服务质量，包括优先级、吞吐量、延迟、可靠性等16位总长度：表示整个IP报文的长度，以字节为单位这一行跳过，之后详细介绍8位生存时间：表示报文在网络中能经过的最大路由器数量，注意这可不是时间。每经过一个路由器TTL就减一，直到TTL为0，IP报文被丢弃8位协议：表示上层使用的协议，6表示TCP，17表示UDP，1表示ICMP16位首部校验和：表示对IP首部进行校验和计算得到的结果。用于检测数据是否被发送错误32位源IP地址和目的地址：表示发送方和接收方的IP地址，每个地址由32位二进制数构成，点分十进制中，每一段都是0~255之间的数字选项和填充：选项表示一些额外信息和功能，选项有多种类型和长度。填充指的是用来使报头长度达到4字节整数倍的比特0 分片处理 对于其中的16位标识位，3位标志位，13位片偏移
+MTU（Maximum Transmission Unit）最大传输单元，这是一个数据链路层的概念，由于物理结构的限制，数据链路层发送的报文有最大限制，一般是1500字节。如果网络层的报文长度超过了MTU，就要进行IP分片，这个过程由网络层进行，分片的重组由对方的网络层进行，解铃还须系铃人嘛。
+要注意的是：MTU限制的是数据链路层的有效载荷，也就是网络层的报文长度，它不包括数据链路层的报头长度
+如果传输层将一个2980字节的数据段（报头+有效载荷）交付给网络层，假设IP层的报头长度为标准的20字节，那么为数据段添加报头后的数据大小为3000字节，由于其大小超过了MTU，所以需要分片。分片后每个报文都需要携带IP报头，这是基本的原则，对原始报文进行分片，2980被分成了20 + 1480， 20 + 1480，此时已经拆分了2960（1480 + 1480）字节的数据，注意这里的20字节是网络层的报头长度，还剩20字节没有分片，所以最后一片的大小为20 + 20。左操作数是报头，右操作数是被分割的数据段，将右操作数相加，得到2980，说明此时的分片没有问题。
+那么现在就有一个问题，要怎么判断接收方接收的数据帧是被分片的还是没被分片的数据帧呢？这与下面这些字段有关
+3位标志位：表示分片的相关信息， RF(Reserved Fragment)： 第一位，保留不用，设置为0DF(Don’t Fragment)：第二位，如果设置为1，表示上层不希望该数据段分片MF(More Fragment)：第三位，如果设置为1，表示后面还有分片，反之表示后续没有分片 16位标识位：表示分片所属的原始数据段的编号，用来区分，重组不同的分片13位偏移位：表示分片的首地址与原始数据段首地址的偏移量，如果为0，表示这是某一数据段的第一个分片。以8字节为单位，也就是说将它 * 8就能得到分片与原始数据段首地址的偏移字节数大小 所以，接收方接收数据帧时，只要根据MF和13位偏移位来判断数据帧是否为分片就可以了。如果MF = 0，并且偏移为0就表示该分片后面没有分片，且该分片是第一个分片，说人话就是该数据报没有被分片，是完整的。如果数据报不是上面的情况，就说明该数据报是一个分片，需要网络层进行重组。如何重组一个完整的数据报呢？我们可以根据片偏移量对数据帧进行排序，第一个肯定是片偏移量为0的数据帧，将片偏移量 + 自身的长度（网络层的报文长度）就能得到下一个数据帧的片偏移量，一直这样遍历下去，直到MF为0，如果片偏移量 + 自身的长度 = 下一个数据帧的片偏移量这个等式，总是成立，说明分片是完整的，就能重组数据报，反之需要继续收集分片。
+要注意的是：虽然分片和重组都发生在网络层，但是分片可以在中间路由器或者源主机上进行，而重组只能在目的主机进行
+分片对传输层的影响 在网络丢包概率同一的情况下，传输越多的报文丢包的可能就越大，将一个报文拆分成多个报文，进行分片传输，肯定增加了丢包的概率，那么丢包对上层有影响吗？传输层有两大协议：udp和tcp，由于tcp有可靠性保证，所以丢包不影响数据的发送，只是会降低传输的效率。但是对于udp，由于其没有可靠性保证策略，所以丢包就是真的丢了，无法恢复的那种，这使得本就不可靠的udp雪上加霜，所以在局域网中，通常建议udp有效载荷的长度为1472字节（1500 - 20 IP报头 - 8 udp报头），使udp尽量不分片
+除此之外，分片将占用更多的带宽，每个分片都有相同的IP报头，这将增加网络拥塞的可能性。并且过多的分片可能带来传输的延迟，分片和重组都将消耗时间
+网段划分 网络划分是网络层学习的一大重点
+IP（IPV4）地址分为两个部分
+网络号：表示不同的网段主机号：表示某一网段下的唯一主机 （图源网络）
+最早的时候，IP地址被划分成5个网段，这样的划分极其容易浪费IP地址，比如我申请了一个B类网，拥有了2的16次方个IP地址，但是只用了2的14次方个，剩下的地址不就浪费了吗？并且网段数量固定与主机号数量固定也使得这样的划分方法不够灵活，所以后来引入了CIDR(Classless Inter-Domain Routing)，无类别域间路由技术，其主要是使用子网掩码进行按位与运算，充分使用不同的网段，利用每一个IP地址。具体表格式是IP address/prefix length，比如192.168.1.1/16，16表示255.255.0.0这个子网掩码（前16位为1的二进制序列），将子网掩码和IP地址按位与后得到192.168.0.0，表示当前IP处于192.168.0.0这个网段。使用子网掩码就能灵活划分不同子网，但是CIDR只是充分利用了每一位IP地址，IP地址的总量不变，其供给与需求的矛盾依然是存在的。有三种解决这个矛盾的典型方法
+动态分配IP地址（DHCP）：只给接入网络的设备分配IP地址，这时同一设备每次上网时所用的IP地址是不同的IPV6技术：IPV6和IPV4互不兼容，IPV6用128b来表示一个IP地址，2的128次方是个非常庞大的数目，在IPV6技术下，每个人都可以拥有属于自己的IP，但是该技术目前没有普及NAT技术（Network Address Translation） 解决IPV4地址耗尽问题的主要策略是NAT技术，NAT延缓了IPV6的普及，使IPV4延用至今。什么是NAT？NAT是一种将私有地址转换成公有地址的转换技术，其主要部署在一个组织网络的出口位置，将所有要访问Internet的私网地址转换成公网地址。不同的私网可以使用相同的IP地址，经过NAT的转换，它们都被转换成了不同的公网地址。理论上我们可以使用所有可能的字段作为私网地址，但是RFC 1918规定了用于组建局域网的IP地址
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/72a593c0c10a33c518dca184eaca0825/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/15386a0b608c2e05580691b527c05300/" rel="bookmark">
+			vue2生命周期
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		本文目录 vue2生命周期常见生命周期：一、beforeCreate二、created三、beforeMounted四、mounted五、beforeUpdate六、updated七、beforeDestroy八、destroyed keep-alive九、activated十、deactivated 其他：十一、errorCaptured vue2生命周期 所有生命周期钩子的 this 上下文将自动绑定至实例中，因此你可以访问 data、computed 和 methods。这意味着你不应该使用箭头函数来定义一个生命周期方法 (例如 created: () =&gt; this.fetchTodos())。因为箭头函数绑定了父级上下文，所以 this 不会指向预期的组件实例，并且this.fetchTodos 将会是 undefined。
+不要在选项 property 或回调上使用箭头函数，比如 created: () =&gt; console.log(this.a) 或 vm.$watch(‘a’, newValue =&gt; this.myMethod())。因为箭头函数并没有 this，this 会作为变量一直向上级词法作用域查找，直至找到为止，经常导致 Uncaught TypeError: Cannot read property of undefined 或 Uncaught TypeError: this.myMethod is not a function 之类的错误。
+常见生命周期： 一、beforeCreate 第一个生命周期钩子，在实例初始化之后,进行数据侦听和事件/侦听器的配置之前同步调用。此时实例的data和methods等配置还未初始化，无法调用，只能使用一些默认事件。
+二、created 在实例创建完成后被立即同步调用。在这一步中，实例已完成对选项的处理，意味着以下内容已被配置完毕：数据侦听、计算属性、方法、事件/侦听器的回调函数。然而，挂载阶段还没开始，且 $el property 目前尚不可用。模板还没有编译，也就是我们还不能获取到DOM。
+三、beforeMounted 该在挂载开始之前被调用：相关的 render 函数首次被调用。该钩子函数在模板渲染之前调用，也就是DOM节点挂载到真实DOM树之前调用。此模板进行编译，会调用render函数生成vDom，也就是虚拟DOM，此时我们同样无法获取DOM节点。此时我们同样是无法获取DOM节点的，因为此时只存在VDOM，还在JS级别。
+四、mounted 实例被挂载后调用，这时 el 被新创建的 vm. e l 替换了。如果根实例挂载到了一个文档内的元素上，当 m o u n t e d 被调用时 v m .
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/15386a0b608c2e05580691b527c05300/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/d74d74824d85ea49a876971de4b794bd/" rel="bookmark">
+			状态机按键消抖
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		嵌入式_状态机按键消抖 状态机，FSM（Finite State Machine），也称为同步有限状态机从。指的是在同步电路系统中使用的，跟随同步时钟变化的，状态数量有限的状态机，简称有限状态机。
+文章目录 嵌入式_状态机按键消抖前言一、状态机消抖原理二、实现步骤1、一共有四个按键，定义一个按键表：2、再定义一个按键属性结构体3、再定义一个按键状态4、接口函数5、按键结构体数据定义以及状态检测切换函数实现 三、完整代码1、.h文件2、.c文件 四、使用方法总结 前言 此代码是在STMF407平台使用标准库函数实现的，需要移植时请根据实际情况进行分析和修改。
+按键抖动：按键抖动时间的长短由按键的机械特性决定，一般为5ms～10ms。这是一个很重要的时间参数，在很多场合都要用到。按键稳定闭合时间的长短则是由操作人员的按键动作决定的，一般为零点几秒至数秒。键抖动会引起一次按键被误读多次。为确保单片机对按键的一次闭合仅作一次处理，必须去除键抖动。在键闭合稳定时读取键的状态，并且必须判别到按键释放到稳定状态后再去作处理。
+一般软件消抖一般又是直接一个简短延时Delay函数，数据阻塞式消抖效率低下，占用MCU资源，最近研究了一下状态机消抖，不占用MCU资源的非阻塞消抖。
+传统硬件消抖：利用电容的充放电特性来对抖动过程中产生的电压毛刺进行平滑处理，从而实现消抖。在按键的两端并联一个0.1uf的电容
+一、状态机消抖原理 如图：
+初始状态：图以黑色方框表示，此时按键没有按下，MCU会检测到有一个初始电平（可以是高电平也可以是低电平），此时状态没有边沿信号触发，触次数为0，当有手按这个按键时候会产生毛刺，当检测到首次与初始电平不一样的电平信号时，就会变为初始抖动状态。
+初始抖动状态：图以右上角灰色方框表示，接上文，按键状态变为初始抖动状态，会持续记录与初始电平不一样的电平信号触发次数，当持续N次时表示已经是持续的反转信号了说明按键确实按下了，此时就会直接跳转到反转状态，表示按键确实被按下。如果某一次检测到的信号还是和初始电平一样，那么就会重新置为初始状态，重新记录触发次数，直至持续N次的反转信号才会跳转到反转状态。
+反转状态：图以白色方框表示，接上文，此时按键确实是按下状态，MCU会检测到一个反转电平（与初始状态电平相反），此状态没有边沿信号触发时触次数为0，当有手重新按这个按键或松开按键时候会产生毛刺，当检测到首次与反转电平不一样的电平信号时，就会变为反转抖动状态。
+反转抖动状态：图以左下角灰色方框表示，接上文，按键状态变为反转抖动状态，会持续记录与反转电平不一样的电平信号触发次数，当持续N次时表示已经是持续的另一种信号了说明按键确实重新按下或松开，此时就会直接跳转到初始状态，表示按键确实被重新按下或松开。如果某一次检测到的信号还是和反转电平一样，那么就会重新置为反转状态，重新记录触发次数，直至持续N次的反转信号才会跳转到初始状态。
+二、实现步骤 提示：本代码基于STM32F407标准库写的，主义修改及兼容性
+1、一共有四个按键，定义一个按键表： typedef enum // 按键表, { KEY0 = 0, KEY1, KEY2, KEY3, KEY_NUM, // 必须要有的记录按钮数量，必须在最后 }KEY_LIST; 2、再定义一个按键属性结构体 代码如下（示例）：
+typedef struct { uint8_t	KeysNum;	//序号 GPIO_TypeDef*	GPIOX;	//端口 uint16_t GPIO_PinsNum;	//引脚号 uint16 KEY_TIMECOUNT;	//时间计数器 GPIO_Pulltype GPIO_Pull;	//初始状态(未按下时候电平 0/1) KEY_STATUS key_NowStatus;	//按键当前状态 uint8_t Key_Event;	//按键事件 }KEY_COMPONENTS; 3、再定义一个按键状态 代码如下（示例）：
+#define ENUM_ITEM(ITEM) ITEM,	//逗号不可省略 #define ENUM_STRING(ITEM) #ITEM, #define KEY_STATUS_ENUM(STATUS) \ STATUS(KS_RELEASE) /*稳定松开状态*/ \ STATUS(KS_PRESS_SHAKE) /*按下抖动状态*/ \ STATUS(KS_PRESS) /*稳定按下状态*/ \ STATUS(KS_RELEASE_SHAKE) /*松开抖动状态*/ \ STATUS(KS_NUM) /*状态总数(无效状态)*/ \ 4、接口函数 extern void ScanKey(void);	//持续扫描函数 extern KEY_STATUS key_status_check(uint Key_index);	//状态检测函数 extern uint8_t Key_GetPinsVolt(uint8_t Pin_index);	//获取GPIO电平函数 5、按键结构体数据定义以及状态检测切换函数实现 KEY_COMPONENTS Key_TestGrop[KEYSNUMBERS] = { {0,GPIOE,GPIO_Pin_4,0,PuLL_UP,KS_RELEASE,0},	//key0 {1,GPIOE,GPIO_Pin_3,0,PuLL_UP,KS_RELEASE,0},	//key1 {2,GPIOE,GPIO_Pin_2,0,PuLL_UP,KS_RELEASE,0},	//key2 {3,GPIOA,GPIO_Pin_0,0,PuLL_DOWN,KS_RELEASE,0}	//WE_UP }; /*分别是：编号 端口 引脚号 触发次数计数器 初始电平 初始状态 触发事件标记位*/ /************************************************************************************ *@fuction	:key_status_check *@brief	:状态机去抖动核心代码 *@param	:-- *@return	:按键状态 *@author	:_Awen *@date	:2022-12-10 ************************************************************************************/ KEY_STATUS key_status_check(uint Key_index) { switch(Key_TestGrop[Key_index].
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/d74d74824d85ea49a876971de4b794bd/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/cda296e9ec3098438e3b95b196516a59/" rel="bookmark">
+			Vue基础
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		文章目录 Vue特点：vue基本使用：vue模板语法插值语法指令语法 vue数据绑定el和data两种写法el两种写法：data两种写法： 数据代理（`Object.defineProperty()`）get函数set函数 vue中的数据代理vue事件处理事件的基本使用：事件修饰符阻止事件冒泡 键盘事件系统修饰键（用法特殊）：ctrl，alt，shift，meta 计算属性（computed）监视属性（watch）深度监视计算属性和监视属性对比 绑定样式条件渲染列表渲染vue监测数据原理vue修改数组中某元素：收集表单数据内置指令：自定义指令配置对象中三个回调： 生命周期 Vue特点： 采用组件化模式，提高代码复用率，且让代码更好维护声明式编码，让编码人员无需重复操作DOM，提高开发效率使用虚拟化DOM+优秀的Diff算法，尽量复用DOM节点 vue基本使用： 想让vue工作，就必须建立一个vue实例，并且要传入配置对象root容器中的代码遵循HTML语法规范，但其中有特殊的vue语法root容器中的代码称为【vue模板】vue实例和容器都是一一对应的真实开发中只有一个vue实例，并配合组件一起使用{{xxx}}中xxx为 js 表达式，且xxx可以自动读取到data中的所有数据一旦vue实例中data值改变，容器中对应位置的内容也会改变 例如下方，new关键字，就创建了一个vue实例，el和data就是当前实例的配置对象，此时新创建的vue对象就可以叫做vm对象
+&lt;!DOCTYPE html&gt; &lt;html lang="en"&gt; &lt;head&gt; &lt;script type="text/javascript" src="./js/vue.js"&gt;&lt;/script&gt; &lt;/head&gt; &lt;body&gt; &lt;div id="root"&gt; &lt;h1&gt;hello,{{name}}&lt;/h1&gt; &lt;/div&gt; &lt;script type="text/javascript"&gt; Vue.config.productionTip = false // 创建vue实例 new Vue({ el: "#root", //el用于指定当前vue为那个容器服务 data: { //data中存储数据 name: '尚硅谷' } }) &lt;/script&gt; &lt;/body&gt; &lt;/html&gt; vue模板语法 插值语法 在root容器中将要改变插入的值写在{{}}中，并把对应的值，写在vue实例中，想改变其中内容时，直接改变vue实例中的值就好了
+&lt;div id="root"&gt; &lt;h1&gt;插值语法&lt;/h1&gt; &lt;h3&gt;你好，{{name}}&lt;/h3&gt; &lt;hr/&gt; &lt;/div&gt; &lt;script type="text/javascript"&gt; Vue.config.productionTip = false //组织vue在启动时生成生产提示 new Vue({ el: "
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/cda296e9ec3098438e3b95b196516a59/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/afe43cbc2241d4bcfc9b91356b456fff/" rel="bookmark">
+			c语言结构体定义、输入与输出
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		 我们在使用c语言时，有时会遇到需要将多个数据混合运算的情况，如果其数据类型相同，我们可以使用二维数组来存储与调用。
+但是，在使用中，我们时常会遇到需要将不同的数据类型进行运算的情况，这时候就可以使用结构体来完成工作。
+struct student //struct用于定义一个结构体，student是结构名 { char name[4]; //定义结构体的数据类型，名称 int age; char sex[1]; }; //;是结构体定义的结束，是必须的 而在使用时和其他数据类型一样
+struct student { char name[4]; int age; char sex[1]; }; struct student xs; //struct student为变量类型，xs为变量名 //自然也可以使用数组定义 struct student sx[10]; 定义完成之后就可以使用了
+struct student { char name[10]; int age; char sex[1]; }; struct student xs={"李明",12,"男"}; //同样可以给初始值 scanf("%s%d%s",&amp;xs.name[10],&amp;xs.age,&amp;xs.sex[1]); //同样可以使用scanf进行输入，输入的变量由 变量名.数据名 组成 printf("%s%d%s",xs.name[10],xs.age,xs.sex[1]); //输出同理 
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/af890f439ad14e5f50cbbad017382fc3/" rel="bookmark">
+			三维环境配置
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		硬件条件
+检查是否有独立显卡
+2.1、点击我的电脑图标，然后右键点击管理按钮，弹出计算机管理页面，点击设备管理器，查看右侧显示适配器，查看是否有独立显卡
+设置：最新显卡驱动设置
+3.1、
+设置：软件或者程序的独显设置
+4.1、全局设置：选择NVIDIA显卡的控制面板，点击管理3D设置，在右侧全局配置中，首选图形处理器，为高性能NVIDIA处理器；
+4.2、程序设置：切换到程序设置面板，点击添加按钮，找到对应的supermap对应的桌面软件，然后设置高性能NVIDIA处理器，点击右下方应用按钮使之生效
+设置：硬件加速GPU设置
+5.1、找到Windows设置面板，然后输入图形设置内容，打开图形设置面板，点击硬件加速GPU计划，接下来通过浏览方式，找到需要添加supermap软件，然后重启电脑
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/b50aad294b53e64973bfde9c1056a794/" rel="bookmark">
+			MapReduce综合学习（含Word Count案例）
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		文章目录 MapReduce简介MapTaskReduceTaskMapper阶段解读Reducer阶段解读 MapReduce适用的问题MapReduce的特点MapReduce基本思想大数据处理思想：分而治之构建抽象模型：Map 函数和 Reduce 函数上升到架构：并行自动化并隐藏底层细节 MapReduce计算架构提供的主要功能MapReduce框架中的名词解释MapReduce与YARNMapReduce的原理MapReduce进程常用数据序列化类型MapReduce实际处理流程FileInputFormat切片机制Mapreduce的shuffle机制MapReduce案例（wordcount） MapReduce简介 MapReduce是一种可用于数据处理的编程框架。MapReduce采用"分而治之"的思想，把对大规模数据集的操作，分发给一个主节点管理下的各个分节点共同完成，然后通过整合各个节点的中间结果，得到最终结果。简单地说，MapReduce就是"任务的分解与结果的汇总"。
+在分布式计算中，MapReduce框架负责处理了并行编程中分布式存储、工作调度、负载均衡、容错均衡、容错处理以及网络通信等复杂问题，把处理过程高度抽象为两个函数：map和reduce，map负责把任务分解成多个任务，reduce负责把分解后多任务处理的结果汇总起来。
+Map/Reduce是一个用于大规模数据处理的分布式计算编程模型。
+MapReduce程序的工作分两个阶段进行：
+Map阶段（映射）
+这个函数单独地应用在每个单元格上的操作就属于映射（Map)。
+由一个或者多个MapTask组成。每个MapTask处理输入数据集合中的一片数据(InputSplit)，并将产生的若干个数据片段(一个数据文件)写到本地磁盘上。
+Reduce阶段
+由一个或者多个ReduceTask组成。ReduceTask则从每个MapTask上远程拷贝相应的数据片段，经分组聚集和归约后，将结果写到HDFS上作为最终结果。
+使用需要定义map函数和reduce函数
+map函数用来处理原始数据（初始键值对）以生成一批中间的key/value对
+reduce函数将 所有这些中间的有着相同key的values合并起来。
+输入到每一个阶段均是键 - 值对。
+MapTask 执行过程概述：
+首先，通过用户提供的InputFormat将对应的InputSplit解析成一系列key/value,并依次交给用户编写的map()函数处理，接着按照指定的Partition对数据分片，以确定每个key/value将交给哪个ReduceTask处理，之后将数据交给用户定义的Combiner进行一次本地合并(没有则直接跳过)，最后即将处理结果保存到本地磁盘上。
+具体步骤：
+（1）Read阶段：MapTask通过用户编写的RecordReader，从输入InputSplit中解析出一个个key/value。
+（2）Map阶段：该阶段只要是将解析出的key/value交给用户编写的map()函数处理，并产生一系列新的key/value。
+（3）Collect阶段：在用户编写的map()函数中，当数据处理完成后，一般会调用OutputCollector.collect()输出结果。在该函数内部，它会将生成的ley/value分片(通过调用Partition),并写入一个环形内存缓冲区中。
+（4）Spill阶段：即“溢写”，当环形缓冲区满后，MapReduce会将数据写到本地磁盘上，生成一个临时文件。需要注意的是，将数据写入本地磁盘之前，先要对数据进行一次本地排序，并在必要时对数据进行合并操作。
+（5）Combine阶段：当所有数据处理完成后，MapTask对所有临时文件进行一次合并，以确保最终只会生成一个数据文件。
+ReduceTask 执行过程概述：
+ReduceTask的输入数据来自各个MapTask，因此首先通过HTTP请求从各个已经运行完成的MapTask所在TaskTracker机器上拷贝相应的数据分片，待所有数据拷贝完成后，再以key为关键字对所有数据进行排序(sort)，通过排序，key相同的记录聚集到一起形成若干分组，然后将分组数据交给用户编写的reduce()函数处理，并将数据结果直接写到HDFS上作为最终输出结果。
+具体步骤：
+（1）Shuffle阶段：也称为Copy阶段。ReduceTask从各个MapTask所在的TaskTracker上远程拷贝一片数据，并针对某一片数据，如果其大小超过一定阈值，则写到磁盘上，否则直接放到内存中。
+（2）Merge阶段：在远程拷贝数据的同时，ReduceTask启动了两个后台线程对内存和磁盘上的文件进行合并，以防止内存使用过多或磁盘上的文件过多，并且可以为后面整体的归并排序减负，提升排序效率。
+（3）Sort阶段：按照MapReduce的语义，用户编写的reduce()函数输入数据是按key进行聚集的一组数据。为了将key相同的数据聚集在一起，Hadoop采用了基于排序的策略。由于各个MapTask已经实现了自己的处理结果进行了局部排序，因此，ReduceTask只需要对所有数据进行一次归并排序即可。
+（4）Reduce阶段：在该阶段中，ReduceTask将每组数据依次交给用户编写的reduce()函数处理。
+（5）Write阶段：reduce()函数将计算结果写到HDFS上。
+Mapper阶段解读 Mapper的输入文件位于HDFS上，先对输入数据切分，每一个split分块对应一个Mapper任务，通过RecordReader对象从输入分块中读取并生成键值对，然后执行Map函数，输出的中间键值对被partion()函数区分并写入缓冲区，同时调用sort()进行排序。
+Reducer阶段解读 Reducer主要有三个阶段：Shuffle、Sort、Reduce
+1 . Shuffle阶段：
+Reducer的输入就是Mapper阶段已经排好序的输出。在这个阶段，框架为每个Reducer任务获得所有Mapper输出中与之相关的分块，把Map端的输出结果传送到Reduce端，大量操作是数据复制（因此也称数据复制阶段）。
+2 . Sort阶段：
+框架按照key对Reducer的输入进行分组（Mapper阶段时每一个Map任务对于它本身的输出结果会有一个排序分组，而不同Map任务的输出中可能会有相同的key，因此要再一次分组）。Shuffle和Sort是同时进行的，Map的输出也是一边被取回一边被合并。排序是基于内存和磁盘的混合模式进行，经过多次Merge才能完成排序。（PS：如果两次排序分组规则需要不同，可以指定一个Comparator比较器来控制分组规则）。
+3 . Reduce阶段：
+通过Shuffle和Sort操作后得到的&lt;key, (list of values)&gt;被送到Reducer的reduce()函数中执行，针对每一个&lt;key, (list of values)&gt;会调用一次reduce()函数。
+MapReduce适用的问题 用MapReduce来处理的数据集（或任务）必须具备这样的特点：待处理的数据集可以分解成许多小的数据集，而且每一个小数据集都可以完全并行地进行处理。
+MapReduce的特点 1)MapReduce 易于编程 。它简单的实现一些接口，就可以完成一个分布式程序
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/b50aad294b53e64973bfde9c1056a794/">Read more…</a>
+	</div>
+</article><article class="list__item post">
+	
+	<header class="list__header">
+		<h2 class="list__title post__title">
+			<a href="/posts/b5e96ee79d148c89553d52b44aace255/" rel="bookmark">
+			Scala学习（基础篇）待更新
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		文章目录 引言大数据介绍大数据与云计算区别大数据和人工智能的区别大数据和传统的分析（excel）的区别scala的特性面向对象特性函数式编程函数式编程的特点：函数式编程的优势静态类型扩展性并发性 为什么要学scalascala安装简单测试了解ScalaScala来源 Scala解释器Scala集成环境配置命名规范Scala基本语法换行符Scala 包定义包引用 Scala 数据类型Scala 基础字面量Scala 转义字符 Scala变量变量类型声明变量推断Scala 多个变量声明其他类型var和val的区别可变和不可变？ Maven项目整合scalaScala类型转换Scala访问修饰符私有(Private)成员保护(Protected)成员公共(Public)成员 作用域保护 引言 推荐学习视频
+大数据介绍 主要工作：数据统计分析（hadoop工程师、spark工程师、flink工程师、数仓工程师、BI工程师、ETL工程师 、大数据平台工程师）
+大数据与云计算区别 大数据可以做数据分析统计，而云计算可以为大数据提供一套资源利用的平台，因此大数据很多时候基于云计算。
+大数据和人工智能的区别 首先人工智能基于大数据，大数据为人工智能提供重要的海量数据
+大数据和传统的分析（excel）的区别 采用excel处理数据的方式早已不能承担海量数据的处理
+scala的特性 面向对象特性 Scala是一种纯面向对象的语言，每个值都是对象，包括基本数据类型（即布尔值、数字等）在内，当然函数也是对象。
+类可以被子类化，对象的数据类型以及行为由类和特质描述。
+类抽象机制的扩展有两种途径：一种途径是子类继承，另一种途径是灵活的混入机制。这两种途径能避免多重继承的种种问题。
+函数式编程 Scala也是一种函数式语言，其函数也能当成值来使用。Scala提供了轻量级的语法用以定义匿名函数，支持高阶函数，允许嵌套多层函数，并支持柯里化。Scala的case class及其内置的模式匹配相当于函数式编程语言中常用的代数类型。
+更进一步，程序员可以利用Scala的模式匹配，编写类似正则表达式的代码处理XML数据。
+纯粹的函数编程语言编写的函数没有变量。因此，任意一个函数，只要输入是确定的，输出就是确定的，这种纯函数我们称之为没有副作用。而允许使用变量的程序设计语言，由于函数内部的变量状态不确定，同样的输入，可有得到不同的输出，因此，这种函数式有副作用的。
+函数式编程的特点： 函数是一等公民
+以表达式为中心
+无副作用
+只用纯函数来构造函程序，或者说函数没有副作用。 不修改状态
+引用透明
+函数式编程的优势 代码简洁，开发速度快
+接近自然语言，易理解
+易于代码管理
+适合并发编程
+适用于热升级
+静态类型 Scala具备类型系统，通过编译时检查，保证代码的安全性和一致性。类型系统具体支持以下特性：
+泛型类
+协变和逆变
+标注
+类型参数的上下限约束
+把类别和抽象类型作为对象成员
+复合类型
+引用自己时显式指定类型
+视图
+多态方法
+扩展性 Scala的设计秉承一项事实，即在实践中，某个领域特定的应用程序开发往往需要特定于该领域的语言扩展。Scala提供了许多独特的语言机制，可以以库的形式轻易无缝添加新的语言结构：
+任何方法可用作前缀或后缀操作符。
+可以根据预期类型自动构造闭包。
+并发性 Scala使用Actor作为其并发模型，Actor是类似线程的实体，通过邮箱发收消息。Actor可以复用线程，因此可以在程序中可以使用数百万个Actor,而线程只能创建数千个。在2.10之后的版本中，使用Akka作为其默认Actor实现。
+为什么要学scala 1.优雅
+框架的而用户是应用开发程序员，API是否优雅直接影响用户体验
+2.速度快
+Scala语言表达能力强，一行代码抵得上java多行，开发速度快，scala是静态编译的，所以和JRuby，Groovy比起来速度会快很多
+	</div>
+	<div class="list__footer clearfix">
+		<a class="list__footer-readmore btn" href="/posts/b5e96ee79d148c89553d52b44aace255/">Read more…</a>
+	</div>
+</article>
+</main>
+
+<div class="pagination">
+	<a class="pagination__item pagination__item--prev btn" href="/posts/page/71/">«</a>
+	<span class="pagination__item pagination__item--current">72/220</span>
+	<a class="pagination__item pagination__item--next btn" href="/posts/page/73/">»</a>
+</div>
+
+			</div>
+			
+
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

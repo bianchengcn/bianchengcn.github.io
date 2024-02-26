@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【嵌入式】Makefile 学习笔记记录 | 嵌入式Linux - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【嵌入式】Makefile 学习笔记记录 | 嵌入式Linux" />
+<meta property="og:description" content="文章目录 前言一、Makefile的引入——最简单的gcc编译过程二、Makefile的规则三、Makefile的语法3.1、通配符3.2、假想目标 .phony3.3、即时变量 延时变量 四、Makefile的函数4.1、foreach4.2、filter4.3、wildcard4.4、patsubst 五、Makefile升级5.1、包含头文件在内的依赖关系（自动生成依赖文件）5.2、添加CFLAGS 六、通用Makefile模板 前言 开发板平台：飞凌嵌入式ElfBoard ELF-1
+参考视频和资料：飞凌嵌入式ElfBoard ELF-1软件学习书册
+韦东山：https://www.bilibili.com/video/BV1kk4y117Tu?p=6&amp;vd_source=3018264d4331e8fc267f9d68c24ee20f
+一、Makefile的引入——最简单的gcc编译过程 keil,mdk,avr这些工具全自动编译的内部机制依然是makefile
+这里我们先随便写两个C文件（a.c 和b.c），用最传统的gcc编译一下：
+a.c:
+#include &lt;stdio.h&gt; void funB(); int main() { funB(); return 0; } b.c:
+#include &lt;stdio.h&gt; void funB() { printf(&#34;hello B!\n&#34;); } 然后我们上传到虚拟机上进行编译：
+gcc -o test a.c b.c 然后执行
+./test 从a.c b.c到可执行文件test经历了什么？：
+总的来说就是四步：预处理，编译，汇编，链接（一般来说前三步统称为编译）
+a.c -&gt;a.s-&gt;a.o
+b.c -&gt;b.s-&gt;b.o
+最后两个.o链接在一起生成可执行文件test
+我们可以在gcc命令后加上 -v看到编译链接的完整过程：
+gcc -o test a.c b.c -v 具体内容很多，就不一一截图了：
+这样gcc有个很明显的缺点：
+不论a.c b.c有没有被更改过，每次gcc都会重新编译链接所有的C文件。有的时候我们只修改了很小一部分的C文件，但此时我们gcc会全部重新编译，这很耽误时间。
+makefile就能解决这个问题。
+它可以把刚刚gcc这个过程解构成一系列小的编译过程：
+gcc -c -o a." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/435343263b952ba058a26868c06ffe5a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-07T21:38:48+08:00" />
+<meta property="article:modified_time" content="2024-01-07T21:38:48+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【嵌入式】Makefile 学习笔记记录 | 嵌入式Linux</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_7" rel="nofollow">前言</a></li><li><a href="#Makefilegcc_13" rel="nofollow">一、Makefile的引入——最简单的gcc编译过程</a></li><li><a href="#Makefile_86" rel="nofollow">二、Makefile的规则</a></li><li><a href="#Makefile_112" rel="nofollow">三、Makefile的语法</a></li><li><ul><li><a href="#31_113" rel="nofollow">3.1、通配符</a></li><li><a href="#32_phony_147" rel="nofollow">3.2、假想目标 .phony</a></li><li><a href="#33__184" rel="nofollow">3.3、即时变量 延时变量</a></li></ul> 
+  </li><li><a href="#Makefile_227" rel="nofollow">四、Makefile的函数</a></li><li><ul><li><a href="#41foreach_228" rel="nofollow">4.1、foreach</a></li><li><a href="#42filter_249" rel="nofollow">4.2、filter</a></li><li><a href="#43wildcard_279" rel="nofollow">4.3、wildcard</a></li><li><a href="#44patsubst_299" rel="nofollow">4.4、patsubst</a></li></ul> 
+  </li><li><a href="#Makefile_317" rel="nofollow">五、Makefile升级</a></li><li><ul><li><a href="#51_318" rel="nofollow">5.1、包含头文件在内的依赖关系（自动生成依赖文件）</a></li><li><a href="#52CFLAGS_452" rel="nofollow">5.2、添加CFLAGS</a></li></ul> 
+  </li><li><a href="#Makefile_557" rel="nofollow">六、通用Makefile模板</a></li></ul> 
+</div> 
+<p></p> 
+<hr> 
+<h2><a id="_7"></a>前言</h2> 
+<p>开发板平台：飞凌嵌入式ElfBoard ELF-1<br> 参考视频和资料：飞凌嵌入式ElfBoard ELF-1软件学习书册<br> 韦东山：<a href="https://www.bilibili.com/video/BV1kk4y117Tu?p=6&amp;vd_source=3018264d4331e8fc267f9d68c24ee20f" rel="nofollow">https://www.bilibili.com/video/BV1kk4y117Tu?p=6&amp;vd_source=3018264d4331e8fc267f9d68c24ee20f</a></p> 
+<h2><a id="Makefilegcc_13"></a>一、Makefile的引入——最简单的gcc编译过程</h2> 
+<p>keil,mdk,avr这些工具全自动编译的内部机制依然是<strong>makefile</strong></p> 
+<p>这里我们先随便写两个C文件（a.c 和b.c），用最传统的gcc编译一下：</p> 
+<p>a.c:</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">void</span> <span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>b.c:</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">void</span> <span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"hello B!\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>然后我们上传到虚拟机上进行编译：</p> 
+<pre><code class="prism language-bash">gcc <span class="token parameter variable">-o</span> <span class="token builtin class-name">test</span> a.c  b.c
+</code></pre> 
+<p>然后执行</p> 
+<pre><code class="prism language-bash">./test
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c8/20/7tjD9PO1_o.png" alt="在这里插入图片描述"><br> 从a.c b.c到可执行文件test经历了什么？：<br> 总的来说就是四步：<strong>预处理，编译，汇编，链接</strong>（一般来说前三步统称为编译）<br> a.c -&gt;a.s-&gt;a.o<br> b.c -&gt;b.s-&gt;b.o<br> 最后两个.o链接在一起生成可执行文件test</p> 
+<p>我们可以在gcc命令后加上 -v看到编译链接的完整过程：</p> 
+<pre><code class="prism language-bash">gcc <span class="token parameter variable">-o</span> <span class="token builtin class-name">test</span> a.c  b.c <span class="token parameter variable">-v</span>
+</code></pre> 
+<p>具体内容很多，就不一一截图了：<br> <img src="https://images2.imgbox.com/15/ad/BFuyFwHA_o.png" alt="在这里插入图片描述"><br> 这样gcc有个很明显的缺点：<br> 不论a.c b.c有没有被更改过，每次gcc都会重新编译链接所有的C文件。有的时候我们只修改了很小一部分的C文件，但此时我们gcc会全部重新编译，这很耽误时间。</p> 
+<p><strong>makefile就能解决这个问题。</strong><br> 它可以把刚刚gcc这个过程解构成一系列小的编译过程：</p> 
+<pre><code class="prism language-bash">gcc <span class="token parameter variable">-c</span> <span class="token parameter variable">-o</span> a.o a.c
+gcc <span class="token parameter variable">-c</span> <span class="token parameter variable">-o</span> b.o b.c
+gcc <span class="token parameter variable">-o</span> <span class="token builtin class-name">test</span>  a.o b.o
+</code></pre> 
+<p>这三句命令的含义如下：</p> 
+<p>gcc -c -o a.o a.c：这个命令使用 GCC 编译器将源文件 a.c 编译成目标文件 a.o。具体解释如下：<br> -c 选项表示只进行编译，而不进行链接，生成目标文件。<br> -o a.o 选项指定输出文件的名称为 a.o。<br> a.c 是源文件的名称。</p> 
+<p>gcc -c -o b.o b.c：这个命令与第一条类似，将源文件 b.c 编译成目标文件 b.o。</p> 
+<p>gcc -o test a.o b.o：这个命令使用 GCC 编译器将目标文件 a.o 和 b.o 进行链接，生成一个名为 test 的可执行文件。<br> -o test 选项指定输出文件的名称为 test。<br> a.o b.o 是链接的目标文件。</p> 
+<p>综合起来，这三条命令用于分别编译两个源文件 a.c 和 b.c，然后将生成的目标文件 a.o 和 b.o 链接在一起，形成一个名为 test 的可执行文件。<br> <strong>makefile如何自己的这些文件被修改了？：</strong><br> 在第一行 判断到a.c比a.o新，就说明a.c被更新过了，就可以重新编译<br> 在第二行 判断到b.c比b.o新，就说明b.c被更新过了，就可以重新编译<br> 在第三行 判断到a.o b.o比test新，就说明a.o b.o被更新过了，就可以重新编译</p> 
+<h2><a id="Makefile_86"></a>二、Makefile的规则</h2> 
+<p>makefile的基本语法格式为：</p> 
+<hr> 
+<p>目标文件：依赖文件<br> TAB 命令</p> 
+<hr> 
+<p>当依赖比目标<strong>新</strong>的时候 or 该目标文件直接不存在的时候，就会执行命令</p> 
+<p>我们在刚刚的文件夹中新建一个makefile:<br> <img src="https://images2.imgbox.com/30/d5/3oosfKMS_o.png" alt="在这里插入图片描述"><br> 然后执行make两此看一下效果：</p> 
+<pre><code class="prism language-bash"><span class="token function">make</span>
+<span class="token function">make</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/e1/5e/enpwK3Ys_o.png" alt="在这里插入图片描述"><br> 第一次Make正确得运行了我们makefile里面写的所有语句<br> 第二次make因为没有检测到依赖项更新，所以并没有重新编译</p> 
+<p>我们再做一个小实验，即只修改a.c ，只修改b.c 以及同时修改a.c和b.c再分别执行make的效果：<br> <img src="https://images2.imgbox.com/52/bc/bS3xoa8i_o.png" alt="在这里插入图片描述"><br> 可以看到，我们修改了啥，make时也只会重新执行依赖项变动的语句，没有修改的部分不会重新执行命令。<br> （touch 命令是用来更新文件的访问和修改时间戳的工具，如果文件不存在，则会创建一个空白文件。它不会修改文件的内容，只是更新文件的元数据。所以，touch 命令不会改变文件的内容，<strong>只是改变文件的时间戳</strong>。<strong>相当于变相修改了文件</strong>）</p> 
+<h2><a id="Makefile_112"></a>三、Makefile的语法</h2> 
+<h3><a id="31_113"></a>3.1、通配符</h3> 
+<p>我们再增加一个c.c文件，里面有一个函数func():</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">void</span> <span class="token function">funC</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"hello C!\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>再把a.c里的内容改一下，把函数func加上去：</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">void</span> <span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">funC</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">funC</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<p>再使用通配符对makefile里面的语句进行一定的修改：<br> <img src="https://images2.imgbox.com/e9/ab/hoBoYM1B_o.png" alt="在这里插入图片描述"><br> 1）$^表示<strong>所有的依赖文件</strong><br> 2）使用 $&lt; <strong>表示第一个依赖文件</strong>（源文件），使用 $@ <strong>表示目标文件</strong>。<br> 这样就可以把gcc -o -c a.o a.c 和gcc -o -c b.o b.c合并成一句话了</p> 
+<p>我们在虚拟机上看一下效果：</p> 
+<p><img src="https://images2.imgbox.com/b5/c6/mK8MTmQI_o.png" alt="在这里插入图片描述"><br> 这里make没啥问题，正常工作了。</p> 
+<h3><a id="32_phony_147"></a>3.2、假想目标 .phony</h3> 
+<p>phony，英语单词，主要用作形容词、名词，作形容词时译为"假的，欺骗的"<br> 我们首先补一下<strong>make clean</strong>的内容 我们修改一下makefile中的内容：<br> <img src="https://images2.imgbox.com/b1/14/rYlhhggF_o.png" alt="在这里插入图片描述"><br> 增加了一句话：</p> 
+<pre><code class="prism language-bash">clean:
+	<span class="token function">rm</span> *.o <span class="token builtin class-name">test</span>
+</code></pre> 
+<p>Makefile 中还包含了一个 clean 目标，用于清理生成的目标文件和可执行文件：<br> 当执行 make clean 时，<strong>它将删除当前目录下的所有 .o 文件和 test 可执行文件</strong>。</p> 
+<p>我们上虚拟机实验一下：<br> <img src="https://images2.imgbox.com/61/df/kpKfwQFi_o.png" alt="在这里插入图片描述"><br> 发现所有的.o文件和可执行文件test均被清除了，这就是make clean的作用</p> 
+<p>在讲完clean之后，正式引出我们的makefile的一个语法：</p> 
+<hr> 
+<p>make [目标]<br> 比如说make clean，就会寻找makefile里面名为clean的目标，执行其tab后的命令<br> <strong>如果make后没有加东西（直接就是make）,那么系统会默认自动执行第一个目标的命令</strong>，在上文中，就会自动执行test目标的命令。</p> 
+<hr> 
+<p>在这个规则下有一个bug，就是遇到<strong>同名文件</strong>的情况（这里以clean同名文件为例子），**因为在makefile里并没有clean的依赖项文件。**之前是因为没有clean这个东西，所以执行会很顺利。<br> <img src="https://images2.imgbox.com/58/65/5Tjj1dSW_o.png" alt="在这里插入图片描述"></p> 
+<p>我们在虚拟机上新建一个名为clean的文件，我们先make，再执行make clean。此时根据makefile的规则，系统没有检测到clean发生改变（因为存在同名文件clean），那么执行make clean时就不会正确执行：<br> <img src="https://images2.imgbox.com/06/5d/ZFmSORwO_o.png" alt="在这里插入图片描述"><br> 解决办法：<strong>我们把clean设置为假想目标就能解决这个问题</strong>。<br> 我们稍微改一下makefile:<br> <img src="https://images2.imgbox.com/ae/e1/ambRl9Bg_o.png" alt="在这里插入图片描述"><br> 这里使用了 .PHONY 目标，它<strong>告诉 Make 这个目标不对应真实的文件名。这样做的目的是防止与同名的实际文件冲突，同时确保即使存在同名文件，make clean 也能正常执行。</strong><br> 这回我们再实验一下就对了：<br> <img src="https://images2.imgbox.com/b1/4f/gl8SzHXA_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="33__184"></a>3.3、即时变量 延时变量</h3> 
+<p>我们写一个新的makefile:<br> <img src="https://images2.imgbox.com/9b/ea/y7P8sZWe_o.png" alt="在这里插入图片描述"><br> 这个 Makefile 定义了两个变量 A 和 B，然后在 all 目标中使用了这两个变量。以下是中文解释：</p> 
+<p>A := abc 表示定义了一个变量 A，其值为 “abc”。:= 是一种赋值方式，表示覆盖先前的值。(<strong>即刻确定</strong>)<br> B = 123 表示定义了一个变量 B，其值为 “123”。= 也是一种赋值方式，但是它是延迟赋值，即在使用变量时才会展开。（<strong>延迟确定</strong>）</p> 
+<p>all 目标中使用了 echo $(A) 和 echo $ (B) 分别输出变量 A 和 B 的值。在 Makefile 中，<strong>$() 用于引用变量的值</strong>。<strong>echo 是一个在命令行中常用的命令，用于将文本输出到标准输出设备（通常是终端）。在类Unix系统（如Linux）和类似的命令行环境中，echo 命令通常用于显示文本。</strong></p> 
+<p>我们make一下看看效果：<br> <img src="https://images2.imgbox.com/76/af/3l0MsGOt_o.png" alt="在这里插入图片描述"><br> 我们可以在echo前面加上@ ：<br> <img src="https://images2.imgbox.com/57/f9/iIgcL3ZJ_o.png" alt="在这里插入图片描述"><br> 这样就不会打印命令本身了：<br> <img src="https://images2.imgbox.com/10/86/ClinZ4Kr_o.png" alt="在这里插入图片描述"><br> 到这里我们还看不出即时变量和延时变量的区别，我们再makefile添一些代码：<br> <img src="https://images2.imgbox.com/87/c1/UYLkPQvN_o.png" alt="在这里插入图片描述"><br> A是即可确定，但此时C还并没被赋值，所以这时会打印空<br> B是使用时才确定，所以不会为空<br> 我们实验一下：<br> <img src="https://images2.imgbox.com/1a/10/pws7YqgJ_o.png" alt="在这里插入图片描述"><br> 我们如果更改C=abc的位置呢：<br> <img src="https://images2.imgbox.com/4d/a9/NpgjVxi4_o.png" alt="在这里插入图片描述"><br> 最后结果还是不影响：（即C位置不影响B，系统会对makefile整体进行分析）</p> 
+<p><img src="https://images2.imgbox.com/fb/ae/0l2BFlwh_o.png" alt="在这里插入图片描述"><br> 最后我们再介绍两种符号：+= ?=<br> 在makefile里我们做如下更改：<br> <img src="https://images2.imgbox.com/46/d5/Hfuqju1v_o.png" alt="在这里插入图片描述"><br> make一下看看效果：<br> <img src="https://images2.imgbox.com/bf/4b/EWZeyGQc_o.png" alt="在这里插入图片描述"><br> 1）+= 运算符：用于追加值到变量。使用 += 时，它会将右侧的值追加到已经存在的变量值的末尾。如果变量之前未定义，则行为类似于简单的赋值。<br> 2）?= 运算符：用于给变量赋值，但仅在该变量之前未定义时才赋值。<strong>使用 ?= 时，它会检查变量是否已经定义，如果已定义则不进行赋值，否则将变量赋予指定的默认值。</strong></p> 
+<p>总结：<br> 1）：= 即时变量<br> 2）= 延时变量<br> 3）？=延时变量 是第一次定义才起效果<br> 4）+= 附加 它是即时变量还是延时变量 取决于前面</p> 
+<h2><a id="Makefile_227"></a>四、Makefile的函数</h2> 
+<h3><a id="41foreach_228"></a>4.1、foreach</h3> 
+<p>foreach 是GNU Make中的一个函数，用于进行循环迭代。其基本语法如下：</p> 
+<pre><code class="prism language-bash"><span class="token variable"><span class="token variable">$(</span>foreach var, list, text<span class="token variable">)</span></span>
+</code></pre> 
+<p>var: 循环中的临时变量，表示每次迭代中的当前元素。</p> 
+<p>list: 要迭代的列表，可以是以空格分隔的多个元素。</p> 
+<p>text: 在每次迭代中对var进行操作的文本块。</p> 
+<p>我们写一个新的makefile:<br> <img src="https://images2.imgbox.com/97/02/to6oBSAV_o.png" alt="在这里插入图片描述"><br> A=a b c: 定义了一个变量A，包含三个元素a、b和c。<br> B=$(foreach f, $(A), $(f).o): <strong>使用foreach循环，将A中的每个元素加上.o后缀，并将结果存储到变量B中。</strong><br> all:: 定义了一个目标规则名为all。@echo B = $(B): 在执行all目标时，打印出变量B的值。<br> 最后结果：<br> <img src="https://images2.imgbox.com/7f/98/z8JgQnFZ_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="42filter_249"></a>4.2、filter</h3> 
+<p>filter 是GNU Make中的一个函数，用于从列表中筛选出符合指定条件的元素。其基本语法如下：</p> 
+<pre><code class="prism language-bash"><span class="token variable"><span class="token variable">$(</span>filter pattern<span class="token punctuation">..</span>., text<span class="token variable">)</span></span>
+</code></pre> 
+<p>pattern…: 一个或多个模式，用于指定筛选条件。可以包含通配符 %。<br> text: 要进行筛选的文本块，通常是一个以空格分隔的元素列表。<br> filter函数会返回text中符合给定模式的元素列表。模式之间使用空格分隔。</p> 
+<p>filter函数还支持反向操作，使用filter-out可以筛选出不符合指定条件的元素。例如：</p> 
+<pre><code class="prism language-bash">C <span class="token operator">=</span> <span class="token variable"><span class="token variable">$(</span>filter-out a%, <span class="token punctuation">$(</span>A<span class="token punctuation">)</span><span class="token variable">)</span></span>
+</code></pre> 
+<p>在这个例子中，匹配A中不以字母’a’开头的元素。</p> 
+<p>我们写一个新的Makefile:<br> <img src="https://images2.imgbox.com/c5/d9/v5FM8RBp_o.png" alt="在这里插入图片描述"></p> 
+<p>C = a b c d/: 定义了一个变量C，包含四个元素a、b、c和d/。<br> D = $(filter %/, $©): 使<strong>用filter函数，从C中筛选出以’/'结尾的元素，存储到变量D中</strong>。在这个例子中，D的值为d/。<br> E = $(filter-out %/, $©): <strong>使用filter-out函数，从C中筛选出不以’/'结尾的元素，存储到变量E中</strong>。在这个例子中，E的值为a b c。</p> 
+<p>最后结果：</p> 
+<p><img src="https://images2.imgbox.com/59/bc/jjtV8pgi_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="43wildcard_279"></a>4.3、wildcard</h3> 
+<p>wildcard 是 GNU Make 中的一个函数，用于匹配文件名模式，返回匹配到的文件列表。其基本语法如下：</p> 
+<pre><code class="prism language-bash"><span class="token variable"><span class="token variable">$(</span>wildcard pattern<span class="token variable">)</span></span>
+</code></pre> 
+<p>pattern: 文件名模式，可以包含通配符 * 和 ?。<br> <strong>wildcard 函数会返回符合指定文件名模式的文件列表</strong>。通常，这个函数用于获取文件列表并将其赋值给一个变量，以便在 Makefile 中进一步处理这些文件。<br> 我们写一个新的makefile:<br> <img src="https://images2.imgbox.com/57/56/AhwqXQpA_o.png" alt="请添加图片描述"><br> files=$(wildcard *.c)：使用 wildcard 函数<strong>匹配当前目录下所有以 .c 结尾的文件</strong>，并将结果存储到变量 files 中。<br> 最后结果：<br> <img src="https://images2.imgbox.com/72/8d/g4FrFoD8_o.png" alt="在这里插入图片描述"></p> 
+<p><strong>扩展应用：可以用检查目录下面哪些文件是真实存在的</strong><br> <img src="https://images2.imgbox.com/72/46/gPMO8FWG_o.png" alt="请添加图片描述"><br> 定义了一个变量 files2 包含了一组源文件名，然后使用 wildcard 函数来获取这些文件的<strong>实际存在</strong>的文件列表并存储在变量 files3 中。<strong>（注意d.c e.c是不存在的）</strong><br> 最后结果：<br> <img src="https://images2.imgbox.com/4d/be/DwTuG8mA_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="44patsubst_299"></a>4.4、patsubst</h3> 
+<p>patsubst 是在 Makefile 中用来替换模式的函数之一。它用于将一个字符串中符合指定模式的部分替换成另一个模式。基本语法是：</p> 
+<pre><code class="prism language-bash"><span class="token variable"><span class="token variable">$(</span>patsubst pattern,replacement,text<span class="token variable">)</span></span>
+</code></pre> 
+<p>pattern 是要匹配的模式，可以包含 % 通配符，表示零个或多个字符。<br> replacement 是替换的模式。<br> text 是要进行替换操作的原始文本。</p> 
+<p>我们改一下makefile:<br> <img src="https://images2.imgbox.com/97/0a/CoqMTNV0_o.png" alt="在这里插入图片描述"><br> Makefile 中，定义了一个变量 files2 包含了一组源文件名，其中包含一个不是以 .c 结尾的文件 abc。接着，使用 patsubst <strong>函数将每个源文件名的扩展名从 .c 替换为 .d</strong>，并将结果存储在变量 dep_files 中。</p> 
+<p>最后结果：<br> <img src="https://images2.imgbox.com/59/cd/fzEdsFMu_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="Makefile_317"></a>五、Makefile升级</h2> 
+<h3><a id="51_318"></a>5.1、包含头文件在内的依赖关系（自动生成依赖文件）</h3> 
+<p>我们使用前面一样的程序来进行实验：<br> a.c:</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">void</span> <span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">funC</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">funC</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>b.c:</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token keyword">void</span> <span class="token function">funB</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"hello B!\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>c.c：（进行了一点点修改）</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"c.h"</span></span>
+<span class="token keyword">void</span> <span class="token function">funC</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"This is C=%d\n"</span><span class="token punctuation">,</span>C<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>新建一个c.h</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">C</span> <span class="token expression"><span class="token number">1</span> </span></span>
+</code></pre> 
+<p>然后我们make加执行一下：<br> <img src="https://images2.imgbox.com/8d/c0/8nCx6lPt_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/d7/42/gjGlNUov_o.png" alt="在这里插入图片描述"><br> 我们这里做一个小小的改动，把头文件中define的数从1改为2：</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">C</span> <span class="token expression"><span class="token number">2</span> </span></span>
+</code></pre> 
+<p>然后我们再make一下看看效果：<br> <img src="https://images2.imgbox.com/8c/cd/km4Op5Z2_o.png" alt="在这里插入图片描述"><br> 我们可以看到make并没有顺利执行，而且C依然为1 ，说明还是有点小问题</p> 
+<p><strong>那这是因为什么原因导致的呢：？</strong><br> 因为我们的c.c是依赖于c.h的，但是makefile中并没有把这种依赖关系写出来，所以makefile也不知道c.h更新了。</p> 
+<p>我们再makefile中重新添加了：</p> 
+<pre><code class="prism language-bash">c.o:c.c c.h
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c1/fa/9s2qfSnE_o.png" alt="在这里插入图片描述"><br> 然后我们再make一下就对了：<br> <img src="https://images2.imgbox.com/19/e3/hkTyHBRU_o.png" alt="请添加图片描述"><br> 但是这样做是不可能的，在大型项目里面，我们每一个C文件几乎都有头文件，我们不可能手动把这些头文件的依赖关系一行行在makefile全部都写出来，我们需要自动去生成这些规则。</p> 
+<hr> 
+<p>在讲解今天的正式内容前，我们先介绍三个查看依赖关系的命令：</p> 
+<pre><code class="prism language-bash">gcc <span class="token parameter variable">-M</span> c.c
+</code></pre> 
+<p>上述命令会使用 gcc 编译器并使用 -M 选项来生成 c.c 源文件的依赖关系，<strong>是立刻打印出来</strong></p> 
+<p><img src="https://images2.imgbox.com/8d/56/NG0R5Kry_o.png" alt="请添加图片描述"></p> 
+<pre><code class="prism language-bash">gcc <span class="token parameter variable">-M</span> <span class="token parameter variable">-MF</span> c.d c.c
+</code></pre> 
+<p>这个命令也会生成 c.c 源文件的依赖关系，但是通过 -MF c.d 选项指定了输出文件为 c.d。<strong>这意味着生成的依赖关系将被保存到 c.d 文件中</strong>，而不是输出到标准输出流。<br> <img src="https://images2.imgbox.com/12/48/Q42qEi8n_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-bash">gcc <span class="token parameter variable">-c</span> <span class="token parameter variable">-o</span> c.o c.c <span class="token parameter variable">-MD</span> <span class="token parameter variable">-MF</span> c.d
+</code></pre> 
+<p>这个命令用于编译 c.c 源文件为目标文件 c.o。参数 -c 表示编译成目标文件，-o c.o 指定输出文件为 c.o。-MD 选项用于生成 .d 文件，-MF c.d 则指定生成的依赖关系文件为 c.d。这意味着除了生成目标文件 c.o 外，还会生成一个描述依赖关系的文件 c.d。<br> <img src="https://images2.imgbox.com/be/ba/kwmhsA7E_o.png" alt="在这里插入图片描述"><br> 按照我们刚刚介绍的gcc依赖关系规则，我们修改一下makefile:<br> <img src="https://images2.imgbox.com/27/9e/xt4SrylG_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/59/52/1urHNNzq_o.png" alt="在这里插入图片描述"><br> （ls 命令用于列出目录中的文件和子目录。<strong>而 ls -a 命令也会列出目录中所有的文件和子目录，包括以 . 开头的隐藏文件或隐藏目录，这些文件或目录在普通的 ls 命令中是不可见的</strong>。）</p> 
+<p><strong>从这里我们可以看到这些依赖关系被自动生成出来了</strong><br> 刚刚makefile里的这句话就可以不用写了：</p> 
+<pre><code class="prism language-bash">c.o:c.c c.h
+</code></pre> 
+<p>我们再改一下makefile:<br> <img src="https://images2.imgbox.com/0c/2a/7lzs7GTv_o.png" alt="在这里插入图片描述"><br> 这一行使用了 Makefile 中的函数 patsubst，它用于替换模式。具体来说，% 是一个通配符，表示每个目标文件名。<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         ( 
+        
+       
+         p 
+        
+       
+         a 
+        
+       
+         t 
+        
+       
+         s 
+        
+       
+         u 
+        
+       
+         b 
+        
+       
+         s 
+        
+       
+         t 
+        
+       
+      
+        (patsubst %,.%.d, 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">s</span><span class="mord mathnormal">u</span><span class="mord mathnormal">b</span><span class="mord mathnormal">s</span><span class="mord mathnormal">t</span></span></span></span></span>(objs)) 的作用是将目标文件列表中的每个目标文件名（a.o, b.o, c.o）替换成相应的依赖关系文件名（.a.o.d, .b.o.d, .c.o.d）。<br> <img src="https://images2.imgbox.com/6a/8e/OWP2ZeoU_o.png" alt="在这里插入图片描述"><br> 可以看到我们的依赖文件已经被生成出来了。</p> 
+<p>接下来我们再改一改，把这些检测到的依赖文件包含进去：<br> <img src="https://images2.imgbox.com/c7/f4/P7e3H4i2_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-bash"><span class="token assign-left variable">objs</span><span class="token operator">=</span>a.o b.o c.o
+dep_files:<span class="token operator">=</span><span class="token variable"><span class="token variable">$(</span>patsubst %,.%.d,<span class="token punctuation">$(</span>objs<span class="token punctuation">)</span><span class="token variable">)</span></span>
+dep_files:<span class="token operator">=</span><span class="token variable"><span class="token variable">$(</span>wildcard <span class="token punctuation">$(</span>dep_files<span class="token punctuation">)</span><span class="token variable">)</span></span>
+</code></pre> 
+<p>这里定义了目标文件列表 objs 和依赖关系文件列表 dep_files。使用 patsubst 函数将目标文件列表转换为相应的依赖关系文件列表，然后通过 wildcard 函数获取实际存在的依赖关系文件。</p> 
+<pre><code class="prism language-bash">ifneq <span class="token punctuation">(</span><span class="token variable"><span class="token variable">$(</span>dep_files<span class="token variable">)</span></span>,<span class="token punctuation">)</span>
+include <span class="token variable"><span class="token variable">$(</span>dep_files<span class="token variable">)</span></span>
+endif
+</code></pre> 
+<p>这里使用条件语句检查是否存在依赖关系文件列表 dep_files，如果存在，则通过 include 关键字包含这些依赖关系文件。这样，Make 就能够了解源文件之间的依赖关系，从而在需要重新编译时执行相应的规则。</p> 
+<p>我们这时候试一下修改c.h里的宏定义如下：</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">C</span> <span class="token expression"><span class="token number">3</span> </span></span>
+</code></pre> 
+<p>这时候我们再make就不会再出现之前的情况了：<strong>即宏定义改了make之后打印出来依然不变的情况</strong><br> 最后结果：<br> <img src="https://images2.imgbox.com/d1/78/v85GxEwH_o.png" alt="在这里插入图片描述"><br> 我们可以看到改为了3，make后就自动识别了头文件的依赖关系，打印出来了3，<strong>实现了我们最初的目标：自动识别依赖关系（自动生成依赖文件）。</strong></p> 
+<h3><a id="52CFLAGS_452"></a>5.2、添加CFLAGS</h3> 
+<p>我们在makefile里添加几条命令：<br> <img src="https://images2.imgbox.com/6c/82/PM3RhVMi_o.png" alt="在这里插入图片描述"><br> CFLAGS=-Werror 设置了一个编译选项，即启用了 -Werror。这个选项的含义是将所有警告视为错误，即编译过程中如果产生了任何警告，就会导致编译失败。<strong>这样做的目的是强制要求代码中不允许存在任何警告，以确保代码的质量和稳定性。</strong></p> 
+<p><strong>CFLAGS 是一个用于存储传递给 C 编译器的额外参数和标志的 Makefile 变量。这些参数和标志可以影响编译的行为，例如警告级别、优化选项、头文件路径等</strong> 在 Makefile 中使用 CFLAGS 变量有助于集中管理编译选项，使得构建过程更加灵活和易于维护。</p> 
+<p>当你设置 CFLAGS 时，可以包含各种编译器选项，这些选项会影响代码的编译和生成。以下是一些常见的 CFLAGS 选项的例子：</p> 
+<p>启用调试信息：</p> 
+<pre><code class="prism language-bash">CFLAGS <span class="token operator">=</span> <span class="token parameter variable">-g</span>
+</code></pre> 
+<p>这个选项启用了编译器生成的调试信息，有助于在调试阶段中进行源代码级别的调试。</p> 
+<p>优化级别：</p> 
+<pre><code class="prism language-bash">CFLAGS <span class="token operator">=</span> <span class="token parameter variable">-O2</span>
+</code></pre> 
+<p>这个选项启用了优化级别 2，以提高生成代码的运行性能。可选的优化级别包括 -O0（无优化）、-O1、-O2、-O3 等。</p> 
+<p>指定头文件搜索路径：</p> 
+<pre><code class="prism language-bash">CFLAGS <span class="token operator">=</span> -I/path/to/include
+</code></pre> 
+<p>这个选项指定了编译器在搜索头文件时要查找的路径。</p> 
+<p>定义宏：</p> 
+<pre><code class="prism language-c">CFLAGS <span class="token operator">=</span> <span class="token operator">-</span>DDEBUG
+</code></pre> 
+<p>这个选项定义了一个名为 DEBUG 的宏，可以在源代码中使用条件编译。</p> 
+<p>关闭某些警告：</p> 
+<pre><code class="prism language-bash">CFLAGS <span class="token operator">=</span> -Wno-unused-variable
+</code></pre> 
+<p>这个选项关闭了关于未使用变量的警告。</p> 
+<p>启用全部警告：</p> 
+<pre><code class="prism language-bash">CFLAGS <span class="token operator">=</span> <span class="token parameter variable">-Wall</span> <span class="token parameter variable">-Wextra</span>
+</code></pre> 
+<p>这个选项启用了大多数可用的警告，帮助开发者发现潜在的问题。</p> 
+<p>指定目标架构：</p> 
+<pre><code class="prism language-bash">CFLAGS <span class="token operator">=</span> <span class="token parameter variable">-march</span><span class="token operator">=</span>native
+</code></pre> 
+<p>这个选项根据编译运行代码的计算机的架构进行优化。</p> 
+<p>来个实际点的makefile例子：</p> 
+<pre><code class="prism language-bash">CC <span class="token operator">=</span> gcc
+CFLAGS <span class="token operator">=</span> <span class="token parameter variable">-g</span>
+
+<span class="token comment"># 目标文件</span>
+TARGET <span class="token operator">=</span> my_program
+
+<span class="token comment"># 源文件</span>
+SRC <span class="token operator">=</span> main.c
+
+all: <span class="token variable"><span class="token variable">$(</span>TARGET<span class="token variable">)</span></span>
+
+<span class="token variable"><span class="token variable">$(</span>TARGET<span class="token variable">)</span></span><span class="token builtin class-name">:</span> <span class="token variable"><span class="token variable">$(</span>SRC<span class="token variable">)</span></span>
+    <span class="token variable"><span class="token variable">$(</span>CC<span class="token variable">)</span></span> <span class="token variable"><span class="token variable">$(</span>CFLAGS<span class="token variable">)</span></span> <span class="token parameter variable">-o</span> <span class="token variable"><span class="token variable">$(</span>TARGET<span class="token variable">)</span></span> <span class="token variable"><span class="token variable">$(</span>SRC<span class="token variable">)</span></span>
+
+clean:
+    <span class="token function">rm</span> <span class="token parameter variable">-f</span> <span class="token variable"><span class="token variable">$(</span>TARGET<span class="token variable">)</span></span>
+</code></pre> 
+<p>在这个例子中：</p> 
+<p>CC 定义了编译器的可执行文件（gcc）。<br> <strong>CFLAGS 包含了编译器选项 -g，表示启用调试信息。</strong><br> TARGET 定义了目标文件的名称为 my_program。<br> SRC 定义了源文件的名称为 main.c。</p> 
+<p>Makefile 中的规则：<br> all 是默认目标，它依赖于 $(TARGET)，当你运行 make 时，它将编译生成目标文件。<br> $(TARGET) 的规则指定了如何生成目标文件。在这里，它使用 gcc 编译器，传递了 CFLAGS 和源文件，生成可执行文件 my_program。<br> clean 规则用于清理生成的文件，执行 make clean 将删除可执行文件。</p> 
+<h2><a id="Makefile_557"></a>六、通用Makefile模板</h2> 
+<p>这个意思就是找一个经典的makefile模板 以后要写自己的makefile就在这个基础上改就行了</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/4f20abfd3629f4851a3baf5dea023ee5/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">游戏美术的技与艺</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/fa5c138ec4c9ccd98db042bcc8706101/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">DVWA靶场搭建</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

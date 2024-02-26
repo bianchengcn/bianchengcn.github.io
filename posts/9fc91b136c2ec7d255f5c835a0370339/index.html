@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Netty客户端同步获取结果 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Netty客户端同步获取结果" />
+<meta property="og:description" content="上次服务间通信是异步的，现在想实现客户端同步拿到服务端响应结果。实现如下：
+在NettyClientHandler类中增加一个结果缓存器
+Map&lt;Long,Protocol&lt;ResponseMsg&gt;&gt; resultMap = new ConcurrentHashMap&lt;&gt;(); 修改方法
+@Override protected void channelRead0(ChannelHandlerContext channelHandlerContext,Protocol&lt;ResponseMsg&gt; o) throws Exception { logger.info(&#34;channelRead0--------------&#34;&#43;Thread.currentThread().getName()); logger.info(&#34;消费者接收到的消息为{}&#34;, JSONObject.toJSONString(o)); resultMap.put(o.getId(),o); } public Protocol&lt;ResponseMsg&gt; sendMsg(Protocol&lt;RequestMsg&gt; message){ channel.writeAndFlush(message); while (true){ Protocol&lt;ResponseMsg&gt; remove = resultMap.remove(message.getId()); if(remove!=null){ return remove; } } } 测试类
+public class NettyTest { public static void main(String[] args) { new Thread(()-&gt;{ NettyServer.startNettyServer(); }).start(); new Thread(()-&gt;{ NettyClient instance = NettyClient.getInstance(); try { while (true){ Thread.sleep(2000); Protocol&lt;RequestMsg&gt; protocol = new Protocol&lt;&gt;(); protocol." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9fc91b136c2ec7d255f5c835a0370339/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-15T17:11:27+08:00" />
+<meta property="article:modified_time" content="2023-08-15T17:11:27+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Netty客户端同步获取结果</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>上次服务间通信是异步的，现在想实现客户端同步拿到服务端响应结果。实现如下：<br> 在NettyClientHandler类中增加一个结果缓存器</p> 
+<pre><code> Map&lt;Long,Protocol&lt;ResponseMsg&gt;&gt; resultMap = new ConcurrentHashMap&lt;&gt;();
+</code></pre> 
+<p>修改方法</p> 
+<pre><code>@Override
+protected void channelRead0(ChannelHandlerContext channelHandlerContext,Protocol&lt;ResponseMsg&gt; o) throws Exception {
+    logger.info("channelRead0--------------"+Thread.currentThread().getName());
+    logger.info("消费者接收到的消息为{}", JSONObject.toJSONString(o));
+    resultMap.put(o.getId(),o);
+}
+</code></pre> 
+<pre><code>public Protocol&lt;ResponseMsg&gt; sendMsg(Protocol&lt;RequestMsg&gt; message){
+        channel.writeAndFlush(message);
+        while (true){
+            Protocol&lt;ResponseMsg&gt; remove = resultMap.remove(message.getId());
+            if(remove!=null){
+                return remove;
+            }
+        }
+    }
+</code></pre> 
+<p>测试类</p> 
+<pre><code>public class NettyTest {
+
+    public static void main(String[] args) {
+
+        new Thread(()-&gt;{
+            NettyServer.startNettyServer();
+        }).start();
+
+        new Thread(()-&gt;{
+            NettyClient instance = NettyClient.getInstance();
+            try {
+                while (true){
+                    Thread.sleep(2000);
+                    Protocol&lt;RequestMsg&gt; protocol = new Protocol&lt;&gt;();
+                    protocol.setMsgType((short)1);
+                    RequestMsg requestMsg = new RequestMsg();
+                    requestMsg.setMsg("hello:"+System.currentTimeMillis());
+                    requestMsg.setOther("你好啊");
+                    protocol.setBody(requestMsg);
+                    Protocol&lt;ResponseMsg&gt; responseMsgProtocol = instance.sendMsg(protocol);
+                    System.out.println("同步获取到结果："+ responseMsgProtocol);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        }).start();
+    }
+}
+</code></pre> 
+<p><img src="https://images2.imgbox.com/6e/10/6rWCf7Uj_o.png" alt="在这里插入图片描述"></p> 
+<p>以上实现了同步获取的功能，但是不太优雅，修改如下，自定义一个Future类</p> 
+<pre><code>public class MyFuture extends CompletableFuture&lt;Object&gt; {
+
+    private static final Logger logger = LoggerFactory.getLogger(MyFuture.class);
+
+    private Sync sync;
+    //请求协议对象
+    private Protocol&lt;RequestMsg&gt; requestMsgProtocol;
+    //响应协议对象
+    private Protocol&lt;ResponseMsg&gt; responseMsgProtocol;
+    //记录开始时间
+    private Long startTime;
+
+    public MyFuture(Protocol&lt;RequestMsg&gt; requestRpcProtocol){
+        this.sync = new Sync();
+        this.requestMsgProtocol = requestRpcProtocol;
+        this.startTime = System.currentTimeMillis();
+    }
+
+    @Override
+    public boolean isDone() {
+        return sync.isDone();
+    }
+
+    @Override
+    public Object get() throws InterruptedException, ExecutionException {
+        sync.acquire(-1);
+        if(this.requestMsgProtocol != null){
+            return this.responseMsgProtocol.getBody();
+        }else {
+            return null;
+        }
+    }
+
+    @Override
+    public Object get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+        boolean success = sync.tryAcquireNanos(-1, unit.toNanos(timeout));
+        if(success){
+            if(this.responseMsgProtocol != null){
+                return responseMsgProtocol.getBody().getResult();
+            }else{
+                return null;
+            }
+        }else {
+            throw new RuntimeException("Timeout exception. Request id: " + this.requestMsgProtocol.getId());
+        }
+    }
+
+    @Override
+    public boolean isCancelled() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void done(Protocol&lt;ResponseMsg&gt; responseRpcProtocol){
+        this.responseMsgProtocol = responseRpcProtocol;
+        sync.release(1);
+        long responseTime = System.currentTimeMillis() - startTime;
+        logger.info("{},responseTime:{}",responseRpcProtocol.getId(),responseTime);
+    }
+
+    /**
+     * 自定义方法
+     */
+    static class Sync extends AbstractQueuedSynchronizer{
+        private static final long serialVersionUID = 1L;
+        private final int done = 1;
+        private final int pending = 0;
+
+        @Override
+        protected boolean tryAcquire(int arg) {
+            return getState() == done;
+        }
+
+        @Override
+        protected boolean tryRelease(int arg) {
+            if(getState() == pending){
+                if(compareAndSetState(pending,done)){
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public boolean isDone(){
+            getState();
+            return getState() == done;
+        }
+    }
+}
+</code></pre> 
+<p>NettyClientHandler 类增加一个变量</p> 
+<pre><code> Map&lt;Long,MyFuture&gt; myFutureMap = new ConcurrentHashMap&lt;&gt;();
+</code></pre> 
+<p>修改channelRead0 方法</p> 
+<pre><code>@Override
+    protected void channelRead0(ChannelHandlerContext channelHandlerContext,Protocol&lt;ResponseMsg&gt; responseMsgProtocol) throws Exception {
+        logger.info("channelRead0--------------"+Thread.currentThread().getName());
+        logger.info("消费者接收到的消息为{}", JSONObject.toJSONString(responseMsgProtocol));
+        MyFuture remove = myFutureMap.remove(responseMsgProtocol.getId());
+        if(remove!=null){
+            remove.done(responseMsgProtocol);
+        }
+    }
+</code></pre> 
+<p>修改sendMsg方法</p> 
+<pre><code>public MyFuture sendMsg(Protocol&lt;RequestMsg&gt; requestMsgProtocol){
+        MyFuture myFuture = new MyFuture(requestMsgProtocol);
+        myFutureMap.put(requestMsgProtocol.getId(), myFuture);
+        channel.writeAndFlush(requestMsgProtocol);
+        return myFuture;
+    }
+</code></pre> 
+<p>测试类的方法就如下：</p> 
+<pre><code>public class NettyTest {
+
+    public static void main(String[] args) {
+
+        new Thread(()-&gt;{
+            NettyServer.startNettyServer();
+        }).start();
+
+        new Thread(()-&gt;{
+            NettyClient instance = NettyClient.getInstance();
+            try {
+                while (true){
+                    Thread.sleep(2000);
+                    Protocol&lt;RequestMsg&gt; protocol = new Protocol&lt;&gt;();
+                    protocol.setMsgType((short)1);
+                    RequestMsg requestMsg = new RequestMsg();
+                    requestMsg.setMsg("hello:"+System.currentTimeMillis());
+                    requestMsg.setOther("你好啊");
+                    protocol.setBody(requestMsg);
+                    MyFuture myFuture = instance.sendMsg(protocol);
+                    System.out.println("同步获取到结果："+ myFuture.get());
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        }).start();
+    }
+}
+
+</code></pre> 
+<p><img src="https://images2.imgbox.com/e5/a2/CXH7bACc_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/ebace5b28e4f188bc33beda2cbb86383/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">git修改历史commit信息</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/0218b9ad4eddb8e2118fe4a6652e6dd2/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Netty注解实现服务调用</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

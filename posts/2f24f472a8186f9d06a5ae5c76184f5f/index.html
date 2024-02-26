@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>VS五子棋大战 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="VS五子棋大战" />
+<meta property="og:description" content="本项目里面只是浅述了一下基本实现步骤，很多细节的地方都在注释中标注了，如需完整代码请去博主码云哦。zqy (zhang-qinyang1) - Gitee.com
+目录
+一、用到的关键技术点
+二、主要模块
+1.使用mybatis操作连接数据库
+1.1修改spring配置文件
+1.2创建实体类User
+1.3创建Mapper接口
+1.4实现mybatis相关的xml的配置
+2.用户模块
+2.1登录功能
+2.2注册功能
+2.3获取自身信息功能
+3.匹配模块
+3.1匹配功能
+4.对战模块
+4.1对战功能
+先演示一下项目完成后的样子： ①登录页面：
+②登录后进入的游戏大厅：
+③我们在另一个浏览器上登录另一个用户李四，来实现博弈：
+1.准备好双方：
+2.双方开始匹配，并且开始博弈分出胜负：
+3.比赛场数和天梯分数的变化：
+一、用到的关键技术点 本文主要用到的关键技术点有：
+Java,Spring/Spring Boot/Spring MVC,HTML,CSS,JS,AJAX,MySQL,MyBatis,WebSocket
+然后在这里面我们很多内容我们在之前已经详细讲解过了，今天这里着重介绍一下WebSocket。
+①为什么这里要用websocket:
+因为我们之前学过的服务器开发，主要是以客户端发出请求，服务器响应这样的方式来进行的，如果客户端不发出请求，那么服务器是不会主动联系客户端的。而在我们这个五子棋项目中就会存在这样的问题，当客户端1下好了棋的位置的时候，就需要告诉服务器下在哪里了，而这个时候，如果靠客户端2每隔一段时间给服务器发送请求看客户端1是否下了棋的话，这样的开销将是很大的，就会浪费很多资源，我们就想着可不可以在服务器接收到客户端1棋的位置后，主动将位置发给客户端2。而websocket正是实现这种消息推送的一个主要方式。
+②websocket的报文格式：
+其中，我们主要对红色部分内容进行讲解：
+（1）opcode:
+描述了当前这个报文是什么类型。（比如说是一个文本帧，还是一个二进制帧，是一个ping帧，还是一个pong帧）
+（2）Payload len:
+表示的是当前数据报携带的数据载荷的长度，这个字段是非常长的，而websocket数据报能承载的载荷长度也是相当长的。
+（3） Payload data：
+表示的是报文实际要传输的数据载荷
+③websocket握手建立连接的过程：
+使用网页端，尝试和服务器建立websocket连接，网页端会先给服务器发送一个HTTP请求，这个请求会带有特殊的header，分别是Connection：Upgrade；Upgrade：Websocket；这两个header实际就是在告诉服务器，我们要进行协议的升级，如果这个时候，服务器支持websocket，就会返回一个特殊的HTTP响应，而这个响应的状态码就是101（切换协议），至此，客户端和服务器之间就开始使用websocket来进行通信了。
+④实现一个简单的websocket代码：
+（1）编写服务器（java）
+1.现在java中创建一个类：（名为TestAPI的类）
+a.让其继承自TextWebSocketHandler类，这个类是spring中提供的websocket类
+b.继承好后，重写四个方法，分别是连接建立，客户端和服务器之间的交互，传输异常，连接被关闭这四个方法：
+2.将刚刚创建这个TestAPI这个类注入到spring中去，我们创建一个新的类，命名为WebSocketConfig:
+a.让这个类实现WebSocketConfigurer接口：
+b.并在这个类中实现registerWebSocketHandlers这个方法，这个方法的含义就是能够注册一些handler到这个框架中去：
+这行代码的含义就是当客户端连接这样一个路径的时候，就会触发到TestAPI(),然后调用执行到TestAPI中的相关方法。
+除此之外，我们需要在这个类外添加两个注解，这样spring才能找到这个类，才能真正处理到这些websocket响应的请求：（第二个注解是开启websocket的关键注解）
+（2）编写客户端（Js）
+1.要保证这个路径和前端websocket中的路径保持一致：
+2.需要给实例挂载一些回调函数，这里与前面服务器中的代码是非常相似的。
+（此时和前端的四个部分是相互对应的，只是名字不同罢了）
+3.实现点击按钮后通过websocket发送请求
+（通过send（）方法实现发送消息）
+二、主要模块 1.使用mybatis操作连接数据库 创建User表，用来表示用户的个人信息：
+create database if not exists java_chess; use java_chess; drop table if exists user; create table user( userId int primary key auto_increment, username varchar(20) unique, password varchar(50), score int,--天梯积分 totalCount int,--比赛总场数 winCount int --获胜场数 ); insert into user values(null,&#39;zhangsan&#39;,&#39;123&#39;,1000,0,0); insert into user values(null,&#39;lisi&#39;,&#39;123&#39;,1000,0,0); insert into user values(null,&#39;wangwu&#39;,&#39;123&#39;,1000,0,0); 1." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/2f24f472a8186f9d06a5ae5c76184f5f/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-11-16T16:16:56+08:00" />
+<meta property="article:modified_time" content="2022-11-16T16:16:56+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">VS五子棋大战</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><img alt="" height="363" src="https://images2.imgbox.com/69/4e/Vl8f48oG_o.png" width="379"></p> 
+<p>本项目里面只是浅述了一下基本实现步骤，很多细节的地方都在注释中标注了，如需完整代码请去博主码云哦。<a href="https://gitee.com/zhang-qinyang1" rel="nofollow" title="zqy (zhang-qinyang1) - Gitee.com">zqy (zhang-qinyang1) - Gitee.com</a></p> 
+<p id="main-toc"><strong>目录</strong></p> 
+<p id="%E4%B8%80%E3%80%81%E7%94%A8%E5%88%B0%E7%9A%84%E5%85%B3%E9%94%AE%E6%8A%80%E6%9C%AF%E7%82%B9-toc" style="margin-left:0px;"><a href="#%E4%B8%80%E3%80%81%E7%94%A8%E5%88%B0%E7%9A%84%E5%85%B3%E9%94%AE%E6%8A%80%E6%9C%AF%E7%82%B9" rel="nofollow">一、用到的关键技术点</a></p> 
+<p id="%E4%BA%8C%E3%80%81%E4%B8%BB%E8%A6%81%E6%A8%A1%E5%9D%97-toc" style="margin-left:0px;"><a href="#%E4%BA%8C%E3%80%81%E4%B8%BB%E8%A6%81%E6%A8%A1%E5%9D%97" rel="nofollow">二、主要模块</a></p> 
+<p id="1.%E4%BD%BF%E7%94%A8mybatis%E6%93%8D%E4%BD%9C%E8%BF%9E%E6%8E%A5%E6%95%B0%E6%8D%AE%E5%BA%93-toc" style="margin-left:40px;"><a href="#1.%E4%BD%BF%E7%94%A8mybatis%E6%93%8D%E4%BD%9C%E8%BF%9E%E6%8E%A5%E6%95%B0%E6%8D%AE%E5%BA%93" rel="nofollow">1.使用mybatis操作连接数据库</a></p> 
+<p id="1.1%E4%BF%AE%E6%94%B9spring%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6-toc" style="margin-left:80px;"><a href="#1.1%E4%BF%AE%E6%94%B9spring%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" rel="nofollow">1.1修改spring配置文件</a></p> 
+<p id="1.2%E5%88%9B%E5%BB%BA%E5%AE%9E%E4%BD%93%E7%B1%BBUser-toc" style="margin-left:80px;"><a href="#1.2%E5%88%9B%E5%BB%BA%E5%AE%9E%E4%BD%93%E7%B1%BBUser" rel="nofollow">1.2创建实体类User</a></p> 
+<p id="1.3%E5%88%9B%E5%BB%BAMapper%E6%8E%A5%E5%8F%A3-toc" style="margin-left:80px;"><a href="#1.3%E5%88%9B%E5%BB%BAMapper%E6%8E%A5%E5%8F%A3" rel="nofollow">1.3创建Mapper接口</a></p> 
+<p id="1.4%E5%AE%9E%E7%8E%B0mybatis%E7%9B%B8%E5%85%B3%E7%9A%84xml%E7%9A%84%E9%85%8D%E7%BD%AE-toc" style="margin-left:80px;"><a href="#1.4%E5%AE%9E%E7%8E%B0mybatis%E7%9B%B8%E5%85%B3%E7%9A%84xml%E7%9A%84%E9%85%8D%E7%BD%AE" rel="nofollow">1.4实现mybatis相关的xml的配置</a></p> 
+<p id="2.%E7%94%A8%E6%88%B7%E6%A8%A1%E5%9D%97-toc" style="margin-left:40px;"><a href="#2.%E7%94%A8%E6%88%B7%E6%A8%A1%E5%9D%97" rel="nofollow">2.用户模块</a></p> 
+<p id="2.1%E7%99%BB%E5%BD%95%E5%8A%9F%E8%83%BD-toc" style="margin-left:80px;"><a href="#2.1%E7%99%BB%E5%BD%95%E5%8A%9F%E8%83%BD" rel="nofollow">2.1登录功能</a></p> 
+<p id="2.2%E6%B3%A8%E5%86%8C%E5%8A%9F%E8%83%BD-toc" style="margin-left:80px;"><a href="#2.2%E6%B3%A8%E5%86%8C%E5%8A%9F%E8%83%BD" rel="nofollow">2.2注册功能</a></p> 
+<p id="2.3%E8%8E%B7%E5%8F%96%E8%87%AA%E8%BA%AB%E4%BF%A1%E6%81%AF%E5%8A%9F%E8%83%BD-toc" style="margin-left:80px;"><a href="#2.3%E8%8E%B7%E5%8F%96%E8%87%AA%E8%BA%AB%E4%BF%A1%E6%81%AF%E5%8A%9F%E8%83%BD" rel="nofollow">2.3获取自身信息功能</a></p> 
+<p id="3.%E5%8C%B9%E9%85%8D%E6%A8%A1%E5%9D%97-toc" style="margin-left:40px;"><a href="#3.%E5%8C%B9%E9%85%8D%E6%A8%A1%E5%9D%97" rel="nofollow">3.匹配模块</a></p> 
+<p id="3.1%E5%8C%B9%E9%85%8D%E5%8A%9F%E8%83%BD-toc" style="margin-left:80px;"><a href="#3.1%E5%8C%B9%E9%85%8D%E5%8A%9F%E8%83%BD" rel="nofollow">3.1匹配功能</a></p> 
+<p id="4.%E5%AF%B9%E6%88%98%E6%A8%A1%E5%9D%97-toc" style="margin-left:40px;"><a href="#4.%E5%AF%B9%E6%88%98%E6%A8%A1%E5%9D%97" rel="nofollow">4.对战模块</a></p> 
+<p id="4.1%E5%AF%B9%E6%88%98%E5%8A%9F%E8%83%BD-toc" style="margin-left:80px;"><a href="#4.1%E5%AF%B9%E6%88%98%E5%8A%9F%E8%83%BD" rel="nofollow">4.1对战功能</a></p> 
+<hr id="hr-toc"> 
+<blockquote> 
+ <h2>先演示一下项目完成后的样子：</h2> 
+ <p>①登录页面：</p> 
+ <h2><img alt="" height="995" src="https://images2.imgbox.com/46/cd/HDtcyTxp_o.png" width="1200"></h2> 
+ <p>  ②登录后进入的游戏大厅：</p> 
+ <p><img alt="" height="964" src="https://images2.imgbox.com/35/25/DkkzmVKL_o.png" width="1200"></p> 
+ <p>③我们在另一个浏览器上登录另一个用户李四，来实现博弈：</p> 
+ <p> 1.准备好双方：</p> 
+ <p><img alt="" height="571" src="https://images2.imgbox.com/d7/ab/ZHkybbjN_o.png" width="1200"></p> 
+ <p>2.双方开始匹配，并且开始博弈分出胜负：</p> 
+ <p><img alt="" height="912" src="https://images2.imgbox.com/8c/94/rEHPSOwk_o.png" width="1200"></p> 
+ <p>3.比赛场数和天梯分数的变化：</p> 
+ <p><img alt="" height="968" src="https://images2.imgbox.com/50/8a/muRtkU63_o.png" width="1200"></p> 
+</blockquote> 
+<h2><span style="color:#98c091;">一、用到的关键技术点</span></h2> 
+<blockquote> 
+ <p><span style="color:#494949;">本文主要用到的关键技术点有：</span></p> 
+ <p><span style="color:#494949;">Java,Spring/Spring Boot/Spring MVC,HTML,CSS,JS,AJAX,MySQL,MyBatis,WebSocket</span></p> 
+ <p><span style="color:#494949;">然后在这里面我们很多内容我们在之前已经详细讲解过了，今天这里着重介绍一下WebSocket。</span></p> 
+ <p><span style="color:#494949;">①为什么这里要用websocket:</span></p> 
+ <p><span style="color:#494949;">因为我们之前学过的服务器开发，主要是以客户端发出请求，服务器响应这样的方式来进行的，如果客户端不发出请求，那么服务器是不会主动联系客户端的。而在我们这个五子棋项目中就会存在这样的问题，当客户端1下好了棋的位置的时候，就需要告诉服务器下在哪里了，而这个时候，如果靠客户端2每隔一段时间给服务器发送请求看客户端1是否下了棋的话，这样的开销将是很大的，就会浪费很多资源，我们就想着可不可以在服务器接收到客户端1棋的位置后，主动将位置发给客户端2。而websocket正是实现这种消息推送的一个主要方式。</span></p> 
+ <p><span style="color:#494949;">②websocket的报文格式：</span></p> 
+ <p><img alt="" height="594" src="https://images2.imgbox.com/96/3e/cAg0O3Hw_o.png" width="857"></p> 
+ <p>其中，我们主要对红色部分内容进行讲解：</p> 
+ <p>（1）opcode:</p> 
+ <p>描述了当前这个报文是什么类型。（比如说是一个文本帧，还是一个二进制帧，是一个ping帧，还是一个pong帧）</p> 
+ <p>（2）Payload len:</p> 
+ <p>表示的是当前数据报携带的数据载荷的长度，这个字段是非常长的，而websocket数据报能承载的载荷长度也是相当长的。</p> 
+ <p>（3） Payload data：</p> 
+ <p>表示的是报文实际要传输的数据载荷</p> 
+ <p>③websocket握手建立连接的过程：</p> 
+ <p>使用网页端，尝试和服务器建立websocket连接，网页端会先给服务器发送一个HTTP请求，这个请求会带有特殊的header，分别是Connection：Upgrade；Upgrade：Websocket；这两个header实际就是在告诉服务器，我们要进行协议的升级，如果这个时候，服务器支持websocket，就会返回一个特殊的HTTP响应，而这个响应的状态码就是101（切换协议），至此，客户端和服务器之间就开始使用websocket来进行通信了。</p> 
+ <p>④实现一个简单的websocket代码：</p> 
+ <p>（1）编写服务器（java）</p> 
+ <p>1.现在java中创建一个类：（名为TestAPI的类）</p> 
+ <p>a.让其继承自TextWebSocketHandler类，这个类是spring中提供的websocket类</p> 
+ <p><img alt="" height="77" src="https://images2.imgbox.com/6e/1b/6Raa8PWX_o.png" width="862"></p> 
+ <p>b.继承好后，重写四个方法，分别是连接建立，客户端和服务器之间的交互，传输异常，连接被关闭这四个方法：</p> 
+ <p><img alt="" height="741" src="https://images2.imgbox.com/95/d4/q5ULHMZx_o.png" width="1200"> 2.将刚刚创建这个TestAPI这个类注入到spring中去，我们创建一个新的类，命名为WebSocketConfig:</p> 
+ <p> a.让这个类实现WebSocketConfigurer接口：</p> 
+ <p><img alt="" height="50" src="https://images2.imgbox.com/3d/74/I6kapLYO_o.png" width="1015"></p> 
+ <p>b.并在这个类中实现registerWebSocketHandlers这个方法，这个方法的含义就是能够注册一些handler到这个框架中去：</p> 
+ <p><img alt="" height="136" src="https://images2.imgbox.com/a3/13/uMJmLlo6_o.png" width="1159"></p> 
+ <p>这行代码的含义就是当客户端连接这样一个路径的时候，就会触发到TestAPI(),然后调用执行到TestAPI中的相关方法。</p> 
+ <p>除此之外，我们需要在这个类外添加两个注解，这样spring才能找到这个类，才能真正处理到这些websocket响应的请求：（第二个注解是开启websocket的关键注解）</p> 
+ <p><img alt="" height="111" src="https://images2.imgbox.com/a3/bd/zqYzgEUL_o.png" width="912"> （2）编写客户端（Js）</p> 
+ <p>1.要保证这个路径和前端websocket中的路径保持一致：</p> 
+ <p><img alt="" height="91" src="https://images2.imgbox.com/88/bd/lPKHqIaH_o.png" width="778"></p> 
+ <p>2.需要给实例挂载一些回调函数，这里与前面服务器中的代码是非常相似的。</p> 
+ <p>（此时和前端的四个部分是相互对应的，只是名字不同罢了）</p> 
+ <p><img alt="" height="375" src="https://images2.imgbox.com/93/b4/Pwa3ysav_o.png" width="745"> 3.实现点击按钮后通过websocket发送请求</p> 
+ <p>（通过send（）方法实现发送消息）</p> 
+ <p><img alt="" height="211" src="https://images2.imgbox.com/1a/42/KrHGGD0k_o.png" width="746"></p> 
+</blockquote> 
+<h2><span style="color:#98c091;">二、主要模块</span></h2> 
+<h3><span style="color:#98c091;">1.使用mybatis操作连接数据库</span></h3> 
+<blockquote> 
+ <p><span style="color:#494949;">创建User表，用来表示用户的个人信息：</span></p> 
+ <pre><code class="language-sql">create database if not exists java_chess;
+use java_chess;
+drop table if exists user;
+create table user(
+userId int primary key auto_increment,
+username varchar(20) unique,
+password varchar(50),
+score int,--天梯积分
+totalCount int,--比赛总场数
+winCount int --获胜场数
+);
+insert into user values(null,'zhangsan','123',1000,0,0);
+insert into user values(null,'lisi','123',1000,0,0);
+insert into user values(null,'wangwu','123',1000,0,0);</code></pre> 
+</blockquote> 
+<h4><span style="color:#98c091;">1.1修改spring配置文件</span></h4> 
+<blockquote> 
+ <p><span style="color:#494949;">这里要是在前面就引入了mybatis就没必要重复了，而下面这个是整体引入完善后的pom.xml:</span></p> 
+ <pre><code class="language-XML">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
+	&lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+	&lt;parent&gt;
+		&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+		&lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+		&lt;version&gt;2.7.5&lt;/version&gt;
+		&lt;relativePath/&gt; &lt;!-- lookup parent from repository --&gt;
+	&lt;/parent&gt;
+	&lt;groupId&gt;com.example&lt;/groupId&gt;
+	&lt;artifactId&gt;java_chess&lt;/artifactId&gt;
+	&lt;version&gt;0.0.1-SNAPSHOT&lt;/version&gt;
+	&lt;name&gt;java_chess&lt;/name&gt;
+	&lt;description&gt;Demo project for Spring Boot&lt;/description&gt;
+	&lt;properties&gt;
+		&lt;java.version&gt;1.8&lt;/java.version&gt;
+	&lt;/properties&gt;
+	&lt;dependencies&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+			&lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+		&lt;/dependency&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+			&lt;artifactId&gt;spring-boot-starter-websocket&lt;/artifactId&gt;
+		&lt;/dependency&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.mybatis.spring.boot&lt;/groupId&gt;
+			&lt;artifactId&gt;mybatis-spring-boot-starter&lt;/artifactId&gt;
+			&lt;version&gt;2.2.2&lt;/version&gt;
+		&lt;/dependency&gt;
+
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+			&lt;artifactId&gt;spring-boot-devtools&lt;/artifactId&gt;
+			&lt;scope&gt;runtime&lt;/scope&gt;
+			&lt;optional&gt;true&lt;/optional&gt;
+		&lt;/dependency&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;com.mysql&lt;/groupId&gt;
+			&lt;artifactId&gt;mysql-connector-j&lt;/artifactId&gt;
+			&lt;scope&gt;runtime&lt;/scope&gt;
+		&lt;/dependency&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
+			&lt;artifactId&gt;lombok&lt;/artifactId&gt;
+			&lt;optional&gt;true&lt;/optional&gt;
+		&lt;/dependency&gt;
+		&lt;dependency&gt;
+			&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+			&lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+			&lt;scope&gt;test&lt;/scope&gt;
+		&lt;/dependency&gt;
+	&lt;/dependencies&gt;
+
+	&lt;build&gt;
+		&lt;plugins&gt;
+			&lt;plugin&gt;
+				&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+				&lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+				&lt;configuration&gt;
+					&lt;excludes&gt;
+						&lt;exclude&gt;
+							&lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
+							&lt;artifactId&gt;lombok&lt;/artifactId&gt;
+						&lt;/exclude&gt;
+					&lt;/excludes&gt;
+				&lt;/configuration&gt;
+			&lt;/plugin&gt;
+		&lt;/plugins&gt;
+	&lt;/build&gt;
+
+&lt;/project&gt;
+</code></pre> 
+</blockquote> 
+<h4><span style="color:#98c091;">1.2创建实体类User</span></h4> 
+<blockquote> 
+ <p>创建实体类model.User:</p> 
+ <pre><code class="language-java">package com.example.java_chess.model;
+
+import lombok.Data;
+
+@Data
+public class User {
+    private int userId;
+    private  String username;
+    private String password;
+    private int score;
+    private int totalCount;
+    private int winCount;
+}
+</code></pre> 
+</blockquote> 
+<h4><span style="color:#98c091;">1.3创建Mapper接口</span></h4> 
+<blockquote> 
+ <p><span style="color:#494949;">①创建一个model.UserMapper接口，并向其中插入后续用到的功能：</span></p> 
+ <pre><code class="language-java">package com.example.java_chess.model;
+
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface UserMapper {
+    //向数据库中插入一个用户，用于注册功能
+    void insert(User user);
+    //用于登录，根据用户名，来查询用户的详细信息
+    User selectByname(String username);
+    //用于判断获胜的场次，每获胜一次，天梯分数加30
+    //总比赛场数+1,获胜场数+1，天梯分数+30
+    void userWin(int userId);
+    //用于判断失败的场次，每失败一次，天梯分数减30
+    //总比赛场数+1,获胜场数不变，天梯分数-30
+    void userLose(int userId);
+}
+</code></pre> 
+ <p>②同时在resource目录下创建一个mapper.UserMapper.xml文件，和上述内容进行匹配：</p> 
+ <p><img alt="" height="98" src="https://images2.imgbox.com/47/d1/qQYIgAjO_o.png" width="380"></p> 
+ <p>代码如下：</p> 
+ <pre><code class="language-XML">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd"&gt;
+&lt;!--namespace 设置是实现的 接口的包名和类名 ！包名从java源代码底下的目录开始--&gt;
+&lt;mapper namespace="com.example.java_chess.model.UserMapper"&gt;
+&lt;insert id="insert"&gt;
+    insert into user values(null,#{username},#{password},1000,0,0);
+&lt;/insert&gt;
+&lt;!--    返回的实体所在哪个位置就写哪个位置--&gt;
+    &lt;select id="selectByname" resultType="com.example.java_chess.model.User"&gt;
+        select * from user where username=#{username};
+    &lt;/select&gt;
+    &lt;update id="userWin"&gt;
+        update user set totalCount=totalCount+1,winCount=winCount+1,score=score+30
+        where userId=#{userId}
+    &lt;/update&gt;
+    &lt;update id="userLose"&gt;
+        update user set totalCount=totalCount+1,score=score-30
+        where userId=#{userId}
+    &lt;/update&gt;
+&lt;/mapper&gt;</code></pre> 
+ <p>③注意：</p> 
+ <p>（1）namespace位置的实现要到其mapper接口创建的位置：<img alt="" height="100" src="https://images2.imgbox.com/c9/09/ZdpIXkXm_o.png" width="939"></p> 
+ <p>（2）查询中resultType的位置需要返回实体类所在的那个类的位置：</p> 
+ <p><img alt="" height="167" src="https://images2.imgbox.com/6d/26/hVItjkCS_o.png" width="1099"></p> 
+</blockquote> 
+<h4><span style="color:#98c091;">1.4实现mybatis相关的xml的配置</span> </h4> 
+<blockquote> 
+ <p>①这里我们还是创建一个主的application.xml配置如下：(这样就实现了数据库和mybatis之间的连接)</p> 
+ <pre><code class="language-XML"># 配置数据库信息
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/java_chess?characterEncoding=utf8
+    username: root
+    password: 123456
+    # 版本8之前版本的数据库使用 com.mysql.jdbc.Driver
+    # 版本8以及之后版本的数据库使用 com.mysql.cj.jdbc.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver
+# 配置 mybatis xml 保存路径
+mybatis:
+  mapper-locations: classpath:mapper/**Mapper.xml</code></pre> 
+ <p>②注意的点：</p> 
+ <p>（1）数据库的名称与密码的正确性：</p> 
+ <p><img alt="" height="130" src="https://images2.imgbox.com/1c/cc/HUin1saH_o.png" width="993"></p> 
+ <p>（2）mybatis.xml的保存路径必须在mapper路径下以**.Mapper.xml结尾的文件才会生效</p> 
+ <p><img alt="" height="204" src="https://images2.imgbox.com/0e/a4/c3Nj3u2P_o.png" width="1114"></p> 
+</blockquote> 
+<h4></h4> 
+<h4><span style="color:#98c091;">2.用户模块</span></h4> 
+<h4><span style="color:#98c091;">2.1登录功能</span></h4> 
+<blockquote> 
+ <p>①前后端交互：</p> 
+ <p><img alt="" height="329" src="https://images2.imgbox.com/1d/9c/4V4Qs56K_o.png" width="1074"></p> 
+ <p>②前端代码：（我们登录的时候，只需要传入用户名和密码，所以这里数据我们就只传入了username和password）核心就在ajax部分，因为是通过ajax来实现前后端的交互的。</p> 
+ <pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta http-equiv="X-UA-Compatible" content="IE=edge"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;登录&lt;/title&gt;
+    &lt;link rel="stylesheet" href="css/common.css"&gt;
+    &lt;link rel="stylesheet" href="css/login.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;div class="nav"&gt;
+        五子棋对战
+    &lt;/div&gt;
+    &lt;div class="login-container"&gt;
+        &lt;!-- 提示信息 --&gt;
+    &lt;div class="login-dialog"&gt;
+        &lt;!--登录界面的对话框--&gt;
+        &lt;h3&gt;登录&lt;/h3&gt;
+        &lt;!--这个表示一行--&gt;
+        &lt;div class="row"&gt;
+            &lt;span&gt;用户名&lt;/span&gt;
+            &lt;input type="text" id="username"&gt;
+        &lt;/div&gt;
+            &lt;div class="row"&gt;
+                &lt;span&gt;密码&lt;/span&gt;
+                &lt;input type="password" id="password"&gt;
+            &lt;/div&gt;
+            &lt;!--提交按钮--&gt;
+            &lt;div class="row"&gt;
+                &lt;button id="submit"&gt;登录&lt;/button&gt;
+            &lt;/div&gt;
+            &lt;div class="row"&gt;
+                &lt;button id="submit2"&gt;注册&lt;/button&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;script src="http://code.jquery.com/jquery-2.1.1.min.js"&gt;&lt;/script&gt;
+    &lt;!-- 通过ajax和服务器实现交互 --&gt;
+    &lt;script&gt;
+        let username=document.querySelector('#username');
+        let password=document.querySelector('#password');
+        let button=document.querySelector('#submit');
+        let button2=document.querySelector('#submit2');
+        button.onclick=function(){
+            $.ajax({
+                type:'post',
+                url:'/login',
+                data:{
+                    username:username.value,
+                    password:password.value,
+                },
+                //请求成功之后的回调函数
+                success:function(body){
+                    //判断当前是否登陆成功
+                    if(body&amp;&amp;body.userId&gt;0){
+                        alert("登陆成功");
+                        location.assign('/game_hall.html');
+                    }else{
+                        //请求执行失败之后的函数，登录失败之后，用户名和密码置为空
+                        alert("登录失败");
+                        $("#username").val("");
+                        $("#password").val("");
+                    }
+                },error:function(){//返回404等问题
+                    alert("登录失败");
+
+                }
+            });
+        }
+        button2.onclick=function(){
+            alert("即将为您跳转注册页面");
+           location.assign('/register.html');
+        }
+    &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre> 
+ <p>③后端代码： （主要通过userMapper去看数据库中是否有这个用户且密码是否正确，都无误后保存user的信息在httpSession中，以便后续可以拿到信息）</p> 
+ <pre><code class="language-java">@Resource
+    private UserMapper userMapper;
+    @PostMapping("/login")
+    @ResponseBody
+    public Object login( String username,String password, HttpServletRequest req){
+        //关键操作。就是根据username在数据中进行查询
+        User user=userMapper.selectByname(username);
+        System.out.println("[login] username="+username);
+        if (user==null || !user.getPassword().equals(password)){
+            //登录失败
+            System.out.println("登陆失败");
+            return new User();
+        }//保存用户的各项信息，将user保存在里面
+//这里的true是没有会话的话就创建一个会话，有的话就直接得到会话
+        HttpSession httpSession=req.getSession(true);
+//然后将user的信息保存在这个会话中
+        httpSession.setAttribute("user",user);
+        return user;
+    }</code></pre> 
+</blockquote> 
+<blockquote> 
+ <p></p> 
+ <p></p> 
+</blockquote> 
+<h4><span style="color:#98c091;">2.2注册功能</span></h4> 
+<blockquote> 
+ <p><span style="color:#494949;">①前后端交互：</span></p> 
+ <p><img alt="" height="316" src="https://images2.imgbox.com/58/30/qEUqKzKL_o.png" width="844"></p> 
+ <p><span style="color:#494949;">②前端代码：（核心也是ajax实现前后端的一个交互）</span></p> 
+ <pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta http-equiv="X-UA-Compatible" content="IE=edge"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;注册页面&lt;/title&gt;
+    &lt;link rel="stylesheet" href="css/common.css"&gt;
+    &lt;link rel="stylesheet" href="css/login.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;div class="nav"&gt;
+        五子棋对战
+    &lt;/div&gt;
+    &lt;div class="login-container"&gt;
+        &lt;!-- 提示信息 --&gt;
+    &lt;div class="login-dialog"&gt;
+        &lt;!--登录界面的对话框--&gt;
+        &lt;h3&gt;注册&lt;/h3&gt;
+        &lt;!--这个表示一行--&gt;
+        &lt;div class="row"&gt;
+            &lt;span&gt;用户名&lt;/span&gt;
+            &lt;input type="text" id="username"&gt;
+        &lt;/div&gt;
+            &lt;div class="row"&gt;
+                &lt;span&gt;密码&lt;/span&gt;
+                &lt;input type="password" id="password"&gt;
+            &lt;/div&gt;
+            &lt;!--提交按钮--&gt;
+            &lt;div class="row"&gt;
+                &lt;button id="submit"&gt;提交&lt;/button&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;script src="http://code.jquery.com/jquery-2.1.1.min.js"&gt;&lt;/script&gt;
+    &lt;!-- 通过ajax和服务器实现交互 --&gt;
+    &lt;script&gt;
+        let username=document.querySelector('#username');
+        let password=document.querySelector('#password');
+        let button=document.querySelector('#submit');
+        button.onclick=function(){
+            $.ajax({
+                type:'post',
+                url:'/register',
+                data:{
+                    username:username.value,
+                    password:password.value,
+                },
+                success:function(body){
+                    if(body&amp;&amp;body.username){
+                        alert('注册成功');
+                        location.assign('/login.html');
+                    }else{
+                        alert("此用户名存在，注册失败！");
+                    }
+                },
+                error:function(){
+                    alert("未知异常，注册失败！");
+                }
+
+            });
+        }
+    &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre> 
+ <p><span style="color:#494949;">③后端代码：(因为是注册，就是原来没有的，那么我们直接创建User这个实体的user对象,调用其中的set方法来设定username和password，设置好后用userMapper来往数据库中插入这个对象，如果用户名已经存在，那么就捕捉异常，抛出一个新的空user对象即可)</span></p> 
+ <pre><code class="language-java"> @Resource
+    private UserMapper userMapper;
+ @PostMapping("/register")
+    @ResponseBody
+    public Object register(String username,String password){
+        try{
+            User user=new User();
+            user.setUsername(username);
+            user.setPassword(password);
+            userMapper.insert(user);
+            return user;
+        }catch (org.springframework.dao.DuplicateKeyException e){//如果用户名重复，就设置抛出异常
+            User user  =new User();
+            return user;
+        }
+    }</code></pre> 
+</blockquote> 
+<h4><span style="color:#98c091;">2.3获取自身信息功能</span></h4> 
+<blockquote> 
+ <p></p> 
+ <p><span style="color:#494949;">①前后端交互：</span></p> 
+ <p>(此功能是为了通过session保存用户的登录信息，以便用户随时可以通过这个接口来访问服务器，从而获取到本身的信息 )</p> 
+ <p><img alt="" height="338" src="https://images2.imgbox.com/46/78/fLgpsBll_o.png" width="788"></p> 
+ <p><span style="color:#494949;">②后端代码：（这里就是直接获取httpSession已经存入的对象信息，因为这个信息是在登录的时候就存取了的，而在后面的操作中，我们极有可能存入了新的值，所以这个时候我们就通过在数据库中再次访问该用户的username的形式来更新这个数据，从而拿到最新的数据。）</span></p> 
+ <pre><code class="language-java"> @GetMapping("/userInfo")
+    @ResponseBody
+    public Object getuserInfo(HttpServletRequest req){
+        try{
+            HttpSession httpSession=req.getSession(false);
+            User user=(User)httpSession.getAttribute("user");
+            //拿到user对象后去数据库中找到最新的数据
+            User newUser=userMapper.selectByname(user.getUsername());
+            return newUser;
+        }catch (NullPointerException e){
+            return new User();
+        }
+    }</code></pre> 
+</blockquote> 
+<h3><span style="color:#98c091;">3.匹配模块</span></h3> 
+<blockquote> 
+ <p><span style="color:#494949;">实现匹配模块，实际上是为了让多个用户在游戏大厅中能够根据得分相近的情况进行两两匹配对战的过程。而这个过程实际上是依赖消息推送机制的，我们可以想到，当玩家1开始匹配就会给服务器发送消息，当匹配到玩家2时，会把这个信息返回给玩家1，同时也得把这个信息返回给玩家2。所以接下来约定的前后端接口，实际上是基于websocket来进行实现的，而我们知道websocket既可以传递文本数据，也可以传递二进制数据，这里我们直接设计让websocket传入json格式的文本数据即可</span></p> 
+ <p></p> 
+ <p>①注意：</p> 
+ <p>JSON字符串和JS对象的转换：<br> JSON字符串转成JS对象：JSON.parse()<br> JS对象转成JSON字符串：JSON.stringify()</p> 
+ <p>JSON字符串和Java对象的转换：<br> JSON字符串转换成java对象：ObjectMapper.readValue();<br> Java对象转换成JSON字符串：ObjectMapper.writeValueAsString()</p> 
+ <p>②约定前后端交互：（注意：在websocket传输请求数据的时候，数据中是不必带有用户的身份信息，因为当前用户的身份信息在前面登录完成之后，就已经保存在HttpSession中了，此时websocket中，也是能拿到之前登录好的HttpSession中的信息的）</p> 
+ <p><img alt="" height="417" src="https://images2.imgbox.com/7a/ab/f3AVCRAJ_o.png" width="1130"></p> 
+ <p>③前后端进行交互的过程：（下面的内容是核心实现websocket的交互步骤）</p> 
+ <p><img alt="" height="518" src="https://images2.imgbox.com/20/04/mCPkkJB2_o.png" width="1015"></p> 
+ <p>通过这个url实现前后端的交互过程 ，然后由上图所见，由MatchAPI这个类来处理匹配功能中的websocket请求。</p> 
+ <p>④MatchAPI来处理websocket的请求：</p> 
+ <p>首先让这个类继承自TextWebSocketHandler</p> 
+ <p><img alt="" height="52" src="https://images2.imgbox.com/16/d3/2afvcfhh_o.png" width="786"></p> 
+ <p> 然后重写这个类中的四个方法，</p> 
+ <p><img alt="" height="681" src="https://images2.imgbox.com/ff/5d/rcccK03L_o.png" width="1200"> 同时在前端中也要做出同样的处理，以便在前端控制台可以打印出响应数据供我们判断是否连接上了：</p> 
+ <p><img alt="" height="430" src="https://images2.imgbox.com/ce/89/yKgAfU8R_o.png" width="1131"></p> 
+ <p>⑤后端封装的内容如何通过websocket传给前端的？</p> 
+ <p>（我们这里举一个例子：以实现处理开始匹配和停止匹配为例）</p> 
+ <p>（1）先建立一个websocket的匹配请求和响应：</p> 
+ <p>匹配请求：</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+import lombok.Data;
+//这是一个websocket的匹配请求
+@Data
+public class MatchRequest {
+    private String message="";
+}</code></pre> 
+ <p>匹配响应：</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+import lombok.Data;
+//这是一个websocket的匹配响应
+@Data
+public class MatchResponse {
+    private boolean ok;
+    private String reason;
+    private String message;
+}</code></pre> 
+ <p> (2)当客户端给服务器发送请求时（这里就是它点击了开始匹配这个按钮）</p> 
+ <p><img alt="" height="683" src="https://images2.imgbox.com/1e/c4/rYXIXhSG_o.png" width="1031"></p> 
+ <p>（3）服务器对客户端传来的websocket数据载荷进行解析：</p> 
+ <p><img alt="" height="560" src="https://images2.imgbox.com/4c/43/gvvPoHUx_o.png" width="1200">（4）服务器响应的对象转换成JSON格式的字符串，通过session发送回去：</p> 
+ <p><img alt="" height="147" src="https://images2.imgbox.com/20/ab/FxvegELy_o.png" width="874"> （5）客户端接收到了服务器的响应后作出的反应：<img alt="" height="454" src="https://images2.imgbox.com/f6/ca/qwifSvto_o.png" width="1022"></p> 
+ <p> 以上就是一个完整的通过websocket来实现的由前端发出请求后，服务器作出响应并返回给前端，前端收到响应后作出一系列反应的过程。</p> 
+</blockquote> 
+<h4><span style="color:#98c091;">3.1匹配功能</span></h4> 
+<blockquote> 
+ <p>主要就是根据客户端对不同的按钮进行点击，从而来判断属于哪一个范畴：</p> 
+ <p>①客户端代码：（此时的功能实现是在游戏大厅中，所以此时应该是game_hall.html）</p> 
+ <pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta http-equiv="X-UA-Compatible" content="IE=edge"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;游戏大厅&lt;/title&gt;
+    &lt;link rel="stylesheet" href="css/common.css"&gt;
+    &lt;link rel="stylesheet" href="css/game_hall.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;div class="五子棋对战"&gt;&lt;/div&gt;
+&lt;!-- 整个页面的容器元素 --&gt;
+&lt;div class="container"&gt;
+    &lt;!-- 这个div在container是处于垂直水平居中这样的位置 --&gt;
+    &lt;div&gt;
+        &lt;!-- 展示用户信息 --&gt;
+        &lt;div id="screen"&gt;&lt;/div&gt;
+        &lt;!-- 匹配按钮 --&gt;
+        &lt;div id="match-button"&gt;开始匹配&lt;/div&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;script src="http://code.jquery.com/jquery-2.1.1.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+    $.ajax({
+        type:'get',
+        url:'/userInfo',
+        success:function(body){
+            let screen=document.querySelector('#screen');
+            screen.innerHTML='玩家:'+body.username+"分数："+body.score+
+            "&lt;br&gt;比赛场数:"+body.totalCount+"获胜场数："+body.winCount
+        },
+        error:function(){
+            alert("获取用户信息失败！");
+        }
+
+    });
+    //此处进行初始化websocket，并且实现前端的匹配逻辑
+    // 此处的路径必须写作 /findMatch, 千万不要写作 /findMatch/
+    let websocketUrl = 'ws://' + location.host + '/findMatch';
+        let websocket = new WebSocket(websocketUrl);
+    websocket.onopen=function(){
+        console.log("onopen");
+    }
+    websocket.onclose=function(){
+        console.log("onclose");
+    }
+    websocket.onerror=function(){
+        console.log("onerror");
+    }
+    //监听页面关闭事件，在页面关闭之前，手动调用这里的websocket的close方法。
+    window.onbeforeunload=function(){
+        websocket.close();
+    }
+
+     //处理服务器返回的响应数据
+    websocket.onmessage=function(e){
+        console.log("onmessage");
+        //处理服务器返回的响应数据，这个响应就是针对"开始匹配"/"结束匹配"来对应的
+        //解析得到的响应对象,返回的数据是一个JSON字符串，解析成js对象
+        let resp=JSON.parse(e.data);
+        let matchButton=document.querySelector('#match-button');
+        if(!resp.ok){
+            console.log("游戏大厅中接收到了失败响应"+resp.reason);
+            return;
+        }
+        if(resp.message=='startMatch'){
+            //开始匹配请求发送成功
+            console.log("成功进入匹配队列");
+            matchButton.innerHTML='匹配中...(点击停止)';
+
+        }else if(resp.message=='stopMatch'){
+            //结束匹配请求发送成功
+            console.log("成功离开匹配队列");
+            matchButton.innerHTML='开始匹配';
+
+        }else if(resp.message=='matchSuccess'){
+            //已经匹配到对手了
+            console.log("匹配成功！进入游戏房间");
+            location.replace('/game_room.html');
+        }else if(resp.message='repeatConnection'){
+            alert("当前禁止多开，请重新登录");
+        location.assign('/login.html');
+        }else{//以上内容均不匹配
+            console.log("收到了非法的响应！message="+resp.message);
+        }
+
+    }
+    //给匹配按钮添加点击事件，就是先实现客户端给服务器发送请求
+    let matchButton=document.querySelector('#match-button');
+    matchButton.onclick=function(){
+        //触发websocket请求之前，看连接是否是建立好的
+        if(websocket.readyState==websocket.OPEN){
+            //处于open即连接是好的
+            //这里发送的数据有两种可能，一是开始匹配，二是停止匹配
+            if(matchButton.innerHTML=='开始匹配'){
+                console.log("开始匹配");
+                websocket.send(JSON.stringify({
+                    message:'startMatch',
+                }));
+            }else if(matchButton.innerHTML=='匹配中...(点击停止)'){
+                console.log("停止匹配");
+                websocket.send(JSON.stringify({
+                    message:'stopMatch',
+                }));
+            }
+        }else{
+            //连接异常
+            alert("当前连接断开，请重新登录");
+            location.replace('/login.html');
+        }
+    }
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;</code></pre> 
+ <p>②服务器代码：</p> 
+ <p>（1）通过websocket作出响应的MatchAPI代码：（这个代码主要是分为四个部分）</p> 
+ <p>在进行这四项之前我们要对其它问题作出相应的处理：首先我们得判断该玩家是否已经登录了，也就是得拿到当前玩家的登录状态，以及他的相关信息，所以这个时候我们新建一个哈希表通过key,value的形式来实现当前在线与否，在线即可拿到玩家的相关信息：</p> 
+ <p>a.这段代码就实现了查询用户的在线状态，以及进入离开游戏大厅，返回当前玩家信息的相关方法操作：</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.WebSocketSession;
+
+import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Component
+public class OnlineUserManager {
+    //此处哈希表的作用是表示当前用户在游戏大厅的在线状态
+    //多个线程访问一个HashMap就会出现线程相关的安全问题，所以我们这个时候用ConcurrentHashMap来解决这个问题
+    private ConcurrentHashMap&lt;Integer, WebSocketSession&gt; gameHall=new ConcurrentHashMap&lt;&gt;();
+    //这个哈希表用来表示当前用户在游戏房间中的在线状态。
+    private ConcurrentHashMap&lt;Integer,WebSocketSession&gt;gameRoom=new ConcurrentHashMap&lt;&gt;();
+    //进入游戏大厅
+    public void enterGameHall(int userId,WebSocketSession webSocketSession){
+        gameHall.put(userId,webSocketSession);
+    }
+    //离开游戏大厅
+    public void exitGameHall(int userId){
+        gameHall.remove(userId);
+    }
+    //根据userId查询找到当前键值对，返回当前的信息
+    public WebSocketSession  getFromGameHall(int userId){
+        return gameHall.get(userId);
+    }
+    public void enterGameRoom(int userId,WebSocketSession webSocketSession){
+        gameRoom.put(userId,webSocketSession);
+    }
+    public void exitGameRoom(int userId){
+        gameRoom.remove(userId);
+    }
+    public WebSocketSession getFromGameRoom(int userId){
+        return gameRoom.get(userId);
+    }
+}
+</code></pre> 
+ <p>b.即表示匹配器，实现匹配与匹配有关的相关功能:</p> 
+ <p>除此之外，我们也要实现，当用户在线就进入匹配队列，玩家下线或者出现异常就退出匹配队列的操作，这个我们用Matcher类来进行实现：</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+
+import com.example.java_chess.model.User;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+
+import javax.annotation.Resource;
+import java.io.IOException;
+import java.util.LinkedList;
+import java.util.Queue;
+
+//这个类表示“匹配器”,通过这个类完成整个匹配的功能
+@Component
+public class Matcher {
+    private ObjectMapper objectMapper=new ObjectMapper();
+    //创建三个匹配队列
+    private Queue&lt;User&gt;normalQueue=new LinkedList&lt;&gt;();
+    private Queue&lt;User&gt;highQueue=new LinkedList&lt;&gt;();
+    private Queue&lt;User&gt;veryHighQueue=new LinkedList&lt;&gt;();
+    //引入房间管理器
+    @Autowired
+    private RoomManager roomManager;
+    //玩家的当前的状态信息
+    @Resource
+    private OnlineUserManager onlineUserManager;
+    //操作匹配队列的方法
+    //把玩家放入匹配队列中
+    public void add(User user){
+        if (user.getScore()&lt;2000){
+            synchronized (normalQueue){
+                normalQueue.offer(user);
+                normalQueue.notify();
+            }
+            System.out.println("把玩家"+user.getUsername()+"加入到了normalQueue的匹配队列中");
+        }else if (user.getScore()&gt;=2000&amp;&amp;user.getScore()&lt;3000){
+            synchronized (highQueue){
+                highQueue.offer(user);
+                highQueue.notify();
+            }
+            System.out.println("把玩家"+user.getUsername()+"加入到了highQueue的匹配队列中");
+        }else{
+            synchronized (veryHighQueue){
+                veryHighQueue.offer(user);
+                veryHighQueue.notify();
+            }
+            System.out.println("把玩家"+user.getUsername()+"加入到了veryHighQueue的匹配队列中");
+        }
+    }
+    //把玩家移除匹配队列中
+    public void remove(User user){
+        if (user.getScore()&lt;2000){
+            synchronized (normalQueue){
+                normalQueue.remove(user);
+            }
+            System.out.println("把玩家"+user.getUsername()+"移除了normalQueue的匹配队列中");
+        }else if (user.getScore()&gt;=2000&amp;&amp;user.getScore()&lt;3000){
+            synchronized (highQueue){
+                highQueue.remove(user);
+            }
+            System.out.println("把玩家"+user.getUsername()+"移除了highQueue的匹配队列中");
+        }else{
+            synchronized (veryHighQueue){
+                veryHighQueue.remove(user);
+            }
+            System.out.println("把玩家"+user.getUsername()+"移除了veryHighQueue的匹配队列中");
+        }
+    }
+    public Matcher(){
+        //创建三个线程，分别针对这三个匹配队列来进行操作
+        Thread t1=new Thread(){
+            @Override
+            public void run() {
+                //扫描normalQueue
+                while (true){
+                    handlerMatch(normalQueue);
+                }
+            }
+        };
+        t1.start();
+        Thread t2=new Thread(){
+            @Override
+            public void run() {
+                //扫描highQueue
+                while (true){
+                    handlerMatch(highQueue);
+                }
+            }
+        };
+        t2.start();
+        Thread t3=new Thread(){
+            @Override
+            public void run() {
+                //扫描veryHighQueue
+                while (true){
+                    handlerMatch(veryHighQueue);
+                }
+            }
+        };
+        t3.start();
+    }
+
+    private void handlerMatch(Queue&lt;User&gt; matchQueue) {
+        synchronized (matchQueue){
+            try {
+                //扫描方法
+                //①检测队列元素个数是否达到2
+                //因为我们五子棋至少得匹配两个人，要是少于两个人的话，压根没有必要去匹配
+                //往队列中添加一个元素，这个时候，后续仍然是不能进行后续匹配操作的，因此，这里使用while是更加合理的
+                while (matchQueue.size() &lt; 2) {
+                    matchQueue.wait();//唤醒后再判断条件，所以我们这里用while
+                }
+                //②尝试从队列中取出两个玩家
+                User player1 = matchQueue.poll();
+                User player2 = matchQueue.poll();
+                //加入日志，方便观察
+                System.out.println("匹配出两个玩家：" + player1.getUsername() + "," + player2.getUsername());
+                //③获取到玩家websocket的会话，告诉玩家，你排到了
+                WebSocketSession session1 = onlineUserManager.getFromGameHall(player1.getUserId());
+                WebSocketSession session2 = onlineUserManager.getFromGameHall(player2.getUserId());
+                //理论来说，匹配中的一定是在线的，前面逻辑已经进行了处理，但是为了保证出现情况，我们就双重判定
+                if (session1 == null) {
+                    //如果玩家1不在线了，就把玩家二放回到匹配队列
+                    matchQueue.offer(player2);
+                    return;
+                }
+                if (session2 == null) {
+                    //如果玩家2不在线了，就把玩家1放回到匹配队列
+                    matchQueue.offer(player1);
+                    return;
+                }//当前两个玩家是同一个用户的情况，理论上不会存在
+                //1、玩家下线就会移除，又禁止了玩家多开，所以一个玩家不会入队两次，不能自己排到自己
+                //但是仍然多进行一次判定，保证以下
+                if (session1 == session2) {
+                    //把其中的一个玩家放回匹配队列
+                    matchQueue.offer(player1);
+                    return;
+                }
+                //④把两个玩家放在一个游戏房间中
+                Room room=new Room();
+                roomManager.add(room,player1.getUserId(),player2.getUserId());
+
+
+                //⑤给玩家返回信息：你匹配到对手了，此处是通过WebSocket返回一个message为‘matchSuccess’这样的响应
+                //此处是给两个玩家都返回“匹配成功”这样的信息
+                MatchResponse response1 = new MatchResponse();
+                response1.setOk(true);
+                response1.setMessage("matchSuccess");
+                //将其返回成json数据格式
+                String json1 = objectMapper.writeValueAsString(response1);
+                session1.sendMessage(new TextMessage(json1));
+
+                MatchResponse response2=new MatchResponse();
+                response2.setOk(true);
+                response2.setMessage("matchSuccess");
+                //将其返回成json数据格式
+                String json2 = objectMapper.writeValueAsString(response2);
+                session2.sendMessage(new TextMessage(json2));
+            }catch (IOException | InterruptedException e){
+                e.printStackTrace();
+            }
+        }
+    }
+}
+</code></pre> 
+ <p>c.匹配到两个实力相当的玩家后需要把他们放入同一个房间，所以我们这里用RoomManager类来实现对房间的管理：（其中包括了添加删除查找房间号）</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.ConcurrentHashMap;
+
+//房间管理器
+@Component
+public class RoomManager {
+    //是管理roomId到room的唯一映射
+    private ConcurrentHashMap&lt;String,Room&gt; rooms =new ConcurrentHashMap&lt;&gt;();
+    //根据Integer对应的userId作为key,该userId对应的房间号作为value来进行返回。通过userId,找到该用户所在的房间号
+    private  ConcurrentHashMap&lt;Integer,String&gt; userIdToRoomId=new ConcurrentHashMap&lt;&gt;();
+    //添加房间号(我们在加入房间号的同时，把userId也加入到第二个哈希表中)
+    public void add(Room room,int userId1,int userId2){
+        rooms.put(room.getRoomId(), room);//以key,value的形式存储
+        userIdToRoomId.put(userId1, room.getRoomId());
+        userIdToRoomId.put(userId2, room.getRoomId());
+    }
+    //删除房间号
+    public void remove(String roomId,int userId1,int userId2){
+        rooms.remove(roomId);
+        userIdToRoomId.remove(userId1);
+        userIdToRoomId.remove(userId2);
+    }
+    //查找房间号
+    public  Room getRoomById(String roomId){
+       return  rooms.get(roomId);
+    }
+
+    public Room getRoomByUserId(int userId){
+        String roomId=userIdToRoomId.get(userId);
+        if (roomId==null){
+            //说明此userId到roomId的映射是不存在的，直接返回null
+            return null;
+        }
+        return  rooms.get(roomId);
+    }
+}
+</code></pre> 
+ <p>d.而要进入房间管理器的条件是先要本身有一个room，所以我们实现room的代码如下：</p> 
+ <pre><code class="language-java">public class Room {
+    //使用字符串类型来表示，方便生成唯一值
+    private String roomId;
+
+    private User user1;
+    private User user2;
+
+    private static final int MAX_ROW = 15;
+    private static final int MAX_COL = 15;
+
+    //创建ObjectMapper用来转换JSON
+    private ObjectMapper objectMapper = new ObjectMapper();
+
+    private OnlineUserManger onlineUserManger;
+
+    // 引入 RoomManager, 用于房间销毁
+    private RoomManger roomManager;
+
+    private UserMapper userMapper;
+
+    //那个玩家是先手（先手方的玩家id）
+    private int whiteUser;
+    
+ public Room(){
+        //构造room的时候生成一个唯一的字符串来表示房间id
+        //使用UUID来作为房间id
+        roomId = UUID.randomUUID().toString();
+        //通过入口类中的context来手动获取前面的onlineUserManger和RoomManager
+        onlineUserManger = DemoApplication.context.getBean(OnlineUserManger.class);
+        roomManager = DemoApplication.context.getBean(RoomManger.class);
+        userMapper = DemoApplication.context.getBean(UserMapper.class);
+    }
+</code></pre> 
+ <p>对于这个类而言，不能注入spring中的@Component等注解，因为这里涉及到很多玩家的房间，不应该是单例，所以我们这里通过注入@Bean的形式来进行注入：</p> 
+ <p>此时在启动类JavaChessApplication中加入context：</p> 
+ <pre><code class="language-java">package com.example.java_chess;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ConfigurableApplicationContext;
+
+@SpringBootApplication
+public class JavaChessApplication {
+ public static ConfigurableApplicationContext context;
+	public static void main(String[] args) {
+		context=SpringApplication.run(JavaChessApplication.class, args);
+	}
+
+}
+</code></pre> 
+ <p>然后在room类进行调用即可：（以下三个类都是需要注入的）</p> 
+ <p><img alt="" height="315" src="https://images2.imgbox.com/33/60/NZRBuMYU_o.png" width="1146"></p> 
+ <p>在处理完上述内容后，我们就看我们之前提到的通过MatchAPI来实现websocket这个类的四大板块：（代码中有详解，不多说）</p> 
+ <pre><code class="language-java">package com.example.java_chess.api;
+
+import com.example.java_chess.game.MatchRequest;
+import com.example.java_chess.game.MatchResponse;
+import com.example.java_chess.game.Matcher;
+import com.example.java_chess.game.OnlineUserManager;
+import com.example.java_chess.model.User;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+@Controller
+//通过这个类来处理匹配功能中的websocket请求
+public class MatchAPI extends TextWebSocketHandler {
+    @Autowired
+    private Matcher matcher;
+    private ObjectMapper objectMapper=new ObjectMapper();
+    @Autowired
+    private OnlineUserManager onlineUserManager;
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        //玩家上线，加入到onlineUserManager中
+        //①先获取到当前用户身份信息(who)
+        //此处的代码之所以能够拿到getAtrributes,全靠了在注册websocket的时候加上的
+        // .addInterceptors(new HttpSessionHandshakeInterceptor())
+        //这个逻辑就把HttpSession中的Attribute都拿到webSocketSession中了
+        //在HTTP登录逻辑中，往HttpSession中存储了User对象： httpSession.setAttribute("user",user);
+        //此时就可以在WebSocketSession中把之前HttpSession里存的User对象给拿到了
+        //此处的user有可能为空，用户之前没有通过HTTP进行登录，直接通过/game_hall.html这个url来访问这个页面
+        try{
+            User user=(User)session.getAttributes().get("user");
+            //②先判断当前用户是否已经登录了，即是否已经在线，在线的话就不该继续进行后续逻辑
+            if (onlineUserManager.getFromGameHall(user.getUserId())!=null
+            || onlineUserManager.getFromGameRoom(user.getUserId())!=null){
+                //当前用户已经登录了，要告诉客户端，你这里重复登录了
+                MatchResponse response=new MatchResponse();
+                response.setOk(true);
+                response.setReason("当前禁止多开");
+                response.setMessage("repeatConnection");
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(response)));
+                //此处直接关闭太过激进，我们还是返回一个特殊的message，由客户端来进行处理
+
+                //session.close();
+                return;
+            }
+            //③拿到身份信息后，将玩家设置为在线状态
+            onlineUserManager.enterGameHall(user.getUserId(),session);
+            System.out.println("玩家进："+user.getUsername()+"进入游戏大厅");
+        }catch (NullPointerException e){
+            System.out.println("[MatchAPI.afterConnectionEstablished]当前用户未登录");
+            //出现空指针异常，说明用户尚未登录。身份信息为空
+            MatchResponse matchResponse=new MatchResponse();
+            matchResponse.setOk(false);
+            matchResponse.setReason("您尚未登录，不能进行后续匹配");
+            //先通过objectMapper把MatchResponse对象转换成json字符串，然后再包装上一层TextMessage，再进行传输
+            //TextMessage就表示一个文本格式的websocket数据包
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(matchResponse)));
+        }
+
+    }
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+     //实现处理开始匹配和停止匹配的请求
+        User user=(User)session.getAttributes().get("user");
+        //获取到客户端给服务器发送的数据
+        String payload=message.getPayload();
+        //解析当前这个json格式的字符串，转换成java对象，这里的话就是指MatchRequest
+        //从客户端读取的数据
+        MatchRequest request=objectMapper.readValue(payload, MatchRequest.class);
+        //从客户端返回的数据
+        MatchResponse response=new MatchResponse();
+        if (request.getMessage().equals("startMatch")){
+            //进入匹配队列
+            //TODD先创建一个类表示匹配队列，给当前用户加入
+            matcher.add(user);
+            //把玩家信息放入匹配队列之后，就会返回一个响应给客户端
+            response.setOk(true);
+            response.setMessage("startMatch");
+        }else if (request.getMessage().equals("stopMatch")){
+            //退出匹配队列
+            //TODD先创建一个类表示匹配队列，把当前用户从队列中移除
+            matcher.remove(user);
+            response.setOk(true);
+            response.setMessage("stopMatch");
+        }else{//非法情况
+            response.setOk(false);
+            response.setMessage("非法的匹配请求");
+
+        }//将response对象转成json格式的字符串，再通过session给发送回去
+        String jsonString= objectMapper.writeValueAsString(response);
+        //对应一个websocket数据报，发送给客户端
+        session.sendMessage(new TextMessage(jsonString));
+    }
+
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+        //玩家下线，从onlineUserManager中删除
+        //①拿到user对象
+        try{
+            User user=(User)session.getAttributes().get("user");
+            //②退出(这应该是针对多开的情况)
+            WebSocketSession session1=onlineUserManager.getFromGameHall(user.getUserId());
+            if (session1==session) {
+                onlineUserManager.exitGameHall(user.getUserId());
+            }
+            //玩家正在匹配中，websocket直接断开，这个时候要从匹配队列中断开
+            matcher.remove(user);
+        }catch (NullPointerException e){
+            System.out.println("[MatchAPI.handleTransportError]当前用户未登录");
+//            MatchResponse matchResponse=new MatchResponse();
+//            matchResponse.setOk(false);
+//            matchResponse.setReason("您尚未登录，不能进行后续匹配");
+//            //先通过objectMapper把MatchResponse对象转换成json字符串，然后再包装上一层TextMessage，再进行传输
+//            //TextMessage就表示一个文本格式的websocket数据包
+//            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(matchResponse)));
+        }
+    }
+    @Override
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+        //玩家下线，从onlineUserManager中删除
+        try{
+            User user=(User)session.getAttributes().get("user");
+            WebSocketSession session1=onlineUserManager.getFromGameHall(user.getUserId());
+            if (session1==session) {
+                onlineUserManager.exitGameHall(user.getUserId());
+            }
+            //玩家正在匹配中，websocket直接断开，这个时候要从匹配队列中断开
+            matcher.remove(user);
+        }catch (NullPointerException e){
+            System.out.println("[MatchAPI.afterConnectionClosed]当前用户未登录");
+            //连接关闭之后，不能再尝试把消息发给客户端
+//            MatchResponse matchResponse=new MatchResponse();
+//            matchResponse.setOk(false);
+//            matchResponse.setReason("您尚未登录，不能进行后续匹配");
+//            //先通过objectMapper把MatchResponse对象转换成json字符串，然后再包装上一层TextMessage，再进行传输
+//            //TextMessage就表示一个文本格式的websocket数据包
+//            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(matchResponse)));
+        }
+    }
+}
+</code></pre> 
+</blockquote> 
+<h3><span style="color:#98c091;">4.对战模块</span></h3> 
+<blockquote> 
+ <p><span style="color:#494949;">对战模块的主要功能就是对进入同一个游戏房间的两个玩家来进行胜负的判定，然而，在这里我们由于要下棋，那么客户端1下的棋告诉服务器后，服务器需要同时发送给客户端2这个落子位置，所以这里仍然需要用websocket来建立前后端的连接。由于这里对战的逻辑和匹配的逻辑是不相同的，所以，我们需要使用两套逻辑，即使用两套不同的websocket路径来进行连接处理</span></p> 
+ <p><span style="color:#494949;">①实现前后端的交互：</span></p> 
+ <p><img alt="" height="427" src="https://images2.imgbox.com/22/c5/ZPsL82U0_o.png" width="1200"></p> 
+ <p>②前后端实现交互的过程：（现在对战的话实在game_room.html中进行的）</p> 
+ <p>而我们这里把前端的操作封装到js里来：</p> 
+ <p><img alt="" height="647" src="https://images2.imgbox.com/44/80/1jGuVdKK_o.png" width="1128"> 这里我们很容易发现，现在是由GameAPI来实现游戏对战中websocket的相关功能：</p> 
+ <p>③前后端还是需要调入以下方法：</p> 
+ <p>（1）后端而言：</p> 
+ <p><img alt="" height="77" src="https://images2.imgbox.com/5e/c5/JeUTDsob_o.png" width="897"></p> 
+ <p><img alt="" height="681" src="https://images2.imgbox.com/de/10/pZwdpTHD_o.png" width="1200"></p> 
+ <p>（2） 前端而言：</p> 
+ <p><img alt="" height="449" src="https://images2.imgbox.com/e1/23/ALqOetLU_o.png" width="891"></p> 
+ <p>④这个地方我们已经进入了游戏房间：</p> 
+ <p>（1）后端向前端传入响应：</p> 
+ <p>当两个玩家都加入成功后，让服务器都访问一个websocket，来通知游戏双方说准备好了：</p> 
+ <pre></pre> 
+ <p>（2）前端作出请求：</p> 
+ <p>这里就将java格式的对象转换成JSON字符串格式，然后传入给客户端。</p> 
+ <p><img alt="" height="781" src="https://images2.imgbox.com/88/33/VUE0oPPj_o.png" width="1200"></p> 
+ <p>（3） 在执行到initGame（）函数后，客户端会向服务器发送落子请求：</p> 
+ <p><img alt="" height="556" src="https://images2.imgbox.com/56/21/i03kYSoE_o.png" width="1010">（4）服务器收到落子请求后，判断胜负之后，把winner返回响应给客户端：</p> 
+ <p><img alt="" height="796" src="https://images2.imgbox.com/fb/31/oT4LpgbM_o.png" width="1200"></p> 
+</blockquote> 
+<h4><span style="color:#98c091;">4.1对战功能</span></h4> 
+<blockquote> 
+ <p><span style="color:#494949;">①客户端：（这里主要是game_room.html和其内部执行的js）</span></p> 
+ <p><span style="color:#494949;">注意：</span>此处引入了 canvas 标签.这个是 HTML5 引入的 “画布”. 后续的棋盘和棋子的绘制, 就依赖这个画布功能。</p> 
+ <pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta http-equiv="X-UA-Compatible" content="IE=edge"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;游戏房间&lt;/title&gt;
+    &lt;link rel="stylesheet" href="css/common.css"&gt;
+    &lt;link rel="stylesheet" href="css/game_room.css"&gt;
+    &lt;script src="http://code.jquery.com/jquery-2.1.1.min.js"&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;div class="nav"&gt;五子棋对战&lt;/div&gt;
+    &lt;div class="container"&gt;
+        &lt;div&gt;
+            &lt;!-- 棋盘区，需要基于canvas来进行实现 --&gt;
+            &lt;canvas id="chess" width="450px" height="450px"&gt;
+                &lt;script src="js/script.js"&gt;&lt;/script&gt;
+
+            &lt;/canvas&gt;
+            &lt;!-- 这是一个显示区 --&gt;
+            &lt;div id="screen"&gt;等待玩家连接中...&lt;/div&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+
+    
+&lt;/body&gt;
+&lt;/html&gt;</code></pre> 
+ <p>js/script.js代码：</p> 
+ <p>需要注意：<br> oneStep 函数起到的效果是在一个指定的位置上绘制一个棋子. 可以区分出绘制白字还是黑子. 参数是横坐标和纵坐标, 分别对应列和行.<br> 用 onclick 来处理用户点击事件. 当用户点击的时候通过这个函数来控制绘制棋子。me 变量用来表示当前是否轮到我落子，over 变量用来表示游戏结束.<br> 实现 onmessage 方法. onmessage 先处理游戏就绪响应.</p> 
+ <p>修改 onclick 函数, 在落子操作时加入发送请求的逻辑.<br> 注释掉原有的 onStep 和 修改 chessBoard 的操作, 放到接收落子响应时处理.<br> 实现 send , 通过 websocket 发送落子请求.</p> 
+ <p>在 initGame 中, 修改 websocket 的 onmessage.在 initGame 之前, 处理的是游戏就绪响应, 在收到游戏响应之后, 就改为接收落子响应了.在处理落子响应中要处理胜负手.</p> 
+ <pre><code class="language-java">let gameInfo = {
+    roomId: null,
+    thisUserId: null,
+    thatUserId: null,
+    isWhite: true,
+}
+
+//
+// 设定界面显示相关操作
+//
+
+function setScreenText(me) {
+    let screen = document.querySelector('#screen');
+    if (me) {
+        screen.innerHTML = "轮到你落子了!";
+    } else {
+        screen.innerHTML = "轮到对方落子了!";
+    }
+}
+
+//
+// 初始化 websocket
+//
+
+// 此处写的路径要写作 /game, 不要写作 /game/
+let websocketUrl = 'ws://' + location.host + '/game';
+let websocket = new WebSocket(websocketUrl);
+
+websocket.onopen = function() {
+    console.log("连接游戏房间成功!");
+}
+
+websocket.close = function() {
+    console.log("和游戏服务器断开连接!");
+}
+
+websocket.onerror = function() {
+    console.log("和服务器的连接出现异常!");
+}
+
+window.onbeforeunload = function() {
+    websocket.close();
+}
+
+// 处理服务器返回的响应数据
+websocket.onmessage = function(event) {
+    console.log("[handlerGameReady] " + event.data);
+    let resp = JSON.parse(event.data);
+
+    if (!resp.ok) {
+        alert("连接游戏失败! reason: " + resp.reason);
+        // 如果出现连接失败的情况, 回到游戏大厅
+        location.assign("/game_hall.html");
+        return;
+    }
+
+    if (resp.message == 'gameReady') {
+        gameInfo.roomId = resp.roomId;
+        gameInfo.thisUserId = resp.thisUserId;
+        gameInfo.thatUserId = resp.thatUserId;
+        gameInfo.isWhite = (resp.whiteUser == resp.thisUserId);
+
+        // 初始化棋盘
+        initGame();
+        // 设置显示区域的内容
+        setScreenText(gameInfo.isWhite);
+    } else if (resp.message == 'repeatConnection') {
+        alert("检测到游戏多开! 请使用其他账号登录!");
+        location.replace("/login.html");
+    }
+}
+
+//
+// 初始化一局游戏
+//
+function initGame() {
+    // 是我下还是对方下. 根据服务器分配的先后手情况决定
+    let me = gameInfo.isWhite;
+    // 游戏是否结束
+    let over = false;
+    let chessBoard = [];
+    //初始化chessBord数组(表示棋盘的数组)
+    for (let i = 0; i &lt; 15; i++) {
+        chessBoard[i] = [];
+        for (let j = 0; j &lt; 15; j++) {
+            chessBoard[i][j] = 0;
+        }
+    }
+    let chess = document.querySelector('#chess');
+    let context = chess.getContext('2d');
+    context.strokeStyle = "#BFBFBF";
+    // 背景图片
+    let logo = new Image();
+    logo.src = "image/science.jpg";
+    logo.onload = function () {
+        context.drawImage(logo, 0, 0, 450, 450);
+        initChessBoard();
+    }
+
+    // 绘制棋盘网格
+    function initChessBoard() {
+        for (let i = 0; i &lt; 15; i++) {
+            context.moveTo(15 + i * 30, 15);
+            context.lineTo(15 + i * 30, 430);
+            context.stroke();
+            context.moveTo(15, 15 + i * 30);
+            context.lineTo(435, 15 + i * 30);
+            context.stroke();
+        }
+    }
+
+    // 绘制一个棋子, me 为 true
+    function oneStep(i, j, isWhite) {
+        context.beginPath();
+        context.arc(15 + i * 30, 15 + j * 30, 13, 0, 2 * Math.PI);
+        context.closePath();
+        var gradient = context.createRadialGradient(15 + i * 30 + 2, 15 + j * 30 - 2, 13, 15 + i * 30 + 2, 15 + j * 30 - 2, 0);
+        if (!isWhite) {
+            gradient.addColorStop(0, "#0A0A0A");
+            gradient.addColorStop(1, "#636766");
+        } else {
+            gradient.addColorStop(0, "#D1D1D1");
+            gradient.addColorStop(1, "#F9F9F9");
+        }
+        context.fillStyle = gradient;
+        context.fill();
+    }
+
+    chess.onclick = function (e) {
+        if (over) {
+            return;
+        }
+        if (!me) {
+            return;
+        }
+        let x = e.offsetX;
+        let y = e.offsetY;
+        // 注意, 横坐标是列, 纵坐标是行
+        let col = Math.floor(x / 30);
+        let row = Math.floor(y / 30);
+        if (chessBoard[row][col] == 0) {
+            // 发送坐标给服务器, 服务器要返回结果
+            send(row, col);
+
+            // 留到浏览器收到落子响应的时候再处理(收到响应再来画棋子)
+            // oneStep(col, row, gameInfo.isWhite);
+            // chessBoard[row][col] = 1;
+        }
+    }
+
+    function send(row, col) {
+        let req = {
+            message: 'putChess',
+            userId: gameInfo.thisUserId,
+            row: row,
+            col: col
+        };
+
+        websocket.send(JSON.stringify(req));
+    }
+
+    // 之前 websocket.onmessage 主要是用来处理了游戏就绪响应. 在游戏就绪之后, 初始化完毕之后, 也就不再有这个游戏就绪响应了.
+    // 就在这个 initGame 内部, 修改 websocket.onmessage 方法~~, 让这个方法里面针对落子响应进行处理!
+    websocket.onmessage = function(event) {
+        console.log("[handlerPutChess] " + event.data);
+
+        let resp = JSON.parse(event.data);
+        if (resp.message != 'putChess') {
+            console.log("响应类型错误!");
+            return;
+        }
+
+        // 先判定当前这个响应是自己落的子, 还是对方落的子.
+        if (resp.userId == gameInfo.thisUserId) {
+            // 我自己落的子
+            // 根据我自己子的颜色, 来绘制一个棋子
+            oneStep(resp.col, resp.row, gameInfo.isWhite);
+        } else if (resp.userId == gameInfo.thatUserId) {
+            // 我的对手落的子
+            oneStep(resp.col, resp.row, !gameInfo.isWhite);
+        } else {
+            // 响应错误! userId 是有问题的!
+            console.log('[handlerPutChess] resp userId 错误!');
+            return;
+        }
+
+        // 给对应的位置设为 1, 方便后续逻辑判定当前位置是否已经有子了.
+        chessBoard[resp.row][resp.col] = 1;
+
+        // 交换双方的落子轮次
+        me = !me;
+        setScreenText(me);
+
+        // 判定游戏是否结束
+        let screenDiv = document.querySelector('#screen');
+        if (resp.winner != 0) {
+            if (resp.winner == gameInfo.thisUserId) {
+                screenDiv.innerHTML = 'WIN!';
+            } else if (resp.winner = gameInfo.thatUserId) {
+                screenDiv.innerHTML = 'LOSE!';
+            } else {
+                alert("winner 字段错误! " + resp.winner);
+            }
+            // 回到游戏大厅
+            // location.assign('/game_hall.html');
+
+            // 增加一个按钮, 让玩家点击之后, 再回到游戏大厅~
+            let backBtn = document.createElement('button');
+            backBtn.innerHTML = '回到大厅';
+            backBtn.onclick = function() {
+                location.replace('/game_hall.html');
+            }
+            let fatherDiv = document.querySelector('.container&gt;div');
+            fatherDiv.appendChild(backBtn);
+        }
+    }
+}
+</code></pre> 
+ <p>②服务器：</p> 
+ <p>（1）通过websocket作出响应的GameAPI代码：（这个代码主要是分为四个部分）</p> 
+ <p>在演示这四个代码部分之前，我们需要做如下一些操作：</p> 
+ <p>1.引入GameRequest类和GameResponse类来明确请求，响应过程中的参数问题：</p> 
+ <p>GameRequest：</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+import lombok.Data;
+//这个类表示落子请求
+@Data
+public class GameRequest {
+    private String message;
+    private  int userId;
+    private int row;
+    private int col;
+}
+</code></pre> 
+ <p>GameResponse：</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+import lombok.Data;
+//这个类表示一个落子响应
+@Data
+public class GameResponse {
+    private String message;
+    private  int userId;
+    private int row;
+    private int col;
+    private int winner;
+}</code></pre> 
+ <p>2.当两个玩家进入了同一个房间后，并且都准备好了，这个时候，就由Room类执行下棋的操作，以及判断最终的胜负：</p> 
+ <pre><code class="language-java">package com.example.java_chess.game;
+
+import com.example.java_chess.JavaChessApplication;
+import com.example.java_chess.model.User;
+import com.example.java_chess.model.UserMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import javafx.scene.chart.ScatterChart;
+import lombok.Data;
+import org.apache.ibatis.annotations.Param;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+
+import java.io.IOException;
+import java.util.UUID;
+
+//这个类表示一个游戏房间
+@Data
+//@Component不能这样，因为Component是单例模式，而这里涉及到很多玩家的房间，不应该是单例
+public class Room {
+    //引入RoomManager来用于房间的销毁
+    //@Autowired
+    private RoomManager roomManager;
+    //引入onlineUserManager来返回用户的当前信息状态
+    //@Autowired
+    private OnlineUserManager onlineUserManager;
+    //创建，用来转换Json对象
+    private ObjectMapper objectMapper=new ObjectMapper();
+    private UserMapper userMapper;
+    //使用字符串类型来表示，方便设置唯一值
+    private String roomId;
+    private User user1;
+    private User user2;
+    //先手方玩家id
+    private int whiteUser;
+    //这个二维数组表示棋盘
+    //做一个约定：1)使用0表示当前位置未落子，初始化好的int数组，就相当于全是0
+    //2)使用1表示user1的落子位置
+    //3)使用2表示user2的落子位置
+    private int [][]board=new int[15][15];
+    //来设置一下该棋盘的最大行数和列数
+    private static final int MAX_ROW=15;
+    private static final int MAX_COL=15;
+    //通过这个方法来处理一次落子操作，要做的为以下几步
+
+
+
+    public void putChess(String reqJson) throws IOException {
+        //1.要记录当前落子的位置
+        //按照GameRequest这个类来进行转换，这个类本身就是用来接收穿过来的request请求的
+        GameRequest request=objectMapper.readValue(reqJson,GameRequest.class);
+        GameResponse response=new GameResponse();
+        //当前这个子是玩家一落的还是玩家2，根据玩家1和玩家2来决定往数组中写1还是写2
+        int chess=request.getUserId()==user1.getUserId()?1:2;//相等是玩家1的子，不相等就是玩家2的子
+        int row=request.getRow();
+        int col=request.getCol();
+        if (board[row][col]!=0){
+            //这种情况一般是不会存在的，因为在客户端已经针对重复落子进行过判定了
+            // 此处是为了保证程序更加没问题，就用服务器进行了再一次的判定
+            System.out.println("当前位置（"+row+","+col+"）已经有子了！");
+            return;
+        }//此处这个位置没有落子，当前得到的值放于该位置
+        board[row][col]=chess;
+        //2.打印出当前的棋盘信息
+        printBoard();
+        //3.进行胜负判断
+        int winner=checkWinner(row,col,chess);
+        //4.给房间中所有客户端返回响应
+        response.setMessage("putChess");
+        response.setUserId(request.getUserId());
+        response.setRow(row);
+        response.setCol(col);
+        response.setWinner(winner);
+
+        //要想给用户发送websocket数据，需要获取到该用户的websocketsession
+        WebSocketSession session1=onlineUserManager.getFromGameRoom(user1.getUserId());
+        WebSocketSession session2=onlineUserManager.getFromGameRoom(user2.getUserId());
+        //特殊处理：万一拿到当前玩家的会话为空，即玩家已经下线
+        if (session1==null){
+            //玩家1下线，直接玩家2获胜
+            response.setWinner(user2.getUserId());
+            System.out.println("玩家1掉线");
+        }
+        if (session2==null){
+            response.setWinner(user1.getUserId());
+            System.out.println("玩家2掉线");
+        }
+        //把响应构造成JSON字符串，在通过session进行传输
+        String respJson=objectMapper.writeValueAsString(response);
+        if (session1!=null){
+            session1.sendMessage(new TextMessage(respJson));
+        }
+        if (session2!=null) {
+            session2.sendMessage(new TextMessage(respJson));
+        }
+        //如果当前胜负已分，那么这个房间就失去了意思，我们就可以直接销毁该房间
+        if(response.getWinner()!=0){
+            //胜负已分
+            System.out.println("游戏结束，即将返回！roomId="+roomId+"获胜方为"+response.getWinner());
+            //更新获胜方和失败方的分数
+            int winUserId=response.getWinner();
+            int loseUserId=response.getWinner()==user1.getUserId()?user2.getUserId():user1.getUserId();
+            userMapper.userWin(winUserId);
+            userMapper.userLose(loseUserId);
+            roomManager.remove(roomId,user1.getUserId(),user2.getUserId());
+
+        }
+    }
+
+    private void printBoard() {
+        //打印棋盘
+        System.out.println("[打印棋盘信息：]"+roomId);
+        System.out.println("===================");
+        for (int r=0;r&lt;MAX_ROW;r++){
+            for (int c=0;c&lt;MAX_ROW;c++){
+                //针对一行之间的若干列，我们不打印换行
+                System.out.print(board[r][c]+" ");
+            }
+            //每遍历完一行之后，再打印换行
+            System.out.println();
+        }
+    }
+
+    //待会来实现，进行胜负判断
+    //谁获胜返回谁的userID，平局返回0
+    private int checkWinner(int row, int col,int chess) {
+        //①检查所有的行
+        //先遍历这五种情况
+        for (int c=col-4;c&lt;=col;c++){
+            //针对其中的一种情况，来判定这五个子是不是连在一起了
+            //并且得和玩家落的子是一样的
+            try{
+                if (board[row][c]==chess
+                        &amp;&amp; board[row][c+1]==chess
+                        &amp;&amp;board[row][c+2]==chess
+                        &amp;&amp; board[row][c+3]==chess &amp;&amp;
+                        board[row][c+4]==chess){
+                    //五子连珠已成，可判断胜负
+                    return chess==1?user1.getUserId():user2.getUserId();
+            }
+            }catch (ArrayIndexOutOfBoundsException e){
+                //如果出现异常，我们就直接忽略这个异常
+                continue;
+            }
+        }
+        //检查所有列
+        for (int r=row-4;r&lt;=row;r++){
+            try{
+                if (board[r][col]==chess&amp;&amp;board[r+1][col]==chess&amp;&amp;board[r+2][col]
+                ==chess&amp;&amp;board[r+3][col]==chess&amp;&amp;board[r+4][col]==chess){
+                    return chess==1?user1.getUserId():user2.getUserId();
+                }
+            }catch (ArrayIndexOutOfBoundsException e){
+                continue;
+            }
+        }
+        //检查主对角线
+        for (int r=row-4,c=col-4;r&lt;=row &amp;&amp; c&lt;=col;r++,c++){
+            try{
+                if (board[r][c]==chess&amp;&amp;board[r+1][c+1]==chess
+                &amp;&amp;board[row+2][col+2]==chess
+                        &amp;&amp;board[row+3][col+3]==chess
+                        &amp;&amp;board[row+4][col+4]==chess){
+                    return chess==1?user1.getUserId():user2.getUserId();
+                }
+            }catch (ArrayIndexOutOfBoundsException e){
+                continue;
+            }
+        }
+        //检查副对角线
+        for (int r=row-4,c=col+4;r&lt;=row&amp;&amp;c&gt;=col;r++,c--){
+            try{
+                if (board[r][c]==chess
+                &amp;&amp;board[r+1][c-1]==chess
+                &amp;&amp;board[r+2][c-2]==chess &amp;&amp;
+                board[r+3][c-3]==chess&amp;&amp;
+                board[r+4][c-4]==chess){
+                    return chess==1?user1.getUserId():user2.getUserId();
+                }
+            }catch (ArrayIndexOutOfBoundsException e){
+                continue;
+            }
+        }//胜负未分，直接返回0
+        return 0;
+    }
+
+    public  Room(){
+        //构造room的时候生成一个唯一的字符串来表示房间id
+        //在这里我们使用UUID来作为房间ID（调用任意次的结果都是不相同的）
+        roomId= UUID.randomUUID().toString();
+        //通过入口类中记录的context来手动获取到前面的RoomManager和OnlineManager
+        onlineUserManager= JavaChessApplication.context.getBean(OnlineUserManager.class);
+        roomManager=JavaChessApplication.context.getBean(RoomManager.class);
+        userMapper=JavaChessApplication.context.getBean(UserMapper.class);
+    }
+}
+</code></pre> 
+ <p>3.GameAPI四个部分的代码如下：（注释里面将得很清楚整个逻辑，就不再复述）</p> 
+ <pre><code class="language-java">package com.example.java_chess.api;
+
+import com.example.java_chess.game.*;
+import com.example.java_chess.model.User;
+import com.example.java_chess.model.UserMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.deploy.security.WSeedGenerator;
+import org.omg.CORBA.UserException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+
+import javax.annotation.Resource;
+import java.io.IOException;
+
+@Component
+public class GameAPI extends TextWebSocketHandler {
+    @Resource
+    private UserMapper userMapper;
+    @Autowired
+    private OnlineUserManager onlineUserManager;
+    @Autowired
+    private RoomManager roomManager;
+    private ObjectMapper objectMapper=new ObjectMapper();
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        GameReadyResponse response=new GameReadyResponse();
+        //①先获取到用户的身份信息(从HttpSession中拿到当前用户的对象）
+        User user =(User)session.getAttributes().get("user");
+        if (user==null){
+            response.setOk(false);
+            response.setReason("用户尚未登录");
+            //把对象转化成json格式的对象
+            session.sendMessage((new TextMessage(objectMapper.writeValueAsString(response))));
+            return;
+        }
+        //②判断当前用户是否已经进入房间（用房间管理器来进行查询）
+        Room room=roomManager.getRoomByUserId(user.getUserId());
+        if (room==null){
+            //该玩家还未匹配到
+            response.setOk(false);
+            response.setReason("当前用户还未匹配到");
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(response)));
+            return;
+        }
+        //③判断当前是不是多开，即该用户是不是已经在其他地方登陆了
+        if (onlineUserManager.getFromGameHall(user.getUserId())!=null ||
+                onlineUserManager.getFromGameRoom(user.getUserId())!=null){
+            //如果一个游戏账号一个在游戏房间一个在游戏大厅，也得视为多开
+            response.setOk(true);
+            response.setReason("禁止游戏多开页面");
+            response.setMessage("repeatConnection");
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(response)));
+            return;
+        }
+        //④设置玩家上线
+        onlineUserManager.enterGameRoom(user.getUserId(),session);
+        //⑤把两个玩家加入到游戏房间中
+        //当前这个逻辑是在game_room.html页面加载的时候进行的
+        //而前面的创建房间/匹配过程，是在game_hall.html页面中完成的
+        //因此前面匹配到对手后，需要进行页面跳转，来到game_room.html才算正式成功
+        //执行到当前这个逻辑，说明玩家已经页面跳转成功啦
+        //到此，本来就已经进入了一个玩家，我们下面的操作实际上就是说明其是玩家几
+        synchronized (room) {
+            if (room.getUser1() == null) {
+                //第一个玩家还未加入到房间中
+                //但是现在是有一个客户端连接成功了才会调用这个方法，
+                // 所以就把当前连上WebSocket的玩家作为user1,加入到房间中
+                room.setUser1(user);
+                //把先连入房间的玩家作为先手
+                room.setWhiteUser(user.getUserId());
+                System.out.println("玩家:" + user.getUsername() + "已经准备就绪");
+                return;
+            }
+            if (room.getUser2() == null) {
+                //就说明玩家1已经进入了房间
+                //给当前玩家作为玩家2
+                room.setUser2(user);
+                System.out.println("玩家：" + user.getUsername() + "已经准备就绪");
+                //当两个玩家都加入成功后，让服务器都访问一个websocket，来通知游戏双方说都已经准备好了
+                //通知玩家1
+                noticeGameReady(room, room.getUser1(), room.getUser2());
+                //通知玩家2
+                noticeGameReady(room, room.getUser2(), room.getUser1());
+                return;
+            }
+        }
+            //⑥此处如果又有玩家尝试连接同一个房间，就提示报错，理论上是不存在这种情况的，但是此处为了更完善
+            response.setOk(false);
+            response.setReason("当前房间已满！已不能加入！");
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(response)));
+        }
+
+    public void noticeGameReady(Room room,User thisUser,User thatUser) throws IOException {
+        GameReadyResponse resp=new GameReadyResponse();
+        resp.setMessage("gameReady");
+        resp.setOk(true);
+        resp.setReason("");
+        resp.setRoomId(room.getRoomId());
+        resp.setThisUserId(thisUser.getUserId());
+        resp.setThatUserId(thatUser.getUserId());
+        resp.setWhiteUser(room.getWhiteUser());
+        //把当前响应数据传回给对应玩家
+        WebSocketSession webSocketSession = onlineUserManager.getFromGameRoom(thisUser.getUserId());
+        webSocketSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(resp)));
+    }
+
+
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        //1.先从session里面拿到当前用户的身份信息
+        User user = (User) session.getAttributes().get("user");
+        if (user == null){
+            System.out.println("[handleTextMessage:]当前玩家尚未登录！");
+            return;
+        }
+        //2.根据玩家id获取到房间对象
+        Room room = roomManager.getRoomByUserId(user.getUserId());
+        //3.通过room对象来处理具体的请求
+        room.putChess(message.getPayload());
+    }
+
+
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+        User user=(User)session.getAttributes().get("user");
+        if (user==null){
+            return;//简单处理，断开的时候不给客户端返回响应
+        }
+        WebSocketSession exitSession= onlineUserManager.getFromGameRoom(user.getUserId());
+        if (exitSession==session){
+            //这里是为了避免在多开的情况下，第二个用户退出连接的动作
+            onlineUserManager.exitGameRoom(user.getUserId());
+        }
+        System.out.println("当前用户"+user.getUsername()+"游戏房间连接异常");
+        //通知对手获胜
+        noticeThatUserWin(user);
+    }
+
+    @Override
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+        User user=(User)session.getAttributes().get("user");
+        if (user==null){
+            return;//简单处理，断开的时候不给客户端返回响应
+        }
+       WebSocketSession exitSession= onlineUserManager.getFromGameRoom(user.getUserId());
+        if (exitSession==session){
+            //这里是为了避免在多开的情况下，第二个用户退出连接的动作
+            onlineUserManager.exitGameRoom(user.getUserId());
+        }
+        System.out.println("当前用户"+user.getUsername()+"离开游戏房间");
+        noticeThatUserWin(user);
+    }
+    private void noticeThatUserWin(User user) throws IOException{
+        //1、根据当前玩家，找到玩家所在的房间
+        Room room=roomManager.getRoomByUserId(user.getUserId());
+        if (room==null){
+            //已经不存在，无对手
+            System.out.println("当前房间不存在");
+            return;
+        }
+        //2.根据房间找到对手
+        User thatUser=(user==room.getUser1())? room.getUser2() : room.getUser1();
+        //3.找到对手后，判断该对手的在线状态
+        WebSocketSession webSocketSession=onlineUserManager.getFromGameRoom(thatUser.getUserId());
+        if (webSocketSession==null){
+            //两人均掉线
+            System.out.println("无需判断胜负，均掉线");
+            return;
+        }
+        //4.如果对手在线，那么构造一个响应来通知对手获胜
+        GameResponse response=new GameResponse();
+        response.setMessage("putChess");
+        response.setUserId(thatUser.getUserId());
+        response.setWinner(thatUser.getUserId());
+        webSocketSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(response)));
+        //5.更新玩家的分数信息
+        //这个方法本身就规定了thisUserId是失败方，那么thatUserId就是胜利者
+        int winUserId=thatUser.getUserId();
+        int loseUserId=user.getUserId();
+        userMapper.userWin(winUserId);
+        userMapper.userLose(loseUserId);
+        //6.释放房间对象
+        roomManager.remove(room.getRoomId(), room.getUser1().getUserId(),room.getUser2().getUserId());
+    }
+
+}
+</code></pre> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a21414eed54d503ead10c45ff1bbe737/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">模数转换电路</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/6b42d399533e3fc646326fa1cffeb3a0/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Windows系统之Yolov5的安装教程笔记</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

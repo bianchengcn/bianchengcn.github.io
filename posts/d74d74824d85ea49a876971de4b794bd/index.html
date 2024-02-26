@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>状态机按键消抖 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="状态机按键消抖" />
+<meta property="og:description" content="嵌入式_状态机按键消抖 状态机，FSM（Finite State Machine），也称为同步有限状态机从。指的是在同步电路系统中使用的，跟随同步时钟变化的，状态数量有限的状态机，简称有限状态机。
+文章目录 嵌入式_状态机按键消抖前言一、状态机消抖原理二、实现步骤1、一共有四个按键，定义一个按键表：2、再定义一个按键属性结构体3、再定义一个按键状态4、接口函数5、按键结构体数据定义以及状态检测切换函数实现 三、完整代码1、.h文件2、.c文件 四、使用方法总结 前言 此代码是在STMF407平台使用标准库函数实现的，需要移植时请根据实际情况进行分析和修改。
+按键抖动：按键抖动时间的长短由按键的机械特性决定，一般为5ms～10ms。这是一个很重要的时间参数，在很多场合都要用到。按键稳定闭合时间的长短则是由操作人员的按键动作决定的，一般为零点几秒至数秒。键抖动会引起一次按键被误读多次。为确保单片机对按键的一次闭合仅作一次处理，必须去除键抖动。在键闭合稳定时读取键的状态，并且必须判别到按键释放到稳定状态后再去作处理。
+一般软件消抖一般又是直接一个简短延时Delay函数，数据阻塞式消抖效率低下，占用MCU资源，最近研究了一下状态机消抖，不占用MCU资源的非阻塞消抖。
+传统硬件消抖：利用电容的充放电特性来对抖动过程中产生的电压毛刺进行平滑处理，从而实现消抖。在按键的两端并联一个0.1uf的电容
+一、状态机消抖原理 如图：
+初始状态：图以黑色方框表示，此时按键没有按下，MCU会检测到有一个初始电平（可以是高电平也可以是低电平），此时状态没有边沿信号触发，触次数为0，当有手按这个按键时候会产生毛刺，当检测到首次与初始电平不一样的电平信号时，就会变为初始抖动状态。
+初始抖动状态：图以右上角灰色方框表示，接上文，按键状态变为初始抖动状态，会持续记录与初始电平不一样的电平信号触发次数，当持续N次时表示已经是持续的反转信号了说明按键确实按下了，此时就会直接跳转到反转状态，表示按键确实被按下。如果某一次检测到的信号还是和初始电平一样，那么就会重新置为初始状态，重新记录触发次数，直至持续N次的反转信号才会跳转到反转状态。
+反转状态：图以白色方框表示，接上文，此时按键确实是按下状态，MCU会检测到一个反转电平（与初始状态电平相反），此状态没有边沿信号触发时触次数为0，当有手重新按这个按键或松开按键时候会产生毛刺，当检测到首次与反转电平不一样的电平信号时，就会变为反转抖动状态。
+反转抖动状态：图以左下角灰色方框表示，接上文，按键状态变为反转抖动状态，会持续记录与反转电平不一样的电平信号触发次数，当持续N次时表示已经是持续的另一种信号了说明按键确实重新按下或松开，此时就会直接跳转到初始状态，表示按键确实被重新按下或松开。如果某一次检测到的信号还是和反转电平一样，那么就会重新置为反转状态，重新记录触发次数，直至持续N次的反转信号才会跳转到初始状态。
+二、实现步骤 提示：本代码基于STM32F407标准库写的，主义修改及兼容性
+1、一共有四个按键，定义一个按键表： typedef enum // 按键表, { KEY0 = 0, KEY1, KEY2, KEY3, KEY_NUM, // 必须要有的记录按钮数量，必须在最后 }KEY_LIST; 2、再定义一个按键属性结构体 代码如下（示例）：
+typedef struct { uint8_t	KeysNum;	//序号 GPIO_TypeDef*	GPIOX;	//端口 uint16_t GPIO_PinsNum;	//引脚号 uint16 KEY_TIMECOUNT;	//时间计数器 GPIO_Pulltype GPIO_Pull;	//初始状态(未按下时候电平 0/1) KEY_STATUS key_NowStatus;	//按键当前状态 uint8_t Key_Event;	//按键事件 }KEY_COMPONENTS; 3、再定义一个按键状态 代码如下（示例）：
+#define ENUM_ITEM(ITEM) ITEM,	//逗号不可省略 #define ENUM_STRING(ITEM) #ITEM, #define KEY_STATUS_ENUM(STATUS) \ STATUS(KS_RELEASE) /*稳定松开状态*/ \ STATUS(KS_PRESS_SHAKE) /*按下抖动状态*/ \ STATUS(KS_PRESS) /*稳定按下状态*/ \ STATUS(KS_RELEASE_SHAKE) /*松开抖动状态*/ \ STATUS(KS_NUM) /*状态总数(无效状态)*/ \ 4、接口函数 extern void ScanKey(void);	//持续扫描函数 extern KEY_STATUS key_status_check(uint Key_index);	//状态检测函数 extern uint8_t Key_GetPinsVolt(uint8_t Pin_index);	//获取GPIO电平函数 5、按键结构体数据定义以及状态检测切换函数实现 KEY_COMPONENTS Key_TestGrop[KEYSNUMBERS] = { {0,GPIOE,GPIO_Pin_4,0,PuLL_UP,KS_RELEASE,0},	//key0 {1,GPIOE,GPIO_Pin_3,0,PuLL_UP,KS_RELEASE,0},	//key1 {2,GPIOE,GPIO_Pin_2,0,PuLL_UP,KS_RELEASE,0},	//key2 {3,GPIOA,GPIO_Pin_0,0,PuLL_DOWN,KS_RELEASE,0}	//WE_UP }; /*分别是：编号 端口 引脚号 触发次数计数器 初始电平 初始状态 触发事件标记位*/ /************************************************************************************ *@fuction	:key_status_check *@brief	:状态机去抖动核心代码 *@param	:-- *@return	:按键状态 *@author	:_Awen *@date	:2022-12-10 ************************************************************************************/ KEY_STATUS key_status_check(uint Key_index) { switch(Key_TestGrop[Key_index]." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d74d74824d85ea49a876971de4b794bd/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-03-15T23:34:24+08:00" />
+<meta property="article:modified_time" content="2023-03-15T23:34:24+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">状态机按键消抖</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="__0"></a>嵌入式_状态机按键消抖</h2> 
+<p>状态机，FSM（Finite State Machine），也称为同步有限状态机从。指的是在同步电路系统中使用的，跟随同步时钟变化的，状态数量有限的状态机，简称有限状态机。</p> 
+<hr> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#__0" rel="nofollow">嵌入式_状态机按键消抖</a></li><li><a href="#_14" rel="nofollow">前言</a></li><li><a href="#_30" rel="nofollow">一、状态机消抖原理</a></li><li><a href="#_45" rel="nofollow">二、实现步骤</a></li><li><ul><li><a href="#1_47" rel="nofollow">1、一共有四个按键，定义一个按键表：</a></li><li><a href="#2_58" rel="nofollow">2、再定义一个按键属性结构体</a></li><li><a href="#3_74" rel="nofollow">3、再定义一个按键状态</a></li><li><a href="#4_90" rel="nofollow">4、接口函数</a></li><li><a href="#5_96" rel="nofollow">5、按键结构体数据定义以及状态检测切换函数实现</a></li></ul> 
+  </li><li><a href="#_187" rel="nofollow">三、完整代码</a></li><li><ul><li><a href="#1h_188" rel="nofollow">1、.h文件</a></li><li><a href="#2c_251" rel="nofollow">2、.c文件</a></li></ul> 
+  </li><li><a href="#_371" rel="nofollow">四、使用方法</a></li><li><a href="#_380" rel="nofollow">总结</a></li></ul> 
+</div> 
+<p></p> 
+<hr> 
+<h2><a id="_14"></a>前言</h2> 
+<p>此代码是在STMF407平台使用标准库函数实现的，需要移植时请根据实际情况进行分析和修改。</p> 
+<p>按键抖动：按键抖动时间的长短由按键的机械特性决定，一般为5ms～10ms。这是一个很重要的时间参数，在很多场合都要用到。按键稳定闭合时间的长短则是由操作人员的按键动作决定的，一般为零点几秒至数秒。键抖动会引起一次按键被误读多次。为确保单片机对按键的一次闭合仅作一次处理，必须去除键抖动。在键闭合稳定时读取键的状态，并且必须判别到按键释放到稳定状态后再去作处理。<br> <img src="https://images2.imgbox.com/e3/13/bVLUrTf6_o.png" alt="在这里插入图片描述"></p> 
+<p>一般软件消抖一般又是直接一个简短延时Delay函数，数据阻塞式消抖效率低下，占用MCU资源，最近研究了一下状态机消抖，不占用MCU资源的非阻塞消抖。<br> 传统硬件消抖：利用电容的充放电特性来对抖动过程中产生的电压毛刺进行平滑处理，从而实现消抖。在按键的两端并联一个0.1uf的电容<br> <img src="https://images2.imgbox.com/30/31/SClWHoge_o.png" alt="在这里插入图片描述"></p> 
+<hr> 
+<h2><a id="_30"></a>一、状态机消抖原理</h2> 
+<p>如图：<br> 初始状态：图以黑色方框表示，此时按键没有按下，MCU会检测到有一个初始电平（可以是高电平也可以是低电平），此时状态没有边沿信号触发，触次数为0，当有手按这个按键时候会产生毛刺，当检测到首次与初始电平不一样的电平信号时，就会变为初始抖动状态。</p> 
+<p>初始抖动状态：图以右上角灰色方框表示，接上文，按键状态变为初始抖动状态，会持续记录与初始电平不一样的电平信号触发次数，当持续N次时表示已经是持续的反转信号了说明按键确实按下了，此时就会直接跳转到反转状态，表示按键确实被按下。如果某一次检测到的信号还是和初始电平一样，那么就会重新置为初始状态，重新记录触发次数，直至持续N次的反转信号才会跳转到反转状态。</p> 
+<p>反转状态：图以白色方框表示，接上文，此时按键确实是按下状态，MCU会检测到一个反转电平（与初始状态电平相反），此状态没有边沿信号触发时触次数为0，当有手重新按这个按键或松开按键时候会产生毛刺，当检测到首次与反转电平不一样的电平信号时，就会变为反转抖动状态。</p> 
+<p>反转抖动状态：图以左下角灰色方框表示，接上文，按键状态变为反转抖动状态，会持续记录与反转电平不一样的电平信号触发次数，当持续N次时表示已经是持续的另一种信号了说明按键确实重新按下或松开，此时就会直接跳转到初始状态，表示按键确实被重新按下或松开。如果某一次检测到的信号还是和反转电平一样，那么就会重新置为反转状态，重新记录触发次数，直至持续N次的反转信号才会跳转到初始状态。</p> 
+<p><img src="https://images2.imgbox.com/b3/a5/nd7c3oCV_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="_45"></a>二、实现步骤</h2> 
+<p><code> 提示：本代码基于STM32F407标准库写的，主义修改及兼容性</code></p> 
+<h3><a id="1_47"></a>1、一共有四个按键，定义一个按键表：</h3> 
+<pre><code class="prism language-c"><span class="token keyword">typedef</span> <span class="token keyword">enum</span> 									<span class="token comment">// 按键表,</span>
+<span class="token punctuation">{<!-- --></span>
+	KEY0 <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">,</span>
+	KEY1<span class="token punctuation">,</span>
+	KEY2<span class="token punctuation">,</span>
+	KEY3<span class="token punctuation">,</span>
+	KEY_NUM<span class="token punctuation">,</span> 										<span class="token comment">// 必须要有的记录按钮数量，必须在最后</span>
+<span class="token punctuation">}</span>KEY_LIST<span class="token punctuation">;</span>
+</code></pre> 
+<h3><a id="2_58"></a>2、再定义一个按键属性结构体</h3> 
+<blockquote> 
+ <p>代码如下（示例）：</p> 
+</blockquote> 
+<pre><code class="prism language-c"><span class="token keyword">typedef</span> <span class="token keyword">struct</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint8_t</span>	KeysNum<span class="token punctuation">;</span>						<span class="token comment">//序号</span>
+	GPIO_TypeDef<span class="token operator">*</span>	GPIOX<span class="token punctuation">;</span>					<span class="token comment">//端口</span>
+	<span class="token class-name">uint16_t</span> GPIO_PinsNum<span class="token punctuation">;</span>					<span class="token comment">//引脚号</span>
+	uint16 KEY_TIMECOUNT<span class="token punctuation">;</span>					<span class="token comment">//时间计数器</span>
+	GPIO_Pulltype GPIO_Pull<span class="token punctuation">;</span>				<span class="token comment">//初始状态(未按下时候电平 0/1)</span>
+	KEY_STATUS key_NowStatus<span class="token punctuation">;</span>				<span class="token comment">//按键当前状态</span>
+	<span class="token class-name">uint8_t</span> Key_Event<span class="token punctuation">;</span>						<span class="token comment">//按键事件</span>
+<span class="token punctuation">}</span>KEY_COMPONENTS<span class="token punctuation">;</span>
+</code></pre> 
+<h3><a id="3_74"></a>3、再定义一个按键状态</h3> 
+<p>代码如下（示例）：</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">ENUM_ITEM</span><span class="token expression"><span class="token punctuation">(</span>ITEM<span class="token punctuation">)</span> ITEM<span class="token punctuation">,</span>					</span><span class="token comment">//逗号不可省略</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">ENUM_STRING</span><span class="token expression"><span class="token punctuation">(</span>ITEM<span class="token punctuation">)</span> #ITEM<span class="token punctuation">,</span></span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">KEY_STATUS_ENUM</span><span class="token expression"><span class="token punctuation">(</span>STATUS<span class="token punctuation">)</span> 	               </span><span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_RELEASE<span class="token punctuation">)</span>       		</span><span class="token comment">/*稳定松开状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_PRESS_SHAKE<span class="token punctuation">)</span>   		</span><span class="token comment">/*按下抖动状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_PRESS<span class="token punctuation">)</span>         		</span><span class="token comment">/*稳定按下状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_RELEASE_SHAKE<span class="token punctuation">)</span> 		</span><span class="token comment">/*松开抖动状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_NUM<span class="token punctuation">)</span>           		</span><span class="token comment">/*状态总数(无效状态)*/</span>  <span class="token punctuation">\</span>
+</span></code></pre> 
+<h3><a id="4_90"></a>4、接口函数</h3> 
+<pre><code class="prism language-c"><span class="token keyword">extern</span> <span class="token keyword">void</span> <span class="token function">ScanKey</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>								<span class="token comment">//持续扫描函数</span>
+<span class="token keyword">extern</span> KEY_STATUS <span class="token function">key_status_check</span><span class="token punctuation">(</span>uint Key_index<span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//状态检测函数</span>
+<span class="token keyword">extern</span> <span class="token class-name">uint8_t</span> <span class="token function">Key_GetPinsVolt</span><span class="token punctuation">(</span><span class="token class-name">uint8_t</span> Pin_index<span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//获取GPIO电平函数</span>
+</code></pre> 
+<h3><a id="5_96"></a>5、按键结构体数据定义以及状态检测切换函数实现</h3> 
+<pre><code class="prism language-c">KEY_COMPONENTS Key_TestGrop<span class="token punctuation">[</span>KEYSNUMBERS<span class="token punctuation">]</span> <span class="token operator">=</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">,</span>GPIOE<span class="token punctuation">,</span>GPIO_Pin_4<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_UP<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">,</span>			<span class="token comment">//key0</span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">1</span><span class="token punctuation">,</span>GPIOE<span class="token punctuation">,</span>GPIO_Pin_3<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_UP<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">,</span>			<span class="token comment">//key1</span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">2</span><span class="token punctuation">,</span>GPIOE<span class="token punctuation">,</span>GPIO_Pin_2<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_UP<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">,</span>			<span class="token comment">//key2</span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">3</span><span class="token punctuation">,</span>GPIOA<span class="token punctuation">,</span>GPIO_Pin_0<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_DOWN<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span>			<span class="token comment">//WE_UP</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+<span class="token comment">/*分别是：编号 端口 引脚号 触发次数计数器 初始电平 初始状态 触发事件标记位*/</span>
+<span class="token comment">/************************************************************************************
+*@fuction	:key_status_check
+*@brief		:状态机去抖动核心代码
+*@param		:--
+*@return	:按键状态
+*@author	:_Awen
+*@date		:2022-12-10
+************************************************************************************/</span>
+KEY_STATUS <span class="token function">key_status_check</span><span class="token punctuation">(</span>uint Key_index<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">switch</span><span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">case</span> KS_RELEASE<span class="token operator">:</span>	<span class="token comment">//按键释放状态</span>
+		<span class="token punctuation">{<!-- --></span>
+			Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token comment">/*判断是否有触发，有触发则进入抖动状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">!=</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_PRESS_SHAKE<span class="token punctuation">;</span>	<span class="token comment">//变为抖动状态</span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>							<span class="token comment">//初始触发次数</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> KS_PRESS_SHAKE<span class="token operator">:</span><span class="token comment">//按键为触发抖动状态</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token comment">/*累计触发次数+1*/</span>
+			Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT<span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token comment">/*判断是否有触发，无持续触发则保持正常释放状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">==</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_RELEASE<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token comment">/*检测到持续触发，触发次数大于最大次数，则变为按下状态*/</span>
+			<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">&gt;</span> MAXDEBOUNCING_DELAY<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_PRESS<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> KS_PRESS<span class="token operator">:</span> <span class="token comment">//触发状态</span>
+ 		<span class="token punctuation">{<!-- --></span>	
+			<span class="token comment">/*判断有无，无持续触发则进入释放抖动状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">==</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_RELEASE_SHAKE<span class="token punctuation">;</span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> KS_RELEASE_SHAKE<span class="token operator">:</span><span class="token comment">//释放抖动状态</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token comment">/*累计触发次数+1*/</span>
+			Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT<span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token comment">/*判断是否有释放，无持续持续释放则保持触发状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">!=</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_PRESS<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token comment">/*检测到持续释放信号，释放次数大于最大次数，则变为释放状态*/</span>
+			<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">&gt;</span> MAXDEBOUNCING_DELAY<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_RELEASE<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		
+		<span class="token keyword">default</span><span class="token operator">:</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token comment">/*当前状态与正常释放状态不一致时，返回触发*/</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">!=</span> KS_RELEASE<span class="token punctuation">)</span>	<span class="token comment">//按键按下</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> KS_PRESS<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> KS_RELEASE<span class="token punctuation">;</span>	
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="_187"></a>三、完整代码</h2> 
+<h3><a id="1h_188"></a>1、.h文件</h3> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifndef</span> <span class="token expression">__KEY_H</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">__KEY_H</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"Config.h"</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">KEYSNUMBERS</span>		<span class="token expression"><span class="token punctuation">(</span><span class="token number">4U</span><span class="token punctuation">)</span>						</span><span class="token comment">//按键数量</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">MAXDEBOUNCING_DELAY</span>    <span class="token expression"><span class="token punctuation">(</span><span class="token number">4U</span><span class="token punctuation">)</span> 	</span><span class="token comment">//消抖计数</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span>	<span class="token macro-name function">GET_VT</span><span class="token expression"><span class="token punctuation">(</span>i<span class="token punctuation">)</span>		<span class="token function">Key_GetPinsVolt</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span></span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">ENUM_ITEM</span><span class="token expression"><span class="token punctuation">(</span>ITEM<span class="token punctuation">)</span> ITEM<span class="token punctuation">,</span>					</span><span class="token comment">//逗号不可省略</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">ENUM_STRING</span><span class="token expression"><span class="token punctuation">(</span>ITEM<span class="token punctuation">)</span> #ITEM<span class="token punctuation">,</span></span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">KEY_STATUS_ENUM</span><span class="token expression"><span class="token punctuation">(</span>STATUS<span class="token punctuation">)</span> 	               </span><span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_RELEASE<span class="token punctuation">)</span>       		</span><span class="token comment">/*稳定松开状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_PRESS_SHAKE<span class="token punctuation">)</span>   		</span><span class="token comment">/*按下抖动状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_PRESS<span class="token punctuation">)</span>         		</span><span class="token comment">/*稳定按下状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_RELEASE_SHAKE<span class="token punctuation">)</span> 		</span><span class="token comment">/*松开抖动状态*/</span>       <span class="token punctuation">\</span>
+		<span class="token expression"><span class="token function">STATUS</span><span class="token punctuation">(</span>KS_NUM<span class="token punctuation">)</span>           		</span><span class="token comment">/*状态总数(无效状态)*/</span>  <span class="token punctuation">\</span>
+</span>
+<span class="token keyword">typedef</span> <span class="token keyword">enum</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token function">KEY_STATUS_ENUM</span><span class="token punctuation">(</span>ENUM_ITEM<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>KEY_STATUS<span class="token punctuation">;</span>
+
+<span class="token keyword">typedef</span> <span class="token keyword">enum</span> 									<span class="token comment">// 按键表,</span>
+<span class="token punctuation">{<!-- --></span>
+	KEY0 <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">,</span>
+	KEY1<span class="token punctuation">,</span>
+	KEY2<span class="token punctuation">,</span>
+	KEY3<span class="token punctuation">,</span>
+	KEY_NUM<span class="token punctuation">,</span> 										<span class="token comment">// 必须要有的记录按钮数量，必须在最后</span>
+<span class="token punctuation">}</span>KEY_LIST<span class="token punctuation">;</span>
+
+<span class="token keyword">typedef</span> <span class="token keyword">enum</span>									<span class="token comment">//未按按键状态下，按键高低电平状态</span>
+<span class="token punctuation">{<!-- --></span>
+	PuLL_DOWN <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">,</span>
+	PuLL_UP <span class="token operator">=</span> <span class="token operator">!</span>PuLL_DOWN
+<span class="token punctuation">}</span>GPIO_Pulltype<span class="token punctuation">;</span>		
+
+<span class="token keyword">typedef</span> <span class="token keyword">struct</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint8_t</span>	KeysNum<span class="token punctuation">;</span>						<span class="token comment">//序号</span>
+	GPIO_TypeDef<span class="token operator">*</span>	GPIOX<span class="token punctuation">;</span>				<span class="token comment">//端口</span>
+	<span class="token class-name">uint16_t</span> GPIO_PinsNum<span class="token punctuation">;</span>			<span class="token comment">//引脚号</span>
+	uint16 KEY_TIMECOUNT<span class="token punctuation">;</span>				<span class="token comment">//时间计数器</span>
+	GPIO_Pulltype GPIO_Pull<span class="token punctuation">;</span>		<span class="token comment">//初始状态(未按下时候电平 0/1)</span>
+	KEY_STATUS key_NowStatus<span class="token punctuation">;</span>		<span class="token comment">//按键当前状态</span>
+	<span class="token class-name">uint8_t</span> Key_Event<span class="token punctuation">;</span>					<span class="token comment">//按键事件</span>
+<span class="token punctuation">}</span>KEY_COMPONENTS<span class="token punctuation">;</span>
+
+<span class="token keyword">extern</span> KEY_COMPONENTS Key_TestGrop<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+
+<span class="token keyword">extern</span> <span class="token keyword">void</span> <span class="token function">ScanKey</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">extern</span> KEY_STATUS <span class="token function">key_status_check</span><span class="token punctuation">(</span>uint Key_index<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">extern</span> <span class="token class-name">uint8_t</span> <span class="token function">Key_GetPinsVolt</span><span class="token punctuation">(</span><span class="token class-name">uint8_t</span> Pin_index<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+
+</code></pre> 
+<h3><a id="2c_251"></a>2、.c文件</h3> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"KEY_Dev.h"</span></span>
+
+<span class="token class-name">uint8_t</span> KK<span class="token punctuation">;</span>
+
+KEY_COMPONENTS Key_TestGrop<span class="token punctuation">[</span>KEYSNUMBERS<span class="token punctuation">]</span> <span class="token operator">=</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">,</span>GPIOE<span class="token punctuation">,</span>GPIO_Pin_4<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_UP<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">,</span>			<span class="token comment">//key0</span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">1</span><span class="token punctuation">,</span>GPIOE<span class="token punctuation">,</span>GPIO_Pin_3<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_UP<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">,</span>			<span class="token comment">//key1</span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">2</span><span class="token punctuation">,</span>GPIOE<span class="token punctuation">,</span>GPIO_Pin_2<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_UP<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span><span class="token punctuation">,</span>			<span class="token comment">//key2</span>
+	<span class="token punctuation">{<!-- --></span><span class="token number">3</span><span class="token punctuation">,</span>GPIOA<span class="token punctuation">,</span>GPIO_Pin_0<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>PuLL_DOWN<span class="token punctuation">,</span>KS_RELEASE<span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">}</span>			<span class="token comment">//WE_UP</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+
+<span class="token comment">/************************************************************************************
+*@fuction	:key_status_check
+*@brief		:状态机去抖动核心代码
+*@param		:--
+*@return	:按键状态
+*@author	:_Awen
+*@date		:2022-12-10
+************************************************************************************/</span>
+KEY_STATUS <span class="token function">key_status_check</span><span class="token punctuation">(</span>uint Key_index<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">switch</span><span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">case</span> KS_RELEASE<span class="token operator">:</span>	<span class="token comment">//按键释放状态</span>
+		<span class="token punctuation">{<!-- --></span>
+			Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token comment">/*判断是否有触发，有触发则进入抖动状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">!=</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_PRESS_SHAKE<span class="token punctuation">;</span>	<span class="token comment">//变为抖动状态</span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>							<span class="token comment">//初始触发次数</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> KS_PRESS_SHAKE<span class="token operator">:</span><span class="token comment">//按键为触发抖动状态</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token comment">/*累计触发次数+1*/</span>
+			Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT<span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token comment">/*判断是否有触发，无持续触发则保持正常释放状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">==</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_RELEASE<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token comment">/*检测到持续触发，触发次数大于最大次数，则变为按下状态*/</span>
+			<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">&gt;</span> MAXDEBOUNCING_DELAY<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_PRESS<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> KS_PRESS<span class="token operator">:</span> <span class="token comment">//触发状态</span>
+ 		<span class="token punctuation">{<!-- --></span>	
+			<span class="token comment">/*判断有无，无持续触发则进入释放抖动状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">==</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_RELEASE_SHAKE<span class="token punctuation">;</span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> KS_RELEASE_SHAKE<span class="token operator">:</span><span class="token comment">//释放抖动状态</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token comment">/*累计触发次数+1*/</span>
+			Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT<span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token comment">/*判断是否有释放，无持续持续释放则保持触发状态*/</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">GET_VT</span><span class="token punctuation">(</span>Key_index<span class="token punctuation">)</span> <span class="token operator">!=</span> Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_Pull<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_PRESS<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token comment">/*检测到持续释放信号，释放次数大于最大次数，则变为释放状态*/</span>
+			<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>KEY_TIMECOUNT <span class="token operator">&gt;</span> MAXDEBOUNCING_DELAY<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">=</span> KS_RELEASE<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		
+		<span class="token keyword">default</span><span class="token operator">:</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token comment">/*当前状态与正常释放状态不一致时，返回触发*/</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Key_index<span class="token punctuation">]</span><span class="token punctuation">.</span>key_NowStatus <span class="token operator">!=</span> KS_RELEASE<span class="token punctuation">)</span>	<span class="token comment">//按键按下</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> KS_PRESS<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> KS_RELEASE<span class="token punctuation">;</span>	
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+
+<span class="token class-name">uint8_t</span> <span class="token function">Key_GetPinsVolt</span><span class="token punctuation">(</span><span class="token class-name">uint8_t</span> Pin_index<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">return</span>	<span class="token function">GPIO_ReadInputDataBit</span><span class="token punctuation">(</span>Key_TestGrop<span class="token punctuation">[</span>Pin_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIOX<span class="token punctuation">,</span>Key_TestGrop<span class="token punctuation">[</span>Pin_index<span class="token punctuation">]</span><span class="token punctuation">.</span>GPIO_PinsNum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">/************************************************************************************
+*@fuction	:ScanKey
+*@brief		:
+*@param		:--
+*@return	:按键状态
+*@author	:_Awen
+*@date		:2022-12-10
+************************************************************************************/</span>
+<span class="token keyword">void</span> <span class="token function">ScanKey</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint8_t</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token keyword">for</span><span class="token punctuation">(</span>i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>i <span class="token operator">&lt;</span> KEY_NUM<span class="token punctuation">;</span>i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">key_status_check</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span> <span class="token operator">==</span> KS_PRESS<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			KK <span class="token operator">=</span> i<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="_371"></a>四、使用方法</h2> 
+<p>1、根据实际需求配置按键表和Key_TestGrop结构体。</p> 
+<p>2、在while循环或子任务中调用void ScanKey(void)函数.</p> 
+<p>3、在需要判断按键是否按下或释放的位置调用KEY_STATUS key_status_check(uint Key_index)，判断其返回值即可.</p> 
+<hr> 
+<h2><a id="_380"></a>总结</h2> 
+<p>1、这里只对反转两种电平信号作判断，扩展一下可以做按下按键、长按按键、短按按键、双击或三击按键做判断。<br> 2、状态机应用非常实用，尤其是Switch case语句常用来作为多状态切换，不同状态使用不同功能的一种常用框架，必须掌握。<br> 如有错误，欢迎指正，原创不易，转载留名！</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/cda296e9ec3098438e3b95b196516a59/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Vue基础</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/15386a0b608c2e05580691b527c05300/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">vue2生命周期</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

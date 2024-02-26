@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>ChatGLM2-6B 模型本地部署及基于 P-Tuning v2 的微调 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="ChatGLM2-6B 模型本地部署及基于 P-Tuning v2 的微调" />
+<meta property="og:description" content="1.说明 ChatGLM2-6B 是开源中英双语对话模型 ChatGLM-6B 的第二代版本，在保留了初代模型对话流畅、部署门槛较低等众多优秀特性的基础之上，还引入了更强大的性能、更强大的性能、更高效的推理、更高效的推理四大特性，本文将详细阐述如何本地部署、P-Tuning微调及在微调的效果。
+2. 显卡驱动安装(仅适用于Ubuntu) 如果不确定本机的显卡驱动是否是最合适的，最好显卡驱动也重装一下
+下载驱动 NVIDIA显卡驱动官方下载地址
+下载好对应驱动并放在某个目录下，我这里放在/usr/local
+禁用nouveau 首先，编辑黑名单配置。
+vim /etc/modprobe.d/blacklist.conf
+在文件的最后添加下面两行。
+blacklist nouveau
+options nouveau modeset=0
+然后，输入下面的命令更新并重启。
+update-initramfs -u
+reboot
+重启后输入下面的命令验证是否禁用成功，成功的话这行命令不会有输出。
+lsmod | grep nouveau
+驱动安装 首先，使用apt卸载已有的驱动，命令如下。
+apt-get purge nvidia*
+进入驱动所在路径，赋予执行权限，并执行安装命令
+chmod &#43;x NVIDIA-Linux-x86_64-535.86.05.run
+./NVIDIA-Linux-x86_64-535.86.05.run
+注：具体文件根据下载的驱动来填写
+nvidia-smi
+3. CUDA安装 显卡驱动版本 nvidia-smi
+需要关注两个地方：
+1.显卡驱动版本：535.86.05
+2.显卡支持最高的CUDA版本：12.2
+官网下载并安装对应版本CUDA 根据系统支持版本下载对应版本的CUDA Toolkit，作者此处选择CUDA10.2。官网链接选择所需版本，通过对应命令进行下载安装（注意此处需要记住下载文件的目录,之后需要找到） 注：在输入第二条命令之后，经过短暂的等待，会出现用户安装界面，其中包括是否选择安装Nvidia显卡驱动，如果本地已有驱动，可选择不安装（将光标移至Driver，点击Enter即可），之后移至Install处，点击Enter即可进行安装。
+3.配置环境变量
+编辑 /etc/profile 结尾添加如下
+export CUDA_HOME=/usr/local/cuda-12.2` export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64 PATH=&#34;$CUDA_HOME/bin:$PATH&#34; 使生效
+sorce /etc/profile
+4.测试CUDA安装是否成功
+nvcc -V
+显示如上图表示成功！" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/4c393a4e4a4623a33457f4b5e090a478/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-27T11:13:21+08:00" />
+<meta property="article:modified_time" content="2023-07-27T11:13:21+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">ChatGLM2-6B 模型本地部署及基于 P-Tuning v2 的微调</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="1_0"></a>1.说明</h3> 
+<hr> 
+<p>ChatGLM2-6B 是开源中英双语对话模型 ChatGLM-6B 的第二代版本，在保留了初代模型对话流畅、部署门槛较低等众多优秀特性的基础之上，还引入了更强大的性能、更强大的性能、更高效的推理、更高效的推理四大特性，本文将详细阐述如何本地部署、P-Tuning微调及在微调的效果。</p> 
+<h3><a id="2_Ubuntu_5"></a>2. 显卡驱动安装(仅适用于Ubuntu)</h3> 
+<hr> 
+<p>如果不确定本机的显卡驱动是否是最合适的，最好显卡驱动也重装一下</p> 
+<h5><a id="_9"></a>下载驱动</h5> 
+<p><a href="https://www.nvidia.com/Download/index.aspx?lang=zh-cn" rel="nofollow">NVIDIA显卡驱动官方下载地址</a></p> 
+<p><img src="https://images2.imgbox.com/73/a7/pefsyp4P_o.png" alt="在这里插入图片描述"><br> 下载好对应驱动并放在某个目录下，我这里放在/usr/local<br> <img src="https://images2.imgbox.com/a2/65/MK8zXwOK_o.png" alt="在这里插入图片描述"></p> 
+<h5><a id="nouveau_18"></a>禁用nouveau</h5> 
+<p>首先，编辑黑名单配置。</p> 
+<p><code>vim /etc/modprobe.d/blacklist.conf</code></p> 
+<p>在文件的最后添加下面两行。</p> 
+<p><code>blacklist nouveau</code><br> <code>options nouveau modeset=0</code></p> 
+<p>然后，输入下面的命令更新并重启。</p> 
+<p><code>update-initramfs -u</code><br> <code>reboot</code></p> 
+<p>重启后输入下面的命令验证是否禁用成功，成功的话这行命令不会有输出。</p> 
+<p>lsmod | grep nouveau</p> 
+<h5><a id="_38"></a>驱动安装</h5> 
+<p>首先，使用apt卸载已有的驱动，命令如下。</p> 
+<p><code>apt-get purge nvidia*</code></p> 
+<p>进入驱动所在路径，赋予执行权限，并执行安装命令</p> 
+<p><code>chmod +x NVIDIA-Linux-x86_64-535.86.05.run</code><br> <code>./NVIDIA-Linux-x86_64-535.86.05.run</code></p> 
+<p>注：具体文件根据下载的驱动来填写</p> 
+<p>nvidia-smi</p> 
+<h3><a id="3_CUDA_53"></a>3. CUDA安装</h3> 
+<hr> 
+<h5><a id="_55"></a>显卡驱动版本</h5> 
+<p><code>nvidia-smi</code></p> 
+<p><img src="https://images2.imgbox.com/6d/19/SvBMOjcy_o.png" alt="在这里插入图片描述"><br> 需要关注两个地方：</p> 
+<p>1.显卡驱动版本：535.86.05<br> 2.显卡支持最高的CUDA版本：12.2</p> 
+<h5><a id="CUDA_65"></a>官网下载并安装对应版本CUDA</h5> 
+<ol><li>根据系统支持版本下载对应版本的CUDA Toolkit，作者此处选择CUDA10.2。<a href="https://developer.nvidia.com/cuda-toolkit-archive" rel="nofollow">官网链接</a></li><li>选择所需版本，通过对应命令进行下载安装（注意此处需要记住下载文件的目录,之后需要找到）</li></ol> 
+<p><img src="https://images2.imgbox.com/39/3e/qvecOmVE_o.png" alt="在这里插入图片描述"><br> 注：在输入第二条命令之后，经过短暂的等待，会出现用户安装界面，其中包括是否选择安装Nvidia显卡驱动，如果本地已有驱动，可选择不安装（将光标移至Driver，点击Enter即可），之后移至Install处，点击Enter即可进行安装。</p> 
+<p>3.配置环境变量</p> 
+<p>编辑 /etc/profile 结尾添加如下</p> 
+<pre><code>export CUDA_HOME=/usr/local/cuda-12.2`
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+PATH="$CUDA_HOME/bin:$PATH"
+</code></pre> 
+<p>使生效</p> 
+<p><code>sorce /etc/profile</code></p> 
+<p>4.测试CUDA安装是否成功</p> 
+<p><code>nvcc -V</code></p> 
+<p><img src="https://images2.imgbox.com/6b/a1/et4XiaVg_o.png" alt="在这里插入图片描述"><br> 显示如上图表示成功！</p> 
+<h3><a id="4ChatGLM26B_92"></a>4.ChatGLM2-6B安装部署</h3> 
+<hr> 
+<h5><a id="_94"></a>项目部署</h5> 
+<p><code>git clone https://github.com/THUDM/ChatGLM2-6B</code><br> <img src="https://images2.imgbox.com/0e/5f/H4koK8dn_o.png" alt="在这里插入图片描述"><br> <code>cd ChatGLM2-6B</code></p> 
+<h5><a id="_99"></a>安装依赖</h5> 
+<p><code>pip install -r requirements.txt</code></p> 
+<p><img src="https://images2.imgbox.com/29/40/nNMDjEZd_o.png" alt="在这里插入图片描述"><br> 其中transformers库版本推荐为4.30.2，torch推荐使用 2.0 以上的版本，以获得最佳的推理性能。</p> 
+<h5><a id="GIT_LFS_106"></a>安装GIT LFS</h5> 
+<p>测试是否安装成功：<br> <code>$ git lfs install </code><br> <code>&gt; Git LFS initialized</code> # 出现此消息说明安装成功</p> 
+<h5><a id="Hugging_Face_Hub__112"></a>从Hugging Face Hub 下载模型</h5> 
+<p><code>git clone https://huggingface.co/THUDM/chatglm2-6b</code></p> 
+<h5><a id="_117"></a>模型量化</h5> 
+<p>默认情况下，模型以 FP16 精度加载，运行上述代码需要大概 13GB 显存。如果你的 GPU 显存有限，可以尝试以量化方式加载模型，使用方法如下：</p> 
+<pre><code class="prism language-python"><span class="token comment"># 按需在web_demo.py中修改，目前只支持 4/8 bit 量化</span>
+ model <span class="token operator">=</span> AutoModel<span class="token punctuation">.</span>from_pretrained<span class="token punctuation">(</span><span class="token string">"THUDM/chatglm2-6b"</span><span class="token punctuation">,</span> trust_remote_code<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">.</span>quantize<span class="token punctuation">(</span><span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">.</span>cuda<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>其中"THUDM/chatglm2-6b"需修改为你本地部署的路径</p> 
+<p>注：如果内存只有8G，模型量化选择int4</p> 
+<h5><a id="web_demopy_128"></a>启动web_demo.py</h5> 
+<pre><code class="prism language-python"> python web_demo<span class="token punctuation">.</span>py
+</code></pre> 
+<h3><a id="API_133"></a>API部署</h3> 
+<p>首先需要安装额外的依赖</p> 
+<p><code>pip install fastapi uvicorn</code></p> 
+<p>将api.py中的"THUDM/chatglm2-6b"修改为本地模型路径</p> 
+<pre><code class="prism language-python"> tokenizer <span class="token operator">=</span> AutoTokenizer<span class="token punctuation">.</span>from_pretrained<span class="token punctuation">(</span><span class="token string">"D:\ChatGLM2-6B"</span><span class="token punctuation">,</span> trust_remote_code<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+ model <span class="token operator">=</span> AutoModel<span class="token punctuation">.</span>from_pretrained<span class="token punctuation">(</span><span class="token string">"D:\ChatGLM2-6B"</span><span class="token punctuation">,</span> trust_remote_code<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">.</span>quantize<span class="token punctuation">(</span><span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">.</span>cuda<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>运行仓库中的 api.py</p> 
+<pre><code class="prism language-python">python api<span class="token punctuation">.</span>py
+</code></pre> 
+<h3><a id="5_PTuning_v2__148"></a>5.基于 P-Tuning v2 的微调</h3> 
+<hr> 
+<h5><a id="_151"></a>软件依赖</h5> 
+<p>运行微调除 ChatGLM2-6B 的依赖之外，还需要安装以下依赖</p> 
+<p>pip install rouge_chinese nltk jieba datasets</p> 
+<h5><a id="_157"></a>编写训练集</h5> 
+<p>train.json</p> 
+<pre><code class="prism language-js"><span class="token punctuation">[</span>
+    <span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-44228是什么"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"Apache Log4j2远程代码执行漏洞"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+    <span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"CVE-2000-0208的详细描述"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"Apache Log4i是Apache的一个开源项目，Apache log4j2是Log4i的升级版本，用户可以控制日志信息输送的目的地为控制台、文件、GUI组件等，通过定义每一条日志信息的级别，能够更加细致地控制日志的生成过程。Log4j-2中存在JNDI注入漏洞，当程序将用户输入的数据进行日志记录时，即可触发此漏洞，成功利用此漏洞可以在目标服务器上执行任意代码。该漏洞影响 Apache Struts、Apache Solr.Apache Druid、Apache Filnk等众多组件，漏洞影响面大，危害性高，建议客户尽快自查在用软件系统是否受影响，采取措施防护此漏洞。"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+    <span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-44228漏洞受影响的版本"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"Log4j 2.x &lt;= 2.15.0-rc1"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-4428的总结"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"在2021年12月10日，在Apache软件基金会发布的版本2.15.0 Log4j的Java日志库，修复CVE-2021-44228，影响的Log4j 2.0-2.14一个远程执行代码漏洞。攻击者可以利用此漏洞通过提交自定义请求来指示受影响的系统下载并执行恶意负载。此漏洞非常严重，在 CVSS 3.1 评分量表上的评分为 10 分（满分 10 分）。"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-4428的安全公告"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"Apache 安全团队发布了针对影响 Apache Log4j2 的 CVE-2021-44228 的安全公告。恶意用户可以利用此漏洞以运行受影响软件的用户或服务帐户身份运行任意代码。使用 log4j 版本 2.0 到 2.14.1 的软件产品受到影响，而 log4j 1.x 不受影响。Cloudera 正在为受影响的软件提供短期解决方法，并且正在创建包含此 CVE 修复程序的新版本。"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"Cloudera 如何应对CVE-2021-4428漏洞"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"我们行业和开源社区的软件和服务使用 Log4j 来处理日志消息。Cloudera 的安全和工程团队已确定此 CVE 对我们产品套件的影响，并且 Cloudera 客户已通过 Cloudera 的技术支持公告 (TSB) 和My Cloudera支持案例收到详细的更新。"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"Cloudera 客户需要做什么来缓解CVE-2021-4428漏洞"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"我们鼓励客户查看我们的 TSB 中的详细信息并立即应用变通方法。同时，客户应计划升级到即将发布的 Cloudera 软件版本，其中包含针对此 CVE 的修复程序。了解此漏洞不仅限于 Cloudera 产品也很重要。此漏洞可能会影响底层基础架构软件以及客户在 Cloudera 产品之上运行的工作负载，例如 Spark 作业或 Flink 应用程序。我们建议客户评估其整个环境以使用 Log4j 并尽快对其进行修复。"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-4428漏洞验证(DNSLOG篇)"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"我们通过JNDI注入请求DNSLOG的恶意语句，如果在DNSLOG端能查看到访问记录，则证明远程代码执行漏洞存在我们CTFshow的靶场来做后续验证"</span>
+    <span class="token punctuation">}</span>	
+
+<span class="token punctuation">]</span>
+</code></pre> 
+<h5><a id="_196"></a>编写验证集</h5> 
+<p>verify.json</p> 
+<pre><code class="prism language-js"><span class="token punctuation">[</span>	
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"Apache Log4j2远程代码执行漏洞是什么"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-44228"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"Apache Log4j2远程代码执行漏洞是CVE-2021-44228的简要介绍吗"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"是的"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+    <span class="token punctuation">{<!-- --></span>
+	   <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"Apache Log4i是Apache的一个开源项目，Apache log4j2是Log4i的升级版本，用户可以控制日志信息输送的目的地为控制台、文件、GUI组件等，通过定义每一条日志信息的级别，能够更加细致地控制日志的生成过程。Log4j-2中存在JNDI注入漏洞，当程序将用户输入的数据进行日志记录时，即可触发此漏洞，成功利用此漏洞可以在目标服务器上执行任意代码。该漏洞影响 Apache Struts、Apache Solr.Apache Druid、Apache Filnk等众多组件，漏洞影响面大，危害性高，建议客户尽快自查在用软件系统是否受影响，采取措施防护此漏洞。"</span><span class="token punctuation">,</span>
+       <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"CVE-2000-0208的详细描述"</span>  
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+    <span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"Log4j 2.x &lt;= 2.15.0-rc1是CVE-2021-44228漏洞受影响的版本"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"是的"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"在2021年12月10日，在Apache软件基金会发布的版本2.15.0 Log4j的Java日志库，修复CVE-2021-44228，影响的Log4j 2.0-2.14一个远程执行代码漏洞。攻击者可以利用此漏洞通过提交自定义请求来指示受影响的系统下载并执行恶意负载。此漏洞非常严重，在 CVSS 3.1 评分量表上的评分为 10 分（满分 10 分）。"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-4428的总结"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"Apache 安全团队发布了针对影响 Apache Log4j2 的 CVE-2021-44228 的安全公告。恶意用户可以利用此漏洞以运行受影响软件的用户或服务帐户身份运行任意代码。使用 log4j 版本 2.0 到 2.14.1 的软件产品受到影响，而 log4j 1.x 不受影响。Cloudera 正在为受影响的软件提供短期解决方法，并且正在创建包含此 CVE 修复程序的新版本。"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"CVE-2021-4428的安全公告"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"我们行业和开源社区的软件和服务使用 Log4j 来处理日志消息。Cloudera 的安全和工程团队已确定此 CVE 对我们产品套件的影响，并且 Cloudera 客户已通过 Cloudera 的技术支持公告 (TSB) 和My Cloudera支持案例收到详细的更新。"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"Cloudera 如何应对CVE-2021-4428漏洞"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"我们鼓励客户查看我们的 TSB 中的详细信息并立即应用变通方法。同时，客户应计划升级到即将发布的 Cloudera 软件版本，其中包含针对此 CVE 的修复程序。了解此漏洞不仅限于 Cloudera 产品也很重要。此漏洞可能会影响底层基础架构软件以及客户在 Cloudera 产品之上运行的工作负载，例如 Spark 作业或 Flink 应用程序。我们建议客户评估其整个环境以使用 Log4j 并尽快对其进行修复。"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"Cloudera 客户需要做什么来缓解CVE-2021-4428漏洞"</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span>
+	<span class="token punctuation">{<!-- --></span>
+        <span class="token string-property property">"content"</span><span class="token operator">:</span> <span class="token string">"如何验证CVE-2021-4428漏洞"</span><span class="token punctuation">,</span>
+        <span class="token string-property property">"summary"</span><span class="token operator">:</span> <span class="token string">"我们通过JNDI注入请求DNSLOG的恶意语句，如果在DNSLOG端能查看到访问记录，则证明远程代码执行漏洞存在我们CTFshow的靶场来做后续验证"</span>
+    <span class="token punctuation">}</span>
+	
+<span class="token punctuation">]</span>
+</code></pre> 
+<h5><a id="_239"></a>训练</h5> 
+<p>进入chatglm2-6b目录<br> <img src="https://images2.imgbox.com/0f/0f/yyFiD1op_o.png" alt="在这里插入图片描述"><br> 编辑train_chat.sh</p> 
+<pre><code>cd ptuning
+vi train_chat.sh
+</code></pre> 
+<p><img src="https://images2.imgbox.com/18/e2/vOsCimwu_o.png" alt="在这里插入图片描述"></p> 
+<p>参数解释：</p> 
+<ol><li> <p>PRE_SEQ_LEN=128: 定义了一个名为PRE_SEQ_LEN的变量，并将其设置为128。这个变量的作用在后续的代码中会用到。</p> </li><li> <p>LR=2e-2: 定义了一个名为LR的变量，并将其设置为2e-2，即0.02。这个变量表示学习率，在后续的代码中会用到。</p> </li><li> <p>–train_file /root/train.json : 指定训练数据文件的路径和文件名为"/root/train.json"。</p> </li><li> <p>–validation_file /root/verify.json : 指定验证数据文件的路径和文件名为"/root/verify.json"。</p> </li><li> <p>–prompt_column content : 指定输入数据中作为提示的列名为"content"。</p> </li><li> <p>–response_column summary : 指定输入数据中作为响应的列名为"summary"。</p> </li><li> <p>–overwrite_cache : 一个命令行参数，指示在缓存存在的情况下覆盖缓存。</p> </li><li> <p>–model_name_or_path THUDM/chatglm-6b : 指定使用的模型的名称或路径为"THUDM/chatglm-6b"。</p> </li><li> <p>–output_dir output/adgen-chatglm-6b-pt-<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           P 
+          
+         
+           R 
+          
+          
+          
+            E 
+           
+          
+            S 
+           
+          
+         
+           E 
+          
+          
+          
+            Q 
+           
+          
+            L 
+           
+          
+         
+           E 
+          
+         
+           N 
+          
+         
+           − 
+          
+         
+        
+          PRE_SEQ_LEN- 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.8778em; vertical-align: -0.1944em;"></span><span class="mord mathnormal" style="margin-right: 0.0077em;">PR</span><span class="mord"><span class="mord mathnormal" style="margin-right: 0.0576em;">E</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3283em;"><span class="" style="top: -2.55em; margin-left: -0.0576em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right: 0.0576em;">S</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right: 0.0576em;">E</span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3283em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">L</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right: 0.109em;">EN</span><span class="mord">−</span></span></span></span></span>LR : 指定输出目录的路径和名称为"output/adgen-chatglm-6b-pt-<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           P 
+          
+         
+           R 
+          
+          
+          
+            E 
+           
+          
+            S 
+           
+          
+         
+           E 
+          
+          
+          
+            Q 
+           
+          
+            L 
+           
+          
+         
+           E 
+          
+         
+           N 
+          
+         
+           − 
+          
+         
+        
+          PRE_SEQ_LEN- 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.8778em; vertical-align: -0.1944em;"></span><span class="mord mathnormal" style="margin-right: 0.0077em;">PR</span><span class="mord"><span class="mord mathnormal" style="margin-right: 0.0576em;">E</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3283em;"><span class="" style="top: -2.55em; margin-left: -0.0576em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right: 0.0576em;">S</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right: 0.0576em;">E</span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.3283em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">L</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right: 0.109em;">EN</span><span class="mord">−</span></span></span></span></span>LR"。这是训练结果和日志的保存位置。</p> </li><li> <p>–overwrite_output_dir : 一个命令行参数，指示在输出目录存在的情况下覆盖输出目录。</p> </li><li> <p>–max_source_length 512 : 指定输入序列的最大长度为512。</p> </li><li> <p>–max_target_length 512 : 指定输出序列的最大长度为512。</p> </li><li> <p>–per_device_train_batch_size 1 : 指定每个训练设备的训练批次大小为1。</p> </li><li> <p>–per_device_eval_batch_size 1 : 指定每个评估设备的评估批次大小为1。</p> </li><li> <p>–gradient_accumulation_steps 16 : 指定梯度累积的步数为16。在每个更新步骤之前，将计算并累积一定数量的梯度。</p> </li><li> <p>–predict_with_generate : 一个命令行参数，指示在生成模型的预测时使用生成模式。</p> </li><li> <p>–max_steps 3000 : 指定训练的最大步数为3000。</p> </li><li> <p>–logging_steps 10 : 指定每隔10个步骤记录一次日志。</p> </li><li> <p>–save_steps 1000 : 指定每隔1000个步骤保存一次模型。</p> </li><li> <p>–learning_rate $LR : 指定学习率为之前定义的LR变量的值。</p> </li><li> <p>–pre_seq_len $PRE_SEQ_LEN : 指定预设序列长度为之前定义的PRE_SEQ_LEN变量的值。</p> </li><li> <p>–quantization_bit 4 : 指定量化位数为4。这个参数可能是与模型相关的特定设置。</p> </li></ol> 
+<p>执行训练命令</p> 
+<p><code>sh train_chat.sh</code><br> <img src="https://images2.imgbox.com/4d/9b/SWhB3xIn_o.png" alt="在这里插入图片描述"><br> 注意：如果报错了，请检查一下本地模型中以下几个文件是否是最新的，如果不是去下载最新的替换。<br> <img src="https://images2.imgbox.com/1e/24/DC2gPoW9_o.png" alt="在这里插入图片描述"></p> 
+<p>训练完后，将微调模型载入<br> <code>vi api.py</code></p> 
+<pre><code class="prism language-python">config <span class="token operator">=</span> AutoConfig<span class="token punctuation">.</span>from_pretrained<span class="token punctuation">(</span><span class="token string">"THUDM/chatglm2-6b"</span><span class="token punctuation">,</span> trust_remote_code<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">,</span> pre_seq_len<span class="token operator">=</span><span class="token number">128</span><span class="token punctuation">)</span>
+model <span class="token operator">=</span> AutoModel<span class="token punctuation">.</span>from_pretrained<span class="token punctuation">(</span><span class="token string">"THUDM/chatglm2-6b"</span><span class="token punctuation">,</span> config<span class="token operator">=</span>config<span class="token punctuation">,</span> trust_remote_code<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+prefix_state_dict <span class="token operator">=</span> torch<span class="token punctuation">.</span>load<span class="token punctuation">(</span>os<span class="token punctuation">.</span>path<span class="token punctuation">.</span>join<span class="token punctuation">(</span>CHECKPOINT_PATH<span class="token punctuation">,</span> <span class="token string">"pytorch_model.bin"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+new_prefix_state_dict <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span>
+<span class="token keyword">for</span> k<span class="token punctuation">,</span> v <span class="token keyword">in</span> prefix_state_dict<span class="token punctuation">.</span>items<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">if</span> k<span class="token punctuation">.</span>startswith<span class="token punctuation">(</span><span class="token string">"transformer.prefix_encoder."</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        new_prefix_state_dict<span class="token punctuation">[</span>k<span class="token punctuation">[</span><span class="token builtin">len</span><span class="token punctuation">(</span><span class="token string">"transformer.prefix_encoder."</span><span class="token punctuation">)</span><span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">]</span> <span class="token operator">=</span> v
+model<span class="token punctuation">.</span>transformer<span class="token punctuation">.</span>prefix_encoder<span class="token punctuation">.</span>load_state_dict<span class="token punctuation">(</span>new_prefix_state_dict<span class="token punctuation">)</span>
+</code></pre> 
+<p>上面这一段代码加到api.py的相应位置，pre_seq_len 改成你训练时的实际值。如果你是从本地加载模型的话，需要将 THUDM/chatglm2-6b 改成本地的模型路径。</p> 
+<p>如果还是不太清楚如何修改可以参考一下我修改后的api.py</p> 
+<p><img src="https://images2.imgbox.com/60/b7/ogAAiWoH_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="6_321"></a>6.测试</h3> 
+<h5><a id="_322"></a>微调前</h5> 
+<p>prompt是提问，response是模型回答<br> <img src="https://images2.imgbox.com/cf/34/CPUXZ4Ey_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/ed/44/uINZDZ2y_o.png" alt="在这里插入图片描述"></p> 
+<p><img src="https://images2.imgbox.com/eb/76/iD62mGws_o.png" alt="在这里插入图片描述"></p> 
+<h5><a id="_328"></a>微调后</h5> 
+<p><img src="https://images2.imgbox.com/92/99/Tg5smz7R_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/34/96/4pT00IiX_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/0a/0d/l4rlKp97_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/ca/6a/HcZ54uRl_o.png" alt="在这里插入图片描述"></p> 
+<h5><a id="_334"></a>对比小结</h5> 
+<p>经过测试可以看到微调后的ChatGLM2-6B模型对于CVE-2021-44228漏洞的回答会根据我们提供的语料作生成，因为给的训练集是针对CVE-2021-44228漏洞的，所以回答更加针对。而微调前是比较通用型的回答，可以适用于任何一种CVE漏洞。</p> 
+<h3><a id="7_337"></a>7.总结</h3> 
+<p>微调可以对原有模型作领域知识的训练，相关领域知识需要进行整理成语料，语料越充分相对来说模型作预测越准，还要结合调参，反复地训练，才有可能起到一定的效果。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/bee43816c40c72df21e50e5adbc9b4d0/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">centos7安装jdk1.8</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/82de6226597573b5b9b3b776501debe2/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">使用FFmpeg读取视频流并保存</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

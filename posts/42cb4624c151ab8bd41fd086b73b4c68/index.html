@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Linux上的虚拟化技术Xen初学者指南 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Linux上的虚拟化技术Xen初学者指南" />
+<meta property="og:description" content="Linux上的虚拟化技术 Xen 初学者指南
+1、什么是Xen;
+Xen是一个开放源代码的para-virtualizing虚拟机(VMM)，或“管理程序”，是为x86架构的机器而设计的。Xen可以在一套物理硬件上安全的执行多个虚拟机；Xen是基于内核的虚拟程序，它和操作平台结合的极为密切，所以它占用的资源最少。
+什么是虚拟机呢？可能大家知道VMWARE吧，是的，Xen就是类似这样的程序，比如我们可以在Fedora上虚拟安装和使用Slackware、Debian、Gentoo ... ...等发行版。因为Xen是基于内核的，相对VMWARE来说，它占用的系统资源也就是VMWARE的百分之几左右。Xen是不是更有优势呢？只有您实践了才知道。这也是我写本文的最主要原因；
+1.1 Xen的特性;
+虚拟机的性能更接近真实硬件环境)
+在真实物理环境的平台和虚拟平台间自由切换)
+在每个客户虚拟机支持到32个虚拟CPU，通过VCPU热插拔)
+支持PAE指令集的x86/32, x86/64平台
+通过Intel虚拟支持VT的支持来用虚拟原始操作系统(未经修改的)支持(包括Microsoft Windows)
+优秀的硬件支持.支持几乎所有的Linux设备驱动
+1.2 Xen的应用范围;
+服务器整合：在虚拟机范围内，在一台物理主机上安装多个服务器,用于演示及故障隔绝；
+无硬件依赖：允许应用程序和操作系统对新硬件的移值测试；
+多操作系统配置：以开发和测试为目的，同时运行多个操作系统；
+内核开发：在虚拟机的沙盒中，做内核的测试和调试，无需为了测试而单独架设一***立的机器；
+集群运算：和单独的管理每个物理主机相比较,在VM级管理更加灵活,在负载均衡方面,更易于控制,和隔离;
+为客户操作系统提供硬件技术支持：可以开发新的操作系统,以得益于现存操作系统的广泛硬件支持,比如Linux；
+1.3 Xen的操作系统支持和硬件支持;
+请参阅： 《Xen v3.0用户手册》
+2、Xen的一点理论基础;
+基于Xen的操作系统，有多个层，最底层和最高特权层是Xen程序本身。Xen可以管理多个客户操作系统，每个操作系统都能在一个安全的虚拟机中实现。在Xen的术语中，Domain由Xen控制，以高效的利用CPU的物理资源。每个客户操作系统可以管理它自身的应用。这种管理包括每个程序在规定时间内的响应到执行，是通过Xen调度到虚拟机中实现。
+当Xen启动运行后，第一个虚拟的操作系统，就是Xen本身，我们通过xm list，会发现有一个Domain 0的虚拟机。Domain 0 是其它虚拟主机的管理者和控制者，Domain 0 可以构建其它的更多的Domain ，并管理虚拟设备。它还能执行管理任务，比如虚拟机的体眠、唤醒和迁移其它虚拟机。
+一个被称为xend的服务器进程通过domain 0来管理系统，Xend负责管理众多的虚拟主机，并且提供进入这些系统的控制台。命令经一个命令行的工具通过一个HTTP的接口被传送到xend。
+3、Xen的安装；
+在写本文时，Xen的当前最新版本是xen-3.0.1，它基于的内核版本是2.6.12.6的。您可以根据自己的操作系统的情况来选择一种安装方式，适合您的就是最好的；
+3.1安装Xen的准备工作；
+拥有GRUB引导的Linux做为安装平台，还要编译工具，比如gcc、binutils及make和automake等；开发库有zlib和python-dev等；
+具体明细请参阅： 《Xen v3.0用户手册》
+由于Xen用Python开发的，所以Python当然也是必不可少的。如果您是新手，我建议您用自己所用的操作系统软件包管理工具来安装这些软件包。
+3.2在Redhat/Fedora操作平台上的安装；
+在Fedora/Redhat平台上安装比较简单，您可以通过yum来在线安装Xen和支持Xen的内核；因为Fedora/Redhat已经提供对Xen的支持了；Fedora/Redhat提供的Xen内核支持比较高；不过就目前我的测试来看好象经常会机器重启，存在的问题可能是桌面环境造成的，比如GNOME桌面，打开就有重启的现象，也可能是Fedora/Redhat提供的Xen内有BUG；
+安装Xen及支持Xen的请参考：《Fedora Core 5.0用 Xen虚拟Slackware 10.2》
+对于Fedora 4.0及Redhat和Fedora 5.0类似；现在Yum的源上都有Xen和支持Xen的内核包；
+3.3通过Xen的二进制包来安装(几乎适用所有的Linux发行版)；
+通过Xen的二进制软件包来安装，这应该是通用的，几乎适合所有的Linux操作系统。由于二进制所是已经编译好的，我已经在Slackware平台上用这种方法来安装，还是成功的。另外etony兄也在Debian上安装成功;
+您应该到http://www.xensource.com/downloads去下载二进制包，文件名中带有xen-3.0.1-install字样的，比如xen-3.0.1-install-x86_32.tgz，这个软件包表示适用x86_32位机器的。也就是我们用的普通32位PC机。如果您用的是64位机器，应该下载文件名带有x86_64字样的软件包；
+下载好后，就解压安装，我们还是以支持x86_32构架机器的xen-3.0.1-install-x86_32.tgz为例：
+[root@localhost ~]# tar zxvf xen-3." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/42cb4624c151ab8bd41fd086b73b4c68/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-03T15:00:29+08:00" />
+<meta property="article:modified_time" content="2023-07-03T15:00:29+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Linux上的虚拟化技术Xen初学者指南</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p style="margin-left:.0001pt;text-align:justify;">Linux上的虚拟化技术 Xen 初学者指南</p> 
+<p style="margin-left:.0001pt;text-align:justify;">1、什么是Xen;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Xen是一个开放源代码的para-virtualizing虚拟机(VMM)，或“管理程序”，是为x86架构的机器而设计的。Xen可以在一套物理硬件上安全的执行多个虚拟机；Xen是基于内核的虚拟程序，它和操作平台结合的极为密切，所以它占用的资源最少。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　什么是虚拟机呢？可能大家知道VMWARE吧，是的，Xen就是类似这样的程序，比如我们可以在Fedora上虚拟安装和使用Slackware、Debian、Gentoo ... ...等发行版。因为Xen是基于内核的，相对VMWARE来说，它占用的系统资源也就是VMWARE的百分之几左右。Xen是不是更有优势呢？只有您实践了才知道。这也是我写本文的最主要原因；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　1.1 Xen的特性;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　虚拟机的性能更接近真实硬件环境)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　在真实物理环境的平台和虚拟平台间自由切换)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　在每个客户虚拟机支持到32个虚拟CPU，通过VCPU热插拔)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　支持PAE指令集的x86/32, x86/64平台</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　通过Intel虚拟支持VT的支持来用虚拟原始操作系统(未经修改的)支持(包括Microsoft Windows)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　优秀的硬件支持.支持几乎所有的Linux设备驱动</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　1.2 Xen的应用范围;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　服务器整合：在虚拟机范围内，在一台物理主机上安装多个服务器,用于演示及故障隔绝；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　无硬件依赖：允许应用程序和操作系统对新硬件的移值测试；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　多操作系统配置：以开发和测试为目的，同时运行多个操作系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　内核开发：在虚拟机的沙盒中，做内核的测试和调试，无需为了测试而单独架设一***立的机器；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　集群运算：和单独的管理每个物理主机相比较,在VM级管理更加灵活,在负载均衡方面,更易于控制,和隔离;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　为客户操作系统提供硬件技术支持：可以开发新的操作系统,以得益于现存操作系统的广泛硬件支持,比如Linux；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　1.3 Xen的操作系统支持和硬件支持;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　请参阅： 《Xen v3.0用户手册》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　2、Xen的一点理论基础;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　基于Xen的操作系统，有多个层，最底层和最高特权层是Xen程序本身。Xen可以管理多个客户操作系统，每个操作系统都能在一个安全的虚拟机中实现。在Xen的术语中，Domain由Xen控制，以高效的利用CPU的物理资源。每个客户操作系统可以管理它自身的应用。这种管理包括每个程序在规定时间内的响应到执行，是通过Xen调度到虚拟机中实现。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　当Xen启动运行后，第一个虚拟的操作系统，就是Xen本身，我们通过xm list，会发现有一个Domain 0的虚拟机。Domain 0 是其它虚拟主机的管理者和控制者，Domain 0 可以构建其它的更多的Domain ，并管理虚拟设备。它还能执行管理任务，比如虚拟机的体眠、唤醒和迁移其它虚拟机。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　一个被称为xend的服务器进程通过domain 0来管理系统，Xend负责管理众多的虚拟主机，并且提供进入这些系统的控制台。命令经一个命令行的工具通过一个HTTP的接口被传送到xend。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3、Xen的安装；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　在写本文时，Xen的当前最新版本是xen-3.0.1，它基于的内核版本是2.6.12.6的。您可以根据自己的操作系统的情况来选择一种安装方式，适合您的就是最好的；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.1安装Xen的准备工作；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　拥有GRUB引导的Linux做为安装平台，还要编译工具，比如gcc、binutils及make和automake等；开发库有zlib和python-dev等；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　具体明细请参阅： 《Xen v3.0用户手册》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　由于Xen用Python开发的，所以Python当然也是必不可少的。如果您是新手，我建议您用自己所用的操作系统软件包管理工具来安装这些软件包。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.2在Redhat/Fedora操作平台上的安装；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　在Fedora/Redhat平台上安装比较简单，您可以通过yum来在线安装Xen和支持Xen的内核；因为Fedora/Redhat已经提供对Xen的支持了；Fedora/Redhat提供的Xen内核支持比较高；不过就目前我的测试来看好象经常会机器重启，存在的问题可能是桌面环境造成的，比如GNOME桌面，打开就有重启的现象，也可能是Fedora/Redhat提供的Xen内有BUG；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　安装Xen及支持Xen的请参考：《Fedora Core 5.0用 Xen虚拟Slackware 10.2》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　对于Fedora 4.0及Redhat和Fedora 5.0类似；现在Yum的源上都有Xen和支持Xen的内核包；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.3通过Xen的二进制包来安装(几乎适用所有的Linux发行版)；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　通过Xen的二进制软件包来安装，这应该是通用的，几乎适合所有的Linux操作系统。由于二进制所是已经编译好的，我已经在Slackware平台上用这种方法来安装，还是成功的。另外etony兄也在Debian上安装成功;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　您应该到http://www.xensource.com/downloads去下载二进制包，文件名中带有xen-3.0.1-install字样的，比如xen-3.0.1-install-x86_32.tgz，这个软件包表示适用x86_32位机器的。也就是我们用的普通32位PC机。如果您用的是64位机器，应该下载文件名带有x86_64字样的软件包；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　下载好后，就解压安装，我们还是以支持x86_32构架机器的xen-3.0.1-install-x86_32.tgz为例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# tar zxvf xen-3.0.1-install-x86_32.tgz</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cd xen-3.0.1-install</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost xen-3.0.1-install]# sh install.sh</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　判断是不是安装好了，请查看/boot目录，会发现有很多文件名带有xen字样的文件，另外在/lib/moudules中也会发现有支持xen的内核模块；另外再看一看是否有/etc/xen这个目录。我想应该是有的。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.4通过Xen的源码包编译安装(仅供参考)；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　通过Xen的二进制包来安装，可能有时内核不太适应我们的需要，这时我们要通过Xen的源码包来安装。通过自己编译来安装Xen及支持Xen的内核；Xen的源码包，您可以到http://www.xensource.com/downloads去下载。文件名带有xen-3.0.1-src字样的，比如xen-3.0.1-src.tgz。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.41编译原理;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　通过Xen的源码包编译，其实也没有什么神秘的。在Xen的源码包中提供了一些内核补丁和内核配置文件等。当我们执行编译命令时，首先编译的是Xen程序本身，然后是编译内核。在编译内核时，程序会自动判断是否有内核源码，xen-3.0.1支持的内核是2.6.12.6，如果在xen的解压目录下没有，他就会自动内核的官方站http://www.kernel.org下载linux-2.6.12.tar.bz2。然后就是自动解压并为此内核打补丁。然后系统会根据指令要求，然后采用相应的内核配置文件，或配置内核进行编译。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.42编译过程简说；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　第一步：解压软件包，查看Xen源码包所带的文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# tar zxvf xen-3.0.1-src.tgz</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cd xen-3.0.1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost xen-3.0.1]# ls</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　COPYING Config.mk README docs install.sh patches xen</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　ChangeLog Makefile buildconfigs extras linux-2.6-xen-sparse tools</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们解压xen-3.0.1-src.tgz后，进入解压目录，会看到以上的文件或文件夹。patches是内核的补丁包，linux-2.6-xen-sparse是支持Xen的内核目录树，值得注意的是内核的配置文件就在这个目录中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost xen-3.0.1]# ls linux-2.6-xen-sparse/arch/xen/configs/</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　xen0_defconfig_ia64 xen0_defconfig_x86_64 xenU_defconfig_x86_32 xen_defconfig_x86_32</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　xen0_defconfig_x86_32 xenU_defconfig_ia64 xenU_defconfig_x86_64 xen_defconfig_x86_64</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　看到上面所列出的内核配置文件了吧，我们可能会发现文件名带有xen0字样的和xenU字样的两类文件。在这两类内核中，我们大多会修改的内核配置文件是运行xen的操作系统的内核配置文件，另一个是用于虚拟操作系统的内核配置文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　xen0字样的就是我们一般是用于我们运行xen的操作系统的内核，而xenU字样的就是为虚拟操作系统所提供的内核。另外还有x86_32和x86_64之分，这表示CPU的架构。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如我们用的是x86架构32位的CPU，我们在编译内核的时候就要用到xen0_defconfig_x86_32和xenU_defconfig_x86_32配置文件。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举个例子：比如我的机器架构是x86_32位的，我安装xen的操作系统是Slackware，我想在Slackware虚拟Debian 、Gentoo、Fedora等操作系统。这时编译虚拟平台Slackware所用的内核的配置文件就是xen0_defconfig_x86_32 ，而被虚拟平台(Debian 、Gentoo、Fedora等操作系统)所用的内核就是xenU_defconfig_x86_32 。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　弄明白内核配置文件有何用？我们能明白xen在编译过程中用了哪些内核配置文件，目的是我们在编译过程中可以根据自己的需要来修改它，以编译出适合我们需要的内核。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如我们想让Slackware支持xen，并且还要支持NTFS文件系统；所以我们就要修改xen0_defconfig_x86_32这个文件。找出如下一行;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　# CONFIG_NTFS_FS is not set</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　改为</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　CONFIG_NTFS_FS=m</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果您想让被虚拟的操作系统(Debian 、Gentoo、Fedora等)也支持NTFS文件系统，所以要在xenU_defconfig_x86_32找出如下一行;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　# CONFIG_NTFS_FS is not set</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　改为</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　CONFIG_NTFS_FS=m</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　第二步：配置内核；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　这一步有两种方法，一个是直接修改内核配置文件，另一个是内核配置界面来配置；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　方法一：通过修改内核配置文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Xen所带的内核配置文件位于解压目录中的linux-2.6-xen-sparse/arch/xen/configs 。我们前面已经提到了相关配置文件的用途。请仔细看前一步的说明；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　方法二：通过内核配置界面来配置；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost xen-3.0.1]# make linux-2.6-xen0-config CONFIGMODE=menuconfig</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　第三步：编译和安装Xen；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost xen-3.0.1]# make</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost xen-3.0.1]# make install</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.43创建initrd文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　有的系统需要initrd-XXXX.img或initrd.gz文件才能引导起来，如果您的系统用了支持xen的支持引导不起来，就要创建一个initrd-XXXX.img或initrd.gz的文件；请参考： 《Xen v3.0用户手册》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　3.44关于xen0和xenU内核说明；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　一般的情况下会在/boot目录中有两个与xen相关的内核，有的文件名带有vmlinuz-XXXX-xen0字样的，有的带有vmlinuz-XXXX-xenU字样的；比如：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost xen-3.0.1]# ls -la /boot/vmlinuz*xen*</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:42 /boot/vmlinuz-2.6-xen0 -&gt; vmlinuz-2.6.12.6-xen0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:49 /boot/vmlinuz-2.6-xenU -&gt; vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:42 /boot/vmlinuz-2.6.12-xen0 -&gt; vmlinuz-2.6.12.6-xen0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:49 /boot/vmlinuz-2.6.12-xenU -&gt; vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　-rw-r--r-- 1 root root 2180524 2006-04-12 07:42 /boot/vmlinuz-2.6.12.6-xen0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　-rw-r--r-- 1 root root 1129950 2006-04-12 07:49 /boot/vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　其实就是两个与xen相关的内核，其它的都是这两个内核文件的链接；也就是vmlinuz-2.6.12.6-xen0和vmlinuz-2.6.12.6-xenU。vmlinuz-2.6.12.6-xen0是用来引导虚拟平台的，比如我们在Slackware上安装Xen，那Slackware就是虚拟平台；所以如果要让Slackware的xen能运行起来，必须用xen相关的内核，也就是vmlinuz-2.6.12.6-xen0这个内核。而XenU字样这个内核，是用来引导虚拟操作系统用的，我们在以后会提到它。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">4、引导XenLinux的GRUB配置;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　一旦我们在Linux操作系统安装好Xen后，这样的系统应该被称为XenLinux。如何才能引导拥有Xen的Linux呢？这时我们要用到GRUB系统引导管理器。我们修改一下GRUB的配置文件menu.lst或grub.conf就行了。此文件位于/boot/grub目录中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　4.1判断系统所在的分区；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# df -h</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Filesystem容量已用可用已用%挂载点</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/dev/hda6 12G 6.9G 4.9G 59% /</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　4.2查看/boot目录中xen相关的配置文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# ls /boot</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　注意：我们前面已经说过了，xen提供了两个内核，一个是虚拟平台用的，也就是文件名带有xen0字样的；另一个带有xenU字样的，这是用于引导和支持虚拟操作系统用的。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　什么虚拟平台，比如我们想用Slackware的Xen虚拟Fedora、Gentoo .... 。那么Slackware就是虚拟平台，而Fedora、Gentoo... ..是被虚拟的操作系统。Slackware是一个真实安装在您的机器上的操作系统，它提供的是一个运行xen的环境。为了让Slackware能支持xen ，所以必须用于支持Xen的内核，也就是在/boot中有xen0字样的文件。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果您安装了Xen，会在/boot中有两个文件vmlinuz-2.6.12.6-xen0和vmlinuz-2.6.12.6-xenU，</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　4.3禁掉TLS Libraries ；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]#mv /lib/tls /lib/tls.disabled</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　禁掉的理由，请查看： 《Xen v3.0用户手册》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　4.4引导XenLinux的GRUB内容；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　title SlackXen</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel /boot/xen-3.0.gz</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　module /boot/vmlinuz-2.6-xen0 root=/dev/hda6 ro console=tty0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果有inintrd-2.xxxx-xen.img或initrd.gz之类的文件才能引导起来系统，还要加一行；要以/boot中的initrd相关的文件为准;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　modules /boot/initrd.gz</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　有关GRUB的文档：《系统引导管理器GRUB，为初学者指南》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　注意：与传统GRUB的定义有点不同，就是kernel是用来定义Xen的，而Linux的内核及initrd映像是通过module指令定义的；要仔细看好；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5、Xen的配置和管理工具；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.1 Xen的相关文件存放位置；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　xen安装后，文件放在什么地方了呢？主要放在以下几个目录；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.11内核及xen自身存放于/boot</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　安装有xen的操作系统下的/boot目录中，存放xen本身及支持xen的内核文件。比如文件名带有xen0和xenU相关的文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.12内核模块存放于/lib/modules</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　内核模块包括虚拟平台支持xen的内核xen0的模块，及支持虚拟操作系统所用的xenU的模块，一般的情况下是在/lib/modules下有两个xen相关的目录存放。一个是文件夹名带有xen0字样的，另一个是xenU字样的；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.13 xen的配置文件及守护程序的存放位置；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　一般的情况下，Xen的配置文件存放于/etc/xen目录。比如xend-config.sxp是用于配置网络的，不过我们不必更改，用其默认的就能完成我们的需要。xmexample1 xmexample2是两个示例性的配置文件。我们在配置引导被虚拟的操作系统时，这两个文件可供参考；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Xen的服务器xend和xendomains启动脚本，一般是位于/etc/init.d/目录中，也就是/etc/init.d/xend ；/etc/init.d/xend负责启动xend服务器，而/etc/init.d/xendomains负责第一个虚拟的系统及其它的Domains，也就是Domain 0 。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.14可执行命令存放于/usr/sbin</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]#ls /usr/sbin/xen*</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/usr/sbin/xen-bugtool /usr/sbin/xenconsoled /usr/sbin/xenmon.py /usr/sbin/xenstored</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/usr/sbin/xenbaked /usr/sbin/xend /usr/sbin/xenperf /usr/sbin/xentop</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]#ls /usr/sbin/xm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.2 Xen服务器的启动；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　xend服务器的启动/停止/重启/状态查询，请用下面的命令；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend start启动xend，如果xend没有运行)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend stop停止xend，如果xend正在运行)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend restart重启正在运行的xend，如果xend没有运行，则启动</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend status查看xend状态</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　启动xendomains服务器的启动/停止/重启/状态查询，请用下面的命令；一般的情况下，xend服务器启动了，xendomains也会自动启动。所以这个只是掌握一下就行了；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend start启动xend，如果xend没有运行)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend stop停止xend，如果xend正在运行)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend restart重启正在运行的xend，如果xend没有运行，则启动</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xend status查看xend状态</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xendomains start</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xendomains stop</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xendomains restart</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /etc/init.d/xendomains status</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.3 Xen管理工具xm；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们前面提到Xen的可执行命令中，我们可能看到了一些以xen开头的命令，您不妨尝试一个一个的尝试一下他们是做什么用的；比如xend是服务器的开启运行命令... ....</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　其中xm命令，就是管理Xen的最基本的工具；您可以通过xm --help来获得帮助；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.31列出所有正在运行的虚拟操作系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 450 1 r----- 5377.0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 4 256 1 -b---- 0.1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　列出所有正在运行的虚拟系统(也可以称为虚拟机)；我们可以看到，一个名为Domain-0的系统正在运行。Domain-0就是Xen本身，也可以称为虚拟平台内存大小，而Domain-0负责提供其它虚拟操作系统的硬件环境，其它的系统都是基于Domain-0开始的，我们看到他的ID为0就应该知道它的权限是至高无尚的。所占用的内存是450M，不过这个是可以指定的。虚拟的CPU个数是1个，运行状态处于r，也就是run，正在运行中；运行时间是5377秒；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　还有一个虚拟系统fc5，他的id是4，占用内存256M，虚拟CPU个数是1个... ...</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.32通过配置文件来引导被虚拟的操作系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm create -c虚拟操作系统的启动配置文件</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如我们要启动被虚拟的操作系统Fedora Core 5.0 ，我们要写一个启动Fedora的配置文件，比如是fc5vm.cfg。然后就可以通过下面的命令来引导Fedora了；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm create -c fc5vm.cfg</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.33从终端或控制台登录正在运行的虚拟操作系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm console正在运行的虚拟操作系统的Name或ID；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 512 1 r----- 5561.9</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 4 256 1 -b---- 0.2</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm console fc5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.34存储正在运行的虚拟操作系统的状态及唤醒虚拟操作系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm save</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm restore</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 458 1 r----- 260.3</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 2 256 1 ------ 6.5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm save 2 fc5run.save</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm restore fc5run.save</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm console fc5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.35停止正在运行的虚拟操作系统/激活停止的虚拟操作系统</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm pause</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm unpause</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 458 1 r----- 260.3</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 2 256 1 ------ 6.5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm pause 2</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm unpause 2</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.36调整虚拟平台/虚拟操作系统的占用内存</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们可以调整正在运行中的虚拟平台(Domain-0)所占内存大小及虚拟操作系统所占用的内存大小；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm mem-set</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 458 1 r----- 260.3</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 2 256 1 ------ 6.5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm mem-set 2 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.37关闭被虚拟的系统</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm shutdown虚拟操作系统的Name或DomID</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm destroy立即停止虚拟的系统(重要);</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 458 1 r----- 260.3</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 2 256 1 ------ 6.5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm shutdown fc5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　或</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm shutdown 2</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　或</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm destroy 2</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.38调整虚拟平台及虚拟操作系统的虚拟CPU个数；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm vcpu-set</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 458 1 r----- 260.3</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 2 256 1 ------ 6.5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm vcpu-set 2 4</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　5.39查看虚拟系统运行的状态；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm top</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　或</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xentop</p> 
+<p style="margin-left:.0001pt;text-align:justify;">6、虚拟操作系统的文件存储系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们虚拟的系统应该有一个存储的地方，也就是文件系统。被虚拟的系统能安装和运行在哪些文件系统上呢？能安装和运行在一个实际的物理分区上，一个映像文件中，或NFS等网络文件系统中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.1以实际物理硬盘做为虚拟操作系统文件系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　以实际物理硬盘分区做为虚拟操作系统的文件系统，要经过硬盘分区，创建文件系统流程；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　请参考：《Linux创建文件系统及挂载文件系统流程详解》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.11准备物理分区及创建文件系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　《Linux查看磁盘分区、文件系统、使用情况的命令和相关工具介绍》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　《实例解说fdisk使用方法》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　《合理规划您的硬盘分区》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　《Linux创建文件系统及挂载文件系统流程详解》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.12在物理分区上构建操作系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　构建操作系统，目前在一个Linux操作系统中构建另一个操作系统，主要是通过chroot工具和软件包提取工具来构建。基础的东西还是需要一点的，请参考：《通过chroot构建Linux操作系统概要》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　目前在开源社区中，已经有人把一些常用的发行版的基础系统做好了。我们能拿过来直接用。呵。。。。。只要有基础系统，我们就能chroot进入，我们就能用相应发行版软件包管理器来构建操作系统了。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　操作系统之基础系统资源：http://jailtime.org</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　您可以直接下载您喜欢的操作系统，解压后，然后挂载映像文件，然后把映像文件的内容都拷到物理分区中就好了。不过还得做一点小小的修改，比如您下载系统映像文件中的/etc/fstab等文件。要根据您的引导的虚拟操作系统中定义的虚拟映射点来改。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.13虚拟操作系统的引导文件中关于文件系统的定义；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果您的硬盘有一定的空间，就可以把被虚拟的操作系统安装在硬盘的实际物理分区中，当然您首先得准备一个硬盘分区。然后格式化成Linux的文件系统，比如ext3或reiserfs等；然后是在这个分区上构建您想要虚拟的操作系统，最后才是写虚拟操作系统的引导配置文件，在配置文件中，要用phy:来指定。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda7,sda1,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　中文意思就是：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk=['phy:分区,映射点,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　这行是什么意思呢？就是表示被虚拟的操作系统安装在/dev/hda3，我们要把hda3硬盘分区虚拟映射到/dev/sda1，并且是可读可写的；在这里要值得注意的是虚拟平台正在使用中的分区不能做为是映射点。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如我在Slackware是位于/dev/hda6的虚拟平台，也就是真实运行的操作系统，我想用它来虚拟位于/dev/hda7分区的Fedora。所以我不能把/dev/hda6做为hda7的映射点。也就是下面一行是错误的：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda7,hda6,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如何定义映射点，其实也比较好办，只要符合Linux设备的规则就可以；比如下面的也可以；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda7,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda7,sda3,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda7,sdb1,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda7,sdb2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　... ...</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　什么是映射点呢？也就是说通过phy定义后，被虚拟的操作系统的位于的真实的物理分区，在虚拟平台中，被映射到另一个分区；可能这样说有点不太明白。呵。。。。。。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　举个例子吧：比如我们在Slackware虚拟Fedora ，而Fedora位于/dev/hda7中。我们在引导Fedora的配置文件中定义Fedora所用的物理分区被映射到/dev/sda1；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda7,sda1,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　当我们把Fedora引导起来的时候，Fedora的文件系统就是用被虚拟后的分区，也就是/dev/sda1。在Fedora中，我们通过df -h查看到Fedora是位于/dev/sda1。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　所以在引导Fedora的配置文件中，还要有一行来指定Fedora的root在哪里，就在/dev/sda1上；因为/dev/hda7已经被虚拟到了/dev/sda1。这回明白了吧；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.2以映像文件做虚拟操作系统的文件系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　以映像文件做为虚拟操作系统的文件系统，这种方法是比较常用。也是比较方便和易于操作的，也就是说被虚拟的操作系统是放在了一个文件中。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.21创建映像文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# dd if=/dev/zero of=fedora50.img bs=2k seek=2048k count=1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　读入了1+0个块</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　输出了1+0个块</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# ls -lh fedora50.img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　-rw-r--r-- 1 root root 4.1G 2006-04-13 01:27 fedora50.img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们可以用dd来创建映像文件，上面的例子是创建了大小为4.1G的体积的，名为fedora50.img的映像文件；您可以调整上面命令参数的大小来创建您想要的体积大小的映像文件。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.22格式化映像为Linux文件系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Linux文件系统，比如ext3或reiserfs，看自己喜欢吧；您可以用mkfs.ext3或mkfs.reiserfs命令来创建文件系统，请参考：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /sbin/mkfs.ext3 fedora50,img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　mke2fs 1.38 (30-Jun-2005)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fedora50,img is not a block special device.</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Proceed anyway? (y,n) y 注：在这里输入y就时行格式化了，然后遇到提示之处，都是用回车。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　这样fedora50.img就是ext3文件系统了，你可以用mount -o loop来挂载使用它，在它上面存储文件等。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /mnt/fedora50</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount -o loop fedora50.img /mnt/fedora50</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# df -h</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root@localhost:/opt# df -lh</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Filesystem容量已用可用已用%挂载点</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/dev/hda6 12G 8.5G 3.3G 73% /</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/root/fedora50,img 4.0G 129M 3.7G 4% /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　上面的一系列命令执行下去后，说明fedora50.img已经挂载到了/mnt/fedora目录中，我们可以向/mnt/fedora中存放文件。这样就写到了fedora50.img映像文件中。写完后，我们可以卸载fedora50.img；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.23在映像文件上构建操作系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　在映像文件上构建操作系统，目前在一个Linux操作系统中构建另一个操作系统，主要是通过chroot工具和软件包提取工具来构建。基础的东西还是需要一点的，请参考：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　目前在开源社区中，已经有人把一些常用的发行版的基础系统做好了。我们能拿过来直接用。呵。。。。。只要有基础系统，我们就能chroot进入，我们就能用相应发行版软件包管理器来构建操作系统了。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　操作系统之基础系统资源：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　http://jailtime.org</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　6.24虚拟操作系统的引导文件中关于文件系统的定义；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['file:/opt/vmos/vmos.img,sda1,w', 'file:/opt/vmos/vmos.swap,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们还是以实例解说，把装有vmos.img的映像映射到/dev/sda1分区，vmos.img就是虚拟操作系统root存放地。vmos.swap是被虚拟文件系统的交换分区，这个交换分区也是一个文件，被映射到了/dev/sda2 。然后通过root=行来指定虚拟操作系统所处的分区，这个位置就是被虚拟后的分区。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　定义时要注意自己的这些文件存放在哪了？上面的例子表示vmos.img和vmos.swap是存放在/opt/vmos目录中。要看好了。。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7、实例应用：用Slackware+Xen虚拟Fedora 5.0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.1 Fedora安装运行于一个物理分区中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.11下载Fedora 5.0的基础系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　请到：http://jailtime.org</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.12解压和提取相应文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们把下载下来的Fedora 5 基础系统，存放到/opt/fedora5vm目录中；然后解压;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /opt/fedora5vm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mv fedora.fc5.20060401.img.tgz /opt/fedora5vm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cd /opt/fedora5vm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost fedora5vm]# tar zxvf fedora.fc5.20060401.img.tgz</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost fedora5vm]# ls</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fedora.fc5.20060401.img.tgz fedora.fc5.img fedora.fc5.xen.cfg fedora.swap</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.13规划硬盘的物理分区并创建文件系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　您可以在您的硬盘上创建一个物理分区，如果有空闲的物理分区可用也行。然后创建一下文件系统。分区工具用fdisk工具就行。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　分区工具，请参考：《实例解说fdisk使用方法》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　创建文件系统，请参考：《Linux创建文件系统及挂载文件系统流程详解》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如我们想把Fedora放在/dev/hda5上，我们可以用mkfs.ext3来格式化/dev/hda5。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /sbin/mkfs.ext3 /dev/hda5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.14构建Fedora 5 的基础系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　因为我们已经下载了，Fedora Core 5的基础系统的映像文件，也做了解压。会看到fedora.fc5.img这个映像文件；我们把这个映像挂载，然后把它的内容复制到我们刚才创始的文件系统的分区中，也就是/dev/hda5；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /mnt/tmp</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount -o loop /opt/fedora5vm/fedora.fc5.img /mnt/tmp</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount /dev/hda5 /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　复制fedora.fc5.img中的内容，到/dev/hda5中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cp -rp /mnt/tmp/* /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /mnt/tmp</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后是chroot到/mnt/fedora目录中，实际就是操作Fedora 5系统，我们要创建Fedora 5的root密码;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# chroot /mnt/fedora/</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root@localhost:/#</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root@localhost:/# passwd root</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Changing password for user root.</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　New UNIX password:</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Retype new UNIX password:</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　passwd: all authentication tokens updated successfully.</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root@localhost:/# exit</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后我们卸载/dev/hda5分区；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /dev/hda5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.15创建Fedora 5 引导文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们在解压fedora.fc5.20060401.img.tgz时看到一个文件fedora.fc5.xen.cfg ，这个就是Fedora 5的引导文件，人家洋人都为我们写好了。我们只是改一改就能用了；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们要回到fedora.fc5.xen.cfg的存放目录/opt/fedora5vm中；复制fedora.fc5.xen.cfg名为fc5vm.cfg的文件。然后我们把fc5vm.cfg作为被虚拟的Fedora 5的引导文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cd /opt/fedora5vm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost fedora5vm]# cp fedora.fc5.xen.cfg fc5vm.cfg</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们要对fc5vm.cfg做一下修改；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　在fc5vm.cfg中，我们会看到如下的内容：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel = "/boot/vmlinuz-2.6-xenU"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory = 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name = "fedora.fc5"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics = 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　dhcp = "dhcp"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['file:/xen/fedora/fedora.fc5.img,sda1,w', 'file:/xen/fedora/fedora.swap,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　首先我们看kernel这行，这行是定义虚拟操作系统内核的，我们要用到我们安装xen是所安装的内核。要在虚拟平台/boot目录中找。比如我用Slackware虚拟Fedora 。那虚拟平台就是Slackware。我应试在Slackware的/boot中找文件名中包含vmlinuz和xenU字样的文件。比如我找以的是：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# ls -lh /boot/vmlinuz*xenU*</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:49 /boot/vmlinuz-2.6-xenU -&gt; vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:49 /boot/vmlinuz-2.6.12-xenU -&gt; vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　-rw-r--r-- 1 root root 1.1M 2006-04-12 07:49 /boot/vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们看到有类似的三个文件，实际上只有一个，也就是vmlinuz-2.6.12.6-xenU，其它的都是他的链接文件。所以我们在kernel行中指定内核时，可以用这三个中的任何一个；比如我们用vmlinuz-2.6-xenU；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory是指定内存大小的，我们设置被虚拟的Fedora 5的虚拟内存大小是128M；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name是定义虚拟操作系统的名字的，可以通过xm list中显示出来，我们也改简单点，改为fc5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics=1不变</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　dhcp这行，是用来指定获取Fedora 5系统的IP是通过DHCP获取的，不过您也可以指定IP。可以不要这行；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']用来指定Fedora 5的网卡的物理地址；可以自己定义。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　ip = "192.168.1.144"用来指定虚拟网卡的IP</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　netmask="255.255.255.0"用来指定掩码</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk这行是用来定义Fedora所处的物理分区映射点，及物理交换分区及映射点的；因为物理分区是通过phy:来指定的。所以我们得改一改。因为我们已经把Fedora放在了/dev/hda5了。另外交换分区在哪呢？可以通过swapon -s来查看物理交换分区，要在虚拟平台中查看；比如我得到的是/dev/hda8是交换分区。所以disk这行就应该这样写：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda5,sda1,w','phy:hda8,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　不过真实物理分区的映射点，比如/dev/hda5映射到了/dev/sda1，交换分区/dev/hda8映射到了/dev/sda2。映射过后，Fedora的root文件系统就用映射后的/dev/sda1。慢慢理解；物理分区的映射点是可以在Linux系统设备定义的许可范围内进行。自己尝试着换一换映射点。如果Fedora的root所处的物理分区的映射点改变后，Fedora的root=的值也得跟着改变。另外还要改Fedora系统中的/etc/fstab文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root一行，来指定Fedora的所有的虚拟物理分区(就是映射点)。映射到哪里了呢？Fedora安装到了/dev/hda5，映射后虚拟到了/dev/sda1。所以Fedora系统引导时就寻找/dev/sda1做为文件系统。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　所以root这行可写为：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　所以我们可以这样写Fedora 5的引导配置文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　第一种：如果是用DHCP来获取IP：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel = "/boot/vmlinuz-2.6-xenU"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory = 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name = "fc5"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics = 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　dhcp = "dhcp"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda5,sda1,w','phy:hda8,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　第二种：如果是指定IP的话：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel = "/boot/vmlinuz-2.6-xenU"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory = 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name = "fc5"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics = 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda5,sda1,w','phy:hda8,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　ip = "192.168.1.144"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　netmask="255.255.255.0"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　再举一例：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如Fedora被安装在了/dev/hda5分区，物理交换分区为/dev/hda8。通过DHCP获得IP。我想映射/dev/hda5到/dev/hda5，并且想映射/dev/hda8到/dev/hda8。我们应该如何修改一些配置文件呢？</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Fedora的引导文件内容应该是：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel = "/boot/vmlinuz-2.6-xenU"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory = 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name = "fc5"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics = 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　dhcp = "dhcp"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda5,hda5,w','phy:hda8,hda8,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/hda5 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后我们应该再把装有Fedora的/dev/hda5分区挂载，然后修改Fedora系统的/etc/fstab。注意：不是修改虚拟平台的/etc/fstab。不要弄混了！！！！</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　应该先挂载Fedora 5所处的分区：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount /dev/hda5 /mnt/fedora/</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后修改Fedora 5的/etc/fstab文件，也就是/mnt/fedora/etc/fstab文件：找到如下两行：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/dev/sda1 / ext3 defaults 1 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/dev/sda2 none swap sw 0 0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　改为：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/dev/hda5 / ext3 defaults 1 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　/dev/hda8 none swap sw 0 0</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　接着再umount /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.16引导Fedora 5 ；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　引导运行Fedora 5.0就好办了，就是用xm工具来引导；首先要确认你的Fedora 5的配置文件放在哪里。比如我是放在了/opt/fedora5vm中。并且文件名为fc5vm.cfg。所以我就可以这样来引导Fedora 5。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm create -c /opt/fedora5vm/fc5vm.cfg</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.17虚拟操作系统网卡不能激活的处理方法；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　modprobe: FATAL: Could not load /lib/modules/2.6.12.6-xenU/modules.dep:</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　No such file or directory</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果出现类似上面的现象，请复制虚拟平台的中的/lib/modues/下的2.6.12.6-xenU到Fedora系统中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　方法是先挂载Fedora所处的物理分区，然后用cp -rp来复制；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　首先要关掉Fedora，然后再复制；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 462 1 r----- 2192.9</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 2 128 1 -b---- 6.4</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　以上面虚拟操作系统的ID为准，比如fc5的ID是2,就要运行如下命令；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm destroy 2</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后mount挂载Fedora所处的物理分区/dev/hda5；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount /dev/hda5 /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /mnt/fedora/lib/modules</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　注：在Fedora中的/lib目录中创建modules。如果有了就不创建；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cp -rp /lib/modules/2.6.12.6-xenU/ /mnt/fedora/lib/modules/</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# chmod -R 755 /mnt/fedora/lib/modules/</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.2 Fedora安装运行于一个映像文件中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.21下载Fedora 5.0的基础系统；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　请到：http://jailtime.org</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.22解压和提取相应文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们把下载下来的Fedora 5 基础系统，存放到/opt/fedora5vm目录中；然后解压;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /opt/fedora5vm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mv fedora.fc5.20060401.img.tgz /opt/fedora5vm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cd /opt/fedora5vm</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost fedora5vm]# tar zxvf fedora.fc5.20060401.img.tgz</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost fedora5vm]# ls</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fedora.fc5.20060401.img.tgz fedora.fc5.img fedora.fc5.xen.cfg fedora.swap</p> 
+<p style="margin-left:.0001pt;text-align:justify;">7.23修改引导运行Fedora的配置文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们从fedora.fc5.20060401.img.tgz解压出来一个fedora.fc5.xen.cfg ，这个就是用来引导Fedora 5的配置文件。我们改一改以适合我们的需要。我们把这个文件复制为fc5vm.cfg</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cp /opt/fedora5vm/fedora.fc5.xen.cfg /opt/fedora5vm/fc5vm.cfg</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5vm.cfg内容如下：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel = "/boot/vmlinuz-2.6-xenU"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory = 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name = "fc5"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics = 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　dhcp = "dhcp"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['file:/opt/fedora5vm/fedora.fc5.img,sda1,w', 'file:/opt/fedora5vm/fedora.swap,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　注解：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　首先我们看kernel这行，这行是定义虚拟操作系统内核的，我们要用到我们安装xen是所安装的内核。要在虚拟平台/boot目录中找。比如我用Slackware虚拟Fedora 。那虚拟平台就是Slackware。我应试在Slackware的/boot中找文件名中包含vmlinuz和xenU字样的文件。比如我找以的是：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# ls -lh /boot/vmlinuz*xenU*</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:49 /boot/vmlinuz-2.6-xenU -&gt; vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　lrwxrwxrwx 1 root root 21 2006-04-12 07:49 /boot/vmlinuz-2.6.12-xenU -&gt; vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　-rw-r--r-- 1 root root 1.1M 2006-04-12 07:49 /boot/vmlinuz-2.6.12.6-xenU</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们看到有类似的三个文件，实际上只有一个，也就是vmlinuz-2.6.12.6-xenU，其它的都是他的链接文件。所以我们在kernel行中指定内核时，可以用这三个中的任何一个；比如我们用vmlinuz-2.6-xenU；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory是指定内存大小的，我们设置被虚拟的Fedora 5的虚拟内存大小是128M；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name是定义虚拟操作系统的名字的，可以通过xm list中显示出来，我们也改简单点，改为fc5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics=1不变</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　dhcp这行，是用来指定获取Fedora 5系统的IP是通过DHCP获取的，不过您也可以指定IP。可以不要这行；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']用来指定Fedora 5的网卡的物理地址；可以自己定义。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　ip = "192.168.1.144"用来指定虚拟网卡的IP</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　netmask="255.255.255.0"用来指定掩码</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk来定义Fedora 5.0所用的文件系统，因为我们这次用的是映像文件。所以要用file:来指定，Fedora 5用的交换分区，也是一个映像文件；所以有：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['file:/opt/fedora5vm/fedora.fc5.img,sda1,w', 'file:/opt/fedora5vm/fedora.swap,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　指定fedora.fc5.img映像文件虚拟映射到/dev/sda1；交换分区文件fedora.swap映射到了/dev/sda2。映射过后，Fedora的root文件系统就用映射后的/dev/sda1。虚拟映射设备是可以在Linux系统设备定义的许可范围内进行。自己尝试着换一换映射点。如果Fedora的虚拟映射设备变了，我们得改变Fedora中的/etc/fstab。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root一行，来指定Fedora的root位于哪个映射后的设备。映射到哪里了呢？Fedora安装到了/dev/sda1，映射后虚拟到了/dev/sda1。所以Fedora系统引导时就寻找/dev/sda1做为文件系统。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　所以root这行可写为：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　所以我们可以这样写Fedora 5的引导配置文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　第一种：如果是用DHCP来获取IP：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel = "/boot/vmlinuz-2.6-xenU"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory = 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name = "fc5"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics = 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　dhcp = "dhcp"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['file:/opt/fedora5vm/fedora.fc5.img,sda1,w', 'file:/opt/fedora5vm/fedora.swap,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　第二种：如果是指定IP的话：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　kernel = "/boot/vmlinuz-2.6-xenU"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　memory = 128</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　name = "fc5"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　nics = 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = ['mac=aa:00:00:00:00:11']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['file:/opt/fedora5vm/fedora.fc5.img,sda1,w', 'file:/opt/fedora5vm/fedora.swap,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　ip = "192.168.1.144"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　netmask="255.255.255.0"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.24引导Fedora 5 ；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　引导运行Fedora 5.0就好办了，就是用xm工具来引导；首先要确认你的Fedora 5的配置文件放在哪里。比如我们在这个例子中是放在了/opt/fedora5vm中。并且文件名为fc5vm.cfg。所以我就可以这样来引导Fedora 5。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /usr/sbin/xm create -c /opt/fedora5vm/fc5vm.cfg</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.25网卡不能激活的处理；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　modprobe: FATAL: Could not load /lib/modules/2.6.12.6-xenU/modules.dep:</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　No such file or directory</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果出现类似上面的现象，请复制虚拟平台的中的/lib/modues/下的2.6.12.6-xenU到Fedora系统中；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　方法是先挂载Fedora所处的物理分区，然后用cp -rp来复制；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　首先要关掉Fedora，然后再复制；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 462 1 r----- 2192.9</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 2 128 1 -b---- 6.4</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　以上面虚拟操作系统的ID为准，比如fc5的ID是2,就要运行如下命令；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm destroy 2</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后mount挂载Fedora所处的物理分区/dev/hda5；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount -o loop /opt/fedora5vm/fedora.fc5.img /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /mnt/fedora/lib/modules</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　注：在Fedora中的/lib目录中创建modules。如果有了就不创建；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cp -rp /lib/modules/2.6.12.6-xenU/ /mnt/fedora/lib/modules/</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# chmod -R 755 /mnt/fedora/lib/modules/</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后再来引导Fedora 5，进入系统后用ifconfig来查看网卡的IP之类的，如果没有激活，请用下面的命令来加载网卡模块；在要Fedora中执行；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@fc5_pristine ~]# modprobe xennet</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@fc5_pristine ~]# dhclient如果您用DHCP获取IP，请执行；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　7.26 Fedora映像文件太小的解决办法；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们会发现我们下载的Fedora基础系统的映像文件体积太小。体积小空间就小的了。Fedora 5.0如果只安装基础系统，倒占用不了多少空间，如果再安装一个桌面环境可能会占用大一点的地方。比如安装GNOME或KDE。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们可以自己创建一个映像文件，创建好文件系统。然后从我们下载下来的Fedora映像文件中的所有文件，也就是Fedora的基础系统，复制到我们新创建的映像中。前面已经说过创建映像文件的办法了。这个应该好办吧。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# dd if=/dev/zero of=fc5.img bs=2k seek=2048k count=1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# ls -lh fc5.img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　-rw-r--r-- 1 root root 4.1G 2006-04-13 11:22 fc5.img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /sbin/mkfs.ext3 fc5.img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　mke2fs 1.38 (30-Jun-2005)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5.img is not a block special device.</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Proceed anyway? (y,n) y</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /mnt/tmp注：在/mnt/中创建tmp目录</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mkdir /mnt/fedora注：在/mnt中创建fedora目录</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount -o loop fc5.img /mnt/fedora/注：挂载我们新创建的fc5.img文件到/mnt/fedora</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# mount -o loop fedora.fc5.img /mnt/tmp/注：挂载我们下载下来的映像文件到/mnt/tmp</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# cp -rp /mnt/tmp/* /mnt/fedora/注：复制Fedora基础系统到新的映像文件；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /mnt/tmp注：卸载fedora.fc5.img ;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# umount /mnt/fedora注：卸载fc5.img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　然后就是改一改引导Fedora 5的配置文件，注意改一下disk:那行；要到fc5.img指定进去。要仔细看一下fc5所处的目录；这个应该好办，不多说了；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　8、强制终止正在运行的虚拟操作系统；(重要)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　在xm这个管理工具中，我们把xm destroy单列出来，就是因为这个工具是极为重要的；有时被虚拟的系统一直退不出去，但由于启动过程中遇到问题，又不能终止。这时我们要用到这个工具强制被虚拟的系统退出。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm list</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Name ID Mem(MiB) VCPUs State Time(s)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Domain-0 0 586 1 r----- 2236.5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　fc5 1 128 1 -b---- 13.7</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm destroy 1</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　或</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# xm destroy fc5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　这时您再用xm list查看，肯定fc5这个Domain已经退出。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　xm destroy这个指令还是极为有用的，所以我们单列出来。希望新手弟兄注意一下。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　9、关于基础系统安装后，虚拟操作系统的软件补充安装；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　基础系统安装好以后，下一步就是其它软件的安装。在各个系统都有软件包管理工具；在主流发行版中，都有相应的软件包管理工具，比如Fedora有rpm和yum工具；Debian有apt工具。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　或者通过chroot来安装一些比较重要的软件包。总之方法太多了；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　总之，后续软件的补充安装并不是什么问题；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　10、关于虚拟操作系统的桌面访问及远程访问；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　被虚拟的操作系统，我们要把它看成一***立运行的计算机。计算机与计算机之间通过什么访问来？ssh或vnc。所以我们要在被虚拟的操作系统上安装vncserver和sshd；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果您虚拟的是Fedora ，我们可以在Fedora中执行yum install vnc来安装vncserver ；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　#yum install vnc</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果您虚拟的是Debian ，您可以用apt-get install vncserver来安装vncserver ;</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　#apt-get install vncserver</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　当然客户端也要安装vncview才行，您要自己在客户端上安装vncview；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　关于vnc远程桌面的访问，您可以参考这篇：《Fedora Core 5.0用 Xen虚拟Slackware 10.2》</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　另外sshd服务器，也要安装openssh的软件包；这个也省略不说了，比较简单，再说目前大多基础系统已经提供这个软件包了。并且在被虚拟的系统在启动时，sshd也自动运行了；连接sshd服务器的命令是；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　#ssh用户名@ip</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　#ssh root@192.168.1.12</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　11、常见问题处理；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　11.1不能找到root分区；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　表现如下症状；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　VFS: Cannot open root device "sda8" or unknown-block(2,0)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Please append a correct "root=" boot option</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(2,0)</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　引导虚拟操作系统的配置文件有问题，主要查看disk:那行和root那行是否用的是一个虚拟映射点。</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如是由于引导Fedora的配置文件中disk行和root行如下：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda5,sda1,w','phy:hda8,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda8 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　我们发现/dev/hda5被虚拟映射到/dev/sda1了。也就是说，被虚拟的操作系统引导运行，它的root应该位于/dev/sda1。而在这里定义的却是/dev/sda8。所以应该改为</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　disk = ['phy:hda5,sda1,w','phy:hda8,sda2,w']</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　root = "/dev/sda1 ro"</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　11.2出现/tmp/.ICE-unix类似的错误；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　chown: changing ownership of `/tmp/.ICE-unix': Read-only file system</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　再比较/tmp/xxxx之类的不能写入，只读之类的，请用xm destrony先关掉被虚拟的操作系统。然后把被虚拟的系统的分区或映像文件挂载，删除/tmp目录中的临时文件。注意.file是隐藏的。您可以通过ls -la来查看。然后再来删除；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　另外如果一直出现这个错误，说明文件系统有问题了，这在ext3的文件系统中是经常发生的。您可以用/sbin/fsck.ext3工具来修复文件系统。当然您的文件系统不能处于挂载状态。应该先umout才能进行；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　比如修复一个分区，应该类似如下的命令；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /sbin/fsck.ext3 /dev/hda5</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果中间遇到是否修复时，按提示的就是y或yes吧；</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果被虚拟的文件系统位于一个映像文件，也是用这种办法,比如：</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　[root@localhost ~]# /sbin/fsck.ext3 fc5.img</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　11.3 Device 0 (vif) could not be connected</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Warning: The nics option is deprecated. Please use an empty vif entry instead:</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　vif = [ '' ]</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　Error: Device 0 (vif) could not be connected. Hotplug scripts not working.</p> 
+<p style="margin-left:.0001pt;text-align:justify;">　　如果出现上面这种错误，应该看一下配置文件中有没有vif=['']的定义；</p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/06a932bc5c78130822bd3f2d2b28b588/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">人员请销假管理系统设计</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/159a3f53a463a8aa4e3c13e80850a08d/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">IDEA ＜statement＞ expected, got ‘ID‘ 的报错原因</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

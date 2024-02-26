@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>计算机视觉：VGGNet网络详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="计算机视觉：VGGNet网络详解" />
+<meta property="og:description" content="1 VGGNet介绍 1.1 VGGnNet概述 VGGNet是牛津大学视觉几何组（Visual Geometry Group)提出的模型，故简称VGGNet， 该模型在2014年的ILSVRC中取得了分类任务第二、定位任务第一的优异成绩。该模型证明了增加网络的深度能够在一定程度上影响网络最终的性能。
+论文地址：原文链接
+根据卷积核大小与卷积层数目不同，VGG可以分为6种子模型，分别是A、A-LRN、B、C、D、E，分别对应的模型为VGG11、VGG11-LRN（第一层采用LRN）、VGG13、VGG16-1、VGG16-3和VGG19。不同的后缀代表不不同的网络层数。VGG16-1表示后三组卷积块中最后一层卷积采用卷积核尺寸为1*1，VGG16-3为3*3。VGG19位后三组每组多一层卷积，VGG19为3*3的卷积。我们常看到的基本是D、E这两种模型，官方给出的6种结构图如下：
+1.2 VGG16网络结构 VGG16的网络结果如上图所示：在卷积层1（conv3-64）,卷积层2（conv3-128）,卷积层3（conv3-256）,卷积层4（conv3-512）分别有64个，128个，256个，512个3X3卷积核，在每两层之间有池化层为移动步长为2的2X2池化矩阵（maxpool）。在卷积层5（conv3-512）后有全连接层，再之后是soft-max预测层。
+处理过程的直观表示：
+1.2.1 输入层 输入的图像一般情况是彩色的三维图像，所以输入的维度是`[B,N,H,W] ， B是batchsize的意思， N输入 的Channel，彩色图像是3 ， H是高度为224 ，W是宽度为224。
+输入的图像经历两个卷积3✖3的卷积， BatchNorm和ReLU，输出的维度是[B,64,224,224]。
+这里要注意两点：第一，默认卷积层后保持维度不改变，第二，卷积层、 BN层和激活函数一般会同时存在。这两点已经成了默认的规则。
+然后，输入到池化层，维度变为[B,64,112,112]。
+1.2.2 第二个卷积Block 到了第二个卷积Block，输入的维度为[[B,64,112,112],输出的Channel变成了128，所以在定义卷积的时 候需要扩大channel。
+从上图中，我们可以看到是两个128Channel的卷积，但是这两个卷积还有所不同，在经历第一个卷积的时候，输入的Channel设置为64，输出的Channel设置为128，经过卷积之后维度变 为[B,128,112,112]，然后再经过BN层和激活函数层。
+第二卷积的输入和输出都是128，然后再经过BN成和激活函数层，在这里维度没有发生变化。然后再输入到MaxPool，将尺寸减小一半，输出的维度变为[B,128,56,56]
+1.2.3 第三个卷积Block 这个Block中有3个3✖3的卷积，和上面的Block一样，第一个卷积起到成承上启下的桥梁作用，经过第一个卷积后，维度变为[B,256,56,56],然后经过第二个和第三个卷积，然后再经过最大池化层，维度变为[B,256,28,28]。
+1.2.4 第四个卷积Block 同上， Channel为512，所以经过这个Block后，维度变为[B,512,14,14].
+1.2.5 第五个卷积Block 同上， Channel为512，所以经过这个Block后，维度变为[B,512,7,7],经过卷积后得到了维度为[B,512,7,7]的特征图。
+1.2.6 变换维度 这部分也是一个承上启下的作用，将[B,N,W,H]维度变成[B,N✖W✖H]。方法有很多，一般常用view方法，代码如下：
+# forward函数中 x = x.view(x.size(0), -1) 也可以使用flatten方法，代码如下：
+# forward函数中 x = torch.flatten(x, 1) 我们观察现在的网络，在变换维度之前还有一部操作。
+现在统一使用平均池化，pytorch官方使用的 nn.AdaptiveAvgPool2d ,也可以使用AvgPool2d。关于这两个平均池化的区别可以参考：nn.AdaptiveAvgPool2d和nn.AvgPool2d的区别。
+所以上面的代码改为：
+#init函数中 self." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d806f51518f384c08a5dee53ce87714d/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-12-22T14:33:00+08:00" />
+<meta property="article:modified_time" content="2023-12-22T14:33:00+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">计算机视觉：VGGNet网络详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2>1 VGGNet介绍</h2> 
+<h3>1.1 VGGnNet概述</h3> 
+<p>VGGNet是牛津大学视觉几何组（Visual Geometry Group)提出的模型，故简称VGGNet， 该模型在2014年的ILSVRC中取得了分类任务第二、定位任务第一的优异成绩。该模型证明了增加网络的深度能够在一定程度上影响网络最终的性能。</p> 
+<p>论文地址：<a class="link-info" href="http://xn--7dv436f" rel="nofollow" title="原文链接">原文链接</a></p> 
+<p>根据卷积核大小与卷积层数目不同，VGG可以分为6种子模型，分别是A、A-LRN、B、C、D、E，分别对应的模型为VGG11、VGG11-LRN（第一层采用LRN）、VGG13、VGG16-1、VGG16-3和VGG19。不同的后缀代表不不同的网络层数。VGG16-1表示后三组卷积块中最后一层卷积采用卷积核尺寸为1*1，VGG16-3为3*3。VGG19位后三组每组多一层卷积，VGG19为3*3的卷积。我们常看到的基本是D、E这两种模型，官方给出的6种结构图如下：</p> 
+<p><img alt="" height="1200" src="https://images2.imgbox.com/a5/e1/4hV8cbJa_o.png" width="1200"></p> 
+<h3>1.2 VGG16网络结构     </h3> 
+<p>VGG16的网络结果如上图所示：在卷积层1（conv3-64）,卷积层2（conv3-128）,卷积层3（conv3-256）,卷积层4（conv3-512）分别有64个，128个，256个，512个3X3卷积核，在每两层之间有池化层为移动步长为2的2X2池化矩阵（maxpool）。在卷积层5（conv3-512）后有全连接层，再之后是soft-max预测层。</p> 
+<p style="text-align:center;"><img alt="" height="1200" src="https://images2.imgbox.com/a2/4a/0EcbKGCb_o.png" width="1200"></p> 
+<p> 处理过程的直观表示：</p> 
+<p><img alt="" height="1048" src="https://images2.imgbox.com/7e/d5/qTQfXNIz_o.jpg" width="1200"></p> 
+<h4>1.2.1 <strong>输入层</strong></h4> 
+<p>输入的图像一般情况是彩色的三维图像，所以输入的维度是`[B,N,H,W] ， B是batchsize的意思， N输入 的Channel，彩色图像是3 ， H是高度为224 ，W是宽度为224。</p> 
+<p>输入的图像经历两个卷积3✖3的卷积， BatchNorm和ReLU，输出的维度是[B,64,224,224]。</p> 
+<p>这里要注意两点：第一，默认卷积层后保持维度不改变，第二，卷积层、 BN层和激活函数一般会同时存在。这两点已经成了默认的规则。</p> 
+<p>然后，输入到池化层，维度变为[B,64,112,112]。</p> 
+<h4>1.2.2 <strong>第二个卷积Block</strong></h4> 
+<p>到了第二个卷积Block，输入的维度为[[B,64,112,112],输出的Channel变成了128，所以在定义卷积的时 候需要扩大channel。</p> 
+<p>从上图中，我们可以看到是两个128Channel的卷积，但是这两个卷积还有所不同，在经历第一个卷积的时候，输入的Channel设置为64，输出的Channel设置为128，经过卷积之后维度变 为[B,128,112,112]，然后再经过BN层和激活函数层。</p> 
+<p>第二卷积的输入和输出都是128，然后再经过BN成和激活函数层，在这里维度没有发生变化。然后再输入到MaxPool，将尺寸减小一半，输出的维度变为[B,128,56,56]</p> 
+<h4>1.2.3 <strong>第三个卷积Block</strong></h4> 
+<p>这个Block中有3个3✖3的卷积，和上面的Block一样，第一个卷积起到成承上启下的桥梁作用，经过第一个卷积后，维度变为[B,256,56,56],然后经过第二个和第三个卷积，然后再经过最大池化层，维度变为[B,256,28,28]。</p> 
+<h4>1.2.4 <strong>第四个卷积Block</strong></h4> 
+<p>同上， Channel为512，所以经过这个Block后，维度变为[B,512,14,14].</p> 
+<h4>1.2.5 <strong>第五个卷积Block</strong></h4> 
+<p>同上， Channel为512，所以经过这个Block后，维度变为[B,512,7,7],经过卷积后得到了维度为[B,512,7,7]的特征图。</p> 
+<h4>1.2.6 <strong>变换维度</strong></h4> 
+<p>这部分也是一个承上启下的作用，将[B,N,W,H]维度变成[B,N✖W✖H]。方法有很多，一般常用view方法，代码如下：</p> 
+<pre><code># forward函数中
+x = x.view(x.size(0), -1)
+</code></pre> 
+<p>也可以使用flatten方法，代码如下：</p> 
+<pre><code># forward函数中
+x = torch.flatten(x, 1)
+</code></pre> 
+<p>我们观察现在的网络，在变换维度之前还有一部操作。</p> 
+<p>现在统一使用平均池化，pytorch官方使用的 nn.AdaptiveAvgPool2d ,也可以使用AvgPool2d。关于这两个平均池化的区别可以参考：nn.AdaptiveAvgPool2d和nn.AvgPool2d的区别。</p> 
+<p>所以上面的代码改为：</p> 
+<pre><code>#init函数中
+self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+
+# forward函数中
+x = self.avgpool(x)
+x = torch.flatten(x, 1)
+</code></pre> 
+<h4>1.2.7 <strong>全连接层</strong></h4> 
+<p>经过维度变换后，我们得到[B,512✖7✖7]的二维向量。然后输入第一个全连接层。所以第一个全连接层的输入为512✖7✖7，输出为4096。第二个全链接输入和输出均为4096，然后第三个全连接输入为 4096，输出为class,由于ImageNet的class为1000，所以输出为1000.</p> 
+<p></p> 
+<h2 style="background-color:transparent;">2 VGG16在pytorch下基于cifar-10数据集的实现</h2> 
+<h3>2.1 cifar-10数据集</h3> 
+<p>Cifar-10 是由 Hinton 的学生 Alex Krizhevsky、Ilya Sutskever 收集的一个用于普适物体识别的计算机视觉数据集，它包含 60000 张 32 X 32 的 RGB 彩色图片，总共 10 个分类。其中，包括 50000 张用于训练集，10000 张用于测试集。<br><img alt="" height="333" src="https://images2.imgbox.com/f8/37/2dokJVN5_o.png" width="435"></p> 
+<p>CIFAR-10数据集中一共包含10 个类别的RGB 彩色图片：飞机（ airplane ）、汽车（ automobile ）、鸟类（ bird ）、猫（ cat ）、鹿（ deer ）、狗（ dog ）、蛙类（ frog ）、马（ horse ）、船（ ship ）和卡车（ truck ）。</p> 
+<p>CIFAR-10是一个更接近普适物体的彩色图像数据集。与MNIST数据集相比， CIFAR-10具有以下不同点：</p> 
+<ul><li>CIFAR-10 是3 通道的彩色RGB 图像，而MNIST 是灰度图像。</li><li>CIFAR-10 的图片尺寸为32 × 32 ， 而MNIST 的图片尺寸为28 × 28 ，比MNIST 稍大。</li></ul> 
+<p>相比于手写字符，CIFAR-10含有的是现实世界中真实的物体，不仅噪声很大，而且物体的比例、特征都不尽相同，这为识别带来很大困难。直接的线性模型如Softmax 在CIFAR-10 上表现得很差。</p> 
+<h3>2.2 基于cifar-10的代码实现：</h3> 
+<pre><code class="language-python">import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+import datetime
+from torchvision import datasets
+from torch.utils.data import DataLoader
+
+# import matplotlib
+# matplotlib.use('TkAgg')
+
+VGG_types = {
+    "VGG11": [64, "M", 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
+    "VGG13": [64, 64, "M", 128, 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
+    "VGG16": [64, 64, "M", 128, 128, "M", 256, 256, 256, "M", 512, 512, 512,
+              "M", 512, 512, 512, "M"],
+    "VGG19": [64, 64, "M", 128, 128, "M", 256, 256, 256, 256, "M", 512, 512, 512, 512,
+              "M", 512, 512, 512, 512, "M"]
+}
+
+VGGType = "VGG16"
+
+
+class VGGnet(nn.Module):
+    def __init__(self, in_channels=3, num_classes=1000):
+        super(VGGnet, self).__init__()
+        self.in_channels = in_channels
+        self.conv_layers = self._create_layers(VGG_types[VGGType])
+        self.fcs = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(4096, 4096),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(4096, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.conv_layers(x)
+        x = x.reshape(x.shape[0], -1)
+        x = self.fcs(x)
+        return x
+
+    def _create_layers(self, architecture):
+        layers = []
+        in_channels = self.in_channels
+
+        for x in architecture:
+            if type(x) == int:
+                out_channels = x
+                layers += [
+                    nn.Conv2d(
+                        in_channels=in_channels,
+                        out_channels=out_channels,
+                        kernel_size=(3, 3),
+                        stride=(1, 1),
+                        padding=(1, 1),
+                    ),
+                    nn.BatchNorm2d(x),
+                    nn.ReLU(),
+                ]
+                in_channels = x
+            elif x == "M":
+                layers += [nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))]
+
+        return nn.Sequential(*layers)
+
+
+transform_train = transforms.Compose(
+    [
+        transforms.Pad(4),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomGrayscale(),
+        transforms.RandomCrop(32, padding=4),
+        transforms.Resize((224, 224))
+    ])
+
+transform_test = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        transforms.Resize((224, 224))
+    ]
+)
+
+train_data = datasets.CIFAR10(
+    root="data",
+    train=True,
+    download=True,
+    transform=transform_train,
+)
+
+test_data = datasets.CIFAR10(
+    root="data",
+    train=False,
+    download=True,
+    transform=transform_test,
+)
+
+
+def get_format_time():
+    return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+if __name__ == "__main__":
+
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_data, batch_size=64, shuffle=False)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = VGGnet(in_channels=3, num_classes=10).to(device)
+    print(model)
+
+    optimizer = optim.SGD(model.parameters(), lr=0.01, weight_decay=5e-3)
+    loss_func = nn.CrossEntropyLoss()
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.4, last_epoch=-1)
+
+    epochs = 40
+    total = 0
+    accuracy_rate = []
+
+    for epoch in range(epochs):
+        model.train()
+        train_loss = 0.0
+        train_correct = 0
+        train_total = 0
+
+        print(f"{get_format_time()},train epoch: {epoch}/{epochs}")
+        for step, (images, labels) in enumerate(train_loader, 0):
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images).to(device)
+            loss = loss_func(outputs, labels).to(device)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+            _, predicted = outputs.max(1)
+            correct = torch.sum(predicted == labels)
+            train_correct += correct
+            train_total += images.shape[0]
+            train_loss += loss.item()
+            if step % 100 == 0 and step &gt; 0:
+                print(f"{get_format_time()},train epoch = {epoch}, step = {step}, "
+                      f"train_loss={train_loss}")
+                train_loss = 0.0
+
+        # 在测试集上进行验证
+        model.eval()
+        test_correct = 0
+        test_total = 0
+        with torch.no_grad():
+            for images, labels in test_loader:
+                images = images.to(device)
+                labels = labels.to(device)
+                outputs = model(images).to(device)
+                _, predicted = torch.max(outputs, 1)
+                test_total += labels.size(0)
+                test_correct += torch.sum(predicted == labels)
+
+        accuracy = 100 * test_correct / test_total
+        accuracy_rate.append(accuracy)
+
+        print(f"{get_format_time()},test epoch = {epoch}, accuracy={accuracy}")
+        scheduler.step()
+
+    accuracy_rate = torch.tensor(accuracy_rate).detach().cpu().numpy()
+    times = np.linspace(1, epochs, epochs)
+    plt.xlabel('times')
+    plt.ylabel('accuracy rate')
+    plt.plot(times, accuracy_rate)
+    plt.show()
+
+    print(f"{get_format_time()},accuracy_rate={accuracy_rate}")
+</code></pre> 
+<p>模型形状打印输出：</p> 
+<pre><code class="language-python">VGGnet(
+  (conv_layers): Sequential(
+    (0): Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (2): ReLU()
+    (3): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (4): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (5): ReLU()
+    (6): MaxPool2d(kernel_size=(2, 2), stride=(2, 2), padding=0, dilation=1, ceil_mode=False)
+    (7): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (8): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (9): ReLU()
+    (10): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (11): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (12): ReLU()
+    (13): MaxPool2d(kernel_size=(2, 2), stride=(2, 2), padding=0, dilation=1, ceil_mode=False)
+    (14): Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (15): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (16): ReLU()
+    (17): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (18): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (19): ReLU()
+    (20): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (21): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (22): ReLU()
+    (23): MaxPool2d(kernel_size=(2, 2), stride=(2, 2), padding=0, dilation=1, ceil_mode=False)
+    (24): Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (25): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (26): ReLU()
+    (27): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (28): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (29): ReLU()
+    (30): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (31): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (32): ReLU()
+    (33): MaxPool2d(kernel_size=(2, 2), stride=(2, 2), padding=0, dilation=1, ceil_mode=False)
+    (34): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (35): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (36): ReLU()
+    (37): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (38): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (39): ReLU()
+    (40): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (41): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (42): ReLU()
+    (43): MaxPool2d(kernel_size=(2, 2), stride=(2, 2), padding=0, dilation=1, ceil_mode=False)
+  )
+  (fcs): Sequential(
+    (0): Linear(in_features=25088, out_features=4096, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.5, inplace=False)
+    (3): Linear(in_features=4096, out_features=4096, bias=True)
+    (4): ReLU()
+    (5): Dropout(p=0.5, inplace=False)
+    (6): Linear(in_features=4096, out_features=10, bias=True)
+  )
+)</code></pre> 
+<p>运行结果显示：</p> 
+<p><img alt="" height="958" src="https://images2.imgbox.com/2a/37/r5UwLlUj_o.png" width="1200"></p> 
+<pre><code>2023-12-22 13:56:27,train epoch: 39/40
+2023-12-22 13:56:49,train epoch = 39, step = 100, train_loss=42.07486420869827
+2023-12-22 13:57:13,train epoch = 39, step = 200, train_loss=43.89785052835941
+2023-12-22 13:57:36,train epoch = 39, step = 300, train_loss=41.38636288046837
+2023-12-22 13:58:00,train epoch = 39, step = 400, train_loss=40.616311356425285
+2023-12-22 13:58:24,train epoch = 39, step = 500, train_loss=41.17254985868931
+2023-12-22 13:58:47,train epoch = 39, step = 600, train_loss=40.342166878283024
+2023-12-22 13:59:11,train epoch = 39, step = 700, train_loss=39.25042723119259
+2023-12-22 13:59:40,test epoch = 39, accuracy=88.98999786376953
+2023-12-22 13:59:40,accuracy_rate=[40.629997 37.79     38.98     58.69     43.739998 64.64     66.13
+ 72.       64.869995 71.99     80.04     80.729996 82.43     81.759995
+ 83.81     83.31     84.869995 86.369995 86.4      85.95     88.14
+ 88.13     88.06     86.81     87.979996 88.549995 88.53     88.549995
+ 88.409996 88.75     88.67     88.79     88.71     88.75     88.75
+ 88.86     88.63     88.72     88.829994 88.99    ]</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/195825a82a4896d25af7540d8974fb34/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">大模型训练为什么用A100？</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f56228f1e425964cae78b8b6a9e5614e/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">A Philosophy of Software Design 学习笔记</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

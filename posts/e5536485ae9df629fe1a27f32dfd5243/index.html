@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Netty自定义编码解码器 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Netty自定义编码解码器" />
+<meta property="og:description" content="上次通信的时候用的是自带的编解码器，今天自己实现一下自定义的。
+1、自定义一下协议
+//协议类 @Data public class Protocol&lt;T&gt; implements Serializable { private Long id = System.currentTimeMillis(); private short msgType;// 假设1为请求 2为响应 private T body; } //消息请求体 @Data public class RequestMsg implements Serializable { private String msg; private String other; } //消息响应体 @Data public class ResponseMsg implements Serializable { private String result; private String error; } 2、定义编解码器import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext; import io.netty.handler.codec.MessageToByteEncoder; //编码器 public class EnCodeMsg extends MessageToByteEncoder&lt;Protocol&lt;Object&gt;&gt; { @Override protected void encode(ChannelHandlerContext channelHandlerContext, Protocol&lt;Object&gt; msg, ByteBuf byteBuf) throws Exception { Serialization serialization = new JdkSerialization(); byte[] body = serialization." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/e5536485ae9df629fe1a27f32dfd5243/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-08T15:41:54+08:00" />
+<meta property="article:modified_time" content="2023-08-08T15:41:54+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Netty自定义编码解码器</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>上次通信的时候用的是自带的编解码器，今天自己实现一下自定义的。<br> 1、自定义一下协议</p> 
+<pre><code>//协议类
+@Data
+public class Protocol&lt;T&gt; implements Serializable {
+
+    private Long id = System.currentTimeMillis();
+
+    private short msgType;// 假设1为请求 2为响应
+
+    private T body;
+    
+}
+
+//消息请求体
+@Data
+public class RequestMsg implements Serializable {
+
+    private String msg;
+
+    private String other;
+
+}
+
+//消息响应体
+@Data
+public class ResponseMsg implements Serializable {
+
+    private String result;
+
+    private String error;
+
+}
+</code></pre> 
+<p>2、定义编解码器import io.netty.buffer.ByteBuf;</p> 
+<pre><code>import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.MessageToByteEncoder;
+
+//编码器
+public class EnCodeMsg extends MessageToByteEncoder&lt;Protocol&lt;Object&gt;&gt; {
+    @Override
+    protected void encode(ChannelHandlerContext channelHandlerContext, Protocol&lt;Object&gt; msg, ByteBuf byteBuf) throws Exception {
+        Serialization serialization = new JdkSerialization();
+        byte[] body = serialization.serialize(msg.getBody());
+        int length = body.length;
+        Long id = msg.getId();
+        short msgType = msg.getMsgType();
+        byteBuf.writeLong(id);
+        byteBuf.writeShort(msgType);
+        byteBuf.writeInt(length);
+        byteBuf.writeBytes(body);
+    }
+}
+
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.ByteToMessageDecoder;
+
+import java.util.List;
+
+//解码器
+public class DeCodeMsg extends ByteToMessageDecoder {
+    @Override
+    protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf in, List&lt;Object&gt; list) throws Exception {
+        Serialization serialization = new JdkSerialization();
+        long id = in.readLong();
+        short msgType = in.readShort();
+        int bodyLength = in.readInt();
+        int i = in.readableBytes();
+        if(bodyLength!=i){
+            in.resetReaderIndex();
+            return;
+        }
+        byte[] bytes = new byte[bodyLength];
+        in.readBytes(bytes);
+        if(msgType==(short)1){
+            Protocol&lt;RequestMsg&gt; requestMsgProtocol = new Protocol&lt;&gt;();
+            RequestMsg requestMsg = serialization.deserialize(bytes, RequestMsg.class);
+            requestMsgProtocol.setBody(requestMsg);
+            requestMsgProtocol.setId(id);
+            requestMsgProtocol.setMsgType(msgType);
+            list.add(requestMsgProtocol);
+        }else if(msgType==(short)2){
+            Protocol&lt;ResponseMsg&gt; responseMsgProtocol = new Protocol&lt;&gt;();
+            ResponseMsg responseMsg = serialization.deserialize(bytes,ResponseMsg.class);
+            responseMsgProtocol.setId(id);
+            responseMsgProtocol.setMsgType(msgType);
+            responseMsgProtocol.setBody(responseMsg);
+            list.add(responseMsgProtocol);
+        }else {
+            return;
+        }
+
+    }
+}
+
+</code></pre> 
+<p>3、修改消息处理器</p> 
+<pre><code>
+public class NettyClientHandler extends SimpleChannelInboundHandler&lt;Protocol&lt;ResponseMsg&gt;&gt; {
+
+    private static final Logger logger = LoggerFactory.getLogger(NettyClientHandler.class);
+
+    private volatile Channel channel;
+
+    private SocketAddress remotePeer;
+
+    public Channel getChannel() {
+        return channel;
+    }
+
+    public SocketAddress getRemotePeer() {
+        return remotePeer;
+    }
+
+    /**
+     * 注册
+     * @param ctx
+     * @throws Exception
+     */
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+        logger.info("channelRegistered--------------");
+        super.channelRegistered(ctx);
+        this.channel = ctx.channel();
+    }
+
+    /**
+     * 激活
+     * @param ctx
+     * @throws Exception
+     */
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        super.channelActive(ctx);
+        this.remotePeer = this.channel.remoteAddress();
+        logger.info("channelActive--------------");
+    }
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext channelHandlerContext,Protocol&lt;ResponseMsg&gt; o) throws Exception {
+        logger.info("channelRead0--------------"+Thread.currentThread().getName());
+        logger.info("消费者接收到的消息为{}", JSONObject.toJSONString(o));
+    }
+
+    public void sendMsg(Protocol&lt;RequestMsg&gt; message){
+        channel.writeAndFlush(message);
+    }
+
+    public void close(){
+        channel.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
+    }
+
+}
+</code></pre> 
+<pre><code>public class NettyServerHandler extends SimpleChannelInboundHandler&lt;Protocol&lt;RequestMsg&gt;&gt; {
+
+    private static final Logger logger = LoggerFactory.getLogger(NettyServerHandler.class);
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext channelHandlerContext, Protocol&lt;RequestMsg&gt; o) throws Exception {
+
+        logger.info("服务端收到的消息为================{}", JSONObject.toJSONString(o));
+        Protocol&lt;ResponseMsg&gt; protocol = new Protocol&lt;&gt;();
+        ResponseMsg responseMsg = new ResponseMsg();
+        responseMsg.setResult("SUCCESS");
+        responseMsg.setError("NO ERROR");
+        protocol.setBody(responseMsg);
+        protocol.setMsgType((short) 2);
+        protocol.setId(o.getId());
+        channelHandlerContext.channel().writeAndFlush(protocol);
+    }
+}
+
+</code></pre> 
+<p>4、测试</p> 
+<pre><code>public class NettyTest {
+
+    public static void main(String[] args) {
+
+        new Thread(()-&gt;{
+            NettyServer.startNettyServer();
+        }).start();
+
+        new Thread(()-&gt;{
+            NettyClient instance = NettyClient.getInstance();
+            try {
+                while (true){
+                    Thread.sleep(2000);
+                    Protocol&lt;RequestMsg&gt; protocol = new Protocol&lt;&gt;();
+                    protocol.setMsgType((short)1);
+                    RequestMsg requestMsg = new RequestMsg();
+                    requestMsg.setMsg("hello:"+System.currentTimeMillis());
+                    requestMsg.setOther("你好啊");
+                    protocol.setBody(requestMsg);
+                    instance.sendMsg(protocol);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        }).start();
+    }
+}
+</code></pre> 
+<p>5、效果截图</p> 
+<p><img src="https://images2.imgbox.com/62/14/dW0mMyvE_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1dd4018e0c217180fbea800905045890/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">python实现简单的爬虫功能</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/a76c3223a38a068cc0a356bb7d385116/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">CSDN Level Help</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

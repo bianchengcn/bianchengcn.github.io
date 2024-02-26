@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>使用platform总线编写驱动，应用层程序，在应用层通过ioctl控制LED灯流水，当按键KEY1按下，让风扇转动 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="使用platform总线编写驱动，应用层程序，在应用层通过ioctl控制LED灯流水，当按键KEY1按下，让风扇转动" />
+<meta property="og:description" content="head.h:
+#ifndef __MYLED_H__ #define __MYLED_H__ #define LED_ON _IOW(&#39;a&#39;,1,int) #define LED_OFF _IOW(&#39;a&#39;,0,int) enum{ LED1, LED2, LED3, }; #endif mydev.c:
+#include &lt;linux/init.h&gt; #include &lt;linux/module.h&gt; #include&lt;linux/fs.h&gt; #include&lt;linux/uaccess.h&gt; #include&lt;linux/io.h&gt; #include&lt;linux/device.h&gt; #include &lt;linux/of.h&gt; #include &lt;linux/of_gpio.h&gt; #include&lt;linux/interrupt.h&gt; #include&lt;linux/of_irq.h&gt; #include &lt;linux/platform_device.h&gt; #include &lt;linux/mod_devicetable.h&gt; #include &#34;mydev.h&#34; struct resource *res; int irqno; int major; struct class *cls; struct device *dev; int i; char kbuf[128]={0}; struct gpio_desc* gpiono1; struct gpio_desc* gpiono2; struct gpio_desc* gpiono3; struct gpio_desc* gpiono4; //中断处理函数 irqreturn_t irq1_handler(int irqno, void *arg) { gpiod_set_value(gpiono4,!" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9d95d1336b03cc040d050f03f8b7ac63/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-03-29T19:06:35+08:00" />
+<meta property="article:modified_time" content="2023-03-29T19:06:35+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">使用platform总线编写驱动，应用层程序，在应用层通过ioctl控制LED灯流水，当按键KEY1按下，让风扇转动</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>head.h:</p> 
+<pre><code class="language-cs">#ifndef __MYLED_H__
+#define __MYLED_H__
+
+#define LED_ON _IOW('a',1,int)
+#define LED_OFF _IOW('a',0,int)
+enum{
+	LED1,
+	LED2,
+	LED3,
+};
+
+
+#endif</code></pre> 
+<p>mydev.c:</p> 
+<pre><code class="language-cpp">#include &lt;linux/init.h&gt;
+#include &lt;linux/module.h&gt;
+#include&lt;linux/fs.h&gt;
+#include&lt;linux/uaccess.h&gt;
+#include&lt;linux/io.h&gt;
+#include&lt;linux/device.h&gt;
+#include &lt;linux/of.h&gt;
+#include &lt;linux/of_gpio.h&gt;
+#include&lt;linux/interrupt.h&gt;
+#include&lt;linux/of_irq.h&gt;
+#include &lt;linux/platform_device.h&gt;
+#include &lt;linux/mod_devicetable.h&gt;
+#include "mydev.h"
+struct resource *res;
+int irqno;
+int major;
+struct class *cls;
+struct device *dev;
+int i;
+char kbuf[128]={0};
+struct gpio_desc* gpiono1;
+struct gpio_desc* gpiono2;
+struct gpio_desc* gpiono3;
+struct gpio_desc* gpiono4;
+//中断处理函数
+irqreturn_t irq1_handler(int irqno, void *arg)
+{
+    gpiod_set_value(gpiono4,!gpiod_get_value(gpiono4));
+    return  IRQ_HANDLED;
+}
+int myled_open(struct inode *inode, struct file *file)
+{
+    printk("%s:%s:%d\n",__FILE__,__func__,__LINE__);
+    return 0;
+}
+//close
+int  myled_close(struct inode *inode, struct file *file)
+{
+    printk("%s:%s:%d\n",__FILE__,__func__,__LINE__);
+    return 0;
+}
+
+long myled_ioctl(struct file *file,unsigned int cmd,unsigned long args)
+{
+    //1.判断cmd switch(cmd)
+    //2.判断操作哪盏灯进行点亮 copy_from_user
+    int whitch;
+    int ret;
+    switch(cmd)
+    {
+    case LED_ON:
+        ret = copy_from_user(&amp;whitch,(void*)args,sizeof(int));
+        if(ret)
+        {
+            printk("copy from user is error\n");
+            return -EIO;
+        }
+        switch (whitch)
+        {
+            case LED1:
+                gpiod_set_value(gpiono1,1);
+                break;
+            case LED2:
+                gpiod_set_value(gpiono2,1);
+                break;
+            case LED3:
+                gpiod_set_value(gpiono3,1);
+                break;
+        }
+    break;
+    case LED_OFF:
+        ret = copy_from_user(&amp;whitch,(void*)args,sizeof(int));
+        if(ret)
+        {
+            printk("copy from user is error\n");
+            return -EIO;
+        }
+        switch (whitch)
+        {
+            case LED1:
+                gpiod_set_value(gpiono1,0);
+                break;
+            case LED2:
+                gpiod_set_value(gpiono2,0);
+                break;
+            case LED3:
+                gpiod_set_value(gpiono3,0);
+                break;
+        }
+        break;    
+    }
+    return 0;
+
+}
+const struct file_operations fops = {
+    .open = myled_open,
+    .unlocked_ioctl = myled_ioctl,
+    .release = myled_close,
+
+};
+
+//分配对象并且初始化
+
+//probe函数
+int pdrv_probe(struct platform_device *pdev)
+{
+    //1.注册字符设备驱动
+    major = register_chrdev(0,"mycdev",&amp;fops);
+    if(major &lt; 0) //2.判断返回值
+    {
+        printk("register chrdev is error\n");
+    }
+    //3.打印主设备号
+    printk("register chrdev major=%d\n",major);
+    //4.向上提交目录
+    cls=class_create(THIS_MODULE,"mycdev");
+    if(IS_ERR(cls))//指针指向预留空间，函数调用失败
+    {
+        printk("向上提交目录失败\n");
+        return PTR_ERR(cls);
+    }
+    printk("向上提交目录成功\n");
+    //向上提交设备节点  
+    for(i=0;i&lt;3;i++)
+    {
+        dev=device_create(cls,NULL,MKDEV(major,i),NULL,"mycdev%d",i);
+        if(IS_ERR(dev))//指针指向预留空间，函数调用失败
+        {
+            printk("向上提交目录失败\n");
+            return PTR_ERR(dev);
+        }
+    }
+    printk("设备节点向上提交成功\n");
+
+   
+    //获取mem类型设备资源
+    res=platform_get_resource(pdev,IORESOURCE_MEM,0);
+    if(res==NULL)
+    {
+        printk("获取设备资源失败\n");
+        return -ENODATA;
+    }
+    //获取中断资源
+    irqno=platform_get_irq(pdev,0);
+    if(irqno&lt;0)
+    {
+        printk("获取中断资源失败\n");
+        return -ENODATA;
+    }
+    //注册中断
+    request_irq(irqno,irq1_handler,IRQF_TRIGGER_FALLING,"myirq1",NULL);
+   
+    gpiono1=gpiod_get_from_of_node(pdev-&gt;dev.of_node,"led1",0, GPIOD_OUT_LOW,NULL);
+    if(IS_ERR(gpiono1))
+    {
+        printk("解析gpio编号失败\n");
+        return -EIO;
+    }
+    gpiono2=gpiod_get_from_of_node(pdev-&gt;dev.of_node,"led2",0, GPIOD_OUT_LOW,NULL);
+    if(IS_ERR(gpiono2))
+    {
+        
+        printk("解析gpio编号失败\n");
+        return -EIO;
+    }
+    gpiono3=gpiod_get_from_of_node(pdev-&gt;dev.of_node,"led3",0, GPIOD_OUT_LOW,NULL);
+    if(IS_ERR(gpiono3))
+    {
+        printk("解析gpio编号失败\n");
+        return -EIO;
+    }
+    gpiono4=gpiod_get_from_of_node(pdev-&gt;dev.of_node,"fan",0, GPIOD_OUT_HIGH,NULL);
+    if(gpiono4&lt;0)
+    {
+        printk("解析gpio编号失败\n");
+        return -EIO;
+    }
+    
+    return 0;
+}
+//remove函数
+int pdrv_remove(struct platform_device *pdev)
+{
+    unregister_chrdev(major,"mycdev");
+    printk("%s:%s:%d\n",__FILE__,__func__,__LINE__);
+    gpiod_set_value(gpiono1,0);
+    gpiod_put(gpiono1);
+    gpiod_set_value(gpiono2,0);
+    gpiod_put(gpiono2);
+    gpiod_set_value(gpiono3,0);
+    gpiod_put(gpiono3);
+    gpiod_set_value(gpiono4,0);
+    gpiod_put(gpiono4);
+
+    return 0;
+}
+
+//构建名字表
+struct of_device_id oftable[]=
+{
+    {.compatible="hqyj,platform"},
+    {},
+};
+struct platform_driver pdrv={
+    .probe=pdrv_probe,
+    .remove=pdrv_remove,
+    .driver={
+        .name="aaaaa",  
+        .of_match_table=oftable,//设置设备树匹配    
+    },
+};
+
+//一件注册宏
+module_platform_driver(pdrv);
+MODULE_LICENSE("GPL");      
+
+</code></pre> 
+<p>test.c:</p> 
+<pre><code class="language-cs">#include &lt;stdio.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;errno.h&gt;
+#include &lt;string.h&gt;
+#include &lt;sys/ioctl.h&gt;
+#include "mydev.h"
+
+int main(int argc,const char * argv[])
+{
+    char buf[128] = {0};
+    int whitch;
+    int fd = -1;
+    fd = open("/dev/mycdev0",O_RDWR);
+    if(fd == -1)
+    {
+        perror("open is error\n");
+        return -1;
+    }
+
+    while(1)
+    {
+        whitch = LED1;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+        whitch = LED2;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+        whitch = LED3;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+
+    }
+
+
+    close(fd);
+    return 0;
+}</code></pre> 
+<p>Makefile:</p> 
+<pre><code class="language-bash">ARCH ?=x86
+modname ?= mydev
+ifeq ($(ARCH),arm)
+#定义一个变量，存放linux内核源码目录，arm架构
+KERNEDIR:=/home/ubuntu/linux-5.10.61
+#x86架构
+else
+KERNEDIR:=/lib/modules/$(shell uname -r)/build
+#定义一个变量，开启一个终端，执行pwd命令
+endif
+PWD:=$(shell pwd)
+
+all:
+	@#-C:跳转到内核顶层目录下,读取内核顶层目录下的Makefile文件
+	@#在内核源码顶层目录下执行:make M=$(shell pwd) modules
+	@#M=$(shell pwd)：回到当前目录下，只编译当前目录下的文件
+	@#make modules:采用模块化方式进行编译
+	make -C $(KERNEDIR) M=$(shell pwd) modules
+
+clean:
+	make -C $(KERNEDIR) M=$(shell pwd) clean
+
+#指定模块化方式编译的文件
+obj-m:=$(modname).o</code></pre> 
+<p>运行效果：</p> 
+<p><img alt="" height="617" src="https://images2.imgbox.com/fc/e0/lWZpU2Mc_o.png" width="861"></p> 
+<p> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/df9b6b706bdeb4747578702be7f6bdfe/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Python基础—读写模式</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/40ab148d5de8888ca7a561503882e6e8/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">C语言中char数组和char指针有什么区别？</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

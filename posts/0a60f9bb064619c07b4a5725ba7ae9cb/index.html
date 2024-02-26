@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>编译原理 实验4 语义分析（基于PL/0，使用C&#43;&#43;代码编写） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="编译原理 实验4 语义分析（基于PL/0，使用C&#43;&#43;代码编写）" />
+<meta property="og:description" content="文章目录 1 实验任务2 实验内容3 错误类型声明4 文件结构与代码4.1 代码结构4.2 详细代码4.3 递归下降子程序的声明 5 常变量说明6 运行结果 1 实验任务 审查每一个语法结构的静态语义，即验证语法正确的结构是否有意义。此部分不再借助已有工具，需手写代码来完成。
+2 实验内容 （1）实验要求
+你的程序需要对输入文件进行语义分析并检查错误进行输出。
+（2）输入格式
+一个包含源代码的文本文件，程序需要能够接收一个输入文件名作为参数。
+（3）输出格式
+要求通过标准输出打印程序的运行结果。对于那些没有语义错误的输入文件，你的程序不需要输出任何内容。对于那些存在语义错误的输入文件，你的程序应当输出相应的错误信息，这些信息包括错误类型、出错的行号以及说明文字，其格式为：
+Error type [错误类型] at Line [行号]: [说明文字].
+3 错误类型声明 自定义错误类型如下（与C–重合的部分不再给出补充说明）：
+错误类型 1：变量在使用时未经定义。错误类型 2：函数在调用时未经定义。错误类型 3：变量出现重复定义，或变量与前面定义过的结构体名字重复。错误类型 4：函数出现重复定义（即同样的函数名出现了不止一次定义）。
+说明：在测试此功能时，要注意PL/0不能将变量定义在begin、end内，只能在过程体外部定义。否则会引发过程相关的错误。错误类型 5：赋值号两边的表达式类型不匹配。
+说明：改进的PL/0 类型只有常量、变量、过程类型。它们三者互相赋值会导致此错误，事实上，只有左部为变量类型才是合法的赋值。
+同时，常量只能由数字赋初值。错误类型 6：操作数类型不匹配或操作数类型与操作符不匹配。
+说明：当因子为过程或其他非法值时，使得操作数不合法或表达式运算不合法。错误类型 7：过程声明格式不正确（procedure后不为标识符）（原：return 语句的返回类型与函数定义的返回类型不匹配。）
+说明：PL/0仅有过程体，无返回值。故进行如上修改。错误类型 8：read或write函数的调用不完整（括号缺失）（原：函数调用时实参与形参的数目或类型不匹配。）
+说明：PL/0调用过程无参数。但read和write需要参数，故进行如上修改。错误类型 9：read函数的参数不是id（原：对非数组型变量使用“[…]”（数组访问）操作符。）
+说明：改进的PL/0无数组。错误类型 10：调用函数格式非法（call后不为过程标识符）（原：对普通变量使用“(…)”或“()”（函数调用）操作符。） 说明：PL/0与C–调用方式不同。
+前十个错误类型是对C–相关错误的进行一定修改，以下是结合书后代码新增的一些错误类型。有些错误设计后在实际测试时发现不合适就删除了，下面只给出保留部分的声明。
+错误类型 11：缺少赋值符号或赋值符号不正确。错误类型 12：一条语句定义（多个）常量或变量时漏掉了逗号或者分号/过程结束时漏了分号。错误类型 14：数字过长。错误类型 16：if后缺少then语句。错误类型 18：while语句缺少do。错误类型 19：地址超出上界。错误类型 20：逻辑表达式不合法（逻辑符号不合法）。错误类型 21：因子标识符为过程。错误类型 22：应输入)，表达式不完整。错误类型 24：程序不以.结尾。 4 文件结构与代码 算法在处理上的词法分析思路与第一个实验一致（专栏实验1），而语法分析则**采用了递归下降（专栏实验2）**的方法，在此基础上做出改进并进行了出错处理。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/0a60f9bb064619c07b4a5725ba7ae9cb/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-11-24T20:50:53+08:00" />
+<meta property="article:modified_time" content="2021-11-24T20:50:53+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">编译原理 实验4 语义分析（基于PL/0，使用C&#43;&#43;代码编写）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#1__1" rel="nofollow">1 实验任务</a></li><li><a href="#2__4" rel="nofollow">2 实验内容</a></li><li><a href="#3__16" rel="nofollow">3 错误类型声明</a></li><li><a href="#4__50" rel="nofollow">4 文件结构与代码</a></li><li><ul><li><a href="#41__54" rel="nofollow">4.1 代码结构</a></li><li><a href="#42__56" rel="nofollow">4.2 详细代码</a></li><li><a href="#43__1087" rel="nofollow">4.3 递归下降子程序的声明</a></li></ul> 
+  </li><li><a href="#5__1107" rel="nofollow">5 常变量说明</a></li><li><a href="#6__1123" rel="nofollow">6 运行结果</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="1__1"></a>1 实验任务</h2> 
+<p>审查每一个语法结构的静态语义，即验证语法正确的结构是否有意义。此部分不再借助已有工具，需手写代码来完成。</p> 
+<h2><a id="2__4"></a>2 实验内容</h2> 
+<p>（1）实验要求<br> 你的程序需要对输入文件进行语义分析并检查错误进行输出。</p> 
+<p>（2）输入格式<br> 一个包含源代码的文本文件，程序需要能够接收一个输入文件名作为参数。</p> 
+<p>（3）输出格式<br> 要求通过标准输出打印程序的运行结果。对于那些没有语义错误的输入文件，你的程序不需要输出任何内容。对于那些存在语义错误的输入文件，你的程序应当输出相应的错误信息，这些信息包括错误类型、出错的行号以及说明文字，其格式为：<br> Error type [错误类型] at Line [行号]: [说明文字].</p> 
+<h2><a id="3__16"></a>3 错误类型声明</h2> 
+<p>自定义错误类型如下（与C–重合的部分不再给出补充说明）：</p> 
+<ol><li>错误类型 1：变量在使用时未经定义。</li><li>错误类型 2：函数在调用时未经定义。</li><li>错误类型 3：变量出现重复定义，或变量与前面定义过的结构体名字重复。</li><li>错误类型 4：函数出现重复定义（即同样的函数名出现了不止一次定义）。<br> 说明：在测试此功能时，要注意PL/0不能将变量定义在begin、end内，只能在过程体外部定义。否则会引发过程相关的错误。</li><li>错误类型 5：赋值号两边的表达式类型不匹配。<br> 说明：改进的PL/0 类型只有常量、变量、过程类型。它们三者互相赋值会导致此错误，事实上，只有左部为变量类型才是合法的赋值。<br> 同时，常量只能由数字赋初值。</li><li>错误类型 6：操作数类型不匹配或操作数类型与操作符不匹配。<br> 说明：当因子为过程或其他非法值时，使得操作数不合法或表达式运算不合法。</li><li>错误类型 7：过程声明格式不正确（procedure后不为标识符）（原：return 语句的返回类型与函数定义的返回类型不匹配。）<br> 说明：PL/0仅有过程体，无返回值。故进行如上修改。</li><li>错误类型 8：read或write函数的调用不完整（括号缺失）（原：函数调用时实参与形参的数目或类型不匹配。）<br> 说明：PL/0调用过程无参数。但read和write需要参数，故进行如上修改。</li><li>错误类型 9：read函数的参数不是id（原：对非数组型变量使用“[…]”（数组访问）操作符。）<br> 说明：改进的PL/0无数组。</li><li>错误类型 10：调用函数格式非法（call后不为过程标识符）（原：对普通变量使用“(…)”或“()”（函数调用）操作符。）</li></ol> 
+<p>说明：PL/0与C–调用方式不同。<br> 前十个错误类型是对C–相关错误的进行一定修改，以下是结合书后代码新增的一些错误类型。有些错误设计后在实际测试时发现不合适就删除了，下面只给出保留部分的声明。</p> 
+<ol start="11"><li>错误类型 11：缺少赋值符号或赋值符号不正确。</li><li>错误类型 12：一条语句定义（多个）常量或变量时漏掉了逗号或者分号/过程结束时漏了分号。</li><li>错误类型 14：数字过长。</li><li>错误类型 16：if后缺少then语句。</li><li>错误类型 18：while语句缺少do。</li><li>错误类型 19：地址超出上界。</li><li>错误类型 20：逻辑表达式不合法（逻辑符号不合法）。</li><li>错误类型 21：因子标识符为过程。</li><li>错误类型 22：应输入)，表达式不完整。</li><li>错误类型 24：程序不以.结尾。</li></ol> 
+<h2><a id="4__50"></a>4 文件结构与代码</h2> 
+<p>算法在处理上的<strong>词法分析思路与第一个实验一致（专栏实验1）</strong>，而语法分析则**采用了递归下降（专栏实验2）**的方法，在此基础上做出改进并进行了出错处理。</p> 
+<p>递归下降子程序包含了所有EBNF的描述，可以根据EBNF描述来写出递归下降子程序。对于<strong>错误处理的方法主要是通过在这些递归下降子程序中的相应位置插入error方法，在处理的时候检测是否有错误产生</strong>，若有错误则调用error函数进行出错提示和处理。</p> 
+<h3><a id="41__54"></a>4.1 代码结构</h3> 
+<p><img src="https://images2.imgbox.com/cc/2b/3vYauFEE_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="42__56"></a>4.2 详细代码</h3> 
+<p>pl0.h:</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span><span class="token string">&lt;sstream&gt;</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span> <span class="token directive keyword">define</span> <span class="token macro-name">norw</span> <span class="token expression"><span class="token number">13</span> </span><span class="token comment">//关键字个数 </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span> <span class="token directive keyword">define</span> <span class="token macro-name">txmax</span> <span class="token expression"><span class="token number">100</span> </span><span class="token comment">//名字表容量 </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span> <span class="token directive keyword">define</span> <span class="token macro-name">nmax</span> <span class="token expression"><span class="token number">14</span> </span><span class="token comment">//number 的最大位数 </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span> <span class="token directive keyword">define</span> <span class="token macro-name">al</span> <span class="token expression"><span class="token number">10</span> </span><span class="token comment">//符号的最大长度</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span> <span class="token directive keyword">define</span> <span class="token macro-name">levmax</span> <span class="token expression"><span class="token number">3</span> </span><span class="token comment">//max depth of block nesting 最大允许过程嵌套声明层数[0，lexmax]</span></span>
+<span class="token keyword">enum</span> <span class="token class-name">symbol</span> <span class="token punctuation">{<!-- --></span>
+	nul<span class="token punctuation">,</span> ident<span class="token punctuation">,</span> number<span class="token punctuation">,</span> plus<span class="token punctuation">,</span> minus<span class="token punctuation">,</span>
+	times<span class="token punctuation">,</span> slash<span class="token punctuation">,</span> oddsym<span class="token punctuation">,</span> eql<span class="token punctuation">,</span> neq<span class="token punctuation">,</span> <span class="token comment">//slash 斜线</span>
+	lss<span class="token punctuation">,</span> leq<span class="token punctuation">,</span> gtr<span class="token punctuation">,</span> geq<span class="token punctuation">,</span> lparen<span class="token punctuation">,</span> <span class="token comment">//leq :less than or equal to; gtr: great than; lparen:left parenthesis</span>
+	rparen<span class="token punctuation">,</span> comma<span class="token punctuation">,</span> semicolon<span class="token punctuation">,</span> period<span class="token punctuation">,</span> becomes<span class="token punctuation">,</span><span class="token comment">//comma 逗号 semicolon 分号 period 句号 becomes 赋值号</span>
+	beginsym<span class="token punctuation">,</span> endsym<span class="token punctuation">,</span> ifsym<span class="token punctuation">,</span> thensym<span class="token punctuation">,</span> whilesym<span class="token punctuation">,</span>
+	writesym<span class="token punctuation">,</span> readsym<span class="token punctuation">,</span> dosym<span class="token punctuation">,</span> callsym<span class="token punctuation">,</span> constsym<span class="token punctuation">,</span>
+	varsym<span class="token punctuation">,</span> procsym<span class="token punctuation">,</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">symnum</span> <span class="token expression"><span class="token number">32</span> </span></span>
+<span class="token keyword">enum</span> <span class="token class-name">object</span> <span class="token punctuation">{<!-- --></span> <span class="token comment">//object 为三种标识符的类型</span>
+	constant<span class="token punctuation">,</span>
+	variable<span class="token punctuation">,</span>
+	procedur<span class="token punctuation">,</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+FILE <span class="token operator">*</span> fa1<span class="token punctuation">;</span> <span class="token comment">//输出源文件及其各行对应的首地址</span>
+FILE <span class="token operator">*</span> fas<span class="token punctuation">;</span> <span class="token comment">//输出名字表</span>
+<span class="token keyword">bool</span> tableswitch<span class="token punctuation">;</span> <span class="token comment">//显示名字表与否</span>
+<span class="token keyword">char</span> ch<span class="token punctuation">;</span> <span class="token comment">//获取字符的缓冲区 ,getch 使用</span>
+<span class="token keyword">enum</span> <span class="token class-name">symbol</span> sym<span class="token punctuation">;</span> <span class="token comment">//当前符号</span>
+<span class="token keyword">char</span> id<span class="token punctuation">[</span>al <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//当前 ident</span>
+<span class="token keyword">int</span> num<span class="token punctuation">;</span> <span class="token comment">//当前 number </span>
+<span class="token keyword">int</span> cc<span class="token punctuation">,</span> ll<span class="token punctuation">;</span> <span class="token comment">//getch 使用的计数器 ,cc 表示当前字符 (ch)的位置</span>
+<span class="token keyword">int</span> lineIndex<span class="token punctuation">;</span> <span class="token comment">//当前行数</span>
+<span class="token keyword">char</span> line<span class="token punctuation">[</span><span class="token number">81</span><span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//读取行缓冲区</span>
+<span class="token keyword">char</span> a<span class="token punctuation">[</span>al <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//临时符号</span>
+<span class="token keyword">char</span> word<span class="token punctuation">[</span>norw<span class="token punctuation">]</span><span class="token punctuation">[</span>al<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//保留字</span>
+<span class="token keyword">enum</span> <span class="token class-name">symbol</span> wsym<span class="token punctuation">[</span>norw<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//保留字对应的符号值</span>
+<span class="token keyword">enum</span> <span class="token class-name">symbol</span> ssym<span class="token punctuation">[</span><span class="token number">256</span><span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//单字符的符号值</span>
+<span class="token keyword">bool</span> declbegsys<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//表示声明开始的符号集合 ,declaring begin symbol set </span>
+<span class="token keyword">bool</span> statbegsys<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//表示语句开始的符号集 , statement </span>
+<span class="token keyword">bool</span> facbegsys<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//表示因子开始的符号集合 ,factor </span>
+
+<span class="token keyword">struct</span> <span class="token class-name">tablestruct</span><span class="token comment">//有用的属性是前几个,后面两个属性为生成中间代码</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">char</span> name<span class="token punctuation">[</span>al<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">// 名字 </span>
+	<span class="token keyword">enum</span> <span class="token class-name">object</span> kind<span class="token punctuation">;</span> <span class="token comment">// 类型仅三种</span>
+	<span class="token keyword">int</span> val<span class="token punctuation">;</span> <span class="token comment">//const数值</span>
+	<span class="token keyword">int</span> level<span class="token punctuation">;</span> <span class="token comment">// 所处层，const 不使用</span>
+	<span class="token keyword">int</span> adr<span class="token punctuation">;</span> <span class="token comment">//地址</span>
+	<span class="token keyword">int</span> size<span class="token punctuation">;</span> <span class="token comment">//需要分配的数据区空间</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+<span class="token keyword">struct</span> <span class="token class-name">tablestruct</span> table<span class="token punctuation">[</span>txmax<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">//名字表 </span>
+FILE <span class="token operator">*</span> fin<span class="token punctuation">;</span> <span class="token comment">//fin 文本文件用于指向输入的源程序文件</span>
+<span class="token keyword">char</span> fname<span class="token punctuation">[</span>al<span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> err<span class="token punctuation">;</span> <span class="token comment">//错误计数器</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">getsymdo</span> <span class="token expression"><span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">getsym</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">getchdo</span> <span class="token expression"><span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">getch</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">expressiondo</span><span class="token expression"><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span> <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">expression</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">factordo</span><span class="token expression"><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span> <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">factor</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">termdo</span><span class="token expression"><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span> <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">term</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">conditiondo</span><span class="token expression"><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span> <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">condition</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">statementdo</span><span class="token expression"><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span> <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">statement</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">constdeclarationdo</span><span class="token expression"><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span> <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">constdeclaration</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name function">vardeclarationdo</span><span class="token expression"><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span> <span class="token keyword">if</span><span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span><span class="token operator">==</span><span class="token function">vardeclaration</span><span class="token punctuation">(</span>a<span class="token punctuation">,</span>b<span class="token punctuation">,</span>c<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span> </span></span>
+<span class="token keyword">void</span> <span class="token function">error</span><span class="token punctuation">(</span><span class="token keyword">int</span> n<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">getsym</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">getch</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">//集合操作声明</span>
+<span class="token comment">//int inset(int e, bool*s);</span>
+<span class="token keyword">int</span> <span class="token function">addset</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>sr<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span>s1<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span>s2<span class="token punctuation">,</span> <span class="token keyword">int</span> n<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">subset</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>sr<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span>s1<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span>s2<span class="token punctuation">,</span> <span class="token keyword">int</span> n<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">mulset</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>sr<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span>s1<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span>s2<span class="token punctuation">,</span> <span class="token keyword">int</span> n<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">//递归下降主要子程序声明</span>
+<span class="token keyword">int</span> <span class="token function">block</span><span class="token punctuation">(</span><span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> tx<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">factor</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">term</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">condition</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">expression</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">statement</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">vardeclaration</span><span class="token punctuation">(</span><span class="token keyword">int</span><span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span> pdx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">constdeclaration</span><span class="token punctuation">(</span><span class="token keyword">int</span><span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span> pdx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> <span class="token function">position</span><span class="token punctuation">(</span><span class="token keyword">char</span><span class="token operator">*</span> idt<span class="token punctuation">,</span> <span class="token keyword">int</span> tx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">enter</span><span class="token punctuation">(</span><span class="token keyword">enum</span> <span class="token class-name">object</span> k<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span> pdx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>源.cpp:</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span><span class="token string">&lt;stdio.h&gt;</span> </span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span><span class="token string">"pl0.h"</span> </span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span><span class="token string">"string.h"</span> </span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">bool</span> nxtlev<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Input pl/0 file ?"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">scanf</span><span class="token punctuation">(</span><span class="token string">"%s"</span><span class="token punctuation">,</span> fname<span class="token punctuation">)</span><span class="token punctuation">;</span> 
+	fin <span class="token operator">=</span> <span class="token function">fopen</span><span class="token punctuation">(</span>fname<span class="token punctuation">,</span> <span class="token string">"r"</span><span class="token punctuation">)</span><span class="token punctuation">;</span> 
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>fin<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		fa1 <span class="token operator">=</span> <span class="token function">fopen</span><span class="token punctuation">(</span><span class="token string">"fa1.txt"</span><span class="token punctuation">,</span> <span class="token string">"w"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">fprintf</span><span class="token punctuation">(</span>fa1<span class="token punctuation">,</span> <span class="token string">"Iput pl/0 file ?"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">fprintf</span><span class="token punctuation">(</span>fa1<span class="token punctuation">,</span> <span class="token string">"%s\n"</span><span class="token punctuation">,</span> fname<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> 
+		err <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> <span class="token comment">//错误计数器置 0 </span>
+		cc <span class="token operator">=</span> lineIndex <span class="token operator">=</span> ll <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		ch <span class="token operator">=</span> <span class="token string">' '</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span> <span class="token operator">!=</span> <span class="token function">getsym</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			fas <span class="token operator">=</span> <span class="token function">fopen</span><span class="token punctuation">(</span><span class="token string">"fas.tmp"</span><span class="token punctuation">,</span> <span class="token string">"w"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">addset</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> declbegsys<span class="token punctuation">,</span> statbegsys<span class="token punctuation">,</span> symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			nxtlev<span class="token punctuation">[</span>period<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span> <span class="token operator">==</span> <span class="token function">block</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> nxtlev<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token comment">//调用编译程序</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">fclose</span><span class="token punctuation">(</span>fa1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fclose</span><span class="token punctuation">(</span>fas<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fclose</span><span class="token punctuation">(</span>fin<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token function">fclose</span><span class="token punctuation">(</span>fa1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">fclose</span><span class="token punctuation">(</span>fas<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> period<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>err <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\ncomplie sucess!\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\n%derrors,complie failed.\n"</span><span class="token punctuation">,</span>err<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token function">fclose</span><span class="token punctuation">(</span>fin<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"File doesn't exist! \n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">getchar</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">getchar</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//初始化符号表等内容</span>
+<span class="token keyword">void</span> <span class="token function">init</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;=</span> <span class="token number">255</span><span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		ssym<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> nul<span class="token punctuation">;</span> <span class="token comment">//ssym ：单字符的符号值</span>
+	<span class="token punctuation">}</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'+'</span><span class="token punctuation">]</span> <span class="token operator">=</span> plus<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'-'</span><span class="token punctuation">]</span> <span class="token operator">=</span> minus<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'*'</span><span class="token punctuation">]</span> <span class="token operator">=</span> times<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'/'</span><span class="token punctuation">]</span> <span class="token operator">=</span> slash<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'('</span><span class="token punctuation">]</span> <span class="token operator">=</span> lparen<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">')'</span><span class="token punctuation">]</span> <span class="token operator">=</span> rparen<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'='</span><span class="token punctuation">]</span> <span class="token operator">=</span> eql<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">','</span><span class="token punctuation">]</span> <span class="token operator">=</span> comma<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'.'</span><span class="token punctuation">]</span> <span class="token operator">=</span> period<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">'#'</span><span class="token punctuation">]</span> <span class="token operator">=</span> neq<span class="token punctuation">;</span>
+	ssym<span class="token punctuation">[</span><span class="token string">';'</span><span class="token punctuation">]</span> <span class="token operator">=</span> semicolon<span class="token punctuation">;</span>
+	<span class="token comment">/*设置保留字名字 ,按照字母顺序 ,便于折半查找 */</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"begin"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"call"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"const"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"do"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"end"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"if"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"odd"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"procedure"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">8</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"read"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"then"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"var"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">11</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"while"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token punctuation">(</span>word<span class="token punctuation">[</span><span class="token number">12</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"write"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">/*设置保留字符号 */</span>
+	wsym<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">=</span> beginsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">=</span> callsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span> <span class="token operator">=</span> constsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span> <span class="token operator">=</span> dosym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span> <span class="token operator">=</span> endsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">]</span> <span class="token operator">=</span> ifsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span> <span class="token operator">=</span> oddsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span> <span class="token operator">=</span> procsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">8</span><span class="token punctuation">]</span> <span class="token operator">=</span> readsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">]</span> <span class="token operator">=</span> thensym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">]</span> <span class="token operator">=</span> varsym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">11</span><span class="token punctuation">]</span> <span class="token operator">=</span> whilesym<span class="token punctuation">;</span>
+	wsym<span class="token punctuation">[</span><span class="token number">12</span><span class="token punctuation">]</span> <span class="token operator">=</span> writesym<span class="token punctuation">;</span>
+	<span class="token comment">/*设置符号集 */</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> symnum<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		declbegsys<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+		statbegsys<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+		facbegsys<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token comment">/*设置声明开始符号集 */</span>
+	declbegsys<span class="token punctuation">[</span>constsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	declbegsys<span class="token punctuation">[</span>varsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	declbegsys<span class="token punctuation">[</span>procsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	<span class="token comment">/*设置语句开始符号集 */</span>
+	statbegsys<span class="token punctuation">[</span>beginsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	statbegsys<span class="token punctuation">[</span>callsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	statbegsys<span class="token punctuation">[</span>ifsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	statbegsys<span class="token punctuation">[</span>whilesym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	<span class="token comment">/*设置因子开始符号集 */</span>
+	facbegsys<span class="token punctuation">[</span>ident<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	facbegsys<span class="token punctuation">[</span>number<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	facbegsys<span class="token punctuation">[</span>lparen<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//集合运算部分</span>
+<span class="token keyword">int</span> <span class="token function">inset</span><span class="token punctuation">(</span><span class="token keyword">int</span> e<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> s<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">return</span> s<span class="token punctuation">[</span>e<span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">int</span> <span class="token function">addset</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> sr<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> s1<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> s2<span class="token punctuation">,</span> <span class="token keyword">int</span> n<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> n<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		sr<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> s1<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">||</span> s2<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">int</span> <span class="token function">subset</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> sr<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> s1<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> s2<span class="token punctuation">,</span> <span class="token keyword">int</span> n<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> n<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		sr<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> s1<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span> <span class="token punctuation">(</span><span class="token operator">!</span>s2<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">int</span> <span class="token function">mulset</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> sr<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> s1<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> s2<span class="token punctuation">,</span> <span class="token keyword">int</span> n<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> n<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		sr<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">=</span> s1<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span> s2<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//出错处理，打印出错位置和错误描述</span>
+<span class="token keyword">void</span> <span class="token function">error</span><span class="token punctuation">(</span><span class="token keyword">int</span> n<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">char</span> space<span class="token punctuation">[</span><span class="token number">256</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token function">memset</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>space<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	space<span class="token punctuation">[</span>cc <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span><span class="token comment">// 出错时当前符号已经读完，所以 cc-1 </span>
+	<span class="token keyword">switch</span> <span class="token punctuation">(</span>n<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">case</span> <span class="token number">1</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [变量%s在使用时未经定义].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">,</span>id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">2</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [函数%s在调用时未经定义].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">,</span>id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">3</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [变量%s出现重复定义，或变量与前面定义过的结构体名字重复].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">,</span>id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">4</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [过程%s出现重复定义].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">,</span>id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">5</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [赋值号两边的表达式类型不匹配].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">6</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [操作数类型不匹配或操作数类型与操作符不匹配].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">7</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [过程声明格式不正确（procedure后不为标识符）].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">8</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [read或write函数的调用不完整（括号缺失）].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">9</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [read函数的参数不是id].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">10</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span><span class="token string">"Error type [%d] at Line [%d]: [调用函数格式非法（call后不为过程标识符）].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">11</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [缺少赋值符号或赋值符号不正确].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//可能发生在语句定义、常变量定义与赋值时。</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">12</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [一条语句定义（多个）常量或变量时漏掉了逗号或者分号/过程结束时漏了分号].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">// 语句结束时或连续定义时缺少终止符号（end, ; ）</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">14</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [数字过长].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">16</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [if后缺少then语句].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">18</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [while语句缺少do].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">19</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [地址超出上界].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">20</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [逻辑表达式不合法（逻辑符号不合法）].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">21</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [因子标识符为过程].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">22</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [应输入)，表达式不完整].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> <span class="token number">24</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [不以.结尾].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">default</span><span class="token operator">:</span>
+			<span class="token function">sprintf</span><span class="token punctuation">(</span>space<span class="token punctuation">,</span> <span class="token string">"Error type [%d] at Line [%d]: [未知错误].\n"</span><span class="token punctuation">,</span> n<span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%s"</span><span class="token punctuation">,</span> space<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	err<span class="token operator">++</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//读取字符部分，先把字符存到缓冲区，然后进行读取，这里同时进行了行号的记录</span>
+<span class="token keyword">int</span> <span class="token function">getch</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>cc <span class="token operator">==</span> ll<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">feof</span><span class="token punctuation">(</span>fin<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token comment">//读到文件尾</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"program incomplete"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		ll <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		cc <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%d "</span><span class="token punctuation">,</span> <span class="token operator">++</span>lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">fprintf</span><span class="token punctuation">(</span>fa1<span class="token punctuation">,</span> <span class="token string">"%d "</span><span class="token punctuation">,</span> lineIndex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		ch <span class="token operator">=</span> <span class="token string">' '</span><span class="token punctuation">;</span>
+		<span class="token keyword">while</span> <span class="token punctuation">(</span>ch <span class="token operator">!=</span> <span class="token number">10</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token constant">EOF</span> <span class="token operator">==</span> <span class="token function">fscanf</span><span class="token punctuation">(</span>fin<span class="token punctuation">,</span> <span class="token string">"%c"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>ch<span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				line<span class="token punctuation">[</span>ll<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+				<span class="token keyword">break</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%c"</span><span class="token punctuation">,</span> ch<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">fprintf</span><span class="token punctuation">(</span>fa1<span class="token punctuation">,</span> <span class="token string">"%c"</span><span class="token punctuation">,</span> ch<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			line<span class="token punctuation">[</span>ll<span class="token punctuation">]</span> <span class="token operator">=</span> ch<span class="token punctuation">;</span>
+			ll<span class="token operator">++</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	ch <span class="token operator">=</span> line<span class="token punctuation">[</span>cc<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	cc<span class="token operator">++</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">// 词法分析 获取一个词法单元</span>
+<span class="token keyword">int</span> <span class="token function">getsym</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">,</span> j<span class="token punctuation">,</span> k<span class="token punctuation">;</span>
+	<span class="token keyword">while</span> <span class="token punctuation">(</span>ch <span class="token operator">==</span> <span class="token string">' '</span> <span class="token operator">||</span> ch <span class="token operator">==</span> <span class="token number">10</span> <span class="token operator">||</span> ch <span class="token operator">==</span> <span class="token number">9</span><span class="token punctuation">)</span> <span class="token comment">//忽略空白部分</span>
+	<span class="token punctuation">{<!-- --></span>
+		getchdo<span class="token punctuation">;</span> 
+
+	<span class="token punctuation">}</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">&gt;=</span> <span class="token string">'a'</span><span class="token operator">&amp;&amp;</span>ch <span class="token operator">&lt;=</span> <span class="token string">'z'</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		k <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>k <span class="token operator">&lt;</span> al<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				a<span class="token punctuation">[</span>k<span class="token punctuation">]</span> <span class="token operator">=</span> ch<span class="token punctuation">;</span>
+				k<span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			getchdo<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>ch <span class="token operator">&gt;=</span> <span class="token string">'a'</span><span class="token operator">&amp;&amp;</span>ch <span class="token operator">&lt;=</span> <span class="token string">'z'</span> <span class="token operator">||</span> ch <span class="token operator">&gt;=</span> <span class="token string">'0'</span><span class="token operator">&amp;&amp;</span>ch <span class="token operator">&lt;=</span> <span class="token string">'9'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		a<span class="token punctuation">[</span>k<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token function">strcpy</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> a<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		j <span class="token operator">=</span> norw <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">;</span>
+		<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+			k <span class="token operator">=</span> <span class="token punctuation">(</span>i <span class="token operator">+</span> j<span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token number">2</span><span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">strcmp</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> word<span class="token punctuation">[</span>k<span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				j <span class="token operator">=</span> k <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">strcmp</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> word<span class="token punctuation">[</span>k<span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token operator">&gt;=</span> <span class="token number">0</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				i <span class="token operator">=</span> k <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>i <span class="token operator">&lt;=</span> j<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">-</span> <span class="token number">1</span> <span class="token operator">&gt;</span> j<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			sym <span class="token operator">=</span> wsym<span class="token punctuation">[</span>k<span class="token punctuation">]</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{<!-- --></span>
+			sym <span class="token operator">=</span> ident<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">&gt;=</span> <span class="token string">'0'</span><span class="token operator">&amp;&amp;</span>ch <span class="token operator">&lt;=</span> <span class="token string">'9'</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			k <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			num <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			sym <span class="token operator">=</span> number<span class="token punctuation">;</span>
+			<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+				num <span class="token operator">=</span> <span class="token number">10</span> <span class="token operator">*</span> num <span class="token operator">+</span> ch <span class="token operator">-</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+				k<span class="token operator">++</span><span class="token punctuation">;</span>
+				getchdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>ch <span class="token operator">&gt;=</span> <span class="token string">'0'</span><span class="token operator">&amp;&amp;</span>ch <span class="token operator">&lt;=</span> <span class="token string">'9'</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 获取数字的值 */</span>
+			k<span class="token operator">--</span><span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>k <span class="token operator">&gt;</span> nmax<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">14</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">==</span> <span class="token string">':'</span><span class="token punctuation">)</span> <span class="token comment">// 检测赋值符号 </span>
+			<span class="token punctuation">{<!-- --></span>
+				getchdo<span class="token punctuation">;</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">==</span> <span class="token string">'='</span><span class="token punctuation">)</span>
+				<span class="token punctuation">{<!-- --></span>
+					sym <span class="token operator">=</span> becomes<span class="token punctuation">;</span>
+					getchdo<span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">else</span>
+				<span class="token punctuation">{<!-- --></span>
+					sym <span class="token operator">=</span> nul<span class="token punctuation">;</span> <span class="token comment">// 不能识别的符号 </span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">==</span> <span class="token string">'&lt;'</span><span class="token punctuation">)</span> <span class="token comment">//检测小于或小于等于符号 </span>
+				<span class="token punctuation">{<!-- --></span>
+					getchdo<span class="token punctuation">;</span>
+					<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">==</span> <span class="token string">'='</span><span class="token punctuation">)</span>
+					<span class="token punctuation">{<!-- --></span>
+						sym <span class="token operator">=</span> leq<span class="token punctuation">;</span>
+						getchdo<span class="token punctuation">;</span>
+					<span class="token punctuation">}</span>
+					<span class="token keyword">else</span>
+					<span class="token punctuation">{<!-- --></span>
+						sym <span class="token operator">=</span> lss<span class="token punctuation">;</span>
+					<span class="token punctuation">}</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">else</span>
+				<span class="token punctuation">{<!-- --></span>
+					<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">==</span> <span class="token string">'&gt;'</span><span class="token punctuation">)</span> <span class="token comment">// 大于或大于等于</span>
+					<span class="token punctuation">{<!-- --></span>
+						getchdo<span class="token punctuation">;</span>
+						<span class="token keyword">if</span> <span class="token punctuation">(</span>ch <span class="token operator">==</span> <span class="token string">'='</span><span class="token punctuation">)</span>
+						<span class="token punctuation">{<!-- --></span>
+							sym <span class="token operator">=</span> geq<span class="token punctuation">;</span>
+							getchdo<span class="token punctuation">;</span>
+						<span class="token punctuation">}</span>
+						<span class="token keyword">else</span>
+						<span class="token punctuation">{<!-- --></span>
+							sym <span class="token operator">=</span> gtr<span class="token punctuation">;</span>
+						<span class="token punctuation">}</span>
+					<span class="token punctuation">}</span>
+					<span class="token keyword">else</span>
+					<span class="token punctuation">{<!-- --></span>
+						sym <span class="token operator">=</span> ssym<span class="token punctuation">[</span>ch<span class="token punctuation">]</span><span class="token punctuation">;</span><span class="token comment">// 按单字符号处理</span>
+						<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> period<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+							getchdo<span class="token punctuation">;</span>
+						<span class="token punctuation">}</span>
+					<span class="token punctuation">}</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+
+<span class="token comment">//在名字表中加入一项</span>
+<span class="token keyword">void</span> <span class="token function">enter</span><span class="token punctuation">(</span><span class="token keyword">enum</span> <span class="token class-name">object</span> k<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span>pdx<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token punctuation">(</span><span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token operator">++</span><span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span>table<span class="token punctuation">[</span><span class="token punctuation">(</span><span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">,</span> id<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//全局变量 id 中已存有当前名字的名字</span>
+	table<span class="token punctuation">[</span><span class="token punctuation">(</span><span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">.</span>kind <span class="token operator">=</span> k<span class="token punctuation">;</span>
+	<span class="token keyword">switch</span> <span class="token punctuation">(</span>k<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">case</span> constant<span class="token operator">:</span> 
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>num <span class="token operator">&gt;=</span> <span class="token number">100000000000000</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">19</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				num <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			table<span class="token punctuation">[</span><span class="token punctuation">(</span><span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">.</span>val <span class="token operator">=</span> num<span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+		<span class="token keyword">case</span> variable<span class="token operator">:</span> <span class="token comment">/* 变量名字 */</span>
+			table<span class="token punctuation">[</span><span class="token punctuation">(</span><span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">.</span>level <span class="token operator">=</span> lev<span class="token punctuation">;</span>
+			table<span class="token punctuation">[</span><span class="token punctuation">(</span><span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">.</span>adr <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token operator">*</span>pdx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">(</span><span class="token operator">*</span>pdx<span class="token punctuation">)</span><span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span> <span class="token comment">/* 过程名字 */</span>
+		<span class="token keyword">case</span> procedur<span class="token operator">:</span>
+			table<span class="token punctuation">[</span><span class="token punctuation">(</span><span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">.</span>level <span class="token operator">=</span> lev<span class="token punctuation">;</span>
+			<span class="token keyword">break</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//查找ident在表中的位置</span>
+<span class="token keyword">int</span> <span class="token function">position</span><span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span> idt<span class="token punctuation">,</span> <span class="token keyword">int</span> tx<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+	<span class="token function">strcpy</span><span class="token punctuation">(</span>table<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">,</span> idt<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	i <span class="token operator">=</span> tx<span class="token punctuation">;</span>
+	<span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token function">strcmp</span><span class="token punctuation">(</span>table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">,</span> idt<span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		i<span class="token operator">--</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> i<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">pragma</span> <span class="token expression">region 递归下降</span></span>
+<span class="token comment">//分程序</span>
+<span class="token keyword">int</span> <span class="token function">block</span><span class="token punctuation">(</span><span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> tx<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+	<span class="token keyword">int</span> dx<span class="token punctuation">;</span> <span class="token comment">/* 名字分配到的相对地址 */</span>
+	<span class="token keyword">int</span> tx0<span class="token punctuation">;</span> <span class="token comment">/*保留初始 tx*/</span>
+	<span class="token keyword">bool</span> nxtlev<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token comment">/* 在下级函数的参数中，符号集合均为值参，但由于使用数组实现，传递进来的是指针， 为防止下级函数改变上级函数的集合，开辟新的空间传递给下级函数 */</span>
+	dx <span class="token operator">=</span> <span class="token number">3</span><span class="token punctuation">;</span>
+	tx0 <span class="token operator">=</span> tx<span class="token punctuation">;</span> <span class="token comment">/* 记录本层名字的初始位置 */</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>lev <span class="token operator">&gt;</span> levmax<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">15</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> constsym<span class="token punctuation">)</span> <span class="token comment">/* 收到常量声明符号，开始处理常量声明 */</span>
+		<span class="token punctuation">{<!-- --></span>
+			getsymdo<span class="token punctuation">;</span>
+			<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token function">constdeclarationdo</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>tx<span class="token punctuation">,</span> lev<span class="token punctuation">,</span> <span class="token operator">&amp;</span>dx<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/*dx 的值会被 constdeclaration 改变，使用指针 */</span>
+				<span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> comma<span class="token punctuation">)</span>
+				<span class="token punctuation">{<!-- --></span>
+					getsymdo<span class="token punctuation">;</span>
+					<span class="token function">constdeclarationdo</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>tx<span class="token punctuation">,</span> lev<span class="token punctuation">,</span> <span class="token operator">&amp;</span>dx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> semicolon<span class="token punctuation">)</span>
+				<span class="token punctuation">{<!-- --></span>
+					getsymdo<span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">else</span>
+				<span class="token punctuation">{<!-- --></span>
+					<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">12</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 漏掉了逗号或者分号 */</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> varsym<span class="token punctuation">)</span><span class="token comment">/* 收到变量声名符号，开始处理变量声名 */</span>
+		<span class="token punctuation">{<!-- --></span>
+			getsymdo<span class="token punctuation">;</span>
+			<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token function">vardeclarationdo</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>tx<span class="token punctuation">,</span> lev<span class="token punctuation">,</span> <span class="token operator">&amp;</span>dx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> comma<span class="token punctuation">)</span>
+				<span class="token punctuation">{<!-- --></span>
+					getsymdo<span class="token punctuation">;</span>
+					<span class="token function">vardeclarationdo</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>tx<span class="token punctuation">,</span> lev<span class="token punctuation">,</span> <span class="token operator">&amp;</span>dx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> semicolon<span class="token punctuation">)</span>
+				<span class="token punctuation">{<!-- --></span>
+					getsymdo<span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">else</span>
+				<span class="token punctuation">{<!-- --></span>
+					<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">12</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> procsym<span class="token punctuation">)</span><span class="token comment">/* 收到过程声名符号，开始处理过程声名 */</span>
+		<span class="token punctuation">{<!-- --></span>
+			getsymdo<span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token function">position</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> dx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span>
+				<span class="token punctuation">{<!-- --></span>
+					<span class="token keyword">if</span> <span class="token punctuation">(</span>table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>kind <span class="token operator">==</span> procedur<span class="token punctuation">)</span><span class="token comment">//过程重定义</span>
+						<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token function">enter</span><span class="token punctuation">(</span>procedur<span class="token punctuation">,</span> <span class="token operator">&amp;</span>tx<span class="token punctuation">,</span> lev<span class="token punctuation">,</span> <span class="token operator">&amp;</span>dx<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">/* 记录过程名字 */</span>
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">/*procedure 后应为标识符 */</span>
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> semicolon<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">12</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">/* 漏掉了分号 */</span>
+			<span class="token punctuation">}</span>
+			<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			nxtlev<span class="token punctuation">[</span>semicolon<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">-</span><span class="token number">1</span> <span class="token operator">==</span> <span class="token function">block</span><span class="token punctuation">(</span>lev <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">,</span> tx<span class="token punctuation">,</span> nxtlev<span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">;</span><span class="token comment">/* 递归调用 */</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> semicolon<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				getsymdo<span class="token punctuation">;</span>
+				<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> statbegsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				nxtlev<span class="token punctuation">[</span>ident<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+				nxtlev<span class="token punctuation">[</span>procsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">12</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 漏掉了分号 */</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> statbegsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>ident<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>period<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token function">inset</span><span class="token punctuation">(</span>sym<span class="token punctuation">,</span> declbegsys<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 直到没有声明符号 */</span>
+	table<span class="token punctuation">[</span>tx0<span class="token punctuation">]</span><span class="token punctuation">.</span>size <span class="token operator">=</span> dx<span class="token punctuation">;</span> <span class="token comment">/* 声明部分中每增加一条声明都会给dx 增加 1,声明部分已经结束 ,dx 就是当前过程数据的 size*/</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>tableswitch<span class="token punctuation">)</span> <span class="token comment">/* 输出名字表 */</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"TABLE:\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>tx0 <span class="token operator">+</span> <span class="token number">1</span> <span class="token operator">&gt;</span> tx<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"NULL\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">for</span> <span class="token punctuation">(</span>i <span class="token operator">=</span> tx0 <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span> i <span class="token operator">&lt;=</span> tx<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">switch</span> <span class="token punctuation">(</span>table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>kind<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">case</span> constant<span class="token operator">:</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%d const %s"</span><span class="token punctuation">,</span> i<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"val=%d\n"</span><span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>val<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fprintf</span><span class="token punctuation">(</span>fas<span class="token punctuation">,</span> <span class="token string">"%d const %s"</span><span class="token punctuation">,</span> i<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fprintf</span><span class="token punctuation">(</span>fas<span class="token punctuation">,</span> <span class="token string">"val=%d\n"</span><span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>val<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token keyword">break</span><span class="token punctuation">;</span>
+			<span class="token keyword">case</span> variable<span class="token operator">:</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%d var%s"</span><span class="token punctuation">,</span> i<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"lev=%d addr=%d\n"</span><span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>level<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>adr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fprintf</span><span class="token punctuation">(</span>fas<span class="token punctuation">,</span> <span class="token string">"%d var %s"</span><span class="token punctuation">,</span> i<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fprintf</span><span class="token punctuation">(</span>fas<span class="token punctuation">,</span> <span class="token string">"lev=%d addr=%d\n"</span><span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>level<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>adr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token keyword">break</span><span class="token punctuation">;</span>
+			<span class="token keyword">case</span> procedur<span class="token operator">:</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%d proc%s"</span><span class="token punctuation">,</span> i<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"lev=%d addr=%d size = %d\n"</span><span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>level<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>adr<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fprintf</span><span class="token punctuation">(</span>fas<span class="token punctuation">,</span> <span class="token string">"%d proc%s"</span><span class="token punctuation">,</span> i<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">fprintf</span><span class="token punctuation">(</span>fas<span class="token punctuation">,</span> <span class="token string">"lev=%d adr=%d size=%d \n"</span><span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>level<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>adr<span class="token punctuation">,</span> table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token keyword">break</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	nxtlev<span class="token punctuation">[</span>semicolon<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	nxtlev<span class="token punctuation">[</span>endsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	<span class="token function">statementdo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> <span class="token operator">&amp;</span>tx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">//常量声明处理</span>
+<span class="token keyword">int</span> <span class="token function">constdeclaration</span><span class="token punctuation">(</span><span class="token keyword">int</span> <span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span> pdx<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">position</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> <span class="token operator">*</span>ptx<span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token comment">//重定义</span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		getsymdo<span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> eql <span class="token operator">||</span> sym <span class="token operator">==</span> becomes<span class="token punctuation">)</span><span class="token comment">//为=或:=</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> becomes<span class="token punctuation">)</span><span class="token comment">//重复写赋值符号</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">11</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			getsymdo<span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> number<span class="token punctuation">)</span><span class="token comment">//是常量说明，则向下</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">enter</span><span class="token punctuation">(</span>constant<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">,</span> pdx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">5</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//常量声明后面不为数字，导致错误5</span>
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">11</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 常量说明标识后应是 =*/</span>
+			getsymdo<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/*const 后应是标识 */</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//变量定义</span>
+<span class="token keyword">int</span> <span class="token function">vardeclaration</span><span class="token punctuation">(</span><span class="token keyword">int</span> <span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span> pdx<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">position</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> <span class="token operator">*</span>ptx<span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token comment">//重定义</span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">enter</span><span class="token punctuation">(</span>variable<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">,</span> pdx<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">// 填写名字表</span>
+		getsymdo<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+		<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//语句</span>
+<span class="token keyword">int</span> <span class="token function">statement</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">,</span> cx1<span class="token punctuation">,</span> cx2<span class="token punctuation">;</span>
+	<span class="token keyword">bool</span> nxtlev<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		i <span class="token operator">=</span> <span class="token function">position</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> <span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token comment">//未定义</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>kind <span class="token operator">!=</span> variable<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">5</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//赋值号两边的表达式类型不匹配（左部）</span>
+			i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		getsymdo<span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> becomes<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			getsymdo<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">11</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span> symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">expressiondo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> readsym<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			getsymdo<span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> lparen<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//缺失左括号</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span>
+				<span class="token punctuation">{<!-- --></span>
+					i <span class="token operator">=</span> <span class="token function">position</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> <span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+					<span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+					<span class="token punctuation">{<!-- --></span>
+						<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//使用变量时未定义</span>
+					<span class="token punctuation">}</span>
+					<span class="token comment">//else if(table[i].kind!=)</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">else</span>
+					<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">9</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//read函数的参数不为id</span>
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> comma<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 一条 read 语句可读多个变量 */</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> rparen<span class="token punctuation">)</span>
+				<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//缺失右括号</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+
+				getsymdo<span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> writesym<span class="token punctuation">)</span> <span class="token comment">/* 准备按照 write 语句处理，与 read 类似 */</span>
+			<span class="token punctuation">{<!-- --></span>
+				getsymdo<span class="token punctuation">;</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> lparen<span class="token punctuation">)</span> 
+					<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//缺失左括号</span>
+				<span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+
+					getsymdo<span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">do</span> <span class="token punctuation">{<!-- --></span>
+					<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+					nxtlev<span class="token punctuation">[</span>rparen<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+					nxtlev<span class="token punctuation">[</span>comma<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span> <span class="token comment">/* write 的后跟符号为） or，*/</span>
+					<span class="token function">expressiondo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">/* 调用表达式处理，此处与 read 不同， read 为给变量赋值 */</span>
+				<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> comma<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> rparen<span class="token punctuation">)</span>
+					<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//缺失有括号</span>
+				<span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+
+					getsymdo<span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> callsym<span class="token punctuation">)</span> <span class="token comment">/* 准备按照 call 语句处理 */</span>
+				<span class="token punctuation">{<!-- --></span>
+					getsymdo<span class="token punctuation">;</span>
+					<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> ident<span class="token punctuation">)</span>
+					<span class="token punctuation">{<!-- --></span>
+						<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/*call 后应为标识符 */</span>
+						getsymdo<span class="token punctuation">;</span>
+					<span class="token punctuation">}</span>
+					<span class="token keyword">else</span>
+					<span class="token punctuation">{<!-- --></span>
+						i <span class="token operator">=</span> <span class="token function">position</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> <span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+						<span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+							<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 过程未找到 */</span>
+						<span class="token keyword">else</span>
+						<span class="token punctuation">{<!-- --></span>
+							<span class="token keyword">if</span> <span class="token punctuation">(</span>table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>kind <span class="token operator">!=</span> procedur<span class="token punctuation">)</span>
+								<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/*call 后标识符应为过程 */</span>
+							
+						<span class="token punctuation">}</span>
+						getsymdo<span class="token punctuation">;</span>
+					<span class="token punctuation">}</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">else</span>
+				<span class="token punctuation">{<!-- --></span>
+					<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ifsym<span class="token punctuation">)</span> <span class="token comment">/* 准备按照 if 语句处理 */</span>
+					<span class="token punctuation">{<!-- --></span>
+						getsymdo<span class="token punctuation">;</span>
+						<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+						nxtlev<span class="token punctuation">[</span>thensym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+						nxtlev<span class="token punctuation">[</span>dosym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span> <span class="token comment">/* 后跟符号为 then 或 do*/</span>
+						<span class="token function">conditiondo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/*调用条件处理（逻辑运算）函数
+						*/</span>
+						<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> thensym<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+							getsymdo<span class="token punctuation">;</span>
+						<span class="token punctuation">}</span>
+						<span class="token keyword">else</span>
+						<span class="token punctuation">{<!-- --></span>
+							<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">16</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/*缺少 then*/</span>
+							<span class="token comment">//getsymdo;</span>
+						<span class="token punctuation">}</span>
+						<span class="token function">statementdo</span><span class="token punctuation">(</span>fsys<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 处理 then 后的语句 */</span>
+					<span class="token punctuation">}</span>
+					<span class="token keyword">else</span>
+					<span class="token punctuation">{<!-- --></span>
+						<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> beginsym<span class="token punctuation">)</span> <span class="token comment">/* 准备按照复合语句处理 */</span>
+						<span class="token punctuation">{<!-- --></span>
+							getsymdo<span class="token punctuation">;</span>
+							<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+							nxtlev<span class="token punctuation">[</span>semicolon<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+							nxtlev<span class="token punctuation">[</span>endsym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span><span class="token comment">/* 后跟符号为分号或 end*/</span>
+							<span class="token comment">/* 循环调用语句处理函数， 直到下一个符号不是语句开始符号或收到 end*/</span>
+							<span class="token function">statementdo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+							<span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token function">inset</span><span class="token punctuation">(</span>sym<span class="token punctuation">,</span> statbegsys<span class="token punctuation">)</span> <span class="token operator">||</span> sym <span class="token operator">==</span> semicolon<span class="token punctuation">)</span>
+							<span class="token punctuation">{<!-- --></span>
+								<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> semicolon<span class="token punctuation">)</span> 
+								<span class="token punctuation">{<!-- --></span>
+
+									getsymdo<span class="token punctuation">;</span>
+								<span class="token punctuation">}</span>
+								<span class="token keyword">else</span>
+								<span class="token punctuation">{<!-- --></span>
+									<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">12</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">/* 缺少分号 */</span>
+									getsymdo<span class="token punctuation">;</span>
+								<span class="token punctuation">}</span>
+								<span class="token function">statementdo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+							<span class="token punctuation">}</span>
+							<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> endsym<span class="token punctuation">)</span>
+							<span class="token punctuation">{<!-- --></span>
+
+								getsymdo<span class="token punctuation">;</span>
+							<span class="token punctuation">}</span>
+							<span class="token keyword">else</span>
+							<span class="token punctuation">{<!-- --></span>
+								<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">12</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 缺少 end 或分号 */</span>
+								getsymdo<span class="token punctuation">;</span>
+							<span class="token punctuation">}</span>
+						<span class="token punctuation">}</span>
+						<span class="token keyword">else</span>
+						<span class="token punctuation">{<!-- --></span>
+							<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> whilesym<span class="token punctuation">)</span><span class="token comment">/* 准备按照 while 语句处理 */</span>
+							<span class="token punctuation">{<!-- --></span>
+								getsymdo<span class="token punctuation">;</span>
+								<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+								nxtlev<span class="token punctuation">[</span>dosym<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span><span class="token comment">/* 后跟符号为 do*/</span>
+								<span class="token function">conditiondo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/*调用条件处理 */</span>
+								<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> dosym<span class="token punctuation">)</span>
+								<span class="token punctuation">{<!-- --></span>
+									getsymdo<span class="token punctuation">;</span>
+								<span class="token punctuation">}</span>
+								<span class="token keyword">else</span>
+								<span class="token punctuation">{<!-- --></span>
+									<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">18</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 缺少 do*/</span>
+									<span class="token comment">//return 0;</span>
+								<span class="token punctuation">}</span>
+								<span class="token function">statementdo</span><span class="token punctuation">(</span>fsys<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 循环体 */</span>							
+							<span class="token punctuation">}</span>
+						<span class="token punctuation">}</span>
+					<span class="token punctuation">}</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//表达式</span>
+<span class="token keyword">int</span> <span class="token function">expression</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">enum</span> <span class="token class-name">symbol</span> addop<span class="token punctuation">;</span> <span class="token comment">/* 用于保存正负号 */</span>
+	<span class="token keyword">bool</span> nxtlev<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> plus <span class="token operator">||</span> sym <span class="token operator">==</span> minus<span class="token punctuation">)</span> <span class="token comment">/* 开头的正负号，此时当前表达式被看作一个正的或负的项 */</span>
+	<span class="token punctuation">{<!-- --></span>
+		addop <span class="token operator">=</span> sym<span class="token punctuation">;</span> <span class="token comment">/* 保存开头的正负号 */</span>
+		getsymdo<span class="token punctuation">;</span>
+		<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>plus<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>minus<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		<span class="token function">termdo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 处理项 */</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span> <span class="token comment">/* 此时表达式被看作项的加减 */</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>plus<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>minus<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		<span class="token function">termdo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 处理项 */</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> plus <span class="token operator">||</span> sym <span class="token operator">==</span> minus<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		addop <span class="token operator">=</span> sym<span class="token punctuation">;</span>
+		getsymdo<span class="token punctuation">;</span>
+		<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>plus<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>minus<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		<span class="token function">termdo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 处理项 */</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//项</span>
+<span class="token keyword">int</span> <span class="token function">term</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">enum</span> <span class="token class-name">symbol</span> mulop<span class="token punctuation">;</span> <span class="token comment">/* 用于保存乘除法符号 */</span>
+	<span class="token keyword">bool</span> nxtlev<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	nxtlev<span class="token punctuation">[</span>times<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	nxtlev<span class="token punctuation">[</span>slash<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	<span class="token function">factordo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 处理因子 */</span>
+	<span class="token keyword">while</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> times <span class="token operator">||</span> sym <span class="token operator">==</span> slash<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		mulop <span class="token operator">=</span> sym<span class="token punctuation">;</span>
+		getsymdo<span class="token punctuation">;</span>
+		<span class="token function">factordo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">//因子</span>
+<span class="token keyword">int</span> <span class="token function">factor</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+	<span class="token keyword">bool</span> nxtlev<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> ident<span class="token punctuation">)</span> <span class="token comment">/* 因子为常量或者变量 */</span>
+	<span class="token punctuation">{<!-- --></span>
+		i <span class="token operator">=</span> <span class="token function">position</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> <span class="token operator">*</span>ptx<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 查找名字 */</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>i <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 标识符未声明 */</span>
+			<span class="token comment">//getsymdo;</span>
+			<span class="token comment">//break;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span> <span class="token keyword">if</span><span class="token punctuation">(</span>table<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>kind<span class="token operator">==</span>procedur<span class="token punctuation">)</span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">6</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//因子为过程时，使得操作数不合法或表达式运算不合法，导致错误6：操作数类型不匹配或操作数类型与操作符不匹配</span>
+		getsymdo<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> number<span class="token punctuation">)</span> <span class="token comment">/* 因子为数*/</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>num <span class="token operator">&gt;=</span> <span class="token number">100000000000000</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">14</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			num <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		getsymdo<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>	
+	<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> lparen<span class="token punctuation">)</span> <span class="token comment">/* 因子为表达式 */</span>
+	<span class="token punctuation">{<!-- --></span>
+		getsymdo<span class="token punctuation">;</span>
+		<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>rparen<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		<span class="token function">expressiondo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> rparen<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			getsymdo<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">22</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">/* 缺少右括号 */</span>
+			getsymdo<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token comment">//条件</span>
+<span class="token keyword">int</span> <span class="token function">condition</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">enum</span> <span class="token class-name">symbol</span> relop<span class="token punctuation">;</span>
+	<span class="token keyword">bool</span> nxtlev<span class="token punctuation">[</span>symnum<span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">==</span> oddsym<span class="token punctuation">)</span> <span class="token comment">// 准备按照 odd 运算处理</span>
+	<span class="token punctuation">{<!-- --></span>
+		getsymdo<span class="token punctuation">;</span>
+		<span class="token function">expressiondo</span><span class="token punctuation">(</span>fsys<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">memcpy</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> fsys<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token punctuation">)</span><span class="token operator">*</span>symnum<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>eql<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>neq<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>lss<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>leq<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>gtr<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		nxtlev<span class="token punctuation">[</span>geq<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+		<span class="token function">expressiondo</span><span class="token punctuation">(</span>nxtlev<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>sym <span class="token operator">!=</span> eql <span class="token operator">&amp;&amp;</span> sym <span class="token operator">!=</span> neq <span class="token operator">&amp;&amp;</span> sym <span class="token operator">!=</span> lss <span class="token operator">&amp;&amp;</span> sym <span class="token operator">!=</span> leq <span class="token operator">&amp;&amp;</span> sym <span class="token operator">!=</span> gtr <span class="token operator">&amp;&amp;</span> sym <span class="token operator">!=</span> geq<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token function">error</span><span class="token punctuation">(</span><span class="token number">20</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{<!-- --></span>
+			relop <span class="token operator">=</span> sym<span class="token punctuation">;</span>
+			getsymdo<span class="token punctuation">;</span>
+			<span class="token function">expressiondo</span><span class="token punctuation">(</span>fsys<span class="token punctuation">,</span> ptx<span class="token punctuation">,</span> lev<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">pragma</span> <span class="token expression">endregion</span></span>
+</code></pre> 
+<h3><a id="43__1087"></a>4.3 递归下降子程序的声明</h3> 
+<pre><code class="prism language-cpp">分程序：
+<span class="token keyword">int</span> <span class="token function">block</span><span class="token punctuation">(</span><span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> tx<span class="token punctuation">,</span> <span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">)</span>
+常量声明处理：
+<span class="token keyword">int</span> <span class="token function">constdeclaration</span><span class="token punctuation">(</span><span class="token keyword">int</span> <span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span> pdx<span class="token punctuation">)</span>
+变量定义：
+<span class="token keyword">int</span> <span class="token function">vardeclaration</span><span class="token punctuation">(</span><span class="token keyword">int</span> <span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span> pdx<span class="token punctuation">)</span>
+语句：
+<span class="token keyword">int</span> <span class="token function">statement</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+表达式：
+<span class="token keyword">int</span> <span class="token function">expression</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+项：
+<span class="token keyword">int</span> <span class="token function">term</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+因子：
+<span class="token keyword">int</span> <span class="token function">factor</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span>fsys<span class="token punctuation">,</span> <span class="token keyword">int</span> <span class="token operator">*</span>ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+条件：
+<span class="token keyword">int</span> <span class="token function">condition</span><span class="token punctuation">(</span><span class="token keyword">bool</span><span class="token operator">*</span> fsys<span class="token punctuation">,</span> <span class="token keyword">int</span><span class="token operator">*</span> ptx<span class="token punctuation">,</span> <span class="token keyword">int</span> lev<span class="token punctuation">)</span>
+
+</code></pre> 
+<h2><a id="5__1107"></a>5 常变量说明</h2> 
+<p>变量：<br> <img src="https://images2.imgbox.com/ff/e7/d0EXdyRj_o.png" alt="在这里插入图片描述"></p> 
+<p>常量：</p> 
+<pre><code>enum symbol {}//包含32种类型符号的枚举
+enum object { 	constant,	variable,	procedur};
+//object 为三种标识符的类型
+struct tablestruct{//名字表结构
+	char name[al]; // 名字 
+	enum object kind; // 类型仅三种
+};
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ff/0a/XvoCm1Eu_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="6__1123"></a>6 运行结果</h2> 
+<p><strong>测试的txt文件需要与debug的exe文件在同一目录</strong><br> （1）测试一：对错误1、2、3、4进行测试。<br> 测试代码t1.txt：</p> 
+<pre><code>var m,n,q;
+procedure gcd;
+begin
+	while r#0 do
+	begin
+		q := m / n;
+		r := m - q * n;
+		m := n;
+		n := r;
+	end;
+end;
+procedure gcd;
+begin
+end;
+var m;
+begin
+	call gcd;
+	call fun;
+end.
+</code></pre> 
+<p><img src="https://images2.imgbox.com/9a/55/gdw3yEU2_o.png" alt="在这里插入图片描述"></p> 
+<p>（2）测试二：对错误5、6、7进行测试。<br> 测试代码t2.txt：</p> 
+<pre><code>var m,n,q;
+const con = 5;
+procedure var;
+begin
+end;
+procedure fun;
+const co = fun;
+const con = 6;
+begin
+end;
+begin
+	m:=fun+2;
+	fun:=1;
+	m:=1;
+	con:=2;
+	con:=con;
+	m:=con;	
+end.
+</code></pre> 
+<p><img src="https://images2.imgbox.com/9d/2b/QHLyyd5i_o.png" alt="在这里插入图片描述"><br> （3）测试三：对错误8、9、10进行测试。<br> 测试代码t3.txt：</p> 
+<pre><code>var m;
+procedure fun;
+begin
+end;
+begin
+	read m;
+	write(m;
+	write(m);
+	read(m);
+	read(var);
+	call fun;
+	call var;
+	call m;
+end.
+</code></pre> 
+<p><img src="https://images2.imgbox.com/f9/9d/k7mMiHgh_o.png" alt="在这里插入图片描述"><br> （4）测试四：对错误12、14、16、18、20进行测试。<br> 测试代码t4.txt：</p> 
+<pre><code>var m;
+var a b;
+const con=1234567891234567;
+procedure fun;
+begin
+end;
+begin
+	if m=5
+	then m:=m+1;
+	if m=4
+	m:=m-1;
+	while m&gt;=7
+	do m:=m-1;
+	while m=6
+	m:=1+2;	
+	if m-m
+	then write(m);
+end.
+
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a5/5a/sgAh6Soi_o.png" alt="在这里插入图片描述"><br> （5）测试五：对错误22、24进行测试。<br> 测试代码t5.txt：</p> 
+<pre><code>var m;
+var a b;
+const con=1234567891234567;
+procedure fun;
+begin
+end;
+begin
+	m:=(6+8)/5+(4);
+	m:=(5+7;
+end
+
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d6/6f/clrUi5NG_o.png" alt="在这里插入图片描述"><br> （6）测试六：无错误测试。<br> 测试代码t6.txt：</p> 
+<pre><code>var m, n, r, q;
+procedure gcd;
+begin
+while r#0 do
+begin
+q := m / n;
+r := m - q * n;
+m := n;
+n := r;
+end;
+end;
+begin
+read(m);
+read(n);
+if m &lt; n then
+begin
+r := m;
+m := n;
+n := r;
+end;
+begin
+r:=1;
+call gcd;
+write(m);
+if odd r
+then write(m)
+end;
+end.
+
+</code></pre> 
+<p><img src="https://images2.imgbox.com/19/38/X5DKkd7c_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/906bbe1763cb0b2ba94f8e63c52a5b10/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Java-String长度限制</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/d4e2260515a2ea9bfbae59365ffc60f7/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">vue-cli2和vue-cli3下的lib-flexible适配（移动端&#43;大屏）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

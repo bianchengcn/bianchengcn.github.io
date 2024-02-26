@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>VGGNet网络详解与模型搭建 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="VGGNet网络详解与模型搭建" />
+<meta property="og:description" content="文章目录 1 模型介绍2 模型结构3 模型特性4 Pytorch模型搭建代码 1 模型介绍 ​ VGGNet是由牛津大学视觉几何小组（Visual Geometry Group, VGG）提出的一种深层卷积网络结构，他们以7.32%的错误率赢得了2014年ILSVRC分类任务的亚军（冠军由GoogLeNet以6.65%的错误率夺得）和25.32%的错误率夺得定位任务（Localization）的第一名（GoogLeNet错误率为26.44%）,网络名称VGGNet取自该小组名缩写。VGG网络原论文《Very Deep Convolutional Networks For Large-Scale Image Recognition》发表于ICLR-2015，VGGNet所提出的 3 × 3 3\times3 3×3卷积核的思想为后来许多模型所沿用。
+2 模型结构 ​ 在原论文中，作者尝试了不同深度的配置（11层，13层，16层，19层），是否使用LRN（Local Response Normalization）以及卷积核1x1与卷积核3x3的差异，VGGNet尝试使用了6种不同的模型结构，分别对应VGG11、VGG11-LRN、VGG13、VGG16-1、VGG16-3和VGG19，不同的后缀数值表示不同的网络层数（VGG11-LRN表示在第一层中采用了LRN的VGG11，VGG16-1表示后三组卷积块中最后一层卷积采用卷积核尺寸为 1 × 1 1\times1 1×1，相应的VGG16-3表示卷积核尺寸为 3 × 3 3\times3 3×3）。下表是从原论文中截取的几种VGG模型的配置表，VGGNet网络模型结构非常工整，其卷积层全部都采用了大小为3x3，步距为1，padding为1的卷积操作（即same卷积，经过卷积后不会改变特征矩阵的高和宽）；最大池化下采样层全部都是池化核大小为2，步距为2的池化操作，每次通过最大池化下采样后特征矩阵的高和宽都会缩减为原来的一半。
+​ 我们通常使用的VGG模型是表格中的VGG16(D)配置，根据表格中的配置信息以及上文所讲的卷积层和池化层的详细参数，可以搭建如下图所示的feature map大小的变化图。在VGG模型中，卷积操作不会改变feature map的大小，池化操作会使feature map大小减小为原来的一半。
+3 模型特性 （1）通过堆叠多个3x3的卷积核来替代大尺度卷积核
+​ 论文中提到，可以通过堆叠两层 3 × 3 3\times 3 3×3的卷积核替代一层 5 × 5 5\times 5 5×5的卷积核，堆叠三层 3 × 3 3\times3 3×3的卷积核替代一层 7 × 7 7\times7 7×7的卷积核。这样的连接方式使得网络参数量更小（见下例），而且多层的激活函数令网络对特征的学习能力更强。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/f136caf7fd29958bf133a7997f81ca19/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-02-04T21:19:20+08:00" />
+<meta property="article:modified_time" content="2022-02-04T21:19:20+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">VGGNet网络详解与模型搭建</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><a href="#1__1" rel="nofollow">1 模型介绍</a></li><li><a href="#2__5" rel="nofollow">2 模型结构</a></li><li><a href="#3__12" rel="nofollow">3 模型特性</a></li><li><a href="#4_Pytorch_28" rel="nofollow">4 Pytorch模型搭建代码</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h3><a id="1__1"></a>1 模型介绍</h3> 
+<p>​ VGGNet是由牛津大学视觉几何小组（Visual Geometry Group, VGG）提出的一种深层卷积网络结构，他们以7.32%的错误率赢得了2014年ILSVRC分类任务的亚军（冠军由GoogLeNet以6.65%的错误率夺得）和25.32%的错误率夺得定位任务（Localization）的第一名（GoogLeNet错误率为26.44%）,网络名称VGGNet取自该小组名缩写。VGG网络原论文《Very Deep Convolutional Networks For Large-Scale Image Recognition》发表于ICLR-2015，VGGNet所提出的<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         3 
+        
+       
+         × 
+        
+       
+         3 
+        
+       
+      
+        3\times3 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">3</span></span></span></span></span>卷积核的思想为后来许多模型所沿用。</p> 
+<h3><a id="2__5"></a>2 模型结构</h3> 
+<p>​ 在原论文中，作者尝试了不同深度的配置（11层，13层，16层，19层），是否使用LRN（Local Response Normalization）以及卷积核1x1与卷积核3x3的差异，VGGNet尝试使用了6种不同的模型结构，分别对应VGG11、VGG11-LRN、VGG13、VGG16-1、VGG16-3和VGG19，不同的后缀数值表示不同的网络层数（VGG11-LRN表示在第一层中采用了LRN的VGG11，VGG16-1表示后三组卷积块中最后一层卷积采用卷积核尺寸为<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         1 
+        
+       
+         × 
+        
+       
+         1 
+        
+       
+      
+        1\times1 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">1</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">1</span></span></span></span></span>，相应的VGG16-3表示卷积核尺寸为<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         3 
+        
+       
+         × 
+        
+       
+         3 
+        
+       
+      
+        3\times3 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">3</span></span></span></span></span>）。下表是从原论文中截取的几种VGG模型的配置表，VGGNet网络模型结构非常工整，其卷积层全部都采用了大小为3x3，步距为1，padding为1的卷积操作（即<code>same</code>卷积，经过卷积后不会改变特征矩阵的高和宽）；最大池化下采样层全部都是池化核大小为2，步距为2的池化操作，每次通过最大池化下采样后特征矩阵的高和宽都会缩减为原来的一半。</p> 
+<p><img src="https://images2.imgbox.com/05/7d/jepppfF2_o.png" alt="在这里插入图片描述"></p> 
+<p>​ 我们通常使用的VGG模型是表格中的VGG16(D)配置，根据表格中的配置信息以及上文所讲的卷积层和池化层的详细参数，可以搭建如下图所示的feature map大小的变化图。在VGG模型中，卷积操作不会改变feature map的大小，池化操作会使feature map大小减小为原来的一半。<br> <img src="https://images2.imgbox.com/39/3c/35a3KlvL_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="3__12"></a>3 模型特性</h3> 
+<p><strong>（1）通过堆叠多个3x3的卷积核来替代大尺度卷积核</strong></p> 
+<p>​ 论文中提到，可以通过堆叠两层<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         3 
+        
+       
+         × 
+        
+       
+         3 
+        
+       
+      
+        3\times 3 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">3</span></span></span></span></span>的卷积核替代一层<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         5 
+        
+       
+         × 
+        
+       
+         5 
+        
+       
+      
+        5\times 5 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">5</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">5</span></span></span></span></span>的卷积核，堆叠三层<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         3 
+        
+       
+         × 
+        
+       
+         3 
+        
+       
+      
+        3\times3 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">3</span></span></span></span></span>的卷积核替代一层<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         7 
+        
+       
+         × 
+        
+       
+         7 
+        
+       
+      
+        7\times7 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">7</span></span></span></span></span>的卷积核。这样的连接方式使得网络参数量更小（见下例），而且多层的激活函数令网络对特征的学习能力更强。</p> 
+<ul><li> <p>如果使用一层卷积核大小为7的卷积所需参数（第一个C代表输入特征矩阵的channel，第二个C代表卷积核的个数也就是输出特征矩阵的深度）：<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           7 
+          
+         
+           × 
+          
+         
+           7 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           = 
+          
+         
+           49 
+          
+          
+          
+            C 
+           
+          
+            2 
+           
+          
+         
+        
+          7\times 7\times C\times C=49C^2 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">7</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2777777777777778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.2777777777777778em;"></span></span><span class="base"><span class="strut" style="height: 0.8141079999999999em; vertical-align: 0em;"></span><span class="mord">4</span><span class="mord">9</span><span class="mord"><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.8141079999999999em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span></p> </li><li> <p>如果使用三层卷积核大小为3的卷积所需参数：<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+       
+        
+         
+         
+           3 
+          
+         
+           × 
+          
+         
+           3 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           + 
+          
+         
+           3 
+          
+         
+           × 
+          
+         
+           3 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           + 
+          
+         
+           3 
+          
+         
+           × 
+          
+         
+           3 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           × 
+          
+         
+           C 
+          
+         
+           = 
+          
+         
+           27 
+          
+          
+          
+            C 
+           
+          
+            2 
+           
+          
+         
+        
+          3\times 3\times C\times C + 3\times 3\times C\times C + 3\times 3\times C\times C=27C^2 
+         
+        
+      </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.76666em; vertical-align: -0.08333em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.68333em; vertical-align: 0em;"></span><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="mspace" style="margin-right: 0.2777777777777778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.2777777777777778em;"></span></span><span class="base"><span class="strut" style="height: 0.8141079999999999em; vertical-align: 0em;"></span><span class="mord">2</span><span class="mord">7</span><span class="mord"><span class="mord mathdefault" style="margin-right: 0.07153em;">C</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.8141079999999999em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span></p> <p>经过对比明显使用3层大小为3x3的卷积核比使用一层7x7的卷积核参数更少</p> </li></ul> 
+<p><strong>（2）整个网络都使用了同样大小的卷积核尺寸<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          3 
+         
+        
+          × 
+         
+        
+          3 
+         
+        
+       
+         3\times3 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">3</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">3</span></span></span></span></span>和最大池化尺寸<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          2 
+         
+        
+          × 
+         
+        
+          2 
+         
+        
+       
+         2\times2 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.72777em; vertical-align: -0.08333em;"></span><span class="mord">2</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right: 0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height: 0.64444em; vertical-align: 0em;"></span><span class="mord">2</span></span></span></span></span>，模型十分工整。</strong></p> 
+<p><strong>（3）VGGNet在训练时有一个小技巧，先训练浅层的的简单网络VGG11，再复用VGG11的权重来初始化VGG13，如此反复训练并初始化VGG19，能够使训练时收敛的速度更快。</strong></p> 
+<h3><a id="4_Pytorch_28"></a>4 Pytorch模型搭建代码</h3> 
+<p>注：由于LRN层对训练结果影响不大，故代码中去除了LRN层</p> 
+<pre><code class="prism language-python"><span class="token keyword">import</span> torch
+<span class="token keyword">import</span> torch<span class="token punctuation">.</span>nn <span class="token keyword">as</span> nn
+
+
+<span class="token keyword">class</span> <span class="token class-name">VGG</span><span class="token punctuation">(</span>nn<span class="token punctuation">.</span>Module<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">def</span> <span class="token function">__init__</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> features<span class="token punctuation">,</span> num_classes<span class="token operator">=</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token builtin">super</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>__init__<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        self<span class="token punctuation">.</span>features <span class="token operator">=</span> features
+        self<span class="token punctuation">.</span>classifier <span class="token operator">=</span> nn<span class="token punctuation">.</span>Sequential<span class="token punctuation">(</span>
+            nn<span class="token punctuation">.</span>Linear<span class="token punctuation">(</span><span class="token number">512</span> <span class="token operator">*</span> <span class="token number">7</span> <span class="token operator">*</span> <span class="token number">7</span><span class="token punctuation">,</span> <span class="token number">4096</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>ReLU<span class="token punctuation">(</span>inplace<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>Dropout<span class="token punctuation">(</span>p<span class="token operator">=</span><span class="token number">0.5</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>Linear<span class="token punctuation">(</span><span class="token number">4096</span><span class="token punctuation">,</span> <span class="token number">4096</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>ReLU<span class="token punctuation">(</span>inplace<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>Dropout<span class="token punctuation">(</span>p<span class="token operator">=</span><span class="token number">0.5</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>Linear<span class="token punctuation">(</span><span class="token number">4096</span><span class="token punctuation">,</span> num_classes<span class="token punctuation">)</span>
+        <span class="token punctuation">)</span>
+
+    <span class="token keyword">def</span> <span class="token function">forward</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> inputs<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        x <span class="token operator">=</span> self<span class="token punctuation">.</span>features<span class="token punctuation">(</span>inputs<span class="token punctuation">)</span>  <span class="token comment"># [N, 3, 224, 224]  --&gt; [N, 512, 7, 7]</span>
+        x <span class="token operator">=</span> torch<span class="token punctuation">.</span>flatten<span class="token punctuation">(</span>x<span class="token punctuation">,</span> start_dim<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>  <span class="token comment"># [N, 512, 7, 7]  --&gt; [N, 512 * 7 * 7]</span>
+        outputs <span class="token operator">=</span> self<span class="token punctuation">.</span>classifier<span class="token punctuation">(</span>x<span class="token punctuation">)</span>  <span class="token comment"># [N, 512 * 7 * 7]  --&gt; [N, num_classes]</span>
+        <span class="token keyword">return</span> outputs
+
+
+<span class="token comment"># VGGNet的配置文件，数字表示卷积层输出的feature map大小，'M'表示最大池化下采样</span>
+cfgs <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token string">'vgg11'</span><span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token number">64</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+    <span class="token string">'vgg13'</span><span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token number">64</span><span class="token punctuation">,</span> <span class="token number">64</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+    <span class="token string">'vgg16'</span><span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token number">64</span><span class="token punctuation">,</span> <span class="token number">64</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+    <span class="token string">'vgg19'</span><span class="token punctuation">:</span> <span class="token punctuation">[</span><span class="token number">64</span><span class="token punctuation">,</span> <span class="token number">64</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">,</span> <span class="token string">'M'</span><span class="token punctuation">]</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">def</span> <span class="token function">make_features</span><span class="token punctuation">(</span>cfg<span class="token punctuation">:</span> <span class="token builtin">list</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+  	<span class="token triple-quoted-string string">"""根据cfgs配置制作vgg的特征提取层"""</span>
+    layers <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+    in_channels <span class="token operator">=</span> <span class="token number">3</span>
+    <span class="token keyword">for</span> v <span class="token keyword">in</span> cfg<span class="token punctuation">:</span>
+        <span class="token keyword">if</span> v <span class="token operator">==</span> <span class="token string">"M"</span><span class="token punctuation">:</span>
+            maxpool2d <span class="token operator">=</span> nn<span class="token punctuation">.</span>MaxPool2d<span class="token punctuation">(</span>kernel_size<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">,</span> stride<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">)</span>
+            layers<span class="token punctuation">.</span>append<span class="token punctuation">(</span>maxpool2d<span class="token punctuation">)</span>
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            conv2d <span class="token operator">=</span> nn<span class="token punctuation">.</span>Conv2d<span class="token punctuation">(</span>in_channels<span class="token operator">=</span>in_channels<span class="token punctuation">,</span> out_channels<span class="token operator">=</span>v<span class="token punctuation">,</span> kernel_size<span class="token operator">=</span><span class="token number">3</span><span class="token punctuation">,</span> padding<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>
+            layers<span class="token punctuation">.</span>append<span class="token punctuation">(</span>conv2d<span class="token punctuation">)</span>
+            in_channels <span class="token operator">=</span> v
+    <span class="token keyword">return</span> nn<span class="token punctuation">.</span>Sequential<span class="token punctuation">(</span><span class="token operator">*</span>layers<span class="token punctuation">)</span>
+
+
+<span class="token keyword">def</span> <span class="token function">vgg</span><span class="token punctuation">(</span>model_name<span class="token operator">=</span><span class="token string">"vgg16"</span><span class="token punctuation">,</span> <span class="token operator">**</span>kwargs<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">assert</span> model_name <span class="token keyword">in</span> cfgs<span class="token punctuation">,</span> <span class="token string">"Warning: {} not in config dict!"</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>model_name<span class="token punctuation">)</span>
+
+    cfg <span class="token operator">=</span> cfgs<span class="token punctuation">[</span>model_name<span class="token punctuation">]</span>
+    model <span class="token operator">=</span> VGG<span class="token punctuation">(</span>features<span class="token operator">=</span>make_features<span class="token punctuation">(</span>cfg<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token operator">**</span>kwargs<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> model
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/783aec7f184c957d5f51da14800270ff/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Linux学习之路--基础命令（2）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/67a85217f0fe28c98d8fb7c464c51815/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">一次ios转安卓记录（ios15 --＞ 魅族18s）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

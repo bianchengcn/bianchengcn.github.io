@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>NRF52832外设blinky添加静态密码绑定 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="NRF52832外设blinky添加静态密码绑定" />
+<meta property="og:description" content="/** * Copyright (c) 2015 - 2021, Nordic Semiconductor ASA * * All rights reserved. * * Redistribution and use in source and binary forms, with or without modification, * are permitted provided that the following conditions are met: * * 1. Redistributions of source code must retain the above copyright notice, this * list of conditions and the following disclaimer. * * 2. Redistributions in binary form, except as embedded into a Nordic * Semiconductor ASA integrated circuit in a product or a software update for * such product, must reproduce the above copyright notice, this list of * conditions and the following disclaimer in the documentation and/or other * materials provided with the distribution." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/bb575c12dce8e658f163a754c4b7df35/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-09-15T10:10:42+08:00" />
+<meta property="article:modified_time" content="2023-09-15T10:10:42+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">NRF52832外设blinky添加静态密码绑定</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <pre><code>/**
+* Copyright (c) 2015 - 2021, Nordic Semiconductor ASA
+*
+* All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without modification,
+* are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice, this
+*    list of conditions and the following disclaimer.
+*
+* 2. Redistributions in binary form, except as embedded into a Nordic
+*    Semiconductor ASA integrated circuit in a product or a software update for
+*    such product, must reproduce the above copyright notice, this list of
+*    conditions and the following disclaimer in the documentation and/or other
+*    materials provided with the distribution.
+*
+* 3. Neither the name of Nordic Semiconductor ASA nor the names of its
+*    contributors may be used to endorse or promote products derived from this
+*    software without specific prior written permission.
+*
+* 4. This software, with or without modification, must only be used with a
+*    Nordic Semiconductor ASA integrated circuit.
+*
+* 5. Any software provided in binary form under this license must not be reverse
+*    engineered, decompiled, modified and/or disassembled.
+*
+* THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
+* OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+* OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
+* DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
+* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+* GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+* HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+* OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*
+*/
+/**
+* @brief Blinky Sample Application main file.
+*
+* This file contains the source code for a sample server application using the LED Button service.
+*/
+
+
+
+
+//Bonding（绑定），配对过程中会生成一个长期密钥（LTK，long-term Key），如果配对双方把这个LTK存
+储起来放在Flash中，
+//那么这两个设备再次重连的时候，就可以跳过配对流程，而直接使用LTK对蓝牙连接进行加密，设备的这种状
+态称为bonding。
+//如果paring过程中不存储LTK（不分发LTK）也是可以的，paring完成后连接也是加密的，但是如果两个设备
+再次重连，那么就需要重走一次paring流程，
+//否则两者还是明文通信。在不引起误解的情况下，我们经常把paring当成paring和bonding两者的组合，因
+为只paring不bonding的应用情况非常少见。
+//在不引起混淆的情况下，下文就不区分paring和bonding的区别，换句话说，我们会把paring和bonding两
+个概念等同起来进行混用。
+
+//SM（security manager），蓝牙协议栈的安全管理层，规定了跟蓝牙安全通信有关的所有要素，包括
+paring，bonding，以及下文提到的SMP。
+
+//SMP（security manager protocol），安全管理协议，SMP着重两个设备之间的蓝牙交互命令序列，对
+paring的空中包进行了严格时序规定。
+
+//OOB（out of band，带外），OOB就是不通过蓝牙射频本身来交互，而是通过比如人眼，NFC，UART等带外
+方式来交互配对信息，在这里人眼，
+//NFC，UART通信方式就被称为OOB通信方式。
+
+//Passkey，又称pin码，是指用户在键盘中输入的一串数字，以达到认证设备的目的。低功耗蓝牙的passkey
+必须为6位。
+
+//Numeric comparison（数字比较），numeric comparison其实跟passkey一样，也是用来认证设备的，只
+不过passkey是通过键盘输入的，
+//而numeric comparison是显示在显示器上的，numeric comparison也必须是6位的数字。
+
+//MITM（man in the middle），MITM是指A和B通信过程中，C会插入进来以模拟A或者B，并且具备截获和篡
+改A和B之间所有通信报文的能力，
+//从而达到让A或者B信任它，以至于错把C当成B或者A来通信。如果对安全要求比较高，需要具备MITM保护能
+力，在SM中这个是通过认证（authentication）
+//来实现的，SM中实现认证的方式有三种：OOB认证信息，passkey以及numeric comparison，大家根据自己
+的实际情况，选择其中一种即可。
+
+//LESC（LE secure connections），又称SC，蓝牙4.2引入的一种新的密钥生成方式和验证方式，SC通过基
+于椭圆曲线的Diffie-Hellman密钥
+//交换算法来生成设备A和B的共享密钥，此密钥生成过程中需要用到公私钥对，以及其他的密码算法库。LESC
+同时还规定了相应的通信协议以生成该密钥，
+//并验证该密钥。需要注意的是LESC对paring的其他方面也会产生一定的影响，所以我们经常会把LESC看成是
+一种新的配对方式。
+
+//Legacy paring，在LESC引入之前的密钥生成方式，称为legacy paring，换句话说，legacy paring是相
+对LESC来说的，不支持LESC的配对即为legacy paring（legacy配对）。
+
+//TK（Temporary Key，临时密钥），legacy paring里面的概念，如果采用just work配对方式，TK就是为
+全0；如果采用passkey配对方式，TK就是passkey；如果采用OOB配对方式，TK就是OOB里面的信息。
+
+//STK（short term key，短期密钥），legacy配对里面的概念，STK是通过TK推导出来的，通过TK对设备A
+和B的随机数进行加密，即得到STK。
+
+//LTK（long term key，长期密钥），legacy配对和LESC配对都会用到LTK，如前所述，LTK是用来对未来的
+连接进行加密和解密用的。Legacy paring中
+//的LTK由从设备根据相应的算法自己生成的（LTK生成过程中会用到EDIV（分散因子）和Rand（随机数）），
+然后通过蓝牙空中包传给主机。LESC配对过程中，
+//先通过Diffie-Hellman生成一个共享密钥，然后这个共享密钥再对设备A和B的蓝牙地址和随机数进行加密，
+从而得到LTK，LTK由设备A和B各自同时生成，因此LTK不会出现在LESC蓝牙空中包中，大大提高了蓝牙通信的
+安全性。
+
+//IRK（Identity Resolving Key，蓝牙设备地址解析密钥），有些蓝牙设备的地址为可解析的随机地址，比
+如iPhone手机，由于他们的地址随着时间会变化，
+//那如何确定这些变化的地址都来自同一个设备呢？答案就是IRK，IRK通过解析变化的地址的规律，从而确定
+这些地址是否来自同一个设备，换句话说，
+//IRK可以用来识别蓝牙设备身份，因此其也称为Identity information。IRK一般由设备出厂的时候按照一
+定要求自动生成。
+
+//Identity Address（设备唯一地址），蓝牙设备地址包括public，random static， private resolvable，random unresolved共四类。
+//如果设备不支持privacy，那么identity address就等于public或者random static设备地址。如果设备
+支持privacy，即使用private resolvable蓝牙设备地址，
+//在这种情况下，虽然其地址每隔一段时间会变化一次，但是identity address仍然保持不变，其取值还是等
+于内在的public或者random static设备地址。Identity Address和IRK都可以用来唯一标识一个蓝牙设备。
+
+
+//IO capabilities（输入输出能力），是指蓝牙设备的输入输出能力，比如是否有键盘，是否有显示器，是
+否可以输入Yes/No两个确认值。
+
+//Key size（密钥长度），一般来说，密钥默认长度为16字节，为了适应一些低端的蓝牙设备处理能力，你也
+可以把密钥长度调低，比如变为10个字节
+
+#include &lt;stdint.h&gt;
+#include &lt;string.h&gt;
+#include "nordic_common.h"
+#include "nrf.h"
+#include "app_error.h"
+#include "ble.h"
+#include "ble_err.h"
+#include "ble_hci.h"
+#include "ble_srv_common.h"
+#include "ble_advdata.h"
+#include "ble_conn_params.h"
+#include "nrf_sdh.h"
+#include "nrf_sdh_ble.h"
+#include "boards.h"
+#include "app_timer.h"
+#include "app_button.h"
+#include "ble_lbs.h"
+#include "nrf_ble_gatt.h"
+#include "nrf_ble_qwr.h"
+#include "nrf_pwr_mgmt.h"
+
+#include "nrf_delay.h"
+
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
+#include "nrf_log_default_backends.h"
+
+//2023/7/26
+//尝试添加配对静态密码
+#define STATIC_PASSKEY "123456"
+//定义操作密码的结构体
+static ble_opt_t m_staic_pin_option;
+#define IO_CAPS BLE_GAP_IO_CAPS_DISPLAY_ONLY    //只有显示装置
+#define BOND    0   //不绑定
+#define OOB     0   //没有外带认证数据，例如使用NFC或者二维码交换
+#define MITM    1   //中间人保护
+#define MIN_KEY_SIZE    7   //密钥最小长度
+#define MAX_KEY_SIZE    16  //密钥最大长度
+
+#define ADVERTISING_LED                 BSP_BOARD_LED_0                         /**&lt; Is 
+on when device is advertising. */
+#define CONNECTED_LED                   BSP_BOARD_LED_1                         /**&lt; Is 
+on when device has connected. */
+#define LEDBUTTON_LED                   BSP_BOARD_LED_2                         /**&lt; LED 
+to be toggled with the help of the LED Button Service. */
+#define LEDBUTTON_BUTTON                BSP_BUTTON_0                            /**&lt; 
+Button that will trigger the notification event with the LED Button Service */
+
+//#define DEVICE_NAME                     "Nordic_Blinky"                         /**&lt; 
+Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME "SHUO-52832"
+#define APP_BLE_OBSERVER_PRIO           3                                       /**&lt; 
+Application's BLE observer priority. You shouldn't need to modify this value. */
+#define APP_BLE_CONN_CFG_TAG            1                                       /**&lt; A 
+tag identifying the SoftDevice BLE configuration. */
+
+#define APP_ADV_INTERVAL                64                                      /**&lt; The 
+advertising interval (in units of 0.625 ms; this value corresponds to 40 ms). */
+#define APP_ADV_DURATION                BLE_GAP_ADV_TIMEOUT_GENERAL_UNLIMITED   /**&lt; The 
+advertising time-out (in units of seconds). When set to 0, we will never time out. */
+
+
+#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(100, UNIT_1_25_MS)        /**&lt; 
+Minimum acceptable connection interval (0.5 seconds). */
+#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(200, UNIT_1_25_MS)        /**&lt; 
+Maximum acceptable connection interval (1 second). */
+#define SLAVE_LATENCY                   0                                       /**&lt; 
+Slave latency. */
+#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)         /**&lt; 
+Connection supervisory time-out (4 seconds). */
+
+#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(20000)                  /**&lt; Time 
+from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (15 seconds). */
+#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(5000)                   /**&lt; Time 
+between each call to sd_ble_gap_conn_param_update after the first call (5 seconds). */
+#define MAX_CONN_PARAMS_UPDATE_COUNT    3                                       /**&lt; 
+Number of attempts before giving up the connection parameter negotiation. */
+
+#define BUTTON_DETECTION_DELAY          APP_TIMER_TICKS(50)                     /**&lt; 
+Delay from a GPIOTE event until a button is reported as pushed (in number of timer 
+ticks). */
+
+#define DEAD_BEEF                       0xDEADBEEF                              /**&lt; 
+Value used as error code on stack dump, can be used to identify stack location on stack 
+unwind. */
+
+
+BLE_LBS_DEF(m_lbs);                                                             /**&lt; LED 
+Button Service instance. */
+NRF_BLE_GATT_DEF(m_gatt);                                                       /**&lt; GATT 
+module instance. */
+NRF_BLE_QWR_DEF(m_qwr);                                                         /**&lt; 
+Context for the Queued Write module.*/
+
+static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        /**&lt; 
+Handle of the current connection. */
+
+static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;                   /**&lt; 
+Advertising handle used to identify an advertising set. */
+static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];                    /**&lt; 
+Buffer for storing an encoded advertising set. */
+static uint8_t m_enc_scan_response_data[BLE_GAP_ADV_SET_DATA_SIZE_MAX];         /**&lt; 
+Buffer for storing an encoded scan data. */
+
+
+//请求配对函数，交换配对信息
+static void resp_pair_request(void)
+{
+    ble_gap_sec_params_t sec_params;
+    uint32_t err_code;
+   
+    memset(&amp;sec_params,0,sizeof(ble_gap_sec_params_t));
+        
+    sec_params.bond = BOND;
+    sec_params.mitm = MITM;
+    sec_params.io_caps = IO_CAPS;
+    sec_params.oob = 0;
+    sec_params.min_key_size = MIN_KEY_SIZE;
+    sec_params.max_key_size = MAX_KEY_SIZE;
+   
+    //带有GAP安全参数的回复
+    err_code = sd_ble_gap_sec_params_reply(m_conn_handle,BLE_GAP_SEC_STATUS_SUCCESS,&amp;sec_params,NULL);
+
+    APP_ERROR_CHECK(err_code);   
+}
+
+
+
+/**@brief Struct that contains pointers to the encoded advertising data. */
+
+static ble_gap_adv_data_t m_adv_data =
+{
+    .adv_data =
+    {
+        .p_data = m_enc_advdata,
+        .len    = BLE_GAP_ADV_SET_DATA_SIZE_MAX
+    },
+    .scan_rsp_data =
+    {
+        .p_data = m_enc_scan_response_data,
+        .len    = BLE_GAP_ADV_SET_DATA_SIZE_MAX
+
+    }
+};
+
+/**@brief Function for assert macro callback.
+*
+* [url=home.php?mod=space&amp;uid=168459]@Details[/url] This function will be called in case 
+of an assert in the SoftDevice.
+*
+* [url=home.php?mod=space&amp;uid=163200]@warning[/url] This handler is an example only and 
+does not fit a final product. You need to analyze
+*          how your product is supposed to react in case of Assert.
+* @warning On assert from the SoftDevice, the system can only recover on reset.
+*
+* @param[in] line_num    Line number of the failing ASSERT call.
+* @param[in] p_file_name File name of the failing ASSERT call.
+*/
+void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
+{
+    app_error_handler(DEAD_BEEF, line_num, p_file_name);
+}
+
+
+/**@brief Function for the LEDs initialization.
+*
+* @details Initializes all LEDs used by the application.
+*/
+static void leds_init(void)
+{
+//    bsp_board_init(BSP_INIT_LEDS);
+   
+    //初始化GPIO
+    nrf_gpio_cfg_output(7);
+    nrf_gpio_cfg_output(8);
+    nrf_gpio_cfg_output(9);
+    nrf_gpio_cfg_output(10);
+    nrf_gpio_cfg_output(11);
+   
+   
+    //按照下面的方式来写只有GPIO10能够反转电平
+    //GPIO 9 10默认是NRF引脚 需要在工程宏定义中添加 CONFIG_NFCT_PINS_AS_GPIOS
+//    这样写之所以不成功是因为这里有限制  ASSERT(led_idx &lt; LEDS_NUMBER);   
+//    for(uint8_t i=0;i&lt;1000;i++)
+//    {
+//        bsp_board_led_off(7);
+//        bsp_board_led_off(8);
+//        bsp_board_led_off(9);
+//        bsp_board_led_off(10);
+//        bsp_board_led_off(11);
+//        
+//        nrf_delay_ms(200);
+//        
+//        bsp_board_led_on(7);
+//        bsp_board_led_on(8);
+//        bsp_board_led_on(9);
+//        bsp_board_led_on(10);
+//        bsp_board_led_on(11);
+
+//        nrf_delay_ms(200);        
+//    }
+
+    //更改设备方式
+    //没有LED灯反转
+//    for(uint8_t i;i&lt;100;i++)
+//    {
+//        nrf_gpio_pin_set(7);
+//        nrf_gpio_pin_set(8);
+//        nrf_gpio_pin_set(9);
+//        nrf_gpio_pin_set(10);
+//        nrf_gpio_pin_set(11);
+//        
+//        nrf_delay_ms(200);
+//   
+//        nrf_gpio_pin_clear(7);
+//        nrf_gpio_pin_clear(8);
+//        nrf_gpio_pin_clear(9);
+//        nrf_gpio_pin_clear(10);
+//        nrf_gpio_pin_clear(11);
+//        nrf_delay_ms(100);
+//    }
+
+    //改成如下所示 LED正常工作
+    for(uint8_t i=0;i&lt;10;i++)
+    {
+        nrf_gpio_pin_write(7,0);
+        nrf_gpio_pin_write(8,0);
+        nrf_gpio_pin_write(9,0);
+        nrf_gpio_pin_write(10,0);
+        nrf_gpio_pin_write(11,0);
+        
+        nrf_delay_ms(100);
+        
+        nrf_gpio_pin_write(7,1);
+        nrf_gpio_pin_write(8,1);
+        nrf_gpio_pin_write(9,1);
+        nrf_gpio_pin_write(10,1);
+        nrf_gpio_pin_write(11,1);
+
+        nrf_delay_ms(200);        
+    }
+
+
+}
+
+
+/**@brief Function for the Timer initialization.
+*
+* @details Initializes the timer module.
+*/
+static void timers_init(void)
+{
+    // Initialize timer module, making it use the scheduler
+    ret_code_t err_code = app_timer_init();
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for the GAP initialization.
+*
+* @details This function sets up all the necessary GAP (Generic Access Profile) parameters of the
+*          device including the device name, appearance, and the preferred connection parameters.
+*/
+static void gap_params_init(void)
+{
+    ret_code_t              err_code;
+    ble_gap_conn_params_t   gap_conn_params;
+    ble_gap_conn_sec_mode_t sec_mode;
+
+    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&amp;sec_mode);
+
+    err_code = sd_ble_gap_device_name_set(&amp;sec_mode,
+                                          (const uint8_t *)DEVICE_NAME,
+                                          strlen(DEVICE_NAME));
+    APP_ERROR_CHECK(err_code);
+
+    memset(&amp;gap_conn_params, 0, sizeof(gap_conn_params));
+
+    gap_conn_params.min_conn_interval = MIN_CONN_INTERVAL;
+    gap_conn_params.max_conn_interval = MAX_CONN_INTERVAL;
+    gap_conn_params.slave_latency     = SLAVE_LATENCY;
+    gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT;
+
+    err_code = sd_ble_gap_ppcp_set(&amp;gap_conn_params);
+    APP_ERROR_CHECK(err_code);
+                        
+    //添加密码操作
+    uint8_t passkey[] = STATIC_PASSKEY;
+    m_staic_pin_option.gap_opt.passkey.p_passkey = passkey;  
+
+    //sd_ble_opt_set使软设备使用预编程的密钥进行身份验证,而不是生成随机的。
+    err_code = sd_ble_opt_set(BLE_GAP_OPT_PASSKEY,&amp;m_staic_pin_option);
+    APP_ERROR_CHECK(err_code);                                          
+}
+
+
+/**@brief Function for initializing the GATT module.
+*/
+static void gatt_init(void)
+{
+    ret_code_t err_code = nrf_ble_gatt_init(&amp;m_gatt, NULL);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for initializing the Advertising functionality.
+*
+* @details Encodes the required advertising data and passes it to the stack.
+*          Also builds a structure to be passed to the stack when starting advertising.
+
+*/
+static void advertising_init(void)
+{
+    ret_code_t    err_code;
+    ble_advdata_t advdata;
+    ble_advdata_t srdata;
+
+    ble_uuid_t adv_uuids[] = {<!-- -->{LBS_UUID_SERVICE, m_lbs.uuid_type}};
+
+    // Build and set advertising data.
+    memset(&amp;advdata, 0, sizeof(advdata));
+
+    advdata.name_type          = BLE_ADVDATA_FULL_NAME;
+    advdata.include_appearance = true;
+    advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
+
+
+    memset(&amp;srdata, 0, sizeof(srdata));
+    srdata.uuids_complete.uuid_cnt = sizeof(adv_uuids) / sizeof(adv_uuids[0]);
+    srdata.uuids_complete.p_uuids  = adv_uuids;
+
+    err_code = ble_advdata_encode(&amp;advdata, m_adv_data.adv_data.p_data, &amp;m_adv_data.adv_data.len);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = ble_advdata_encode(&amp;srdata, m_adv_data.scan_rsp_data.p_data, &amp;m_adv_data.scan_rsp_data.len);
+    APP_ERROR_CHECK(err_code);
+
+    ble_gap_adv_params_t adv_params;
+
+    // Set advertising parameters.
+    memset(&amp;adv_params, 0, sizeof(adv_params));
+
+    adv_params.primary_phy     = BLE_GAP_PHY_1MBPS;
+    adv_params.duration        = APP_ADV_DURATION;
+    adv_params.properties.type = BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
+    adv_params.p_peer_addr     = NULL;
+    adv_params.filter_policy   = BLE_GAP_ADV_FP_ANY;
+    adv_params.interval        = APP_ADV_INTERVAL;
+
+    err_code = sd_ble_gap_adv_set_configure(&amp;m_adv_handle, &amp;m_adv_data, &amp;adv_params);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for handling Queued Write Module errors.
+*
+* @details A pointer to this function will be passed to each service which may need to inform the
+*          application about an error.
+*
+* @param[in]   nrf_error   Error code containing information about what went wrong.
+*/
+static void nrf_qwr_error_handler(uint32_t nrf_error)
+{
+    APP_ERROR_HANDLER(nrf_error);
+}
+
+
+//添加一个自己的服务
+//实现一个改变LED闪烁次数的一个功能
+//20230807
+static void blink_count_handler(uint16_t conn_handle,ble_lbs_t *p_lbs,uint8_t count)
+{
+//     for(uint8_t i=0;i&lt;led_state;i++)
+//    {
+//        nrf_gpio_pin_write(7,0);
+//        nrf_gpio_pin_write(8,0);
+//        nrf_gpio_pin_write(9,0);
+//        nrf_gpio_pin_write(10,0);
+//        nrf_gpio_pin_write(11,0);
+//        
+//        nrf_delay_ms(100);
+//        
+//        nrf_gpio_pin_write(7,1);
+//        nrf_gpio_pin_write(8,1);
+//        nrf_gpio_pin_write(9,1);
+//        nrf_gpio_pin_write(10,1);
+//        nrf_gpio_pin_write(11,1);
+
+//        nrf_delay_ms(200);        
+//    }
+   
+    if(count)
+    {
+        nrf_gpio_pin_write(7,0);
+        nrf_gpio_pin_write(8,0);
+        nrf_gpio_pin_write(9,0);
+        nrf_gpio_pin_write(10,0);
+        nrf_gpio_pin_write(11,0);
+
+    }
+    else
+    {
+        nrf_gpio_pin_write(7,1);
+        nrf_gpio_pin_write(8,1);
+        nrf_gpio_pin_write(9,1);
+        nrf_gpio_pin_write(10,1);
+        nrf_gpio_pin_write(11,1);
+
+    }
+}
+
+
+/**@brief Function for handling write events to the LED characteristic.
+*
+* @param[in] p_lbs     Instance of LED Button Service to which the write applies.
+* @param[in] led_state Written/desired state of the LED.
+*/
+static void led_write_handler(uint16_t conn_handle, ble_lbs_t * p_lbs, uint8_t led_state)
+{
+    if (led_state)
+    {      
+        bsp_board_led_on(LEDBUTTON_LED);
+        NRF_LOG_INFO("Received LED ON!");
+    }
+    else
+    {
+        bsp_board_led_off(LEDBUTTON_LED);
+        NRF_LOG_INFO("Received LED OFF!");
+    }
+}
+
+
+/**@brief Function for initializing services that will be used by the application.
+*/
+static void services_init(void)
+{
+    ret_code_t         err_code;
+    ble_lbs_init_t     init     = {0};
+    nrf_ble_qwr_init_t qwr_init = {0};
+
+    // Initialize Queued Write Module.
+    qwr_init.error_handler = nrf_qwr_error_handler;
+
+    err_code = nrf_ble_qwr_init(&amp;m_qwr, &amp;qwr_init);
+    APP_ERROR_CHECK(err_code);
+
+    // Initialize LBS.
+    init.led_write_handler = led_write_handler;
+   
+    //添加闪烁计数服务
+    init.blink_count_handler = blink_count_handler;
+
+    err_code = ble_lbs_init(&amp;m_lbs, &amp;init);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for handling the Connection Parameters Module.
+*
+* @details This function will be called for all events in the Connection Parameters Module that
+*          are passed to the application.
+*
+* [url=home.php?mod=space&amp;uid=60778]@note[/url] All this function does is to disconnect. 
+This could have been done by simply
+*       setting the disconnect_on_fail config parameter, but instead we use the event
+*       handler mechanism to demonstrate its use.
+*
+* @param[in] p_evt  Event received from the Connection Parameters Module.
+*/
+static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
+{
+    ret_code_t err_code;
+
+    if (p_evt-&gt;evt_type == BLE_CONN_PARAMS_EVT_FAILED)
+    {
+        err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
+        APP_ERROR_CHECK(err_code);
+    }
+}
+
+
+/**@brief Function for handling a Connection Parameters error.
+*
+* @param[in] nrf_error  Error code containing information about what went wrong.
+*/
+static void conn_params_error_handler(uint32_t nrf_error)
+{
+    APP_ERROR_HANDLER(nrf_error);
+}
+
+
+/**@brief Function for initializing the Connection Parameters module.
+*/
+static void conn_params_init(void)
+{
+    ret_code_t             err_code;
+    ble_conn_params_init_t cp_init;
+
+    memset(&amp;cp_init, 0, sizeof(cp_init));
+
+    cp_init.p_conn_params                  = NULL;
+    cp_init.first_conn_params_update_delay = FIRST_CONN_PARAMS_UPDATE_DELAY;
+    cp_init.next_conn_params_update_delay  = NEXT_CONN_PARAMS_UPDATE_DELAY;
+    cp_init.max_conn_params_update_count   = MAX_CONN_PARAMS_UPDATE_COUNT;
+    cp_init.start_on_notify_cccd_handle    = BLE_GATT_HANDLE_INVALID;
+    cp_init.disconnect_on_fail             = false;
+    cp_init.evt_handler                    = on_conn_params_evt;
+    cp_init.error_handler                  = conn_params_error_handler;
+
+    err_code = ble_conn_params_init(&amp;cp_init);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for starting advertising.
+*/
+static void advertising_start(void)
+{
+    ret_code_t           err_code;
+
+    err_code = sd_ble_gap_adv_start(m_adv_handle, APP_BLE_CONN_CFG_TAG);
+    APP_ERROR_CHECK(err_code);
+
+    bsp_board_led_on(ADVERTISING_LED);
+}
+
+
+/**@brief Function for handling BLE events.
+*
+* @param[in]   p_ble_evt   Bluetooth stack event.
+* @param[in]   p_context   Unused.
+*/
+static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
+{
+    ret_code_t err_code;
+   
+      ble_gap_phys_t const phys =
+            {
+                .rx_phys = BLE_GAP_PHY_2MBPS,
+                .tx_phys = BLE_GAP_PHY_2MBPS,
+            };
+            
+    switch (p_ble_evt-&gt;header.evt_id)
+    {
+        case BLE_GAP_EVT_CONNECTED:
+            NRF_LOG_INFO("Connected");
+            bsp_board_led_on(CONNECTED_LED);
+            bsp_board_led_off(ADVERTISING_LED);
+            m_conn_handle = p_ble_evt-&gt;evt.gap_evt.conn_handle;
+        
+//            err_code = nrf_ble_qwr_conn_handle_assign(&amp;m_qwr, m_conn_handle);
+//            APP_ERROR_CHECK(err_code);
+        
+            err_code = app_button_enable();
+            APP_ERROR_CHECK(err_code);
+        
+            err_code = sd_ble_gap_phy_update(p_ble_evt-&gt;evt.gap_evt.conn_handle,&amp;phys);
+            //启动连接后，连接成功，启动本地连接的安全认证
+            ble_gap_sec_params_t params;
+            params.bond = 0;
+            params.mitm = 1;
+            //启动GAP身份验证程序
+            //在中心角色中，该功能将发送SMP配对请求（如果被拒绝，则发送SMP配对失败）
+            //在外围角色中，将发送SMP安全请求
+            sd_ble_gap_authenticate(m_conn_handle,&amp;#182;ms);
+            break;
+
+        case BLE_GAP_EVT_DISCONNECTED:
+            NRF_LOG_INFO("Disconnected");
+            bsp_board_led_off(CONNECTED_LED);
+            m_conn_handle = BLE_CONN_HANDLE_INVALID;
+            err_code = app_button_disable();
+            APP_ERROR_CHECK(err_code);
+            advertising_start();
+            break;
+
+        case BLE_GAP_EVT_SEC_PARAMS_REQUEST://安全参数交换请求
+            // Pairing not supported
+//            err_code = sd_ble_gap_sec_params_reply(m_conn_handle,
+//                                                   BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP,
+//                                                   NULL,
+//                                                   NULL);
+//            APP_ERROR_CHECK(err_code);
+            resp_pair_request();
+            break;
+
+        case BLE_GAP_EVT_PHY_UPDATE_REQUEST://PHY更新请求
+        {
+            NRF_LOG_DEBUG("PHY update request.");
+            ble_gap_phys_t const phys =
+            {
+                .rx_phys = BLE_GAP_PHY_AUTO,
+                .tx_phys = BLE_GAP_PHY_AUTO,
+            };
+            err_code = sd_ble_gap_phy_update(p_ble_evt-&gt;evt.gap_evt.conn_handle, &amp;phys);
+            APP_ERROR_CHECK(err_code);
+        } break;
+        
+        case BLE_GAP_EVT_PHY_UPDATE: //PHY更新完成
+            NRF_LOG_INFO("tx:&amp;d,rx:&amp;d",p_ble_evt-&gt;evt.gap_evt.params.phy_update.tx_phy,p_ble_evt-&gt;evt.gap_evt.params.phy_update.rx_phy);
+            break;
+        case BLE_GATTS_EVT_SYS_ATTR_MISSING:
+            // No system attributes have been stored.
+            err_code = sd_ble_gatts_sys_attr_set(m_conn_handle, NULL, 0, 0);
+            APP_ERROR_CHECK(err_code);
+            break;
+
+        case BLE_GATTC_EVT_TIMEOUT:
+            // Disconnect on GATT Client timeout event.
+            NRF_LOG_DEBUG("GATT Client Timeout.");
+            err_code = sd_ble_gap_disconnect(p_ble_evt-&gt;evt.gattc_evt.conn_handle,
+                                             BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+            APP_ERROR_CHECK(err_code);
+            break;
+
+        case BLE_GATTS_EVT_TIMEOUT:
+            // Disconnect on GATT Server timeout event.
+            NRF_LOG_DEBUG("GATT Server Timeout.");
+            err_code = sd_ble_gap_disconnect(p_ble_evt-&gt;evt.gatts_evt.conn_handle,
+                                             BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+            APP_ERROR_CHECK(err_code);
+            break;
+        case BLE_GAP_EVT_CONN_PARAM_UPDATE://连接参数更新
+            NRF_LOG_INFO("conn_Param Update: %d,%d,%d,%d",
+                         p_ble_evt-&gt;evt.gap_evt.params.conn_param_update.conn_params.min_conn_interval,
+                         p_ble_evt-&gt;evt.gap_evt.params.conn_param_update.conn_params.max_conn_interval,
+                         p_ble_evt-&gt;evt.gap_evt.params.conn_param_update.conn_params.slave_latency,
+                         p_ble_evt-&gt;evt.gap_evt.params.conn_param_update.conn_params.conn_sup_timeout
+                         );
+            break;
+        
+        case BLE_GAP_EVT_AUTH_STATUS:
+            //认证，如果认证失败，则断开连接
+            if(p_ble_evt-&gt;evt.gap_evt.params.auth_status.auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
+            {
+
+            }
+            else
+            {
+                sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+            }
+            break;
+            
+        default:
+            // No implementation needed.
+            break;
+    }
+}
+
+
+/**@brief Function for initializing the BLE stack.
+*
+* @details Initializes the SoftDevice and the BLE event interrupt.
+*/
+static void ble_stack_init(void)
+{
+    ret_code_t err_code;
+
+    err_code = nrf_sdh_enable_request();
+    APP_ERROR_CHECK(err_code);
+
+    // Configure the BLE stack using the default settings.
+    // Fetch the start address of the application RAM.
+    uint32_t ram_start = 0;
+    err_code = nrf_sdh_ble_default_cfg_set(APP_BLE_CONN_CFG_TAG, &amp;ram_start);
+    APP_ERROR_CHECK(err_code);
+
+    // Enable BLE stack.
+    err_code = nrf_sdh_ble_enable(&amp;ram_start);
+    APP_ERROR_CHECK(err_code);
+
+    // Register a handler for BLE events.
+    NRF_SDH_BLE_OBSERVER(m_ble_observer, APP_BLE_OBSERVER_PRIO, ble_evt_handler, NULL);
+}
+
+
+/**@brief Function for handling events from the button handler module.
+*
+* @param[in] pin_no        The pin that the event applies to.
+* @param[in] button_action The button action (press/release).
+*/
+static void button_event_handler(uint8_t pin_no, uint8_t button_action)
+{
+    ret_code_t err_code;
+
+    switch (pin_no)
+    {
+        case LEDBUTTON_BUTTON:
+            NRF_LOG_INFO("Send button state change.");
+            err_code = ble_lbs_on_button_change(m_conn_handle, &amp;m_lbs, button_action);
+            if (err_code != NRF_SUCCESS &amp;&amp;
+                err_code != BLE_ERROR_INVALID_CONN_HANDLE &amp;&amp;
+                err_code != NRF_ERROR_INVALID_STATE &amp;&amp;
+                err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING)
+            {
+                APP_ERROR_CHECK(err_code);
+            }
+            break;
+
+        default:
+            APP_ERROR_HANDLER(pin_no);
+            break;
+    }
+}
+
+
+/**@brief Function for initializing the button handler module.
+*/
+static void buttons_init(void)
+{
+    ret_code_t err_code;
+
+    //The array must be static because a pointer to it will be saved in the button handler module.
+    static app_button_cfg_t buttons[] =
+    {
+        {LEDBUTTON_BUTTON, false, BUTTON_PULL, button_event_handler}
+    };
+
+    err_code = app_button_init(buttons, ARRAY_SIZE(buttons),
+                               BUTTON_DETECTION_DELAY);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+static void log_init(void)
+{
+    ret_code_t err_code = NRF_LOG_INIT(NULL);
+    APP_ERROR_CHECK(err_code);
+
+    NRF_LOG_DEFAULT_BACKENDS_INIT();
+}
+
+
+/**@brief Function for initializing power management.
+*/
+static void power_management_init(void)
+{
+    ret_code_t err_code;
+    err_code = nrf_pwr_mgmt_init();
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for handling the idle state (main loop).
+*
+* @details If there is no pending log operation, then sleep until next the next event occurs.
+*/
+static void idle_state_handle(void)
+{
+    if (NRF_LOG_PROCESS() == false)
+    {
+        nrf_pwr_mgmt_run();
+    }
+}
+
+
+/**@brief Function for application main entry.
+*/
+int main(void)
+{
+    // Initialize.
+    log_init();
+    leds_init();
+    bsp_board_led_off(LEDBUTTON_LED);//默认状态：关闭
+    timers_init();
+    buttons_init();
+    power_management_init();
+    ble_stack_init();
+    gap_params_init();
+    gatt_init();
+    services_init();
+    advertising_init();
+    conn_params_init();
+
+    // Start execution.
+    NRF_LOG_INFO("Blinky example started.");
+    advertising_start();
+           
+    // Enter main loop.
+    for (;;)
+    {   
+        idle_state_handle();
+    }
+}
+
+
+/**
+* @}
+*/
+</code></pre> 
+<p>17.1版本的SDK</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/68bd8ca84a544343fc021938d279b587/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">STARTUP-STM32F10X_HD.S文件说明</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1fd344271fc38fb9a82696c7da61b6b6/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">蓝牙通讯关于GAP BLE回调事件的一些说明</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

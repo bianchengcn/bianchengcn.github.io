@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>操作系统（8）---进程的同步与互斥以及信号量机制（万字总结~） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="操作系统（8）---进程的同步与互斥以及信号量机制（万字总结~）" />
+<meta property="og:description" content="目录
+一.进程的同步与互斥
+1.进程的异步和同步
+2.进程互斥
+3.进程互斥的软件实现方法
+（1）单标志法
+（2）双标志法
+（3）双标志后检查
+（4）Peterson算法
+4.进程互斥的硬件实现方法
+（1）中断屏蔽方法
+（2）TestAndSet(TS指令/TSL指令)
+（3）Swap指令（XCHG指令）
+补充：
+互斥锁
+排号自旋锁
+条件变量
+二.信号量机制
+1.信号量的类别
+（1）整型信号量
+（2）记录型信号量
+2.信号量机制实现进程互斥
+3.信号量机制实现进程同步
+4.信号量机制实现前驱关系
+三.同步与互斥典型案例
+1.生产者、消费者问题
+2.多生产者、多消费者问题
+3.读者、写者问题
+4.哲学家进餐问题
+四.管程
+1.为什么要引入管程
+2.管程的定义和基本特征
+3.管程的例子
+一.进程的同步与互斥 1.进程的异步和同步 异步性是指，各并发执行的进程以各自独立的、不可预知的速度向前推进。
+例如：进程通信----管道通信
+读进程和写进程并发地运行，由于并发必然导致异步性，因此“写数据”和“读数据”两个操作执行的先后顺序是不确定的。而实际应用中，又必须按照“写数据→读数据”的顺序来执行的。如何解决这种异步问题，就是“进程同步”所讨论的内容。
+同步亦称直接制约关系，它是指为完成某种任务而建立的两个或多个进程，这些进程因为需要在某些位置上协调它们的工作次序而产生的制约关系。进程间的直接制约关系就是源于它们之间的相互合作。
+2.进程互斥 进程的“并发”需要“共享”的支持。各个并发执行的进程不可避免的需要共享一些系统资源(比如内存，又比如打印机、摄像头这样的I/O设备)
+资源有两种共享方式：
+(1)同时共享方式：系统中的某些资源，允许一个时间段内由多个进程“同时”对它们进行访问。
+(2)互斥共享方式：系统中的某些资源，虽然可以提供给多个进程使用，但一个时间段内只允许一个进程访问该资源。
+我们把一个时间段内只允许一个进程使用的资源称为临界资源。许多物理设备(比如摄像头、打印机)都属于临界资源。此外还有许多变量、数据、内存缓冲区等都属于临界资源。对临界资源的访问，必须互斥地进行。
+互斥，亦称间接制约关系。进程互斥指当一个进程访问某临界资源时，另一个想要访问该临界资源的进程必须等待。当前访问临界资源的进程访问结束，释放该资源之后，另一个进程才能去访问临界资源。
+对临界资源的互斥访问，从逻辑上分为如下四个部分：
+进入区：
+负责检查是否可进入临界区，若可进入，则应设置正在访问临界资源的标志(可理解为“上锁”)，以阻止其他进程同时进入临界区
+临界区：
+访问临界资源的那段代码
+退出区：
+负责解除正在访问临界资源的标志(可理解为“解锁”)
+剩余区：
+做其他处理
+注意进入区和临界区的区别：
+临界区是进程中访问临界资源的代码段。
+进入区和退出区是负责实现互斥的代码段。
+为了实现对临界资源的互斥访问，同时保证系统整体性能，需要遵循以下原则:
+1.空闲让进。临界区空闲时，可以允许一个请求进入临界区的进程立即进入临界区;
+2.忙则等待。当已有进程进入临界区时，其他试图进入临界区的进程必须等待；
+3.有限等待。对请求访问的进程，应保证能在有限时间内进入临界区(保证不会饥饿);
+4.让权等待。当进程不能进入临界区时，应立即释放处理机，防止进程忙等待。
+注：这里的忙等待可以类比while(1){}循环，占着CPU但不运行进程。
+3.进程互斥的软件实现方法 （1）单标志法 两个进程在访问完临界区后会把使用临界区的权限转交给另一个进程。也就是说每个进程进入临界区的权限只能被另一个进程赋予
+例如：
+turn表示当前允许进入临界区的进程号,在进入区时，进程会判断自己的进程号是否与允许进入临界区的进程号相同,若此时turn不等于自己的编号时，说明此时临界区只允许另一个进程进入。以上述例子为例：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/fcb6188fef8ee33711755efe0c415fdb/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-02-01T01:29:29+08:00" />
+<meta property="article:modified_time" content="2024-02-01T01:29:29+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">操作系统（8）---进程的同步与互斥以及信号量机制（万字总结~）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="main-toc-toc" style="margin-left:80px;"><a href="#main-toc" rel="nofollow">一.进程的同步与互斥</a></p> 
+<p id="1.%E8%BF%9B%E7%A8%8B%E7%9A%84%E5%BC%82%E6%AD%A5%E5%92%8C%E5%90%8C%E6%AD%A5-toc" style="margin-left:120px;"><a href="#1.%E8%BF%9B%E7%A8%8B%E7%9A%84%E5%BC%82%E6%AD%A5%E5%92%8C%E5%90%8C%E6%AD%A5" rel="nofollow">1.进程的异步和同步</a></p> 
+<p id="2.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5-toc" style="margin-left:120px;"><a href="#2.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5" rel="nofollow">2.进程互斥</a></p> 
+<p id="3.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5%E7%9A%84%E8%BD%AF%E4%BB%B6%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%B3%95-toc" style="margin-left:120px;"><a href="#3.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5%E7%9A%84%E8%BD%AF%E4%BB%B6%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%B3%95" rel="nofollow">3.进程互斥的软件实现方法</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E5%8D%95%E6%A0%87%E5%BF%97%E6%B3%95-toc" style="margin-left:160px;"><a href="#%EF%BC%881%EF%BC%89%E5%8D%95%E6%A0%87%E5%BF%97%E6%B3%95" rel="nofollow">（1）单标志法</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E5%8F%8C%E6%A0%87%E5%BF%97%E6%B3%95-toc" style="margin-left:160px;"><a href="#%EF%BC%882%EF%BC%89%E5%8F%8C%E6%A0%87%E5%BF%97%E6%B3%95" rel="nofollow">（2）双标志法</a></p> 
+<p id="%EF%BC%883%EF%BC%89%E5%8F%8C%E6%A0%87%E5%BF%97%E5%90%8E%E6%A3%80%E6%9F%A5-toc" style="margin-left:160px;"><a href="#%EF%BC%883%EF%BC%89%E5%8F%8C%E6%A0%87%E5%BF%97%E5%90%8E%E6%A3%80%E6%9F%A5" rel="nofollow">（3）双标志后检查</a></p> 
+<p id="%EF%BC%884%EF%BC%89Peterson%E7%AE%97%E6%B3%95-toc" style="margin-left:160px;"><a href="#%EF%BC%884%EF%BC%89Peterson%E7%AE%97%E6%B3%95" rel="nofollow">（4）Peterson算法</a></p> 
+<p id="4.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5%E7%9A%84%E7%A1%AC%E4%BB%B6%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%B3%95-toc" style="margin-left:120px;"><a href="#4.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5%E7%9A%84%E7%A1%AC%E4%BB%B6%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%B3%95" rel="nofollow">4.进程互斥的硬件实现方法</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E4%B8%AD%E6%96%AD%E5%B1%8F%E8%94%BD%E6%96%B9%E6%B3%95-toc" style="margin-left:160px;"><a href="#%EF%BC%881%EF%BC%89%E4%B8%AD%E6%96%AD%E5%B1%8F%E8%94%BD%E6%96%B9%E6%B3%95" rel="nofollow">（1）中断屏蔽方法</a></p> 
+<p id="%EF%BC%882%EF%BC%89TestAndSet(TS%E6%8C%87%E4%BB%A4%2FTSL%E6%8C%87%E4%BB%A4)-toc" style="margin-left:160px;"><a href="#%EF%BC%882%EF%BC%89TestAndSet%28TS%E6%8C%87%E4%BB%A4%2FTSL%E6%8C%87%E4%BB%A4%29" rel="nofollow">（2）TestAndSet(TS指令/TSL指令)</a></p> 
+<p id="%EF%BC%883%EF%BC%89Swap%E6%8C%87%E4%BB%A4%EF%BC%88XCHG%E6%8C%87%E4%BB%A4%EF%BC%89-toc" style="margin-left:160px;"><a href="#%EF%BC%883%EF%BC%89Swap%E6%8C%87%E4%BB%A4%EF%BC%88XCHG%E6%8C%87%E4%BB%A4%EF%BC%89" rel="nofollow">（3）Swap指令（XCHG指令）</a></p> 
+<p id="%E8%A1%A5%E5%85%85%EF%BC%9A-toc" style="margin-left:160px;"><a href="#%E8%A1%A5%E5%85%85%EF%BC%9A" rel="nofollow">补充：</a></p> 
+<p id="%E4%BA%92%E6%96%A5%E9%94%81-toc" style="margin-left:200px;"><a href="#%E4%BA%92%E6%96%A5%E9%94%81" rel="nofollow">互斥锁</a></p> 
+<p id="%E6%8E%92%E5%8F%B7%E8%87%AA%E6%97%8B%E9%94%81-toc" style="margin-left:200px;"><a href="#%E6%8E%92%E5%8F%B7%E8%87%AA%E6%97%8B%E9%94%81" rel="nofollow">排号自旋锁</a></p> 
+<p id="%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8F-toc" style="margin-left:200px;"><a href="#%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8F" rel="nofollow">条件变量</a></p> 
+<p id="%E4%BA%8C.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6-toc" style="margin-left:80px;"><a href="#%E4%BA%8C.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6" rel="nofollow">二.信号量机制</a></p> 
+<p id="1.%E4%BF%A1%E5%8F%B7%E9%87%8F%E7%9A%84%E7%B1%BB%E5%88%AB-toc" style="margin-left:120px;"><a href="#1.%E4%BF%A1%E5%8F%B7%E9%87%8F%E7%9A%84%E7%B1%BB%E5%88%AB" rel="nofollow">1.信号量的类别</a></p> 
+<p id="%EF%BC%881%EF%BC%89%E6%95%B4%E5%9E%8B%E4%BF%A1%E5%8F%B7%E9%87%8F-toc" style="margin-left:160px;"><a href="#%EF%BC%881%EF%BC%89%E6%95%B4%E5%9E%8B%E4%BF%A1%E5%8F%B7%E9%87%8F" rel="nofollow">（1）整型信号量</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E8%AE%B0%E5%BD%95%E5%9E%8B%E4%BF%A1%E5%8F%B7%E9%87%8F-toc" style="margin-left:160px;"><a href="#%EF%BC%882%EF%BC%89%E8%AE%B0%E5%BD%95%E5%9E%8B%E4%BF%A1%E5%8F%B7%E9%87%8F" rel="nofollow">（2）记录型信号量</a></p> 
+<p id="2.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5-toc" style="margin-left:120px;"><a href="#2.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5" rel="nofollow">2.信号量机制实现进程互斥</a></p> 
+<p id="3.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E5%90%8C%E6%AD%A5-toc" style="margin-left:120px;"><a href="#3.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E5%90%8C%E6%AD%A5" rel="nofollow">3.信号量机制实现进程同步</a></p> 
+<p id="4.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E5%89%8D%E9%A9%B1%E5%85%B3%E7%B3%BB-toc" style="margin-left:120px;"><a href="#4.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E5%89%8D%E9%A9%B1%E5%85%B3%E7%B3%BB" rel="nofollow">4.信号量机制实现前驱关系</a></p> 
+<p id="%E4%B8%89.%E5%90%8C%E6%AD%A5%E4%B8%8E%E4%BA%92%E6%96%A5%E5%85%B8%E5%9E%8B%E6%A1%88%E4%BE%8B-toc" style="margin-left:80px;"><a href="#%E4%B8%89.%E5%90%8C%E6%AD%A5%E4%B8%8E%E4%BA%92%E6%96%A5%E5%85%B8%E5%9E%8B%E6%A1%88%E4%BE%8B" rel="nofollow">三.同步与互斥典型案例</a></p> 
+<p id="1.%E7%94%9F%E4%BA%A7%E8%80%85%E3%80%81%E6%B6%88%E8%B4%B9%E8%80%85%E9%97%AE%E9%A2%98-toc" style="margin-left:120px;"><a href="#1.%E7%94%9F%E4%BA%A7%E8%80%85%E3%80%81%E6%B6%88%E8%B4%B9%E8%80%85%E9%97%AE%E9%A2%98" rel="nofollow">1.生产者、消费者问题</a></p> 
+<p id="2.%E5%A4%9A%E7%94%9F%E4%BA%A7%E8%80%85%E3%80%81%E5%A4%9A%E6%B6%88%E8%B4%B9%E8%80%85%E9%97%AE%E9%A2%98-toc" style="margin-left:120px;"><a href="#2.%E5%A4%9A%E7%94%9F%E4%BA%A7%E8%80%85%E3%80%81%E5%A4%9A%E6%B6%88%E8%B4%B9%E8%80%85%E9%97%AE%E9%A2%98" rel="nofollow">2.多生产者、多消费者问题</a></p> 
+<p id="3.%E8%AF%BB%E8%80%85%E3%80%81%E5%86%99%E8%80%85%E9%97%AE%E9%A2%98-toc" style="margin-left:120px;"><a href="#3.%E8%AF%BB%E8%80%85%E3%80%81%E5%86%99%E8%80%85%E9%97%AE%E9%A2%98" rel="nofollow">3.读者、写者问题</a></p> 
+<p id="4.%E5%93%B2%E5%AD%A6%E5%AE%B6%E8%BF%9B%E9%A4%90%E9%97%AE%E9%A2%98-toc" style="margin-left:120px;"><a href="#4.%E5%93%B2%E5%AD%A6%E5%AE%B6%E8%BF%9B%E9%A4%90%E9%97%AE%E9%A2%98" rel="nofollow">4.哲学家进餐问题</a></p> 
+<p id="%E5%9B%9B.%E7%AE%A1%E7%A8%8B-toc" style="margin-left:80px;"><a href="#%E5%9B%9B.%E7%AE%A1%E7%A8%8B" rel="nofollow">四.管程</a></p> 
+<p id="1.%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%BC%95%E5%85%A5%E7%AE%A1%E7%A8%8B-toc" style="margin-left:120px;"><a href="#1.%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%BC%95%E5%85%A5%E7%AE%A1%E7%A8%8B" rel="nofollow">1.为什么要引入管程</a></p> 
+<p id="2.%E7%AE%A1%E7%A8%8B%E7%9A%84%E5%AE%9A%E4%B9%89%E5%92%8C%E5%9F%BA%E6%9C%AC%E7%89%B9%E5%BE%81-toc" style="margin-left:120px;"><a href="#2.%E7%AE%A1%E7%A8%8B%E7%9A%84%E5%AE%9A%E4%B9%89%E5%92%8C%E5%9F%BA%E6%9C%AC%E7%89%B9%E5%BE%81" rel="nofollow">2.管程的定义和基本特征</a></p> 
+<p id="3.%E7%AE%A1%E7%A8%8B%E7%9A%84%E4%BE%8B%E5%AD%90-toc" style="margin-left:120px;"><a href="#3.%E7%AE%A1%E7%A8%8B%E7%9A%84%E4%BE%8B%E5%AD%90" rel="nofollow">3.管程的例子</a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h4>一.进程的同步与互斥</h4> 
+<h5 id="1.%E8%BF%9B%E7%A8%8B%E7%9A%84%E5%BC%82%E6%AD%A5%E5%92%8C%E5%90%8C%E6%AD%A5">1.进程的异步和同步</h5> 
+<p><strong>异步性</strong>是指，<strong>各并发执行的进程以各自独立的、不可预知的速度向前推进</strong>。</p> 
+<p>例如：进程通信----管道通信</p> 
+<p><img alt="" height="89" src="https://images2.imgbox.com/9b/28/iib28RzU_o.png" width="909"></p> 
+<blockquote> 
+ <p>读进程和写进程并发地运行，由于并发必然导致异步性，因此“写数据”和“读数据”两个操作执行的先后顺序是不确定的。而实际应用中，又必须按照“<strong>写数据→读数据</strong>”的顺序来执行的。如何解决这种异步问题，就是“进程同步”所讨论的内容。</p> 
+</blockquote> 
+<p><strong>同步亦称直接制约关系</strong>，它是指为完成某种任务而建立的两个或多个进程，这些进程因为需要在某些位置上<strong>协调</strong>它们的<strong>工作次序</strong>而产生的制约关系。进程间的直接制约关系就是源于它们之间的相互合作。</p> 
+<p></p> 
+<h5 id="2.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5">2.进程互斥</h5> 
+<p>进程的“并发”需要“共享”的支持。<strong>各个并发执行的进程不可避免的需要共享一些系统资源</strong>(比如内存，又比如打印机、摄像头这样的I/O设备)</p> 
+<p><strong>资源有两种共享方式：</strong></p> 
+<p>(1)同时共享方式：系统中的某些资源，<strong>允许一个时间段内由多个进程“同时”对它们进行访问。</strong></p> 
+<p>(2)互斥共享方式：系统中的某些资源，虽然可以提供给多个进程使用，但<strong>一个时间段内只允许一个进程访问该资源。</strong></p> 
+<blockquote> 
+ <p>我们把<strong>一个时间段内只允许一个进程使用</strong>的资源称为<strong>临界资源</strong>。许多物理设备(比如摄像头、打印机)都属于临界资源。此外还有许多变量、数据、内存缓冲区等都属于临界资源。对临界资源的访问，必须互斥地进行。</p> 
+ <p>互斥，亦称<strong>间接制约关系</strong>。<strong>进程互斥指</strong>当一个进程访问某临界资源时，另一个想要访问该临界资源的进程必须等待。当前访问临界资源的进程访问结束，释放该资源之后，另一个进程才能去访问临界资源。</p> 
+</blockquote> 
+<p>对临界资源的互斥访问，从逻辑上分为如下四个部分：</p> 
+<p><img alt="" height="149" src="https://images2.imgbox.com/b7/ed/fXc3qkY6_o.png" width="400"></p> 
+<blockquote> 
+ <p><strong>进入区：</strong></p> 
+ <p>负责检查是否可进入<strong>临界区</strong>，若可进入，则应设置<strong>正在访问临界资源的标志</strong>(可理解为“上锁”)，以阻止其他进程同时进入临界区</p> 
+ <p><strong>临界区：</strong></p> 
+ <p>访问临界资源的那段代码</p> 
+ <p><strong>退出区：</strong></p> 
+ <p>负责解除<strong>正在访问临界资源的标志</strong>(可理解为“解锁”)</p> 
+ <p><strong>剩余区：</strong></p> 
+ <p>做其他处理</p> 
+ <p><strong>注意进入区和临界区的区别：</strong><br> 临界区是进程中访问临界资源的代码段。<br> 进入区和退出区是负责实现互斥的代码段。</p> 
+</blockquote> 
+<p><strong>为了实现对临界资源的互斥访问，同时保证系统整体性能，需要遵循以下原则:</strong></p> 
+<p>1.<strong>空闲让进</strong>。临界区空闲时，可以允许一个请求进入临界区的进程立即进入临界区;</p> 
+<p>2.<strong>忙则等待</strong>。当已有进程进入临界区时，其他试图进入临界区的进程必须等待；</p> 
+<p>3.<strong>有限等待</strong>。对请求访问的进程，应保证能在有限时间内进入临界区(<strong>保证不会饥饿</strong>);</p> 
+<p>4.<strong>让权等待</strong>。当进程不能进入临界区时，应立即释放处理机，防止进程忙等待。</p> 
+<p><strong>注：</strong>这里的忙等待可以类比while(1){}循环，占着CPU但不运行进程。</p> 
+<p></p> 
+<h5 id="3.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5%E7%9A%84%E8%BD%AF%E4%BB%B6%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%B3%95">3.进程互斥的软件实现方法</h5> 
+<h6 id="%EF%BC%881%EF%BC%89%E5%8D%95%E6%A0%87%E5%BF%97%E6%B3%95">（1）单标志法</h6> 
+<p>两个进程在<strong>访问完临界区后</strong>会把使用临界区的权限转交给另一个进程。也就是说<strong>每个进程进入临界区的权限只能被另一个进程赋予</strong></p> 
+<p><strong>例如：</strong></p> 
+<p><img alt="" height="307" src="https://images2.imgbox.com/f6/19/6yfwKOop_o.png" width="1200"></p> 
+<blockquote> 
+ <p>turn表示当前允许进入临界区的进程号,在进入区时，进程会判断自己的进程号是否与允许进入临界区的进程号相同,若此时turn不等于自己的编号时，说明此时临界区只允许另一个进程进入。<strong>以上述例子为例：</strong></p> 
+ <p>turn 的初值为0，即刚开始只允许0号进程进入临界区。<br> 若 P1先上处理机运行，则会一直卡在<strong> ⑤</strong>。直到 P1 的时间片用完，发生调度，切换 P0 上处理机运行。<br> 代码 <strong>①</strong> 不会卡住 PO，PO可以正常访问临界区，在 P0访问临界区期间即时切换回 P1，P1依然会卡在 <strong>⑤</strong>。直到P1进程的时间片用完，操作系统会再次调度P0进程，让其上处理机运行。只有到P0进程运行到退出区时，P1进程才能跳过while，使用临界区资源。</p> 
+ <p><strong>因此，该算法可以实现“同一时刻最多只允许一个进程访问临界区</strong></p> 
+</blockquote> 
+<p>这个算法只能按 P0 →P1→P0 →P1→…这样轮流访问。这种必须“轮流访问”带来的问题是，如果此时允许进入临界区的进程是<strong> P0</strong>，而P0一直不访问临界区，那么虽然此时临界区空闲，但是并不允许P1访问。<strong>因此，单标志法存在的主要问题是:违背“空闲让进”原则。</strong><br>  </p> 
+<h6 id="%EF%BC%882%EF%BC%89%E5%8F%8C%E6%A0%87%E5%BF%97%E6%B3%95">（2）双标志法</h6> 
+<p>设置一个布尔型数组flag[]，数组中各个元素用来<strong>标记各进程想进入临界区的意愿</strong>，比如<br> “flag[0]=ture”意味着0号进程P0现在想要进入临界区。每个进程在进入临界区之前先检查当前有没有别的进程想进入临界区，如果没有，则把自身对应的标志flag[i]设为true，之后开始访问临界区。</p> 
+<p><img alt="" height="344" src="https://images2.imgbox.com/57/3a/gFwbC5kv_o.png" width="1200"></p> 
+<blockquote> 
+ <p>以上图为例：</p> 
+ <p>当flag[0]=false时,表示0号进程现在不想进入临界区，flag[0]=true时，表示0号进程现在想进入临界区。</p> 
+ <p>1.每个进程在进入临界区之前，会先检查对方是否想进入临界区</p> 
+ <p>2.若对方想进入临界区，此进程就会一直卡在while循环，若对方不想进入临界区，此进程就会把flag[i]设为true。</p> 
+ <p><strong>现在假设一种情况：</strong></p> 
+ <p><strong>1.</strong>P0进程检查P1进程，发现P1进程并不想进入临界区，P1就会跳过while循环，P1接下来要执行②，在执行②之前，也就是flag[0]还没有切换为true，就切换到P0进程。</p> 
+ <p><strong>2.</strong>P1进程的⑤检测flag[0]=false，所以P1进程的while循环会被跳过，进入⑥，并且访问临界区。</p> 
+ <p>3.若此时又切换为P0进程，flag[0]设为true，P0进程也会进入临界区。</p> 
+</blockquote> 
+<p>若按照 ①⑤②⑥③⑦..的顺序执行，P0 和 P1将会同时访问临界区。因此，双标志先检查法的主要问题是:违反<strong>“忙则等待”</strong>原则。</p> 
+<p><strong>根本原因在于</strong>，<strong>进入区</strong>的“检查”和“上锁”<strong>两个处理不是一气呵成的</strong>。“检查”后，“上锁”前可能发生进程切换。</p> 
+<p></p> 
+<h6 id="%EF%BC%883%EF%BC%89%E5%8F%8C%E6%A0%87%E5%BF%97%E5%90%8E%E6%A3%80%E6%9F%A5">（3）双标志后检查</h6> 
+<p>双标志先检查法的政版。前一个算法的问题是先“检查”后“上锁”，但是这两个操作又无法一气呵成，因此导致了两个进程同时进入临界区的问题。因此，人们又想到先“上锁”后“检查的方法，来避免上述问题。</p> 
+<p><img alt="" height="342" src="https://images2.imgbox.com/28/ae/USIEgCPY_o.png" width="1200"></p> 
+<blockquote> 
+ <p>先检查法和后检查法都是用flag标志表示是否进入临界区的意愿，<strong>区别在于</strong>：</p> 
+ <p>先检查法是先“检查”后“上锁”</p> 
+ <p><strong>后检查法是先“上锁”后“检查”</strong></p> 
+ <p><img alt="" height="232" src="https://images2.imgbox.com/5f/74/NgKsYhKn_o.png" width="1200"></p> 
+ <p>若P0进程想要进入临界区，那么P0先将flag[0]设为true，再检查P1是否想使用，若P1不想使用，P0就可以进入临界区访问临界资源。当P0访问完毕，再flag[0]=false，退出临界区。</p> 
+ <p>接下来考虑并发的情况：</p> 
+ <p>若P0表示自己想访问临界资源，即flag[0]=true，此时进程切换到P1，P1也想访问临界资源，即flag[1]=true，此时P0发现P1也想进入临界区，就会卡在while循环，同理，P1发现P0想访问临界区，也会卡在while循环。所以P0和P1都无法进入临界区。</p> 
+</blockquote> 
+<p>若按照 ①⑤②⑥...的顺序执行，<strong>P0 和 P1将都无法进入临界区</strong></p> 
+<p>因此，双标志后检查法<strong>虽然解决了“忙则等待”</strong>的问题，但是又违背了“空闲让进”和"有限等待"（每个进程都进入不了临界区，就会造成无限等待的情况）原则，会因各进程都长期无法访问临界资源而<strong>产生“饥饿”现象</strong>。</p> 
+<p>两个进程都争着想进入临界区，但是谁也不让谁，最后谁都无法进入临界区。</p> 
+<h6></h6> 
+<h6 id="%EF%BC%884%EF%BC%89Peterson%E7%AE%97%E6%B3%95">（4）Peterson算法</h6> 
+<p>Peterson方法结合了双标志法与单标志法，例如：</p> 
+<p><img alt="" height="320" src="https://images2.imgbox.com/72/44/xru0bbWw_o.png" width="600"></p> 
+<blockquote> 
+ <p>flag用于表示是否有进入临界区的意愿，turn用来表示优先让哪个进程进入临界区。</p> 
+ <p>以P0进程为例，若P0想要访问临界区，会把flag设为true，同时把turn的值设为对方的编号，也就表示可以优先让对方使用临界资源。</p> 
+ <p>while(flag[1] &amp;&amp; turn==1)用来检查P1是否想用，若对方想用，那么P0就会停留在while中，若P1不想使用，那么P0就会进入临界区，使用完后，就会将<strong>flag[0]=false</strong></p> 
+ <p><img alt="" height="111" src="https://images2.imgbox.com/43/05/NpCOn9jq_o.png" width="652"></p> 
+</blockquote> 
+<p> 若按照①⑥②⑦⑧…的顺序执行，①表示P0想进入临界区，⑥表示P1想进入临界区，②表示可以优先让P1访问临界区，⑦表示P1可以优先让P0访问临界区，接下来P1要运行⑧，但是P1发现</p> 
+<p>flag[0]=1并且turn==0，所以P1会卡在while循环中，直到进程切换为P0，并且P1没有进入临界区的意愿，那么P0可以顺利进入临界区。</p> 
+<p>所以Peterson 算法用软件方法解决了进程互斥问题，<strong>遵循了空闲让进、忙则等待、有限等待 三个原则，但是依然未遵循让权等待的原则。</strong></p> 
+<blockquote> 
+ <p>让权等待即若进程进入不了临界区，那么应该立即释放处理机，但是这个算法的规则是，若某进程进入不了临界区，那么会一直停留在while()循环中，一直占用着CPU，检查while循环是否得到满足，有两种情况：</p> 
+ <p><strong>1.在时间片内，另一个进程flag[i]=0，即不想访问临界区</strong></p> 
+ <p><strong>2.这个进程不想访问临界区，那么另外一个进程就可以跳过while循环，顺利执行</strong></p> 
+</blockquote> 
+<p></p> 
+<h5 id="4.%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5%E7%9A%84%E7%A1%AC%E4%BB%B6%E5%AE%9E%E7%8E%B0%E6%96%B9%E6%B3%95">4.进程互斥的硬件实现方法</h5> 
+<p>我们可以看到，上述软件实现的方法都未遵循让权等待的原则，所以接下来介绍硬件实现方法。</p> 
+<h6 id="%EF%BC%881%EF%BC%89%E4%B8%AD%E6%96%AD%E5%B1%8F%E8%94%BD%E6%96%B9%E6%B3%95">（1）中断屏蔽方法</h6> 
+<p>利用“开/关中断指令”实现(与原语的实现思想相同，即在某进程开始访问临界区到结束访问为止都不允许被中断，也就不能发生进程切换，因此也不可能发生两个同时访问临界区的情况)</p> 
+<p><img alt="" height="173" src="https://images2.imgbox.com/14/4b/kdpJRwau_o.png" width="141"></p> 
+<blockquote> 
+ <p>关中断即不允许当前进程被中断，也必然不会发生进程切换，直到当前进程访问完临界区，再执行开中断指令，才有可能有别的进程上处理机并访问临界区。</p> 
+</blockquote> 
+<p>优点：简单，高效</p> 
+<p>缺点：<strong>不适用于多处理机</strong>（也就是另外一个用户进程也要使用临界资源，也使用这样的方法，那么就会导致两个进程同时访问临界资源的情况)；<strong>只适用于操作系统内核进程，不适用于用户进程</strong>(因为开/关中断指令只能运行在内核态，这组指令如果能让用户随意使用会很危险)</p> 
+<h6></h6> 
+<h6 id="%EF%BC%882%EF%BC%89TestAndSet(TS%E6%8C%87%E4%BB%A4%2FTSL%E6%8C%87%E4%BB%A4)">（2）TestAndSet(TS指令/TSL指令)</h6> 
+<p>简称 TS 指令，也有地方称为TestAndSetLock指令，或 TSL指令</p> 
+<p>TSL指令<strong>是用硬件实现</strong>的，执行的过程不允许被中断，只能一气呵成。以下是用C语言描述的逻辑</p> 
+<p><img alt="" height="262" src="https://images2.imgbox.com/21/2d/WI8nfrEU_o.png" width="1200"></p> 
+<blockquote> 
+ <p>若当前临界区已经被加锁，那么在while循环中会一直为true，一直到lock被当前进程在退出区改为false，那么跳出while循环，并且该进程访问临界资源，直到此进程在退出区lock=false，临界资源被解锁，即：</p> 
+ <p><img alt="" height="1" src="https://images2.imgbox.com/87/66/AhYrDLMS_o.png" width="500"></p> 
+</blockquote> 
+<p>相比软件实现方法，TSL指令把“上锁”和“检查”操作用硬件的方式变成了一气呵成的原子操作。</p> 
+<blockquote> 
+ <p>优点:实现简单，无需像软件实现方法那样严格检查是否会有逻辑漏洞；适用于多处理机环境 。</p> 
+ <p>缺点<strong>:不满足“让权等待”原则</strong>，暂时无法进入临界区的进程会占用CPU并循环执行TSL指令，从而导致“忙等”。</p> 
+</blockquote> 
+<h6></h6> 
+<h6 id="%EF%BC%883%EF%BC%89Swap%E6%8C%87%E4%BB%A4%EF%BC%88XCHG%E6%8C%87%E4%BB%A4%EF%BC%89">（3）Swap指令（XCHG指令）</h6> 
+<p>有的地方也叫 Exchange 指令，或简称 XCHG 指令。</p> 
+<p>swap 指令<strong>是用硬件实现的</strong>，执行的过程不允许被中断，只能一气呵成。以下是用C语言描述的逻辑:</p> 
+<p><img alt="" height="267" src="https://images2.imgbox.com/c1/0b/KXQBf9M2_o.png" width="1112"></p> 
+<blockquote> 
+ <p>逻辑上来看 Swap和 TSL并无太大区别，都是先记录下此时临界区是否已经被上锁(记录在 old 变量上)，再将上锁标记lock 设置为true，最后检查 old，如果old为false, 则说明之前没有别的进程对临界区上锁，则可跳出循环，进入临界区。</p> 
+ <p><strong>以下while循环对应两种情况：</strong></p> 
+ <p>① lock=false，swap执行一次，把lock=true，即上锁，old=false，即可以往下执行</p> 
+ <p>② lock=true，一直停留在while循环中，即一直执行swap，直到lock=false后执行①</p> 
+ <p><img alt="" height="177" src="https://images2.imgbox.com/84/07/qhUWigPj_o.png" width="400"></p> 
+</blockquote> 
+<p><strong>优点:</strong>实现简单，无需像软件实现方法那样严格检查是否会有逻辑漏洞;适用于多处理机环境。</p> 
+<p><strong>缺点:</strong>不满足“让权等待”原则，暂时无法进入临界区的进程会占用CPU并循环执行TSL指令，从而导致“忙等”。</p> 
+<h6 id="%E8%A1%A5%E5%85%85%EF%BC%9A"><strong>补充：</strong></h6> 
+<h6 id="%E4%BA%92%E6%96%A5%E9%94%81">互斥锁</h6> 
+<p>解决临界区最简单的工具就是互斥锁(mutex lock)。一个进程在进入临界区时应获得锁;在退出临界区时释放锁。函数acquire()获得锁，而函数release()释放锁。</p> 
+<p>每个互斥锁有一个布尔变量 available，表示锁是否可用。如果锁是可用的，调用 acqiure()会成功，且锁不再可用。当一个进程试图获取不可用的锁时，会被阻塞，直到锁被释放。</p> 
+<p><img alt="" height="206" src="https://images2.imgbox.com/2c/f1/ljhf2wmG_o.png" width="717"></p> 
+<p><strong>acquire()或release()的执行必须是原子操作</strong>，因此互斥锁通常采用硬件机制来实现。</p> 
+<p><strong>互斥锁的主要缺点是忙等待</strong>，当有一个进程在临界区中，任何其他进程在进入临界区时必须连续循环调用 acquire()。当多个进程共享同一CPU时，就浪费了CPU周期。因此，互斥锁通常用于多处理器系统，一个线程可以在一个处理器上等待，不影响其他线程的执行。<br><strong>需要连续循环忙等的互斥锁，都可称为自旋锁(spinlock)，如TSL指令、swap指令、单标志法。</strong></p> 
+<p><strong>特性:</strong><br> 1.需忙等，进程时间片用完才下处理机，违反“让权等待”</p> 
+<p>2.优点:等待期间不用切换进程上下文，多处理器系统中，若上锁的时间短，则等待代价很低</p> 
+<p>3.常用于多处理器系统，一个核忙等，其他核照常工作，并快速释放临界区</p> 
+<p>4.不太适用于单处理机系统，忙等的过程中不可能解锁，只有该进程时间片用完，另一个进程上处理机（上锁），并且使用完临界资源，退出临界区，该进程才能再次获得锁。</p> 
+<p><img alt="" height="267" src="https://images2.imgbox.com/85/a6/e9kwMaDc_o.png" width="960"></p> 
+<h6></h6> 
+<h6 id="%E6%8E%92%E5%8F%B7%E8%87%AA%E6%97%8B%E9%94%81">排号自旋锁</h6> 
+<p><strong>自旋锁中有一种排号自旋锁：</strong></p> 
+<p>排号锁就是要给用锁的线程进行排号，然后锁沿着这个号进行传递，因此可以说锁的竞争就变成了一个先进先出的等待队列。</p> 
+<pre><code>struct lock
+{
+	volatile int owner;
+	volatile int next;
+};
+
+void lock_init(struct lock *lock)
+{
+	//初始化排号锁
+	lock-&gt;owner = 0;
+	lock-&gt;next = 0;
+}
+
+void lock(struct lock*lock)
+{
+	//拿取自己的序号
+	volatile int my_ticket = atomic_FAA(&amp;lock-&gt;next,1);
+	while(lock-&gt;owner != my_ticket)
+	; //循环忙等
+}
+
+void unlock(struct lock*lock)
+{
+	//传递给下一位竞争者
+	lock-&gt;owner++;
+}
+</code></pre> 
+<blockquote> 
+ <p>owner表示当前的锁持有序号，next表示下一个需要分发的序号<br> 第17行是拿取自己的序号，并累加，这样就不会拿取相同的序号<br> 第18行是看当前锁的持有者是不是自己，不是就循环等待<br> 第25行是释放锁，然后锁持有者向后传递。</p> 
+</blockquote> 
+<p></p> 
+<h6 id="%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8F">条件变量</h6> 
+<p>在生产者和消费者模型中，无剩余空位时，生产者会陷入循环等待，他可以不用循环等待的，这会浪费cpu资源，因此需要一种挂起/唤醒机制，条件变量就是为这个机制而设计的。<br> 通过条件变量的接口，一个线程可以停止使用CPU并将自己挂起，当等待的条件满足时，其他线程会唤醒该挂起的线程让其继续执行。</p> 
+<pre><code class="language-cpp">int empty_slot = 5;
+int filled_slot = 0;
+struct cond empty_cond;
+struct lock empty_cnt_lock;
+struct cond filled_cond;
+struct lock filled_cnt_lock;
+
+void producer(void)
+{
+	int new_msg;
+	while(TRUE)
+	{
+		new_msg = produce_new();
+		lock(&amp;empty_cnt_lock);
+		while(empty_slot == 0)
+		{
+			cond_wait(&amp;empty_cond, &amp;empty_cnt_lock);
+		}
+		empty_slot --;
+		unlock(&amp;empty_cnt_lock);
+		
+		buffer_add_safe(new_msg);
+		
+		lock(&amp;filled_cnt_lock);
+		filled_slot ++;
+		cond_signal(&amp;filled_cond);
+		unlock(&amp;filled_cnt_lock);
+	}
+}
+</code></pre> 
+<p>empty_cnt_lock和filled_cnt_lock是来保护对共享计数器empty_slot与filled_slot的修改的锁，这个锁设计的目的是在使用条件变量时，必须要搭配互斥锁一起使用。</p> 
+<p><strong>这里设置了两个条件，empty_cond 缓冲区无空位和filled_cond 缓冲区无数据。</strong></p> 
+<p>当生产者要写数据时发现没有空位，则通过cond_wait函数挂起，条件是empty_cond无空位，搭配的互斥锁是empty_cnt_lock，后边那个cond_signal是唤醒线程，由于写入数据则缓冲区存在数据了，可以唤醒由于缓冲区无数据而挂起的消费者线程。</p> 
+<pre><code class="language-cpp">struct cond{
+	struct thread *wait_list;
+};
+
+void cond_wait(struct cond *cond, struct lock *mutex)
+{
+	list_append(cond-&gt;wait_list, thread_self());//将线程加入等待队列
+	atomic_block_unlock(mutex);	//原子挂起并放锁
+    //这里为一个原子操作，它将当前线程从条件变量的等待队列中移除，并在同一原子操作中释放了互斥锁 mutex
+	lock(mutex);	//重新获得互斥锁（被唤醒后）
+}
+
+void cond_signal(struct cond *cond)
+{
+	if(!list_empty(cond-&gt;wait_list))//看是否有线程等待在条件变量上
+		wakeup(list_remove(cond-&gt;wait_list));	//操作系统提供的唤醒
+}
+
+void cond_broadcast(struct cond *cond)	//广播操作，用于唤醒所有等待在条件变量上的线程
+{
+	while(!list_empty(cond-&gt;wait_list))
+		wakeup(list_remove(cond-&gt;wait_list));
+}
+</code></pre> 
+<p>参考原文链接：https://blog.csdn.net/weixin_38849460/article/details/112334023</p> 
+<h4></h4> 
+<h4 id="%E4%BA%8C.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6">二.信号量机制</h4> 
+<p>由于上述的进程互斥实现方法存在以下问题：</p> 
+<p>1.在双标志先检查法中，<strong>进入区的“检查”，“上锁”操作无法一气呵成</strong>，从而导致了两个进程有可能同时进入临界区的问题;</p> 
+<p>2.所有的解决方案都无法实现“让权等待”。</p> 
+<p><strong>为解决上述问题，提出了信号量机制</strong></p> 
+<p>用户进程可以通过使用操作系统提供的<strong>一对原语</strong>来对<strong>信号量</strong>进行操作，从而很方便的实现了进程互斥、进程同步。</p> 
+<blockquote> 
+ <p><strong>原语</strong>是一种特殊的程序段，其<strong>执行只能一气呵成，不可被中断</strong>。原语是由<strong>关中断/开中断指令</strong>实现的。软件解决方案的主要问题是由“进入区的各种操作无法一气呵成”，因此如果能把进入区、退出区的操作都用“原语”实现，使这些操作能“一气呵成”就能避免问题。</p> 
+ <p><strong>一对原语:</strong>wait(S)原语和 signal(S)原语，可以把原语理解为我们自己写的函数，函数名分别为 wait和 signal，括号里的<strong>信号量S</strong>其实就是函数调用时传入的一个参数。wait、signal 原语常简称为P、V操作。因此，做题的时候常把wait(S)、signal(s)两个操作分别写为 <strong>P(S)、V(S)</strong></p> 
+</blockquote> 
+<p><strong>信号量</strong>其实就是一个变量(可以是一个整数，也可以是更复杂的记录型变量)，可以用一个信号量来<strong>表示系统中某种资源的数量</strong>，比如:系统中只有一台打印机，就可以设置一个初值为1的信号量。</p> 
+<p></p> 
+<h5 id="1.%E4%BF%A1%E5%8F%B7%E9%87%8F%E7%9A%84%E7%B1%BB%E5%88%AB">1.信号量的类别</h5> 
+<h6 id="%EF%BC%881%EF%BC%89%E6%95%B4%E5%9E%8B%E4%BF%A1%E5%8F%B7%E9%87%8F">（1）整型信号量</h6> 
+<p>用一个<strong>整数型的变量</strong>作为信号量，用来<strong>表示系统中某种资源的数量。</strong></p> 
+<p>与<strong>普通整数变量</strong>的区别：对信号的操作只有三种：初始化，P操作，V操作。</p> 
+<p>例如：某计算机系统中有一台打印机</p> 
+<p><img alt="" height="462" src="https://images2.imgbox.com/0a/aa/LurgbMV9_o.png" width="1000"></p> 
+<blockquote> 
+ <p>while(S&lt;=0);</p> 
+ <p>S=S-1;</p> 
+ <p>这两个句子与双标志先检查法的原理是相同的，先检查资源是否足够，如果资源够占用一个资源，<strong>但是这里是用原语实现，所以就避免了双标志先检查法中两个进程同时进入临界区的问题。</strong></p> 
+ <p>同时这里的while循环也会导致<strong>不满足“让权等待”原则，会发生"忙等"</strong></p> 
+ <p><strong>实质上，这里也不是忙等，忙等的情况下，若该进程时间片完，会发生时间片中断，切换到其他进程，但这里是原子操作，进程是不可被中断的。</strong></p> 
+ <p>这里的代码只是演示，不是简单的while循环，而是先给信号量上一个自旋锁，判断如果资源不够，那么会先释放自旋锁，紧跟goto语句回到获取自旋锁的那一步，那么下次回到这个进程时会再次对信号量上自旋锁。</p> 
+ <p><strong>这里也是看了很多资料总结了一下，若佬们有其他见解，请在评论区指教指教，谢谢佬们</strong></p> 
+</blockquote> 
+<p></p> 
+<h6 id="%EF%BC%882%EF%BC%89%E8%AE%B0%E5%BD%95%E5%9E%8B%E4%BF%A1%E5%8F%B7%E9%87%8F">（2）记录型信号量</h6> 
+<p>整型信号量的缺陷是存在“忙等”问题，因此人们又提出了“记录型信号量”，即用记录型数据结构表<br> 示的信号量。</p> 
+<p><img alt="" height="350" src="https://images2.imgbox.com/6d/2e/BzJc1aYA_o.png" width="400"></p> 
+<blockquote> 
+ <p>如果剩余资源数不够使用block语使进程从运行态进入阻塞态，并把挂到信号量S的等待队列(即阻塞队列)中</p> 
+</blockquote> 
+<p><img alt="" height="180" src="https://images2.imgbox.com/b3/3c/pbkytGPb_o.png" width="400"></p> 
+<blockquote> 
+ <p>若<strong>S.value&lt;=0</strong>,表示释放资源后，若还有别的进程在等待这种资源，则使用wakeup原语唤醒等待队列中的一个进程，该进程从阻塞态变为就绪态。</p> 
+</blockquote> 
+<p>例如：某计算机系统中有2台打印机，则可在初始化信号量S时将S.value的值设为2，队列S.L设置为空</p> 
+<p><img alt="" height="153" src="https://images2.imgbox.com/67/1f/qUyyiP0d_o.png" width="500"></p> 
+<p><strong>1</strong>.当分配给P0进程CPU时，剩余资源数会减1</p> 
+<p><img alt="" height="286" src="https://images2.imgbox.com/59/a5/enS6Ylmr_o.png" width="1200"></p> 
+<p><strong>2</strong>.接下来CPU分配给P1进程，剩余的一个资源分配给P1进程</p> 
+<p><img alt="" height="211" src="https://images2.imgbox.com/e9/83/l0TkvxLZ_o.png" width="500"></p> 
+<p><strong>3</strong>.接下来CPU分配给P2进程，剩余资源减1，当前剩余资源为-1，value的值在减1之后小于0，说明此时系统当中没有多余资源分配给进程了。因此这个进程会在wait()原语中，主动执行block原语，即把自己阻塞的原语，因此P2进程会被放到打印资源的等待队列中。</p> 
+<blockquote> 
+ <p>S.value=0,资源恰好分配完S.value=-1,有1个进程在等待</p> 
+</blockquote> 
+<p><img alt="" height="201" src="https://images2.imgbox.com/4d/0f/wAll7Gxp_o.png" width="624"></p> 
+<p><strong>4</strong>.同理，CPU为P3进程服务，没有多余的资源，所以P3也会被放入等待队列的队尾中</p> 
+<blockquote> 
+ <p>S.value=-2,有2个进程在等待</p> 
+</blockquote> 
+<p><img alt="" height="180" src="https://images2.imgbox.com/32/6e/dsrzOJCp_o.png" width="715"></p> 
+<p><strong>5</strong>.P0在使用完打印机后会进行signal操作，首先会让value值做加1的操作，即剩余资源数加1，此时S.value的值会从-2变为-1，若S.value依然是<strong>小于等于</strong>0（注意这里的0，因为是减完后才等于0，所以等于0，也有进程在等待队列中）的，说明等待队列中依然有进程等待，<strong>signal（S）操作中，会主动执行wakeup原语用于唤醒等待队列中队头的进程，即P2，并且将P0释放的打印机资源分配给P2，P2从等待队列中移除，若此时P2进程得到CPU，P2就能使用打印机资源了。</strong></p> 
+<p><img alt="" height="507" src="https://images2.imgbox.com/93/10/wurQBPVD_o.png" width="1200"></p> 
+<p><strong>6</strong>.P2使用完打印机后也会进行signal操作，首先将value减1，接着使用wqakeup原语唤醒等待队列中对头的进程P3，并且将打印机资源分配给P3，P3会从等待队列中移除，此时等待队列为空。若此时P3被分配CPU，就可以使用打印机资源。</p> 
+<p><img alt="" height="500" src="https://images2.imgbox.com/24/e3/15YWaWxH_o.png" width="1179"></p> 
+<p><strong>7</strong>.若此时P1使用完进程释放资源，剩余资源加1，即从0变为1，此时剩余资源数已经大于0了，说明没有进程在等待队列中，所以执行signal操作时，并不需要执行wakeup原语，唤醒进程。</p> 
+<p><img alt="" height="2" src="https://images2.imgbox.com/7c/f9/Gdcayfbo_o.png" width="500"></p> 
+<p><strong>8</strong>.最后P3使用完打印机资源后，会对打印机资源释放，系统回收打印机资源，剩余资源数从1变为2,也不需要执行wakeup原语。</p> 
+<p><img alt="" height="164" src="https://images2.imgbox.com/75/a3/g8AIXnMY_o.png" width="500"></p> 
+<p><strong>总结：</strong></p> 
+<blockquote> 
+ <p><strong>wait(S)、signal(s)也可以记为 P(S)、V(S)，这对原语可用于实现系统资源的“申请”和“释放”</strong></p> 
+ <p>对信号量S的一次P操作意味着进程请求一个单位的该类资源，因此需要执行 S.value--，表示资源数减1，当S.value&lt;0时表示该类资源已分配完毕，<strong>因此进程应调用 block 原语进行自我阻塞(当前运行的进程从运行态---&gt;阻塞态)</strong>，<strong>主动放弃处理机</strong>，并插入该类资源的等待队列S.L中。可见，该机制遵循了“让权等待”原则，不会出现“忙等”现象。</p> 
+ <p>对信号量S的一次V操作意味着进程释放一个单位的该类资源，因此需要执行S.value++，表示资源数加1，若加1后仍是S.value&lt;=0，表示依然有进程在等待该类资源，<strong>因此应调用 wakeup 原语唤醒等待队列中的第1个进程(被唤醒进程从阻塞态---&gt;就绪态)</strong></p> 
+</blockquote> 
+<p></p> 
+<h5 id="2.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E4%BA%92%E6%96%A5"><strong>2.信号量机制实现进程互斥</strong></h5> 
+<p>实现进程互斥操作的步骤如下：</p> 
+<p>1.分析并发进程的关键活动，划定临界区(如:对临界资源打印机的访问就应放在临界区)</p> 
+<p>2.设置互斥信号量 mutex，初值为 1</p> 
+<p>3.在进入区 P(mutex)--申请资源</p> 
+<p>4.在退出区 V(mutex)--释放资源</p> 
+<blockquote> 
+ <p>此时P1进程申请进入临界区，由于此时互斥信号量为1，即临界资源为1，所以此时P1可以进入临界区，若P2也想进入临界区，就会被阻塞在P操作，等到P1进行V操作，释放资源后，P2进程才能被唤醒。</p> 
+</blockquote> 
+<p><img alt="" height="435" src="https://images2.imgbox.com/3f/6c/EPPSyWNb_o.png" width="300"></p> 
+<blockquote> 
+ <p>注：</p> 
+ <p>1.队不同临界资源需要设置不同的互斥信号量，例如打印机资源设置为mutex1，摄像头资源设置为mutex2。</p> 
+ <p>2.P、V操作必须成对出现。缺少P(mutex)就不能保证临界资源的互斥访问。缺少V(mutex)会导致资源永不被释放，等待进程永不被唤醒。</p> 
+</blockquote> 
+<p></p> 
+<h5 id="3.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E5%90%8C%E6%AD%A5">3.信号量机制实现进程同步</h5> 
+<p>进程同步就是要让各并发进程按要求有序地推进。例如，<strong>下图中P1、P2并发执行，由于存在异步性，因此二者交替推进的次序是不确定的。</strong><br> 若 P2的“代码4”要基于 P1的“代码1”和“代码2”的运行结果才能执行，那么我们就必须保证“代码4”一定是在“代码2”之后才会执行。这就是进程同步问题，让本来异步并发的进程互相配合，有序推进。</p> 
+<p><img alt="" height="285" src="https://images2.imgbox.com/c4/ea/wLFh6pM0_o.png" width="100"></p> 
+<p>实现步骤如下：</p> 
+<blockquote> 
+ <p>1.分析什么地方需要实现“同步关系”，即必须保证“一前一后”执行的两个操作(或两句代码)<br> 2.设置<strong>同步信号量S,初始为0</strong></p> 
+ <p><strong>3.在“前操作”之后执行 V(S)</strong></p> 
+ <p><strong>4.在“后操作”之前执行 P(S)</strong></p> 
+ <p><strong>注意这里是前V后P，由于刚开始信号量为0，需要先V(s)，释放资源，后P(S）才能申请到该资源。</strong></p> 
+</blockquote> 
+<p><img alt="" height="266" src="https://images2.imgbox.com/a2/be/XHZMyH5m_o.png" width="500"></p> 
+<blockquote> 
+ <p><strong>假设刚开始P1上处理机运行</strong>，先执行到 V(S)操作，则 S++后 S=1。之后当执行到 P(S)操作时，由于 S=1，表示有可用资源，会执行S--，S的值变回 0,P2进程不会执行 block 原语(即P2进程不会被阻塞)，而是继续往下执行代码4。</p> 
+ <p><strong>假设刚开始P2上处理机运行</strong>，先执行到 P(S)操作，由于S=0，S--后 S=-1，表示此时没有可用资源，因此P操作中会执行 block 原语，主动请求阻塞。之后当执行完代码2，继而执行V(S)操作，S++，使S变回 0,由于此时有进程在该信号量对应的阻塞队列中，因此会在V操作中执行 wakeup 原语，唤醒 P2进程。这样 P2 就可以继续执行 代码4 了。</p> 
+ <p><strong>总的来说，保证了代码4一定在代码2之后执行。</strong></p> 
+</blockquote> 
+<p></p> 
+<h5 id="4.%E4%BF%A1%E5%8F%B7%E9%87%8F%E6%9C%BA%E5%88%B6%E5%AE%9E%E7%8E%B0%E5%89%8D%E9%A9%B1%E5%85%B3%E7%B3%BB">4.信号量机制实现前驱关系</h5> 
+<p>进程 P1中有句代码S1，P2中有句代码S2，P3中有句代码S3...P6中有句代码S6。这些代码要求按如下前驱图所示的顺序来执行:</p> 
+<p><img alt="" height="339" src="https://images2.imgbox.com/63/34/kJI54i2h_o.png" width="300"></p> 
+<blockquote> 
+ <p>其实每一对前驱关系都是一个进程同步问题(需要保证一前一后的操作),即每一条线都代表一前一后地同步问题。</p> 
+ <p>因此:<br> 1.要<strong>为每一对前驱关系各设置一个同步信号量，并且设置为0</strong></p> 
+ <p><img alt="" height="228" src="https://images2.imgbox.com/ed/71/rTf7N3IV_o.png" width="200"></p> 
+ <p><strong>2.在“前操作”之后对相应的同步信号量执行V操作</strong></p> 
+ <p><strong>3.在“后操作”之前对相应的同步信号量执行P操作</strong></p> 
+ <p><img alt="" height="215" src="https://images2.imgbox.com/1d/ff/1kpHEXVh_o.png" width="200"></p> 
+ <p>对应的代码如下：</p> 
+ <p><img alt="" height="175" src="https://images2.imgbox.com/84/d6/tWaIKSU1_o.png" width="500"></p> 
+</blockquote> 
+<p></p> 
+<h4 id="%E4%B8%89.%E5%90%8C%E6%AD%A5%E4%B8%8E%E4%BA%92%E6%96%A5%E5%85%B8%E5%9E%8B%E6%A1%88%E4%BE%8B">三.同步与互斥典型案例</h4> 
+<h5 id="1.%E7%94%9F%E4%BA%A7%E8%80%85%E3%80%81%E6%B6%88%E8%B4%B9%E8%80%85%E9%97%AE%E9%A2%98">1.生产者、消费者问题</h5> 
+<p> 系统中有一组生产者进程和一组消费者进程，生产者进程每次生产一个产品放入缓冲区，消费者进程每次从缓冲区中取出一个产品并使用。(注:这里的“产品”理解为某种数据)</p> 
+<p>生产者、消费者共享一个初始为空、大小为n的缓冲区。</p> 
+<p><img alt="" height="352" src="https://images2.imgbox.com/40/de/2FmaOocI_o.png" width="1000"></p> 
+<blockquote> 
+ <p><strong>对于生产者：</strong></p> 
+ <p>缓冲区没满时，生产者才能继续生产，若缓冲区满时，生产者必须阻塞等待。</p> 
+ <p>消费者从缓冲区取走数据后，若此时有生产者处于阻塞状态，那么消费者进程应该唤醒生产者进程(阻塞态---&gt;就绪态)</p> 
+ <p>注：生产者进程只是回到了就绪态，这并不意味着生产者进程需要立即往缓冲区写数据</p> 
+ <p><strong>对于消费者：</strong></p> 
+ <p>缓冲区空时，消费者必须等待，缓冲区没空时，消费者才能取走数据（消费）</p> 
+ <p>当生产者写入数据，缓冲区不为空，就会唤醒消费者进程（阻塞态---&gt;就绪态）</p> 
+ <p><strong>缓冲区：</strong></p> 
+ <p>缓冲区是临界资源，各进程必须互斥地访问。</p> 
+ <p>假如两个进程并发地往缓冲区写入数据，两个进程挑选了同一块区域写入数据，<strong>那么后面进程写入的数据就会覆盖前面进程写入的数据</strong>。所以各进程必须互斥访问才不会导致数据覆盖等问题。</p> 
+ <p><img alt="" height="269" src="https://images2.imgbox.com/c8/71/fQLYdlbD_o.png" width="500"></p> 
+</blockquote> 
+<p><strong>PV操作题目分析步骤：</strong></p> 
+<blockquote> 
+ <p><strong>例：</strong>系统中有一组生产者进程和一组消费者进程，生产者进程每次生产一个产品放入缓冲区，消费者进程每次从缓冲区中取出一个产品并使用。(注:这里的“产品”理解为某种数据)</p> 
+ <p>生产者、消费者共享一个<strong>初始为空、大小为n的缓冲区。</strong></p> 
+ <p><strong>1.找出题目中描述的各个进程，分析它们之间的同步、互斥关系。</strong></p> 
+ <p><strong>同步</strong>：当缓冲区没满时，生产者才能生产，否则堵塞等待，当缓冲区没空时，消费者才能消费，否则堵塞等待。</p> 
+ <p><strong>互斥</strong>：对于临界资源，各进程必须互斥访问。</p> 
+ <p><strong>2.根据各进程的操作流程确定P、V操作的大致顺序</strong></p> 
+ <p></p> 
+ <p>当缓冲区没空（即有产品）之后，可以执行V操作，在在消费者消费之前需要执行P操作。下面的案例同理。（前V后P）<br><img alt="" height="209" src="https://images2.imgbox.com/fc/13/ytKchikN_o.png" width="841"></p> 
+ <p><strong>3.设置信号量，并根据题目条件确定信号量初值。(互斥信号量初值一般为1，同步信号量的初始值要看对应资源的初始值是多少)</strong></p> 
+ <p>semaphore mutex=1;        //<strong>互斥信号量</strong>，实现对缓冲区的互斥访问<br> semaphore empty=n；     //<strong>同步信号量</strong>，表示空闲缓冲区的数量<br> semaphore full=0;            //<strong>同步信号量</strong>，表示产品的数量，也即非空缓冲区的数量</p> 
+ <p><strong>代码实现如下：</strong></p> 
+ <p><strong>这里需要注意的是：</strong></p> 
+ <p><strong>实现互斥</strong>是在同一进程中进行一对PV操作</p> 
+ <p><strong>实现进程的同步</strong>是在其中一个进程执行P操作，另一个进程执行V操作</p> 
+ <p>P表示对临界区上锁（mutex=0），V表示对临界区解锁（mutex=1）</p> 
+ <p><img alt="" height="489" src="https://images2.imgbox.com/5c/6a/0kqzmeyz_o.png" width="1200"></p> 
+ <p><strong>在这里能否改变相邻P、V操作的顺序（重要）：</strong></p> 
+ <p><img alt="" height="339" src="https://images2.imgbox.com/5c/cf/PUzipHSU_o.png" width="1156"></p> 
+ <p>若此时缓冲区内已经放满产品，即empty=0，full=n。</p> 
+ <p>则生产者进程执行①，使mutex变为0，再执行②，由于已没有空闲缓冲区，因此生产者被阻塞。</p> 
+ <p>由于生产者阻塞，因此切换到消费者进程。消费者进程执行③，由于mutex为0，即生产者还没释放对临界资源的“锁”，因此消费者也被阻塞。</p> 
+ <p><strong>这就造成了生产者等待消费者释放空闲缓冲区，而消费者又等待生产者释放临界区的情况，生产者和消费者循环等待被对方唤醒，出现“死锁”。</strong></p> 
+ <p>同样的，若缓冲区中没有产品，即full=0，empty=n。按③④①的顺序执行就会发生死锁。<br><strong><span style="background-color:#ffd900;">因此，实现互斥的P操作一定要在实现同步的P操作之后</span></strong></p> 
+ <p><strong><span style="background-color:#ffd900;">V操作不会导致进程阻塞，因此两个V操作顺序可以交换</span></strong></p> 
+ <p></p> 
+ <p><strong>两个红框执行语句能否放在PV操作间：</strong></p> 
+ <p><img alt="" height="334" src="https://images2.imgbox.com/ab/a4/KuZy8vVs_o.png" width="1042"></p> 
+ <p>逻辑上是可以的，但这会导致临界区代码更长，也就是对临界区上锁的时间更长，这样各进程交替使用临界资源的效率就会下降。</p> 
+</blockquote> 
+<p></p> 
+<h5 id="2.%E5%A4%9A%E7%94%9F%E4%BA%A7%E8%80%85%E3%80%81%E5%A4%9A%E6%B6%88%E8%B4%B9%E8%80%85%E9%97%AE%E9%A2%98">2.多生产者、多消费者问题</h5> 
+<p>这一问题的做题步骤与上一问题是一样的:</p> 
+<blockquote> 
+ <p>例：桌子上有一只盘子，每次只能向其中放入一个水果。爸爸专向盘子中放苹果，妈妈专向盘子中放橘子，儿子专等着吃盘子中的橘子，女儿专等着吃盘子中的苹果。只有盘子空时，爸爸或妈妈才可向盘子中放一个水果。仅当盘子中有自己需要的水果时，儿子或女儿可以从盘子中取出水果。</p> 
+ <p>1.找出题目中描述的各个进程，分析它们之间的同步、互斥关系。</p> 
+ <p><strong>互斥关系：</strong></p> 
+ <p>对缓冲区(盘子)的访问要互斥地进行</p> 
+ <p><strong>同步关系（一前一后）：</strong></p> 
+ <p>1.父亲将苹果放入盘子后，女儿才能取苹果</p> 
+ <p>2.母亲将橘子放入盘子后，儿子才能取橘子</p> 
+ <p>3.只有<strong>盘子为空</strong>时，父亲或母亲才能放入水果</p> 
+ <p>注：盘子为空”这个事件可以由儿子或女儿触发，事件发生后才允许父亲或母亲放水果</p> 
+ <p><img alt="" height="276" src="https://images2.imgbox.com/8b/19/atItarZk_o.png" width="400"></p> 
+ <p>2.根据各进程的操作流程确定P、V操作的大致顺序。</p> 
+ <p>对于互斥关系的P、V操作，只需要在临界区前后进行PV操作即可。</p> 
+ <p>对于同步关系，遵循前V后P这样的关系即可。</p> 
+ <p><img alt="" height="302" src="https://images2.imgbox.com/45/69/qEOr2qSk_o.png" width="400"></p> 
+ <p>3.设置信号量，设置需要的信号量，并根据题目条件确定信号量初值。(互斥信号量初值一般为1，同步信号量的初始值要看对应资源的初始值是多少)</p> 
+ <p>互斥关系:mutex=1</p> 
+ <p>同步关系如图：</p> 
+ <p><strong>初始值</strong>苹果和橘子都为0，即apple=0，orange=0，而刚开始盘子是空的，父亲和母亲都可以向盘子中放入水果，所以plate=1。</p> 
+ <p><img alt="" height="259" src="https://images2.imgbox.com/60/cc/DOme4biq_o.png" width="400"></p> 
+ <p>若我们从<strong>单个进程行为角度</strong>来考虑的话：</p> 
+ <p>如果盘子里装有苹果，那么一定要女儿取走苹果后父亲或母亲才能再放入水果</p> 
+ <p>如果盘子里装有橘子，那么一定要儿子取走橘子后父亲或母亲才能再放入水果</p> 
+ <p><img alt="" height="273" src="https://images2.imgbox.com/53/b7/CWnIX9QD_o.png" width="400"></p> 
+ <p><span style="background-color:#ffd900;">这样分析会产生冗余的前-后关系，我们应该从事件的角度分析，即从事件的前后关系下手：</span></p> 
+ <p><strong>盘子变空事件→放入水果事件。</strong></p> 
+ <p>“盘子变空事件”既可由儿子引发，也可由女儿引发;</p> 
+ <p>“放水果事件”既可能是父亲执行，也可能是母亲执行。</p> 
+ <p>这样的话，就可以用一个同步信号量解决问题了。</p> 
+ <p><img alt="" height="276" src="https://images2.imgbox.com/8f/b1/OY5PienM_o.png" width="400"></p> 
+ <p>代码实现如下：</p> 
+ <p><img alt="" height="143" src="https://images2.imgbox.com/5d/bc/i9HsWR5K_o.png" width="859"></p> 
+ <p><strong>父亲进程：</strong></p> 
+ <p>P（plate）操作用来检查盘子是否为空，V（apple）操作，用于告诉女儿进程，盘子中苹果数量+1</p> 
+ <p><img alt="" height="247" src="https://images2.imgbox.com/1a/75/QHupibSQ_o.png" width="250"></p> 
+ <p><strong>母亲进程：</strong></p> 
+ <p>P（plate）用于检查盘子是否为空，若盘子中有其他水果，该P操作就会阻塞，V（orange）操作用于告诉儿子进程，盘子中橘子数+1</p> 
+ <p><img alt="" height="255" src="https://images2.imgbox.com/4a/ff/kBgm6x5J_o.png" width="250"></p> 
+ <p><strong>女儿进程：</strong></p> 
+ <p>P（apple）进程用于检查盘子中是否有苹果，V（plate）进程用于告诉父亲母亲进程盘子已经为空。</p> 
+ <p><img alt="" height="261" src="https://images2.imgbox.com/45/3a/p2c5Ye3G_o.png" width="250"></p> 
+ <p><strong>儿子进程：</strong></p> 
+ <p>P（orange）进程用于检查盘子中是否有橘子，V（plate）进程用于告诉父亲母亲进程盘子已经为空。</p> 
+ <p><img alt="" height="257" src="https://images2.imgbox.com/42/dd/3kk9IMhi_o.png" width="250"></p> 
+ <p>再加上加锁解锁的互斥PV操作即可。</p> 
+ <p><img alt="" height="346" src="https://images2.imgbox.com/32/1e/hSvL4xMl_o.png" width="1200"></p> 
+ <p><strong>可不可以不用互斥信号量,即:</strong></p> 
+ <p><img alt="" height="271" src="https://images2.imgbox.com/de/eb/nyzPi5gY_o.png" width="1200"></p> 
+ <p>刚开始，儿子、女儿进程即使上处理机运行也会被阻塞。如果刚开始是父亲进程先上处理机运行，则:</p> 
+ <p>父亲 P(plate)，可以将苹果放入盘子</p> 
+ <p>若此时母亲也想放入橘子，即P(plate)，阻塞等待盘子</p> 
+ <p>父亲放入苹果V(apple)，女儿进程被唤醒，其他进程即使运行也都会阻塞，暂时不可能访问临界资源(盘子)，女儿P(apple)，访问盘子，V(plate)后，等待盘子的母亲进程被唤醒，母亲进程访问盘子，即将橘子放到盘子中，plate=0(其他进程暂时都无法进入临界区)</p> 
+ <p><strong>所以，即使不设置专门的互斥变量mutex，也不会出现多个进程同时访问盘子的现象</strong></p> 
+ <p><strong>原因在于:</strong></p> 
+ <p>本题中的缓冲区大小为1，在任何时刻，apple、orange、plate 三个同步信号量中最多只有一个是1。<strong>因此在任何时刻最多只有一个进程的P操作不会被阻塞，并顺利地进入临界区。</strong></p> 
+ <p></p> 
+ <p><strong>若将临界资源数=2</strong></p> 
+ <p><img alt="" height="202" src="https://images2.imgbox.com/34/a7/bGnfoxB0_o.png" width="873"></p> 
+ <p>父亲 P(plate)，可以访问盘子，母亲 P(plate)，也可以访问盘子→父亲在往盘子里放苹果，同时母亲也可以往盘子里放橘子。于是就出现了两个进程同时访问缓冲区的情况，有可能导致两个进程写入缓冲区的数据相互覆盖的情况。</p> 
+ <p><strong>因此，如果缓冲区大小大于1，就必须专门设置个互斥信号量mutex来保证互斥访问缓冲区。</strong></p> 
+</blockquote> 
+<p>总结：</p> 
+<p>在生产者--消费者问题中，如果缓冲区大小为1，那么<strong>有可能不需要设置互斥信号量</strong>就可以实现互斥访问缓冲区的功能。当然，这不是绝对的，要具体问题具体分析。</p> 
+<p></p> 
+<p>3.吸烟者问题:</p> 
+<p>假设一个系统<strong>有三个抽烟者进程和一个供应者进程。</strong>每个抽烟者不停地卷烟并抽掉它，但是要卷起并抽掉一支烟，抽烟者需要有三种材料:烟草、纸和胶水。三个抽烟者中，第一个拥有烟草、第二个拥有纸、第三个拥有胶水。供应者进程无限地提供三种材料，供应者每次将两种材料放桌子上，拥有剩下那种材料的抽烟者卷一根烟并抽掉它，并给供应者进程一个信号告诉完成了，供应者就会放另外两种材料再桌上，这个过程一直重复(让三个抽烟者轮流地抽烟)</p> 
+<p><img alt="" height="245" src="https://images2.imgbox.com/29/0b/BU4pcXmt_o.png" width="500"></p> 
+<blockquote> 
+ <p><strong>1.找出题目中描述的各个进程，分析它们之间的同步、互斥关系。</strong></p> 
+ <p><strong>互斥关系：</strong>桌子可以抽象为容量为1的缓冲区，要互斥访问</p> 
+ <p>组合一:纸和胶水，这是抽烟者1需要的</p> 
+ <p>组合二:烟草和胶水，这是抽烟者2需要的</p> 
+ <p>组合三：烟草和纸，这是抽烟者3需要的</p> 
+ <p>桌子上只能放其中某一个组合（我们将组合看为一个整体）</p> 
+ <p><strong>同步问题：</strong><br> 桌上有组合一--&gt;第一个抽烟者取走东西</p> 
+ <p>桌上有组合二--&gt;第二个抽烟者取走东西</p> 
+ <p>桌上有组合三--&gt;第三个抽烟者取走东西</p> 
+ <p>发出完成信号--&gt;供应者将下一个组合放到桌上</p> 
+ <p><strong>2.根据各进程的操作流程确定P、V操作的大致顺序</strong></p> 
+ <p>互斥关系：在临界区前P操作，后V操作</p> 
+ <p>同步关系：前V后P</p> 
+ <p><strong>3.设置信号量。设置需要的信号量，并根据题目条件确定信号量初值。(互斥信号量初值一般为1，同步信号量的初始值要看对应资源的初始值是多少)</strong></p> 
+ <p><img alt="" height="217" src="https://images2.imgbox.com/ef/d3/MsA6EcLK_o.png" width="600"></p> 
+ <p>发出完成信号---&gt;供应者将下一个组合放到桌上</p> 
+ <p><img alt="" height="263" src="https://images2.imgbox.com/16/e8/n7VChj24_o.png" width="400"></p> 
+ <p></p> 
+ <p><strong>代码实现如下：</strong></p> 
+ <p>这里设置i=0，供应者在提供完组合后，需要i=(i+1)%3操作，实现<strong>三个抽烟者轮流抽烟</strong></p> 
+ <p><img alt="" height="171" src="https://images2.imgbox.com/14/de/rtL6Z24P_o.png" width="1007"></p> 
+ <p>供应者代码如下：</p> 
+ <p>供应者将材料放到桌上后V（offer），需要等待吸烟者向他发出完成吸烟的信号P（finish）</p> 
+ <p><img alt="" height="272" src="https://images2.imgbox.com/f1/d0/eQls7gAZ_o.png" width="200"></p> 
+ <p><strong>注：若一个生产者要生产多种产品(或者说会引发多种前驱事件)，那么各个V操作应该放在各自对应的“事件”发生之后的位置。</strong></p> 
+ <p></p> 
+ <p>吸烟者代码如下：</p> 
+ <p>各个吸烟者从桌子上拿走相应组合之前，需要检查是否为自己需要的材料P（offer），当发现是自己需要的材料，并且卷烟抽掉后，需要向供应者提供完成信号，通知供应者可以放下一个组合的材料了。供给者就可以进行下一轮的供给</p> 
+ <p><img alt="" height="276" src="https://images2.imgbox.com/1c/f2/CqYmmKBS_o.png" width="1009"></p> 
+ <p><strong>这里是否需要设置一个专门的互斥信号量？</strong></p> 
+ <p>与多生产者多消费者问题分析原理一样，缓冲区大小为1，同一时刻，四个同步信号量中至多有一个的值为1，所以可以不用设置一个专门的互斥信号量。</p> 
+ <p><strong>注：若题目改为每次随机让一个吸烟者吸烟，就可以加入random，随机将某一种组合放到桌子上。</strong></p> 
+</blockquote> 
+<p></p> 
+<h5 id="3.%E8%AF%BB%E8%80%85%E3%80%81%E5%86%99%E8%80%85%E9%97%AE%E9%A2%98"><strong>3.读者、写者问题</strong></h5> 
+<p>有读者和写者两组并发进程，<strong>共享一个文件</strong>，当两个或两个以上的读进程同时访问共享数据时不会产生副作用，但若某个写进程和其他进程(读进程或写进程)同时访问共享数据时则可能导致数据不一致的错误。因此要求：①允许多个读者可以同时对文件执行读操作；②只允许一个写者往文件中写信息；③任一写者在完成写操作之前不允许其他读者或写者工作；④写者执行写操作前，应让已有的读者和写者全部退出。</p> 
+<blockquote> 
+ <p><strong>为什么允许多个读进程同时执行读操作？</strong></p> 
+ <p>这里和之前的消费者进程不同，消费者进程会取走数据，读者进程在读数据后并不会将数据清空，并不会改变数据。因此多个读者可同时访问共享数据</p> 
+ <p><img alt="" height="224" src="https://images2.imgbox.com/ff/00/CKc49YmI_o.png" width="400"></p> 
+ <p><strong>当某进程想要向共享文件写数据时，必须等待其他进程对此文件的操作结束后，才能写数据</strong></p> 
+ <p><strong>1.</strong>写者进程会改变共享文件的内容，<strong>若读进程与写进程并发运行</strong>，写者进程在读者进程之前，写入了一些数据，覆盖了之前的内容，那么读者进程读到的将是错误的内容，而不是覆盖之前的内容，这就会导致出错。</p> 
+ <p><strong>2.若两写者进程并发运行</strong>，两写进程都往同一块内容写数据，那么后面的写进程写入的数据将覆盖前一个写进程写入的数据。</p> 
+</blockquote> 
+<blockquote> 
+ <p>1.找出题目中描述的各个进程，分析它们之间的同步、互斥关系。</p> 
+ <p><strong>两类进程</strong>:写进程、读进程<br><strong>互斥关系</strong>:写进程---写进程、写进程----读进程。读进程与读进程不存在互斥问题。</p> 
+ <p>写进程----读进程互斥访问的代码如下：</p> 
+ <p>读者和写者在访问文件前后都进行“加锁”,“解锁”操作。</p> 
+ <p><img alt="" height="642" src="https://images2.imgbox.com/c2/a2/3tIzObqA_o.png" width="1200"></p> 
+ <p><span style="background-color:#ffd900;">但这样会导致读者与读者之间不能同时访问共享文件：</span></p> 
+ <p>这里可以加入count变量，<strong>在读进程加锁之前，检查是否是第一个读进程，若是，就进行加锁操作，若不是，则不进行加锁操作，</strong>并将count++，若读完文件，则count--，count--后，若count==0，表示是最后一个读进程，那么进行解锁即可。</p> 
+ <p>读进程代码如下：</p> 
+ <p><img alt="" height="282" src="https://images2.imgbox.com/42/bf/XwHGJIKV_o.png" width="400"></p> 
+ <p>但是这一方法存在一个不足，若两个读进程并发执行，在读进程时count==0，都会进行“加锁”操作。后一进行在进行P操作后，rw值为0，此时前一进程发现rw已经等于1，就会堵塞等待。</p> 
+ <p><strong>出现上述问题的原因在于对count 变量的检查和赋值无法一气呵成，因此可以设置另一个互斥信号量来保证各读进程对count 的访问是互斥的。</strong></p> 
+ <p><img alt="" height="291" src="https://images2.imgbox.com/c1/40/sc12aEyQ_o.png" width="400"></p> 
+ <p>读者进程1执行P（mutex）操作，使得mutex从1变为0，此时读者进程2也想要执行P（mutex），但是发现mutex=0，所以就会被阻塞在此P操作，所以可以实现对count的互斥访问。</p> 
+</blockquote> 
+<p><strong>读者、写者问题中有一个潜在的问题：</strong></p> 
+<p>只要有读进程还在读，进程就要一直阻塞等待，可能"饿死"。<strong>因此，这种算法中，读进程是优先的</strong></p> 
+<p>例如，第一个进程到来后，执行P（rw）操作，使得rw由1变为0，那么写进程的P（rw）操作就会堵塞等待，若此时源源不断有读进程执行读操作，那么写进程就会一直等待。</p> 
+<p><img alt="" height="516" src="https://images2.imgbox.com/dc/24/23Tx5N9s_o.png" width="1200"></p> 
+<blockquote> 
+ <p>我们可以再设置一个信号量，用于直线"写优先"</p> 
+ <p><img alt="" height="433" src="https://images2.imgbox.com/77/bc/VSYrjhPz_o.png" width="1000"></p> 
+ <p><strong>1.若两个读者之间并发运行：</strong></p> 
+ <p>读者1与读者2是并发运行的，即宏观上同时读，但是微观上读者1先执行读操作，再读者2进行读操作，若读者1执行到P(rw)操作后，切换到读者2进程，那么读者2进程会被堵塞再<strong>P(w)</strong></p> 
+ <p><strong>直到读者1执行完V(w),读者2才能继续执行，由于这里会跳过if语句，所以读进程是能并发运行的。</strong></p> 
+ <p><strong>2.两个写者进程并发运行：</strong></p> 
+ <p>第一个写进程没有执行完之前，第二个写进程会被堵塞再P（w），直到第一个写进程执行完V（w）之后，第二个写进程才能继续执行，两个写进程是能实现互斥访问的。</p> 
+ <p><strong>3.一个写者和一个读者并发运行：</strong></p> 
+ <p><strong>（1）写者--&gt;读者</strong></p> 
+ <p><strong>写进程在写文件时，w的信号量已经由1变为0，此时读者进程会被堵塞在P（w），直到写进程执行完V（w），读者进程才有可能访问共享文件。实现了"写优先"。</strong></p> 
+ <p><strong>（2）读者1---&gt;写者1---&gt;读者2</strong></p> 
+ <p>1.读者进程在读完文件后w值为1，写者进程能执行P（w），w的值由1变为0，但是写者进程会被堵塞在P（rw）</p> 
+ <p>2.若此时还有读者想要读共享文件，由于w的值为0，所以会被堵塞在P(w)中</p> 
+ <p>3.那么写者1和读者2都会堵塞，当读者读完文件后，count--，因为只有1个读者读文件，所以count--后，count值为0，那么就会执行V（rw）</p> 
+ <p>4.这样就可以唤醒堵塞在P（rw）的写者进程了，实现了"写优先"</p> 
+ <p><img alt="" height="355" src="https://images2.imgbox.com/98/b1/cvPtbnWw_o.png" width="300"></p> 
+ <p><strong>（3）写者1--&gt;读者1--&gt;写者2</strong></p> 
+ <p>1.当写者写文件时，执行P（w）和P（rw），那么w=0，rw=0</p> 
+ <p>2.读者在读文件时，就会堵塞在P（w）</p> 
+ <p>3.若写者2也想写进程的话，那么第二个写者进程也会被阻塞在P(w)中。</p> 
+ <p>4.<strong>由于读者先对w进行了P操作，所以读者1在等待队列的对头位置，而写者进程2排在后面，所以当写者1执行完V操作后，唤醒的是读者进程。</strong></p> 
+</blockquote> 
+<p><strong>结论:</strong></p> 
+<p>在这种算法中，连续进入的多个读者可以同时读文件；写者和其他进程不能同时访问文件；写者不会饥饿，但也并不是真正的“写优先”，而是相对公平的先来先服务原则。有的书上把这种算法称为"读写公平法"。</p> 
+<p></p> 
+<h5 id="4.%E5%93%B2%E5%AD%A6%E5%AE%B6%E8%BF%9B%E9%A4%90%E9%97%AE%E9%A2%98" style="background-color:transparent;">4.哲学家进餐问题</h5> 
+<p>一张圆桌上坐着5名哲学家，每两个哲学家之间的桌上摆一根筷子，桌子的中间是一碗米饭。哲学家们倾注毕生的精力用于思考和进餐，哲学家在思考时，并不影响他人。只有当哲学家饥饿时，才试图拿起左、右两根筷子(一根一根地拿起)。如果筷子已在他人手上，则需等待。饥饿的哲学家只有同时拿起两根筷子才可以开始进餐，当进餐完毕后，放下筷子继续思考。</p> 
+<p><img alt="" height="365" src="https://images2.imgbox.com/75/4e/ciiHP5Wn_o.png" width="400"></p> 
+<blockquote> 
+ <p><strong>1.</strong>关系分析。系统中有5个哲学家进程，5位哲学家与左右邻居对其中间筷子的访问是互斥关系</p> 
+ <p><strong>2.</strong>整理思路。这个问题中只有互斥关系，但与之前遇到的问题不同的是，每个哲学家进程需要同时持有两个临界资源才能开始吃饭。如何避免临界资源分配不当造成的死锁现象，是哲学家问题的关键。</p> 
+ <p><strong>3.</strong>信号量设置。定义互斥信号量数组chopstick[5]={1,1,1,1,1}，用于实现对5个筷子的互斥访问。并对哲学家按0~4编号，哲学家i左边的筷子编号为i，右边的筷子编号为(i+1)%5。</p> 
+</blockquote> 
+<p>这里设置每个哲学家吃饭前依次拿起左、右两支筷子。</p> 
+<p><img alt="" height="233" src="https://images2.imgbox.com/7d/9e/bU6Zfptz_o.png" width="400"></p> 
+<p>若此时5个哲学家并发地拿起了自己左手边的筷子，每位哲学家循环等待右边的人放下筷子(阻塞)<br> 发生“死锁。</p> 
+<p><img alt="" height="350" src="https://images2.imgbox.com/14/07/Hc5iLIUx_o.png" width="400"></p> 
+<p>如何避免死锁：</p> 
+<blockquote> 
+ <p>①可以对哲学家进程施加一些限制条件，比如最多允许四个哲学家同时进餐。这样可以保证至少有一个哲学家是可以拿到左右两只筷子的（剩余的筷子分配给相邻的哲学家即可）。</p> 
+ <p><img alt="" height="332" src="https://images2.imgbox.com/37/e4/7Mjkjv5g_o.png" width="400"></p> 
+ <p>②要求奇数号哲学家先拿左边的筷子，然后再拿右边的筷子，而偶数号哲学家刚好相反。用这种方法可以保证如果相邻的两个奇偶号哲学家都想吃饭，那么只会有其中一个可以拿起第一只筷子，另一个会直接阻塞。<strong>这就避免了占有一支后再等待另一只的情况。</strong></p> 
+ <p>③仅当一个哲学家左右两支筷子都可用时才允许他抓起筷子。</p> 
+ <p><img alt="" height="289" src="https://images2.imgbox.com/f3/6f/tFcvEcam_o.png" width="400"></p> 
+ <p>（1）若1号哲学家执行P（mutex）操作，使mutex由1变为0，继续执行P（chopstick[i]），此时若切换为2号哲学家，此时2号哲学家会被堵塞在P（mutex）中，只有等待1号哲学家执行完P（chopstick[（i+1）%5]）后，拿起右边筷子后，才能释放mutex。</p> 
+ <p>（2）若0号哲学家执行完以下操作，就会释放mutex</p> 
+ <p><img alt="" height="139" src="https://images2.imgbox.com/46/fe/XKlKBgOB_o.png" width="601"></p> 
+ <p>此时1号哲学家可以通过P（mutex），但是因为0号拿了两支筷子，<strong>所以1号哲学家会被堵塞在P(chopstick[i])</strong></p> 
+ <p>而2号哲学家由于1号哲学家已经执行了P（mutex），所以mutex由1变为0，<strong>所以2号哲学家又会被阻塞在P（mutex），所以即使2号哲学家左右两边筷子都可以用，但是依然会被堵塞。</strong></p> 
+ <p><strong>因此这种方法并不能保证只有两边的筷子都可用时，才允许哲学家拿起筷子。</strong></p> 
+ <p><img alt="" height="333" src="https://images2.imgbox.com/11/1f/e8ZahGVO_o.png" width="400"></p> 
+ <p>（3）0号哲学家拿起左右两边的筷子开始吃饭，此时4号哲学家可以拿起左边的筷子，但是不能拿右边的筷子，即会被阻塞在P(chopstick[(i+1)%5])</p> 
+ <p><strong>因此此时4号右边的筷子不可用，但4号仍然会先拿起左边的筷子</strong></p> 
+ <p><img alt="" height="136" src="https://images2.imgbox.com/76/38/u4pJEUVc_o.png" width="566"></p> 
+ <p><strong>总结：</strong></p> 
+ <p>各哲学家拿筷子这件事必须互斥的执行。这就保证了即使一个哲学家在拿筷子拿到一半时被阻塞，也不会有别的哲学家会继续尝试拿筷子。这样的话，当前正在吃饭的哲学家放下筷子后，被阻塞的哲学家就可以获得等待的筷子了。</p> 
+</blockquote> 
+<p>哲学家进餐问题的关键在于解决进程死锁。</p> 
+<p>这些进程之间只存在互斥关系，但是与之前接触到的互斥关系不同的是，每个进程都需要同时持有两个临界资源，因此就有“死锁”问题的隐患。<strong>若遇到了一个进程需要同时持有多个临界资源的情况，应该参考哲学家问题的思想，分析题中给出的进程之间是否会发生循环等待，是否会发生死锁。</strong></p> 
+<p></p> 
+<h4 id="%E5%9B%9B.%E7%AE%A1%E7%A8%8B"><strong>四.管程</strong></h4> 
+<h5 id="1.%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%BC%95%E5%85%A5%E7%AE%A1%E7%A8%8B"><strong>1.为什么要引入管程</strong></h5> 
+<p>由于信号量机制存在编写程序困难、易出错的问题，例如：</p> 
+<blockquote> 
+ <p>像这样如果写错了P操作的顺序，按 ①②③执行，<strong>就会发生死锁</strong></p> 
+</blockquote> 
+<p><img alt="" height="225" src="https://images2.imgbox.com/34/8b/LvibQWya_o.png" width="600"></p> 
+<p>所以设置了管程，使程序员写程序时不需要关注复杂的PV操作</p> 
+<p></p> 
+<h5 id="2.%E7%AE%A1%E7%A8%8B%E7%9A%84%E5%AE%9A%E4%B9%89%E5%92%8C%E5%9F%BA%E6%9C%AC%E7%89%B9%E5%BE%81">2.管程的定义和基本特征</h5> 
+<p><strong>管程</strong>是一种特殊的软件模块，有这些部分组成：</p> 
+<blockquote> 
+ <p>1.局部于管程的<strong>共享数据结构</strong>说明;</p> 
+ <p>2.对该数据结构进行操作的<strong>一组过程（函数）</strong>；</p> 
+ <p>3.对局部于管程的共享数据设置初始值的语句；</p> 
+ <p>4.管程需要有一个名字。</p> 
+</blockquote> 
+<p>为了用管程实现进程间的互斥和同步，管程需要以下特征：</p> 
+<blockquote> 
+ <p>1.局部于管程的数据只能被局部于管程的过程所访问；</p> 
+ <p>2.一个进程只有通过调用管程内的过程才能进入管程访问共享数据；</p> 
+ <p><strong>3.每次仅允许一个进程在管程内执行某个内部过程。</strong></p> 
+</blockquote> 
+<p></p> 
+<h5 id="3.%E7%AE%A1%E7%A8%8B%E7%9A%84%E4%BE%8B%E5%AD%90"><strong>3.管程的例子</strong></h5> 
+<p><strong>1.用管程解决生产者消费者问题</strong></p> 
+<blockquote> 
+ <p>①生产者只用将函数的参数传入ProducerConsumer.insert();其他互斥同步等问题都由管程解决。</p> 
+ <p>②消费者也可以直接调用函数，从缓存中取出产品，中间的过程只由管程负责。</p> 
+ <p><strong>由编译器负责实现各进程互斥进入管程的过程，生产者进程、消费者进程只需要调用管程中的函数就可以了</strong></p> 
+</blockquote> 
+<p><img alt="" height="344" src="https://images2.imgbox.com/94/5d/ZZl7oDr2_o.png" width="700"></p> 
+<p><strong>1.实现进程互斥</strong></p> 
+<p>若第一个进程正在调用insert函数，若第二个进程也想调用，编译器就会阻止第二个进程使用该函数。只有第一个进程使用完毕，第二个进程才能使用。</p> 
+<p><strong>2.实现进程同步</strong></p> 
+<p><strong>管程中会设置条件变量和等待/唤醒操作，用来解决同步问题，例如：</strong></p> 
+<p>消费者1想要从缓冲区取产品，但是初始count==0，所以第一个消费者进程会等待在empty这一条件变量的队列中，消费者2进程同理</p> 
+<p><img alt="" height="59" src="https://images2.imgbox.com/8d/3c/mS9Xnl17_o.png" width="659"></p> 
+<p>生产者生产产品后，会将产品放入缓冲区中，并且检查count是否为1，即自己放入的产品是不是缓冲区中的第一个产品，这就意味着可能由消费者进程在等待产品，所以此时会用signal(empty),唤醒在empty条件变量中等待产品的进程，在这里会先唤醒对头进程，也就是消费者1。</p> 
+<p><img alt="" height="199" src="https://images2.imgbox.com/a3/c0/MT1IeJbm_o.png" width="500"></p> 
+<p>若执行消费者进程后，count--，此时count==N-1，那么就说明原本缓冲区是满的，现在消费者取走一个进程，那么生产者就可以继续生产了，就会使用signal(full),唤醒生产者进程。</p> 
+<p><img alt="" height="229" src="https://images2.imgbox.com/b3/51/QyrxMBfU_o.png" width="500"></p> 
+<p><strong>总结：</strong></p> 
+<p><strong>引入管程的目的无非就是要更方便地实现进程互斥和同步。</strong></p> 
+<blockquote> 
+ <p><strong>1.</strong>需要在管程中定义共享数据(如生产者消费者问题的缓冲区)</p> 
+ <p><strong>2.</strong>需要在管程中定义用于访问这些共享数据的“入口”----其实就是一些函数(如生产者消费者问题中，可以定义一个函数用于将产品放入缓冲区，再定义一个函数用于从缓冲区取出产品)</p> 
+ <p><strong>3.</strong>只有通过这些特定的“入口”才能访问共享数据</p> 
+ <p><strong>4.</strong>管程中有很多“入口”，<strong>但是每次只能开放其中一个“入口”</strong>，并且只能让一个进程或线程进入(如生产者消费者问题中，各进程需要互斥地访问共享缓冲区。管程的这种特性即可保证一个时间段内最多只会有一个进程在访问缓冲区。</p> 
+ <p><strong>注意：这种互斥特性是由编译器负责实现的，程序员不用关心</strong></p> 
+ <p><strong>5.</strong>可在管程中设置条件变量及等待/唤醒操作以解决同步问题。可以让一个进程或线程在条件变量上等待<strong>(此时，该进程应先释放管程的使用权，也就是让出“入口”)；</strong>可以通过唤醒操作将等待在条件变量上的进程或线程唤醒。</p> 
+ <p>程序员可以用某种特殊的语法定义一个管程(比如:monitor ProducerConsumer…end monitor)之后其他程序员就可以使用这个管程提供的特定“入口”很方便地使用实现进程同步/互斥了。<strong>即程序设计中封装的思想（将复杂的细节隐藏，对外提供简单易用的接口）。</strong></p> 
+</blockquote> 
+<p><strong>java中类似管程的机制：</strong></p> 
+<p>Java 中，如果用关键字 synchronized 来描述一个函数，那么这个函数同一时间段内只<strong>能被一个线程调用</strong>。</p> 
+<blockquote> 
+ <p>每次只能有一个线程进入insert 函数，如果多个线程同时调用 insert 函数，则后来者需要排队等待。</p> 
+</blockquote> 
+<p><img alt="" height="164" src="https://images2.imgbox.com/b1/8b/jzeRumnr_o.png" width="400"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a992dacfa6729533ae733c9d1d419990/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">设计模式之 has-a</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/ea1eb226e3631420e28fa3ee8bc18319/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">前端工程化基础（四）：Git代码版本控制工具详解</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

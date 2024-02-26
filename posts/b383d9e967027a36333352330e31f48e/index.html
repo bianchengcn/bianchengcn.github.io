@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>ARM独占访问指令ldrex、strex - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="ARM独占访问指令ldrex、strex" />
+<meta property="og:description" content="为了实现线程间同步，一般都要在执行关键代码段之前加互斥（Mutex）锁，且在执行完关键代码段之后解锁。为了实现所谓的互斥锁的概念，一般都需要所在平台提供支持。
+本文主要用来说明ARM平台上特有的独占访问指令LDREX和STREX的工作原理，以及如何使用。而它们也是ARM平台上，实现互斥锁等线程同步工具的基础。
+我们先来看看LDREX和STREX两条指令的语义。其实LDREX和STREX指令，是将单纯的更新内存的原子操作分成了两个独立的步骤。
+1）LDREX用来读取内存中的值，并标记对该段内存的独占访问：
+LDREX Rx, [Ry]
+上面的指令意味着，读取寄存器Ry指向的4字节内存值，将其保存到Rx寄存器中，同时标记对Ry指向内存区域的独占访问。
+如果执行LDREX指令的时候发现已经被标记为独占访问了，并不会对指令的执行产生影响。
+2）而STREX在更新内存数值时，会检查该段内存是否已经被标记为独占访问，并以此来决定是否更新内存中的值：
+STREX Rx, Ry, [Rz]
+如果执行这条指令的时候发现已经被标记为独占访问了，则将寄存器Ry中的值更新到寄存器Rz指向的内存，并将寄存器Rx设置成0。指令执行成功后，会将独占访问标记位清除。
+而如果执行这条指令的时候发现没有设置独占标记，则不会更新内存，且将寄存器Rx的值设置成1。
+一旦某条STREX指令执行成功后，以后再对同一段内存尝试使用STREX指令更新的时候，会发现独占标记已经被清空了，就不能再更新了，从而实现独占访问的机制。
+大致的流程就是这样，但是ARM内部为了实现这个功能，还有不少复杂的情况要处理。
+在ARM系统中，内存有两种不同且对立的属性，即共享（Shareable）和非共享（Non-shareable）。共享意味着该段内存可以被系统中不同处理器访问到，这些处理器可以是同构的也可以是异构的。而非共享，则相反，意味着该段内存只能被系统中的一个处理器所访问到，对别的处理器来说不可见。
+为了实现独占访问，ARM系统中还特别提供了所谓独占监视器（Exclusive Monitor）的东西，其结构大致如下：
+可以看出来，一共有两种类型的独占监视器。每一个处理器内部都有一个本地监视器（Local Monitor），且在整个系统范围内还有一个全局监视器（Global Monitor）。
+如果要对非共享内存区中的值进行独占访问，只需要涉及本处理器内部的本地监视器就可以了；而如果要对共享内存区中的内存进行独占访问，除了要涉及到本处理器内部的本地监视器外，由于该内存区域可以被系统中所有处理器访问到，因此还必须要由全局监视器来协调。
+对于本地监视器来说，它只标记了本处理器对某段内存的独占访问，在调用LDREX指令时设置独占访问标志，在调用STREX指令时清除独占访问标志。
+而对于全局监视器来说，它可以标记每个处理器对某段内存的独占访问。也就是说，当一个处理器调用LDREX访问某段共享内存时，全局监视器只会设置针对该处理器的独占访问标记，不会影响到其它的处理器。当在以下两种情况下，会清除某个处理器的独占访问标记：
+1）当该处理器调用LDREX指令，申请独占访问另一段内存时；
+2）当别的处理器成功更新了该段独占访问内存值时。
+对于第二种情况，也就是说，当独占内存访问内存的值在任何情况下，被任何一个处理器更改过之后，所有申请独占该段内存的处理器的独占标记都会被清空。
+另外，更新内存的操作不一定非要是STREX指令，任何其它存储指令都可以。但如果不是STREX的话，则没法保证独占访问性。
+现在的处理器基本上都是多核的，一个芯片上集成了多个处理器。而且对于一般的操作系统，系统内存基本上都被设置上了共享属性，也就是说对系统中所有处理器可见。因此，我们这里主要分析多核系统中对共享内存的独占访问的情况。
+为了更加清楚的说明，我们可以举一个例子。假设系统中有两个处理器内核，而一个程序由三个线程组成，其中两个线程被分配到了第一个处理器上，另外一个线程被分配到了第二个处理器上。且他们的执行序列如下：
+大致经历的步骤如下：
+1）CPU2上的线程3最早执行LDREX，锁定某段共享内存区域。它会相应更新本地监视器和全局监视器。
+2）然后，CPU1上的线程1执行LDREX，它也会更新本地监视器和全局监视器。这时在全局监视器上，CPU1和CPU2都对该段内存做了独占标记。
+3）接着，CPU1上的线程2执行LDREX指令，它会发现本处理器的本地监视器对该段内存有了独占标记，同时全局监视器上CPU1也对该段内存做了独占标记，但这并不会影响这条指令的操作。
+4）再下来，CPU1上的线程1最先执行了STREX指令，尝试更新该段内存的值。它会发现本地监视器对该段内存是有独占标记的，而全局监视器上CPU1也有该段内存的独占标记，则更新内存值成功。同时，清除本地监视器对该段内存的独占标记，还有全局监视器所有处理器对该段内存的独占标记。
+5）下面，CPU2上的线程3执行STREX指令，也想更新该段内存值。它会发现本地监视器拥有对该段内存的独占标记，但是在全局监视器上CPU1没有了该段内存的独占标记（前面一步清空了），则更新不成功。
+6）最后，CPU1上的线程2执行STREX指令，试着更新该段内存值。它会发现本地监视器已经没有了对该段内存的独占标记（第4步清除了），则直接更新失败，不需要再查全局监视器了。
+所以，可以看出来，这套机制的精髓就是，无论有多少个处理器，有多少个地方会申请对同一个内存段进行操作，保证只有最早的更新可以成功，这之后的更新都会失败。失败了就证明对该段内存有访问冲突了。实际的使用中，可以重新用LDREX读取该段内存中保存的最新值，再处理一次，再尝试保存，直到成功为止。
+还有一点需要说明，LDREX和STREX是对内存中的一个字（Word，32 bit）进行独占访问的指令。如果想独占访问的内存区域不是一个字，还有其它的指令：
+1）LDREXB和STREXB：对内存中的一个字节（Byte，8 bit）进行独占访问；
+2）LDREXH和STREXH：中的一个半字（Half Word，16 bit）进行独占访问；
+3）LDREXD和STREXD：中的一个双字（Double Word，64 bit）进行独占访问。
+它们必须配对使用，不能混用。
+--------------------- 作者：roland_sun 来源：CSDN 原文：https://blog.csdn.net/roland_sun/article/details/47670099 版权声明：本文为博主原创文章，转载请附上博文链接！
+以上是转载自其他作者的解释，这里在调试cortex a7的时候，会碰到多核情况，原子操作编译出strex和ldrex指令，当需要访问的这段内存是uncahced，mmu属性没有配置，会直接进入到指令异常，我理解这个指令是需要过cache的，monitor在提供给竞争线程返回数据的时候，是利用了cache的数据，实际并不会真的访问到实际内存。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b383d9e967027a36333352330e31f48e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2019-03-24T11:44:35+08:00" />
+<meta property="article:modified_time" content="2019-03-24T11:44:35+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">ARM独占访问指令ldrex、strex</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>为了实现线程间同步，一般都要在执行关键代码段之前加互斥（Mutex）锁，且在执行完关键代码段之后解锁。为了实现所谓的互斥锁的概念，一般都需要所在平台提供支持。</p> 
+<p>本文主要用来说明ARM平台上特有的独占访问指令LDREX和STREX的工作原理，以及如何使用。而它们也是ARM平台上，实现互斥锁等线程同步工具的基础。</p> 
+<p>我们先来看看LDREX和STREX两条指令的语义。其实LDREX和STREX指令，是将单纯的更新内存的原子操作分成了两个独立的步骤。</p> 
+<p>1）LDREX用来读取内存中的值，并标记对该段内存的独占访问：</p> 
+<p>LDREX Rx, [Ry]<br> 上面的指令意味着，读取寄存器Ry指向的4字节内存值，将其保存到Rx寄存器中，同时标记对Ry指向内存区域的独占访问。</p> 
+<p>如果执行LDREX指令的时候发现已经被标记为独占访问了，并不会对指令的执行产生影响。</p> 
+<p>2）而STREX在更新内存数值时，会检查该段内存是否已经被标记为独占访问，并以此来决定是否更新内存中的值：</p> 
+<p>STREX Rx, Ry, [Rz]<br> 如果执行这条指令的时候发现已经被标记为独占访问了，则将寄存器Ry中的值更新到寄存器Rz指向的内存，并将寄存器Rx设置成0。指令执行成功后，会将独占访问标记位清除。</p> 
+<p>而如果执行这条指令的时候发现没有设置独占标记，则不会更新内存，且将寄存器Rx的值设置成1。</p> 
+<p>一旦某条STREX指令执行成功后，以后再对同一段内存尝试使用STREX指令更新的时候，会发现独占标记已经被清空了，就不能再更新了，从而实现独占访问的机制。</p> 
+<p>大致的流程就是这样，但是ARM内部为了实现这个功能，还有不少复杂的情况要处理。</p> 
+<p>在ARM系统中，内存有两种不同且对立的属性，即共享（Shareable）和非共享（Non-shareable）。共享意味着该段内存可以被系统中不同处理器访问到，这些处理器可以是同构的也可以是异构的。而非共享，则相反，意味着该段内存只能被系统中的一个处理器所访问到，对别的处理器来说不可见。</p> 
+<p>为了实现独占访问，ARM系统中还特别提供了所谓独占监视器（Exclusive Monitor）的东西，其结构大致如下：</p> 
+<p><img alt="" class="has" src="https://images2.imgbox.com/c5/25/fr6BAZJp_o.png"></p> 
+<p>可以看出来，一共有两种类型的独占监视器。每一个处理器内部都有一个本地监视器（Local Monitor），且在整个系统范围内还有一个全局监视器（Global Monitor）。</p> 
+<p>如果要对非共享内存区中的值进行独占访问，只需要涉及本处理器内部的本地监视器就可以了；而如果要对共享内存区中的内存进行独占访问，除了要涉及到本处理器内部的本地监视器外，由于该内存区域可以被系统中所有处理器访问到，因此还必须要由全局监视器来协调。</p> 
+<p>对于本地监视器来说，它只标记了本处理器对某段内存的独占访问，在调用LDREX指令时设置独占访问标志，在调用STREX指令时清除独占访问标志。</p> 
+<p>而对于全局监视器来说，它可以标记每个处理器对某段内存的独占访问。也就是说，当一个处理器调用LDREX访问某段共享内存时，全局监视器只会设置针对该处理器的独占访问标记，不会影响到其它的处理器。当在以下两种情况下，会清除某个处理器的独占访问标记：</p> 
+<p>1）当该处理器调用LDREX指令，申请独占访问另一段内存时；</p> 
+<p>2）当别的处理器成功更新了该段独占访问内存值时。</p> 
+<p>对于第二种情况，也就是说，当独占内存访问内存的值在任何情况下，被任何一个处理器更改过之后，所有申请独占该段内存的处理器的独占标记都会被清空。</p> 
+<p>另外，更新内存的操作不一定非要是STREX指令，任何其它存储指令都可以。但如果不是STREX的话，则没法保证独占访问性。</p> 
+<p>现在的处理器基本上都是多核的，一个芯片上集成了多个处理器。而且对于一般的操作系统，系统内存基本上都被设置上了共享属性，也就是说对系统中所有处理器可见。因此，我们这里主要分析多核系统中对共享内存的独占访问的情况。</p> 
+<p>为了更加清楚的说明，我们可以举一个例子。假设系统中有两个处理器内核，而一个程序由三个线程组成，其中两个线程被分配到了第一个处理器上，另外一个线程被分配到了第二个处理器上。且他们的执行序列如下：</p> 
+<p><img alt="" class="has" src="https://images2.imgbox.com/26/51/9kUwffvn_o.png"></p> 
+<p>大致经历的步骤如下：</p> 
+<p>1）CPU2上的线程3最早执行LDREX，锁定某段共享内存区域。它会相应更新本地监视器和全局监视器。</p> 
+<p>2）然后，CPU1上的线程1执行LDREX，它也会更新本地监视器和全局监视器。这时在全局监视器上，CPU1和CPU2都对该段内存做了独占标记。</p> 
+<p>3）接着，CPU1上的线程2执行LDREX指令，它会发现本处理器的本地监视器对该段内存有了独占标记，同时全局监视器上CPU1也对该段内存做了独占标记，但这并不会影响这条指令的操作。</p> 
+<p>4）再下来，CPU1上的线程1最先执行了STREX指令，尝试更新该段内存的值。它会发现本地监视器对该段内存是有独占标记的，而全局监视器上CPU1也有该段内存的独占标记，则更新内存值成功。同时，清除本地监视器对该段内存的独占标记，还有全局监视器所有处理器对该段内存的独占标记。</p> 
+<p>5）下面，CPU2上的线程3执行STREX指令，也想更新该段内存值。它会发现本地监视器拥有对该段内存的独占标记，但是在全局监视器上CPU1没有了该段内存的独占标记（前面一步清空了），则更新不成功。</p> 
+<p>6）最后，CPU1上的线程2执行STREX指令，试着更新该段内存值。它会发现本地监视器已经没有了对该段内存的独占标记（第4步清除了），则直接更新失败，不需要再查全局监视器了。</p> 
+<p>所以，可以看出来，这套机制的精髓就是，无论有多少个处理器，有多少个地方会申请对同一个内存段进行操作，保证只有最早的更新可以成功，这之后的更新都会失败。失败了就证明对该段内存有访问冲突了。实际的使用中，可以重新用LDREX读取该段内存中保存的最新值，再处理一次，再尝试保存，直到成功为止。</p> 
+<p>还有一点需要说明，LDREX和STREX是对内存中的一个字（Word，32 bit）进行独占访问的指令。如果想独占访问的内存区域不是一个字，还有其它的指令：</p> 
+<p>1）LDREXB和STREXB：对内存中的一个字节（Byte，8 bit）进行独占访问；</p> 
+<p>2）LDREXH和STREXH：中的一个半字（Half Word，16 bit）进行独占访问；</p> 
+<p>3）LDREXD和STREXD：中的一个双字（Double Word，64 bit）进行独占访问。</p> 
+<p>它们必须配对使用，不能混用。<br> --------------------- <br> 作者：roland_sun <br> 来源：CSDN <br> 原文：https://blog.csdn.net/roland_sun/article/details/47670099 <br> 版权声明：本文为博主原创文章，转载请附上博文链接！</p> 
+<p> </p> 
+<p>以上是转载自其他作者的解释，这里在调试cortex a7的时候，会碰到多核情况，原子操作编译出strex和ldrex指令，当需要访问的这段内存是uncahced，mmu属性没有配置，会直接进入到指令异常，我理解这个指令是需要过cache的，monitor在提供给竞争线程返回数据的时候，是利用了cache的数据，实际并不会真的访问到实际内存。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/5d2b40fb7eeb64c9e20e24fe46c1ec79/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">layui  form表单下的button按钮会自动提交表单的问题以及解决方案</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/58d4fc84fcdd92aad6b2fb5ade202010/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">欢迎使用CSDN-markdown编辑器- 简书</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

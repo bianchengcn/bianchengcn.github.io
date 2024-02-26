@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Docker整理篇（网络与数据卷） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Docker整理篇（网络与数据卷）" />
+<meta property="og:description" content="Docker整理篇（Docker网络与数据卷） 安装与常用命令操作Docker网络与数据卷docker-compose与私服搭建 一：docker虚拟化与容器介绍 1.什么是虚拟化 如果要对物理资源进行管理，第一步，就是“虚拟化”。虚拟化是云计算的基础。简单来说，虚拟化就是
+在一台物理服务器上，运行多台“虚拟服务器”。这种虚拟服务器，也叫虚拟机（VM，VirtualMachine）。
+从表面来看，这些虚拟机都是独立的服务器，但实际上，它们共享物理服务器的CPU、内存、硬件、网卡等资源。通过模拟计算机的硬件，来实现在同一台计算机上同时运行不同的操作系统的技术。常用的vmwore、openstack、kvm都是使用的虚拟化技术
+2.什么是容器 基于硬件级虚拟化技术的缺点和不足，后续又发展出来另一种虚拟化技术，即操作系统级别的虚拟化技术。操作系统级虚拟化是运行在操作系统之上的虚拟化技术，它模拟的是运行在一个操作系统上的多个
+不同进程，并将其封闭在一个密闭的容器内，该技术也就被称之为容器化技术。
+容器就是在隔离环境运行的一个进程，如果进程停止，容器就会销毁。隔离的环境拥有自己的系统文件，IP地址，主机名等。容器也是虚拟化，但是属于“轻量级”的虚拟化。它的目的和虚拟机一样，都是为了创造“隔离环境”。但是，它又和虚拟机有很大的不同——虚拟机是操作系统级别的资源隔离，而容器本质上是进程级的资源隔离。
+3.容器和虚拟化的区别 容器是将代码和环境打包在一起的一个集合，而虚拟机是在物理层面上分离出来一个操作系统；多个容器可以运行在同一台硬件服务器上，并共享一个操作系统的内核资源。多个虚拟机也可以运行在同一台服务器上，但每个虚拟机都需要有一个完整的操作系统。
+二：docker应用(容器与镜像操作) docker网络 docker安装后会自动创建3种网络:
+bridgehostnone docker network ls 使用命令查看docker网络部分 docker info 网络模式 Docker网络 模式配置说明host模式-net=host容器和宿主机共享Network namespace。容器将不会虚拟出自己的网卡，配置自己的IP等，而是使用宿主机的IP和端口。container模式–net=container:NAME_or_ID容器和另外一个容器共享Network namespace。kubernetes中的pod就是多个容器共享一个Network namespace。创建的容器不会创建自己的网卡，配置自己的IP，而是和一个指定的容器共享IP、端口范围。none模式–net=none容器有独立的Network namespace，并没有对其进行任何网络设置，如分配veth pair 和网桥连接，配置IP等。该模式关闭了容器的网络功能。bridge模式–net=bridge（默认为该模式）。此模式会为每一个容器分配、设置IP等，并将容器连接到一个docker0虚拟网桥，通过docker0网桥以及Iptables nat表配置与宿主机通信。Macvlan network无容器具备Mac地址，使其显示为网络上的物理设备Overlay无(覆盖网络）： 利用VXLAN实现的bridge模式 容器网络测试 拉取镜像 docker pull nginx:1.19.3-alpine 备份镜像 docker save nginx:1.19.3-alpine -o nginx.1.19.3.alpine.tar 导入镜像 docker load -i nginx.1.19.3.alpine.tar bridge网络 bridge网络表现形式就是docker0这个网络接口。容器默认都是通过docker0这个接口进行通信。也可以通过docker0去和本机的以太网接口连接，这样容器内部才能访问互联网。
+查看docker0网络，在默认环境中，一个名为docker0的linux bridge自动被创建好了，其上有一个 docker0 内部接口，IP地址为172.17.0.1/16 ip a 查看docker 网络 docker network ls 查看bridge网络详情。主要关注Containers节点信息。 docker network inspect bridge 运行镜像 docker run -itd --name nginx1 nginx:1." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/57ca14f0f592937150a57ec3f46219c9/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-03-23T14:48:57+08:00" />
+<meta property="article:modified_time" content="2022-03-23T14:48:57+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Docker整理篇（网络与数据卷）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="DockerDocker_0"></a>Docker整理篇（Docker网络与数据卷）</h3> 
+<ul><li><strong><a href="https://blog.csdn.net/weixin_43118617/article/details/123039980">安装与常用命令操作</a></strong></li><li><strong><a href="https://blog.csdn.net/weixin_43118617/article/details/123051418">Docker网络与数据卷</a></strong></li><li><strong><a href="https://blog.csdn.net/weixin_43118617/article/details/123092008">docker-compose与私服搭建</a></strong></li></ul> 
+<h3><a id="docker_6"></a>一：docker虚拟化与容器介绍</h3> 
+<h4><a id="1_7"></a>1.什么是虚拟化</h4> 
+<p>如果要对物理资源进行管理，第一步，就是“虚拟化”。虚拟化是云计算的基础。简单来说，虚拟化就是<br> 在一台物理服务器上，运行多台“虚拟服务器”。这种虚拟服务器，也叫虚拟机（VM，VirtualMachine）。<br> 从表面来看，这些虚拟机都是独立的服务器，但实际上，它们共享物理服务器的CPU、内存、硬件、网卡等资源。通过模拟计算机的硬件，来实现在同一台计算机上同时运行不同的操作系统的技术。常用的vmwore、openstack、kvm都是使用的虚拟化技术</p> 
+<h4><a id="2_12"></a>2.什么是容器</h4> 
+<p>基于硬件级虚拟化技术的缺点和不足，后续又发展出来另一种虚拟化技术，即操作系统级别的虚拟化技术。操作系统级虚拟化是运行在操作系统之上的虚拟化技术，它模拟的是运行在一个操作系统上的多个<br> 不同进程，并将其封闭在一个密闭的容器内，该技术也就被称之为容器化技术。<br> 容器就是在隔离环境运行的一个进程，如果进程停止，容器就会销毁。隔离的环境拥有自己的系统文件，IP地址，主机名等。容器也是虚拟化，但是属于“轻量级”的虚拟化。它的目的和虚拟机一样，都是为了创造“隔离环境”。但是，它又和虚拟机有很大的不同——虚拟机是操作系统级别的资源隔离，而容器本质上是进程级的资源隔离。</p> 
+<h4><a id="3_16"></a>3.容器和虚拟化的区别</h4> 
+<p>容器是将代码和环境打包在一起的一个集合，而虚拟机是在物理层面上分离出来一个操作系统；多个容器可以运行在同一台硬件服务器上，并共享一个操作系统的内核资源。多个虚拟机也可以运行在同一台服务器上，但每个虚拟机都需要有一个完整的操作系统。</p> 
+<h3><a id="docker_19"></a>二：docker应用(容器与镜像操作)</h3> 
+<h4><a id="docker_20"></a>docker网络</h4> 
+<p>docker安装后会自动创建3种网络:</p> 
+<ul><li>bridge</li><li>host</li><li>none</li></ul> 
+<pre><code class="prism language-bash">docker network <span class="token function">ls</span>
+
+使用命令查看docker网络部分
+docker info
+</code></pre> 
+<h4><a id="_32"></a>网络模式</h4> 
+<table><thead><tr><th>Docker网络 模式</th><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>host模式</td><td>-net=host</td><td>容器和宿主机共享Network namespace。容器将不会虚拟出自己的网卡，配置自己的IP等，而是使用宿主机的IP和端口。</td></tr><tr><td>container模式</td><td>–net=container:NAME_or_ID</td><td>容器和另外一个容器共享Network namespace。kubernetes中的pod就是多个容器共享一个Network namespace。创建的容器不会创建自己的网卡，配置自己的IP，而是和一个指定的容器共享IP、端口范围。</td></tr><tr><td>none模式</td><td>–net=none</td><td>容器有独立的Network namespace，并没有对其进行任何网络设置，如分配veth pair 和网桥连接，配置IP等。该模式关闭了容器的网络功能。</td></tr><tr><td>bridge模式</td><td>–net=bridge</td><td>（默认为该模式）。此模式会为每一个容器分配、设置IP等，并将容器连接到一个docker0虚拟网桥，通过docker0网桥以及Iptables nat表配置与宿主机通信。</td></tr><tr><td>Macvlan network</td><td>无</td><td>容器具备Mac地址，使其显示为网络上的物理设备</td></tr><tr><td>Overlay</td><td>无</td><td>(覆盖网络）： 利用VXLAN实现的bridge模式</td></tr></tbody></table> 
+<h4><a id="_42"></a>容器网络测试</h4> 
+<h5><a id="_43"></a>拉取镜像</h5> 
+<pre><code class="prism language-bash">docker pull nginx:1.19.3-alpine
+</code></pre> 
+<h5><a id="_47"></a>备份镜像</h5> 
+<pre><code class="prism language-bash">docker save nginx:1.19.3-alpine -o nginx.1.19.3.alpine.tar
+</code></pre> 
+<h5><a id="_51"></a>导入镜像</h5> 
+<pre><code class="prism language-bash">docker load -i nginx.1.19.3.alpine.tar
+</code></pre> 
+<h5><a id="bridge_55"></a>bridge网络</h5> 
+<p>bridge网络表现形式就是docker0这个网络接口。容器默认都是通过docker0这个接口进行通信。也可以通过docker0去和本机的以太网接口连接，这样容器内部才能访问互联网。</p> 
+<pre><code class="prism language-bash">查看docker0网络，在默认环境中，一个名为docker0的linux bridge自动被创建好了，其上有一个
+docker0 内部接口，IP地址为172.17.0.1/16
+<span class="token function">ip</span> a
+查看docker 网络
+docker network <span class="token function">ls</span>
+查看bridge网络详情。主要关注Containers节点信息。
+docker network inspect bridge
+</code></pre> 
+<h5><a id="_66"></a>运行镜像</h5> 
+<pre><code class="prism language-bash">docker run -itd --name nginx1 nginx:1.19.3-alpine
+查看bridge网络详情。主要关注Containers节点信息。发现nginx1容器默认使用bridge网络
+docker network inspect bridge
+</code></pre> 
+<p>容器创建时IP地址的分配</p> 
+<pre><code class="prism language-bash">查看docker100主机网络。发现多出一块网卡veth62aef5e@if8
+<span class="token function">ip</span> a
+</code></pre> 
+<p>Docker 创建一个容器的时候，会执行如下操作：<br> • 创建一对虚拟接口/网卡，也就是veth pair，分别放到本地主机和新容器中；<br> • 本地主机一端桥接到默认的 docker0 或指定网桥上，并具有一个唯一的名字，如 vetha596da4；<br> • 容器一端放到新容器中，并修改名字作为 eth0，这个网卡/接口只在容器的名字空间可见；<br> • 从网桥可用地址段中（也就是与该bridge对应的network）获取一个空闲地址分配给容器的 eth0，并配置默认路由到桥接网卡 vetha596da4。<br> 完成这些之后，容器就可以使用 eth0 虚拟网卡来连接其他容器和其他网络。<br> 如果不指定–network，创建的容器默认都会挂到 docker0 上，使用本地主机上 docker0 接口的 IP 作为所有容器的默认网关。</p> 
+<pre><code class="prism language-bash">第一种方式：
+docker <span class="token builtin class-name">exec</span> -it nginx1 <span class="token function">sh</span>
+<span class="token function">ip</span> a
+第二种方式：
+docker <span class="token builtin class-name">exec</span> -it nginx1 <span class="token function">ip</span> a
+</code></pre> 
+<p>安装brctl</p> 
+<pre><code class="prism language-bash">yum <span class="token function">install</span> -y bridge-utils
+</code></pre> 
+<p>运行命令</p> 
+<pre><code class="prism language-bash">brctl show
+</code></pre> 
+<p><img src="https://images2.imgbox.com/5a/b2/c8wkLjNs_o.png" alt="在这里插入图片描述"></p> 
+<h5><a id="_101"></a>多容器之间通讯</h5> 
+<pre><code class="prism language-bash">docker run -itd --name nginx1 nginx:1.19.3-alpine
+docker run -itd --name nginx2 nginx:1.19.3-alpine
+docker network inspect bridge
+docker <span class="token builtin class-name">exec</span> -it nginx1 <span class="token function">sh</span>
+<span class="token function">ping</span> <span class="token number">172.17</span>.0.2
+docker <span class="token builtin class-name">exec</span> -it nginx2 <span class="token function">sh</span>
+<span class="token function">ping</span> <span class="token number">172.17</span>.0.2
+<span class="token function">ping</span> www.baidu.com
+<span class="token function">ping</span> nginx1
+</code></pre> 
+<p>容器IP地址会发生变化</p> 
+<pre><code class="prism language-bash">docker stop nginx1 nginx2
+先启动nginx2，在启动nginx1
+docker start nginx2
+docker start nginx1
+docker network inspect bridge
+</code></pre> 
+<h5><a id="bridge_121"></a>新建bridge网络</h5> 
+<pre><code class="prism language-bash">docker network create -d bridge lagou-bridge
+</code></pre> 
+<p>上面命令参数-d 是指DRIVER的类型，后面的lagou-bridge是network的自定义名称，这个和docker0是类似的。下面开始介绍，如何把容器连接到lagou-bridge这个网络。<br> 启动一个nginx的容器nginx3，并通过参数network connect来连接lagou-bridge网络。在启动容器nginx3之前，我们查看目前还没有容器连接到了lagou-bridge这个网络上。</p> 
+<pre><code class="prism language-bash">brctl show
+docker network <span class="token function">ls</span>
+docker network inspect lagou-bridge
+docker run -itd --name nginx3 --network lagou-bridge nginx:1.19.3-alpine
+brctl show
+docker network inspect lagou-bridge
+</code></pre> 
+<p>把一个运行中容器连接到lagou-bridge网络</p> 
+<pre><code class="prism language-bash">docker network connect lagou-bridge nginx2
+docker network inspect lagou-bridge
+docker <span class="token builtin class-name">exec</span> -it nginx2 <span class="token function">sh</span>
+<span class="token function">ping</span> nginx3
+docker <span class="token builtin class-name">exec</span> -it nginx3 <span class="token function">sh</span>
+<span class="token function">ping</span> nginx2
+</code></pre> 
+<h5><a id="nonehost_144"></a>none、host网络</h5> 
+<h6><a id="none_145"></a>none网络</h6> 
+<p>环境准备，先stop和rm掉全部之前开启的容器。并且把前面创建的lagou-bridge网络也删除。当然，更简单的办法是使用快照方式。将docker-100主机恢复到docker初始化安装时。</p> 
+<pre><code class="prism language-bash">docker <span class="token function">rm</span> -f <span class="token variable"><span class="token variable">$(</span>docker <span class="token function">ps</span> -aq<span class="token variable">)</span></span>
+docker network <span class="token function">rm</span> lagou-bridge
+docker network <span class="token function">ls</span>
+</code></pre> 
+<p>启动一个ngnix的容器nginx1，并且连接到none网络。然后执行docker network inspect none，看看容器信息</p> 
+<pre><code class="prism language-bash">docker run -itd --name nginx1 --network none nginx:1.19.3-alpine
+docker network inspect none
+</code></pre> 
+<p>注意，容器使用none模式，是没有物理地址和IP地址。我们可以进入到nginx1容器里，执行ip a命令看看。只有一个lo接口，没有其他网络接口，没有IP。也就是说，使用none模式，这个容器是不能被其他容器访问。这种使用场景很少，只有项目安全性很高的功能才能使用到。例如：密码加密算法容器</p> 
+<pre><code class="prism language-bash">docker <span class="token builtin class-name">exec</span> -it nginx1 <span class="token function">sh</span>
+<span class="token function">ip</span> a
+</code></pre> 
+<h6><a id="host_162"></a>host网络</h6> 
+<p>前面学习none网络模式特点就是，容器没有IP地址，不能和其他容器通信。下面来看看host网络是什么特点。我们使用前面命令，启动一个nginx的nginx2容器，连接到host网络。然后docker networkinspect host, 看看容器信息。</p> 
+<pre><code class="prism language-bash">docker run -itd --name nginx2 --network <span class="token function">host</span> nginx:1.19.3-alpine
+docker network inspect <span class="token function">host</span>
+</code></pre> 
+<p>这里来看，也不显示IP地址。那么是不是和none一样，肯定不是，不然也不会设计none和host网络进行区分。下面我们进入nginx2容器，执行ip a看看效果。我们在容器里执行ip a，发现打印内容和在linux本机外执行ip a是一样的。</p> 
+<pre><code class="prism language-bash">docker <span class="token builtin class-name">exec</span> -it nginx2 <span class="token function">sh</span>
+<span class="token function">ip</span> a
+</code></pre> 
+<p>这说明什么呢？容器使用了host模式，说明容器和外层linux主机共享一套网络接口。VMware公司的虚拟机管理软件，其中网络设置，也有host这个模式，作用也是一样，虚拟机里面使用网络和你自己外层机器是一模一样的。这种容器和本机使用共享一套网络接口，缺点还是很明显的，例如我们知道web服务器一般端口是80，共享了一套网络接口，那么你这台机器上只能启动一个nginx端口为80的服务器了。否则，出现端口被占用的情况</p> 
+<h5><a id="_174"></a>网络命令汇总</h5> 
+<pre><code class="prism language-bash">docker network --help
+网络常用命令汇总
+connect Connect a container to a network
+create Create a network
+disconnect Disconnect a container from a network
+inspect Display detailed information on one or <span class="token function">more</span> networks
+<span class="token function">ls</span> List networks
+prune Remove all unused networks
+<span class="token function">rm</span> Remove one or <span class="token function">more</span> networks
+</code></pre> 
+<h5><a id="_187"></a>查看网络</h5> 
+<pre><code class="prism language-bash">查看网络 – docker network <span class="token function">ls</span>
+<span class="token comment"># 作用：</span>
+查看已经建立的网络对象
+<span class="token comment"># 命令格式：</span>
+docker network <span class="token function">ls</span> <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span>
+<span class="token comment"># 命令参数(OPTIONS)：</span>
+-f, --filter filter 过滤条件<span class="token punctuation">(</span>如 <span class="token string">'driver=bridge’)
+	--format string 格式化打印结果
+	--no-trunc 不缩略显示
+-q, --quiet 只显示网络对象的ID
+# 注意：
+默认情况下，docker安装完成后，会自动创建bridge、host、none三种网络驱动
+# 命令演示
+docker network ls
+docker network ls --no-trunc
+docker network ls -f '</span><span class="token assign-left variable">driver</span><span class="token operator">=</span>host'
+</code></pre> 
+<h5><a id="_206"></a>创建网络</h5> 
+<pre><code class="prism language-bash">创建网络 – docker network create
+<span class="token comment"># 作用：</span>
+创建新的网络对象
+<span class="token comment"># 命令格式：</span>
+docker network create <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span> NETWORK
+<span class="token comment"># 命令参数(OPTIONS)：</span>
+-d, --driver string 指定网络的驱动<span class="token punctuation">(</span>默认 <span class="token string">"bridge"</span><span class="token punctuation">)</span>
+--subnet strings 指定子网网段<span class="token punctuation">(</span>如192.168.0.0/16、172.88.0.0/24<span class="token punctuation">)</span>
+--ip-range strings 执行容器的IP范围，格式同subnet参数
+--gateway strings 子网的IPv4 or IPv6网关，如<span class="token punctuation">(</span><span class="token number">192.168</span>.0.1<span class="token punctuation">)</span>
+<span class="token comment"># 注意：</span>
+host和none模式网络只能存在一个
+docker自带的overlay 网络创建依赖于docker swarm<span class="token punctuation">(</span>集群负载均衡<span class="token punctuation">)</span>服务
+<span class="token number">192.168</span>.0.0/16 等于 <span class="token number">192.168</span>.0.0~192.168.255.255192.168.8.0/24
+<span class="token number">172.88</span>.0.0/24 等于 <span class="token number">172.88</span>.0.0~172.88.0.255
+<span class="token comment"># 命令演示</span>
+docker network <span class="token function">ls</span>
+docker network create -d bridge my-bridge
+docker network <span class="token function">ls</span>
+</code></pre> 
+<h5><a id="_228"></a>网络删除</h5> 
+<pre><code class="prism language-bash">网络删除 – docker network <span class="token function">rm</span>
+<span class="token comment"># 作用：</span>
+删除一个或多个网络
+<span class="token comment"># 命令格式：</span>
+docker network <span class="token function">rm</span> NETWORK <span class="token punctuation">[</span>NETWORK<span class="token punctuation">..</span>.<span class="token punctuation">]</span>
+<span class="token comment"># 命令参数(OPTIONS)：</span>
+无
+</code></pre> 
+<h5><a id="_238"></a>查看网络详细信息</h5> 
+<pre><code class="prism language-bash">查看网络详细信息 docker network inspect
+<span class="token comment"># 作用：</span>
+查看一个或多个网络的详细信息
+<span class="token comment"># 命令格式：</span>
+docker network inspect <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span> NETWORK <span class="token punctuation">[</span>NETWORK<span class="token punctuation">..</span>.<span class="token punctuation">]</span>
+或者 docker inspect <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span> NETWORK <span class="token punctuation">[</span>NETWORK<span class="token punctuation">..</span>.<span class="token punctuation">]</span>
+<span class="token comment"># 命令参数(OPTIONS)：</span>
+-f, --format string 根据format输出结果
+</code></pre> 
+<h5><a id="_249"></a>使用网络</h5> 
+<pre><code class="prism language-bash">使用网络 – docker run –-network
+<span class="token comment"># 作用：</span>
+为启动的容器指定网络模式
+<span class="token comment"># 命令格式：</span>
+docker run/create --network NETWORK
+<span class="token comment"># 命令参数(OPTIONS)：</span>
+无
+<span class="token comment"># 注意：</span>
+默认情况下，docker创建或启动容器时，会默认使用名为bridge的网络
+</code></pre> 
+<h5><a id="_261"></a>网络连接与断开</h5> 
+<pre><code class="prism language-bash">网络连接与断开 – docker network connect/disconnect
+<span class="token comment"># 作用：</span>
+将指定容器与指定网络进行连接或者断开连接
+<span class="token comment"># 命令格式：</span>
+docker network connect <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span> NETWORK CONTAINER
+docker network disconnect <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span> NETWORK CONTAINER
+<span class="token comment"># 命令参数(OPTIONS)：</span>
+-f, --force 强制断开连接<span class="token punctuation">(</span>用于disconnect<span class="token punctuation">)</span>
+</code></pre> 
+<h5><a id="_272"></a>小练习</h5> 
+<pre><code class="prism language-bash">docker network create -d bridge --subnet<span class="token operator">=</span><span class="token number">172.172</span>.0.0/24 --gateway <span class="token number">172.172</span>.0.1
+lagou-network
+<span class="token number">172.172</span>.0.0/24: <span class="token number">24</span>代表子码掩码是255.255.255.0
+<span class="token number">172.172</span>.0.0/16: <span class="token number">16</span> 代表子码掩码
+docker network <span class="token function">ls</span>
+docker run -itd --name nginx3 -p <span class="token number">80</span>:80 --net lagou-network --ip <span class="token number">172.172</span>.0.10
+nginx:1.19.3-alpine
+--net mynetwork:选择存在的网络
+--ip <span class="token number">172.172</span>.0.10:给nginx分配固定的IP地址
+docker network inspect lagou-network
+docker stop nginx3
+docker start nginx3
+docker network inspect lagou-network
+</code></pre> 
+<pre><code class="prism language-bash">docker run -itd --name mysql --restart always --privileged<span class="token operator">=</span>true -p <span class="token number">3306</span>:3306 -e
+<span class="token assign-left variable">MYSQL_ROOT_PASSWORD</span><span class="token operator">=</span>admin mysql:5.7.31 --character-set-server<span class="token operator">=</span>utf8 --collationserver<span class="token operator">=</span>utf8_general_ci
+</code></pre> 
+<h4><a id="_293"></a>什么是数据卷</h4> 
+<p>当我们在使用docker容器的时候，会产生一系列的数据文件，这些数据文件在我们删除docker容器时是会消失的，但是其中产生的部分内容我们是希望能够把它给保存起来另作用途的，Docker将应用与运行环境打包成容器发布，我们希望在运行过程钟产生的部分数据是可以持久化的的，而且容器之间我们希望能够实现数据共享。<br> 通俗地来说，docker容器数据卷可以看成使我们生活中常用的u盘，它存在于一个或多个的容器中，由docker挂载到容器，但不属于联合文件系统，Docker不会在容器删除时删除其挂载的数据卷。</p> 
+<h5><a id="cp_297"></a>cp命令</h5> 
+<p>docker cp :用于容器与主机之间的数据拷贝</p> 
+<pre><code class="prism language-bash">宿主机文件复制到容器内
+docker <span class="token function">cp</span> <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span> SRC_PATH CONTAINER:DEST_PATH
+容器内文件复制到宿主机
+docker <span class="token function">cp</span> <span class="token punctuation">[</span>OPTIONS<span class="token punctuation">]</span> CONTAINER:SRC_PATH DEST_PATH
+</code></pre> 
+<p><strong>宿主机文件 copy to 容器内</strong><br> 宿主机的index.html页面覆盖容器内的index.html页面</p> 
+<pre><code class="prism language-bash">docker run -itd --name nginx -p <span class="token number">80</span>:80 nginx:1.19.3-alpine
+<span class="token builtin class-name">cd</span> /data
+<span class="token builtin class-name">echo</span> <span class="token string">"laosiji"</span> <span class="token operator">&gt;</span> /data/index.html
+docker <span class="token function">cp</span> /data/index.html nginx:/usr/share/nginx/html/index.html
+</code></pre> 
+<p><strong>容器内文件 copy to 宿主机</strong><br> 将容器内的nginx.cnf复制到宿主机中</p> 
+<pre><code class="prism language-bash">docker run -itd --name nginx -p <span class="token number">80</span>:80 nginx:1.19.3-alpine
+<span class="token builtin class-name">cd</span> /data
+docker <span class="token function">cp</span> nginx:/etc/nginx/nginx.conf /data
+</code></pre> 
+<p><strong>数据覆盖问题</strong></p> 
+<ul><li>如果挂载一个空的数据卷到容器中的一个非空目录中，那么这个目录下的文件会被复制到数据卷中</li><li>如果挂载一个非空的数据卷到容器中的一个目录中，那么容器中的目录会显示数据卷中的数据。如果原来容器中的目录有数据，那么原始数据会被隐藏掉</li></ul> 
+<pre><code class="prism language-bash">docker run -v /宿主机绝对路径目录:/容器内目录 镜像名
+</code></pre> 
+<p><strong>推荐还是先创建好目录后再进行数据挂载</strong></p> 
+<pre><code class="prism language-bash">docker run -itd --name mysql --restart always --privileged<span class="token operator">=</span>true -p <span class="token number">3306</span>:3306 -e
+<span class="token assign-left variable">MYSQL_ROOT_PASSWORD</span><span class="token operator">=</span>admin -v /data/mysql:/var/lib/mysql mysql:5.7.31 --
+character-set-server<span class="token operator">=</span>utf8 --collation-server<span class="token operator">=</span>utf8_general_ci
+</code></pre> 
+<p>容器目录权限</p> 
+<pre><code class="prism language-bash">通过 -v 容器内路径： ro rw 改变读写权限
+ro:readonly 只读
+rw:readwrite 可读可写
+docker run -it -v /宿主机绝对路径目录:/容器内目录:ro 镜像名
+docker run -it -v /宿主机绝对路径目录:/容器内目录:rw 镜像名
+例如：
+docker run -d -P --name nginx05 -v lagouedu1:/etc/nginx:ro nginx
+docker run -d -P --name nginx05 -v lagouedu2:/etc/nginx:rw nginx
+ro 只要看到ro就说明这个路径只能通过宿主机来操作，容器内部是无法操作！
+</code></pre> 
+<h5><a id="_351"></a>挂载目录权限问题</h5> 
+<pre><code class="prism language-bash">挂载目录权限问题
+https://hub.docker.com/r/sonatype/nexus3
+</code></pre> 
+<pre><code class="prism language-bash">拉取镜像
+docker pull sonatype/nexus3:3.28.1
+备份镜像
+docker save sonatype/nexus3:3.28.1 -o sonatype.nexus3.3.28.1.tar
+导入镜像
+docker load -i sonatype.nexus3.3.28.1.tar
+</code></pre> 
+<pre><code class="prism language-bash">运行容器
+docker run -d -p <span class="token number">8081</span>:8081 --name nexus3 sonatype/nexus3:3.28.1
+
+进入容器查找初始化密码
+docker <span class="token builtin class-name">exec</span> -it nexus3 /bin/bash
+<span class="token builtin class-name">cd</span> /nexus-data/
+<span class="token function">cat</span> admin.password
+浏览器端访问
+http://192.168.198.100:8081/
+docker <span class="token function">rm</span> <span class="token variable"><span class="token variable">$(</span>docker stop <span class="token punctuation">$(</span>docker <span class="token function">ps</span> -aq<span class="token punctuation">)</span><span class="token variable">)</span></span>
+</code></pre> 
+<pre><code class="prism language-bash">数据卷挂载
+docker run -d -p <span class="token number">8081</span>:8081 --name nexus3 -v /data/nexus3/:/nexus-data/
+sonatype/nexus3:3.28.1
+查看容器启动日志
+docker logs -f nexus3
+报错信息如下：
+mkdir: cannot create directory <span class="token string">'../sonatype-work/nexus3/log'</span><span class="token builtin class-name">:</span> Permission denied
+mkdir: cannot create directory <span class="token string">'../sonatype-work/nexus3/tmp'</span><span class="token builtin class-name">:</span> Permission denied
+OpenJDK <span class="token number">64</span>-Bit Server VM warning: Cannot <span class="token function">open</span> <span class="token function">file</span> <span class="token punctuation">..</span>/sonatypework/nexus3/log/jvm.log due to No such <span class="token function">file</span> or directory
+Warning: Cannot <span class="token function">open</span> log file: <span class="token punctuation">..</span>/sonatype-work/nexus3/log/jvm.log
+Warning: Forcing option -XX:LogFile<span class="token operator">=</span>/tmp/jvm.log
+java.io.FileNotFoundException: <span class="token punctuation">..</span>/sonatypework/nexus3/tmp/i4j_ZTDnGON8hezynsMX2ZCYAVDtQog<span class="token operator">=</span>.lock <span class="token punctuation">(</span>No such <span class="token function">file</span> or
+directory<span class="token punctuation">)</span>
+<span class="token punctuation">..</span><span class="token punctuation">..</span>
+</code></pre> 
+<pre><code class="prism language-bash">删除容器
+docker <span class="token function">rm</span> -f nexus3
+查看官网说明文档，需要为挂载目录授权
+<span class="token function">chown</span> -R <span class="token number">200</span> nexus3/
+运行容器
+docker run -d -p <span class="token number">8081</span>:8081 --name nexus3 -v /data/nexus3/:/nexus-data/
+sonatype/nexus3:3.28.1
+查看容器启动日志
+docker logs -f nexus3
+</code></pre> 
+<p>总结：开发环境中推荐为挂载目录授最高权限777；生产环境需要查看官网文档，结合实际生产环境进行授权。</p> 
+<h5><a id="_409"></a>挂载数据卷</h5> 
+<pre><code class="prism language-bash">docker run -itd --name nginx -p <span class="token number">80</span>:80 -v lagouedu-nginx:/etc/nginx nginx:1.19.3-
+alpine
+查看docker数据卷
+docker volume <span class="token function">ls</span>
+查看lagouedu-nginx宿主机目录
+docker volume inspect lagouedu-nginx
+进入docker数据卷默认目录
+<span class="token builtin class-name">cd</span> /var/lib/docker/volumes/lagouedu-nginx
+查看文件
+<span class="token function">ls</span>
+所有的文件docker默认保存在_data目录中
+<span class="token builtin class-name">cd</span> _data
+删除容器
+docker <span class="token function">rm</span> <span class="token variable"><span class="token variable">$(</span>docker stop <span class="token punctuation">$(</span>docker <span class="token function">ps</span> -aq<span class="token punctuation">)</span><span class="token variable">)</span></span>
+查看挂载数据是否还存在，通过查看数据，发现删除容器后，宿主机中的数据还存在
+<span class="token function">ls</span>
+</code></pre> 
+<h5><a id="_428"></a>清理数据卷</h5> 
+<p>删除上面创建的容器后会，发现数据卷仍然存在，我们就需要去清理它，不然会占用我们的资源</p> 
+<pre><code class="prism language-bash">docker volume <span class="token function">ls</span>
+清理数据卷
+docker volume prune
+docker volume <span class="token function">ls</span>
+</code></pre> 
+<h4><a id="_437"></a>数据卷容器</h4> 
+<p><strong>基础镜像</strong></p> 
+<pre><code class="prism language-bash">docker pull centos:7.8.2003
+docker pull nginx:1.19.3-alpine
+docker pull mysql:5.7.31
+</code></pre> 
+<p>如果用户需要在多个容器之间共享一些持续更新的数据，最简单的方式是使用数据卷容器。数据卷容器<br> 也是一个容器，但是它的目的是专门用来提供数据卷供其他容器挂载<br> <img src="https://images2.imgbox.com/88/6c/ydG57VeO_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-bash">docker run -d --name data-volume -v /data/nginx:/usr/share/nginx/html -v
+/data/mysql:/var/lib/mysql centos:7.8.2003
+</code></pre> 
+<pre><code class="prism language-bash">docker run -itd --name nginx01 -p <span class="token number">80</span>:80 --volumes-from data-volume nginx:1.19.3-alpine
+
+<span class="token builtin class-name">echo</span> <span class="token string">"lagouedu nginx"</span> <span class="token operator">&gt;</span> /data/nginx/index.html
+http://192.168.198.100
+
+docker run -itd --name nginx02 -p <span class="token number">81</span>:80 --volumes-from data-volume nginx:1.19.3-
+alpine
+http://192.168.198.100:81
+</code></pre> 
+<pre><code class="prism language-bash">docker run -itd --name mysql01 --restart always --privileged<span class="token operator">=</span>true -p <span class="token number">3306</span>:3306
+-e <span class="token assign-left variable">MYSQL_ROOT_PASSWORD</span><span class="token operator">=</span>admin --volumes-from data-volume mysql:5.7.31 --
+character-set-server<span class="token operator">=</span>utf8 --collation-server<span class="token operator">=</span>utf8_general_ci
+
+docker run -itd --name mysql02 --restart always --privileged<span class="token operator">=</span>true -p <span class="token number">3307</span>:3306
+-e <span class="token assign-left variable">MYSQL_ROOT_PASSWORD</span><span class="token operator">=</span>admin --volumes-from data-volume mysql:5.7.31 --
+character-set-server<span class="token operator">=</span>utf8 --collation-server<span class="token operator">=</span>utf8_general_ci
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0fdc3379515c8a101e466f1d2fde806b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">JavaScript【FS】文件系统模块</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/397506879ad0b872eb4cd590b2a28567/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">还不会华为交换机如何恢复出厂设置的，看这里</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

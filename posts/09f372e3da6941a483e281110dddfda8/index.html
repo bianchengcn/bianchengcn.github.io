@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>golang调用外部程序，创建进程，fork，守护进程，shell命令，fd查看，lsof - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="golang调用外部程序，创建进程，fork，守护进程，shell命令，fd查看，lsof" />
+<meta property="og:description" content="一、syscall.Exec() 函数原型
+func Exec(argv0 string, argv []string, envv []string) (err error)
+函数说明
+Exec invokes the execve(2) system call.
+此方法会将在当前进程空间里，用新的程序覆盖掉当前程序，并执行新的程序，它们依然在同一个进程里，只是进程的内容发生了变化。
+main11.go
+package main import ( &#34;fmt&#34; &#34;syscall&#34; ) func main() { // 打印当前进程号 fmt.Println(syscall.Getpid()) } go build main11.go 得到 main11 可执行文件
+main10.go
+package main import ( &#34;fmt&#34; &#34;os&#34; &#34;os/exec&#34; &#34;syscall&#34; ) func main() { fmt.Println(&#34;11111&#34;) fmt.Println(syscall.Getpid()) f3() // 后面的依然属于当前进程的内容，不会被执行到 fmt.Println(&#34;22222&#34;) } func f3() { // LookPath获得绝对地址；参数可以是绝对路径或相对路径。 // binary 应该是一个可执行文件，对于全局的命令，也需要找到其具体的命令文件的位置。 binary, lookErr := exec." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/09f372e3da6941a483e281110dddfda8/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-11-16T10:36:32+08:00" />
+<meta property="article:modified_time" content="2022-11-16T10:36:32+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">golang调用外部程序，创建进程，fork，守护进程，shell命令，fd查看，lsof</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h5><a id="syscallExec_0"></a>一、syscall.Exec()</h5> 
+<p>函数原型<br> func Exec(argv0 string, argv []string, envv []string) (err error)</p> 
+<p>函数说明<br> Exec invokes the <code>execve(2)</code> system call.</p> 
+<p>此方法会将在当前进程空间里，用新的程序覆盖掉当前程序，并执行新的程序，它们依然在同一个进程里，只是进程的内容发生了变化。</p> 
+<p>main11.go</p> 
+<pre><code class="prism language-go"><span class="token keyword">package</span> main
+
+<span class="token keyword">import</span> <span class="token punctuation">(</span>
+	<span class="token string">"fmt"</span>
+	<span class="token string">"syscall"</span>
+<span class="token punctuation">)</span>
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">// 打印当前进程号</span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>syscall<span class="token punctuation">.</span><span class="token function">Getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>go build main11.go 得到 main11 可执行文件</p> 
+<p>main10.go</p> 
+<pre><code class="prism language-go"><span class="token keyword">package</span> main
+
+<span class="token keyword">import</span> <span class="token punctuation">(</span>
+	<span class="token string">"fmt"</span>
+	<span class="token string">"os"</span>
+	<span class="token string">"os/exec"</span>
+	<span class="token string">"syscall"</span>
+<span class="token punctuation">)</span>
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"11111"</span><span class="token punctuation">)</span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>syscall<span class="token punctuation">.</span><span class="token function">Getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+	<span class="token function">f3</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+	<span class="token comment">// 后面的依然属于当前进程的内容，不会被执行到</span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"22222"</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">func</span> <span class="token function">f3</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">// LookPath获得绝对地址；参数可以是绝对路径或相对路径。</span>
+	<span class="token comment">// binary 应该是一个可执行文件，对于全局的命令，也需要找到其具体的命令文件的位置。</span>
+	binary<span class="token punctuation">,</span> lookErr <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">LookPath</span><span class="token punctuation">(</span><span class="token string">"./main11"</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> lookErr <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">panic</span><span class="token punctuation">(</span>lookErr<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token comment">// 不需要参数</span>
+	args <span class="token operator">:=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">{<!-- --></span><span class="token string">""</span><span class="token punctuation">}</span>
+
+	<span class="token comment">// 使用当前进程的环境变量</span>
+	env <span class="token operator">:=</span> os<span class="token punctuation">.</span><span class="token function">Environ</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+	<span class="token comment">// 执行，并进入新的程序</span>
+	execErr <span class="token operator">:=</span> syscall<span class="token punctuation">.</span><span class="token function">Exec</span><span class="token punctuation">(</span>binary<span class="token punctuation">,</span> args<span class="token punctuation">,</span> env<span class="token punctuation">)</span>
+	<span class="token keyword">if</span> execErr <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">panic</span><span class="token punctuation">(</span>execErr<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token comment">// 后面的依然属于当前进程的内容，不会被执行到</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>go run main10.go</p> 
+<p>输出<br> 11111<br> 4758<br> 4758</p> 
+<p>可见它们是在同一个进程中执行的。</p> 
+<h5><a id="osStartProcess_80"></a>二、os.StartProcess()</h5> 
+<p>函数原型<br> func StartProcess(name string, argv []string, attr *ProcAttr) (*Process, error)</p> 
+<p>函数说明<br> StartProcess starts a new process with the program, arguments and attributes specified by name, argv and attr. The argv slice will become os.Args in the new process, so it normally starts with the program name.</p> 
+<p>If the calling goroutine has locked the operating system thread with runtime.LockOSThread and modified any inheritable OS-level thread state (for example, Linux or Plan 9 name spaces), the new process will inherit the caller’s thread state.</p> 
+<p>StartProcess is a low-level interface. The os/exec package provides higher-level interfaces.</p> 
+<p>If there is an error, it will be of type *PathError.</p> 
+<p>此方法将使用 <code>fork &amp; exec</code> 的方式产生一个子进程来运行新的程序，是父子进程关系。<br> 子进程是以<code>守护进程</code>的方式运行。</p> 
+<p>并且可以通过返回的 Process 对象控制子进程：<br> <code>func (*Process) Kill</code> 杀死进程<br> <code>func (*Process) Release</code> 释放进程资源<br> <code>func (*Process) Signal</code> 向进程发送信号<br> <code>func (*Process) Wait</code> 等待子进程退出，<code>回收子进程，防止出现僵尸进程</code></p> 
+<p>main11.go</p> 
+<pre><code class="prism language-go"><span class="token keyword">package</span> main
+
+<span class="token keyword">import</span> <span class="token punctuation">(</span>
+	<span class="token string">"fmt"</span>
+	<span class="token string">"os"</span>
+	<span class="token string">"strconv"</span>
+<span class="token punctuation">)</span>
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	f<span class="token punctuation">,</span> err <span class="token operator">:=</span> os<span class="token punctuation">.</span><span class="token function">OpenFile</span><span class="token punctuation">(</span><span class="token string">"note.log"</span><span class="token punctuation">,</span> os<span class="token punctuation">.</span>O_RDWR<span class="token operator">|</span>os<span class="token punctuation">.</span>O_CREATE<span class="token operator">|</span>os<span class="token punctuation">.</span>O_APPEND<span class="token punctuation">,</span> os<span class="token punctuation">.</span>ModePerm<span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">panic</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+
+	f<span class="token punctuation">.</span><span class="token function">WriteString</span><span class="token punctuation">(</span><span class="token string">"parent: "</span> <span class="token operator">+</span> strconv<span class="token punctuation">.</span><span class="token function">Itoa</span><span class="token punctuation">(</span>os<span class="token punctuation">.</span><span class="token function">Getppid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+	f<span class="token punctuation">.</span><span class="token function">WriteString</span><span class="token punctuation">(</span><span class="token string">"\n"</span><span class="token punctuation">)</span>
+	f<span class="token punctuation">.</span><span class="token function">WriteString</span><span class="token punctuation">(</span><span class="token string">"son: "</span> <span class="token operator">+</span> strconv<span class="token punctuation">.</span><span class="token function">Itoa</span><span class="token punctuation">(</span>os<span class="token punctuation">.</span><span class="token function">Getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+	f<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<p>go build main11.go 得到 main11 可执行文件。</p> 
+<p>main10.go</p> 
+<pre><code class="prism language-go"><span class="token keyword">package</span> main
+
+<span class="token keyword">import</span> <span class="token punctuation">(</span>
+	<span class="token string">"fmt"</span>
+	<span class="token string">"os"</span>
+	<span class="token string">"os/exec"</span>
+	<span class="token string">"syscall"</span>
+	<span class="token string">"time"</span>
+<span class="token punctuation">)</span>
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"11111"</span><span class="token punctuation">)</span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>syscall<span class="token punctuation">.</span><span class="token function">Getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+	<span class="token function">f4</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"22222"</span><span class="token punctuation">)</span>
+	time<span class="token punctuation">.</span><span class="token function">Sleep</span><span class="token punctuation">(</span>time<span class="token punctuation">.</span>Second <span class="token operator">*</span> <span class="token number">10</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">func</span> <span class="token function">f4</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	binary<span class="token punctuation">,</span> lookErr <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">LookPath</span><span class="token punctuation">(</span><span class="token string">"./main11"</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> lookErr <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">panic</span><span class="token punctuation">(</span>lookErr<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+	args <span class="token operator">:=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">{<!-- --></span><span class="token string">""</span><span class="token punctuation">}</span>
+	pro<span class="token punctuation">,</span> err <span class="token operator">:=</span> os<span class="token punctuation">.</span><span class="token function">StartProcess</span><span class="token punctuation">(</span>binary<span class="token punctuation">,</span> args<span class="token punctuation">,</span> <span class="token operator">&amp;</span>os<span class="token punctuation">.</span>ProcAttr<span class="token punctuation">{<!-- --></span><span class="token punctuation">}</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+		<span class="token keyword">return</span>
+	<span class="token punctuation">}</span>
+
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"son "</span><span class="token punctuation">,</span> pro<span class="token punctuation">.</span>Pid<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>打印信息<br> 11111<br> 5989<br> son 5994<br> 22222</p> 
+<p>日志信息<br> parent: 5989<br> son: 5994</p> 
+<p>重点说一下这个<code>Wait</code>方法。</p> 
+<pre><code class="prism language-go"><span class="token comment">// Wait waits for the Process to exit, and then returns a</span>
+<span class="token comment">// ProcessState describing its status and an error, if any.</span>
+<span class="token comment">// Wait releases any resources associated with the Process.</span>
+<span class="token comment">// On most operating systems, the Process must be a child</span>
+<span class="token comment">// of the current process or an error will be returned.</span>
+<span class="token keyword">func</span> <span class="token punctuation">(</span>p <span class="token operator">*</span>Process<span class="token punctuation">)</span> <span class="token function">Wait</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token operator">*</span>ProcessState<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">return</span> p<span class="token punctuation">.</span><span class="token function">wait</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>在各个编程语言中，这都是一样的，当前程序调起的进程视为子进程，如果父进程先于子进程结束，那么子进程成为孤儿进程，被初始化进程接管（pid=1），如果子进程先于父进程结束，而父进程并没有处理子进程结束的信号，那么子进程将死不瞑目，成为僵尸进程，无法被kill掉，除非父进程结束了（僵尸进程会随之消失）；所以在某些场景下，是需要回收子进程的，也就是调用 Wait 方法。</p> 
+<p>它的作用是：如果子进程结束，那么子进程会有退出码 exit code，Stderr，Srdout 等信息，操作系统就会给父进程发送 SIGCHLD信号，父进程需要阻塞等待，并处理这个信号；</p> 
+<h5><a id="osexec__196"></a>三、os/exec 包</h5> 
+<p>此包是对 StartProcess 的封装，并提供更高级的功能，推荐使用此方法。<br> 并且可以通过 cmd.Process 对象控制子进程。</p> 
+<p>依然使用上面的 main11 可执行程序。</p> 
+<p>main10.go</p> 
+<pre><code class="prism language-go"><span class="token keyword">package</span> main
+
+<span class="token keyword">import</span> <span class="token punctuation">(</span>
+	<span class="token string">"fmt"</span>
+	<span class="token string">"os/exec"</span>
+	<span class="token string">"syscall"</span>
+	<span class="token string">"time"</span>
+<span class="token punctuation">)</span>
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"11111"</span><span class="token punctuation">)</span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>syscall<span class="token punctuation">.</span><span class="token function">Getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+	<span class="token function">f2</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"22222"</span><span class="token punctuation">)</span>
+	time<span class="token punctuation">.</span><span class="token function">Sleep</span><span class="token punctuation">(</span>time<span class="token punctuation">.</span>Second <span class="token operator">*</span> <span class="token number">10</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">func</span> <span class="token function">f2</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"./main11"</span><span class="token punctuation">)</span>
+	err <span class="token operator">:=</span> cmd<span class="token punctuation">.</span><span class="token function">Start</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">panic</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"son "</span><span class="token punctuation">,</span> cmd<span class="token punctuation">.</span>Process<span class="token punctuation">.</span>Pid<span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>os/exec 文档参考 https://golang.google.cn/pkg/os/exec/</p> 
+<h5><a id="goshell_237"></a>四、go程序执行shell命令</h5> 
+<p>首先要理解前面讲的三种方式的效果是，golang程序在服务器上，启动新的进程来运行别的程序，形如 <code>[program arg1 arg2 ...]</code>。</p> 
+<p>但是如果我们想带上额外的功能，比如管道过滤 <code>ps -ef | grep xxx</code> ，输出重定向 <code>ls -l &gt;&gt; note.log</code> 等操作，使用go程序实现就比较麻烦。</p> 
+<p>而我们在 xshell 等类似工具上运行的命令，本质上是 ssh 终端，我们首先要连接上 sshd 服务，然后被分配一个 ssh 子进程来处理我们后面发出的命令，比如你在终端输入一条命令 <code>xxxxx</code>，实际上在服务器上是 <code>/bin/bash -c xxxxx</code>，基于此，我们可以调用 <code>/bin/bash</code> 程序，传入一个参数 <code>-c</code>，参数值就是全部的命令字符串。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	c <span class="token operator">:=</span> <span class="token string">"ls -l &gt;&gt; note.log"</span>
+	cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"/bin/bash"</span><span class="token punctuation">,</span> <span class="token string">"-c"</span><span class="token punctuation">,</span> c<span class="token punctuation">)</span>
+	err <span class="token operator">:=</span> cmd<span class="token punctuation">.</span><span class="token function">Run</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>exit status 127 表示命令不存在<br> <code>ll</code> 不是命令，是<code> ls -l</code> 的别名，你发出的ll命令，终端会将其转换为 ls -l 命令，如果使用go程序发送ll命令，就会报127错误码。所以，并不是所有在终端上能运行的命令，使用go程序都能调用成功，极少部分会失败，要具体分析。</p> 
+<p>因此执行外部命令可以</p> 
+<pre><code class="prism language-go">cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"/app/read5/read5"</span><span class="token punctuation">,</span> <span class="token string">"serve"</span><span class="token punctuation">,</span> <span class="token string">"-d"</span><span class="token punctuation">)</span>
+cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"/bin/bash"</span><span class="token punctuation">,</span> <span class="token string">"-c"</span><span class="token punctuation">,</span> <span class="token string">"/app/read5/read5 serve -d"</span><span class="token punctuation">)</span>
+cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"/bin/bash"</span><span class="token punctuation">,</span> <span class="token string">"-c"</span><span class="token punctuation">,</span> <span class="token string">"cd /app/read5 &amp;&amp; ./read5 serve -d"</span><span class="token punctuation">)</span>
+</code></pre> 
+<p><strong>获取执行结果</strong><br> 如果要读取返回结果，需要设置 cmd 的<code>Stdout, Stderr</code>，他们都是<code>io.Writer</code>，可以使用常用的<code>bytes.Buffer</code>，或者，我们可以将<code>cmd.Run</code>换成 <code>cmd.Output</code> 即可</p> 
+<pre><code class="prism language-go">cs <span class="token operator">:=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">{<!-- --></span><span class="token string">"-c"</span> <span class="token punctuation">,</span><span class="token string">`ps -ef | grep "show serve" | grep -v "grep" | grep -v "expect"| wc -l`</span><span class="token punctuation">}</span>
+cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"/bin/bash"</span><span class="token punctuation">,</span> cs<span class="token operator">...</span><span class="token punctuation">)</span>
+ret<span class="token punctuation">,</span> err <span class="token operator">:=</span> cmd<span class="token punctuation">.</span><span class="token function">Output</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"err: "</span><span class="token punctuation">,</span> err<span class="token punctuation">)</span>
+<span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token function">string</span><span class="token punctuation">(</span>ret<span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="_args_280"></a>五、关于进程参数 args</h5> 
+<p>关于命令 <code>ls -l &gt;&gt; note.log</code>，看下面两个例子</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token function">f2</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	c <span class="token operator">:=</span> <span class="token string">"-c ls -l &gt;&gt; note.log"</span>
+	cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"sh"</span><span class="token punctuation">,</span> strings<span class="token punctuation">.</span><span class="token function">Split</span><span class="token punctuation">(</span>c<span class="token punctuation">,</span> <span class="token string">" "</span><span class="token punctuation">)</span><span class="token operator">...</span><span class="token punctuation">)</span>
+	
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>cmd<span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token comment">// /usr/bin/sh -c ls -l &gt;&gt; note.log</span>
+	
+	err <span class="token operator">:=</span> cmd<span class="token punctuation">.</span><span class="token function">Run</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">func</span> <span class="token function">f1</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	c <span class="token operator">:=</span> <span class="token string">"ls -l &gt;&gt; note.log"</span>
+	cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"/bin/bash"</span><span class="token punctuation">,</span> <span class="token string">"-c"</span><span class="token punctuation">,</span> c<span class="token punctuation">)</span>
+	
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>cmd<span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token comment">// /usr/bin/sh -c ls -l &gt;&gt; note.log</span>
+	
+	err <span class="token operator">:=</span> cmd<span class="token punctuation">.</span><span class="token function">Run</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>虽然最终打印的命令字符串是一样的，都是 <code>/usr/bin/sh -c ls -l &gt;&gt; note.log</code>，但是 <code>f1 成功， f2 失败</code>，因为在这个场景下 <code>/bin/bash 只有一个参数 -c</code> ，而 f2 的写法意味着向 sh 程序传入多个参数，它会将多余的舍弃，就变成了 <code>/bin/bash -c ls</code>。</p> 
+<p>所以args的写法还是要规范，比如将 f2 缓存 f3。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token function">f3</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	c <span class="token operator">:=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span><span class="token punctuation">{<!-- --></span><span class="token string">"-c"</span><span class="token punctuation">,</span> <span class="token string">"ls -l &gt;&gt; note.log"</span><span class="token punctuation">}</span>
+	cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span><span class="token string">"/bin/bash"</span><span class="token punctuation">,</span> c<span class="token operator">...</span><span class="token punctuation">)</span>
+	fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>cmd<span class="token punctuation">.</span><span class="token function">String</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token comment">// /usr/bin/sh -c ls -l &gt;&gt; note.log</span>
+	err <span class="token operator">:=</span> cmd<span class="token punctuation">.</span><span class="token function">Run</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="cmd__324"></a>六、cmd 对象注释</h5> 
+<pre><code class="prism language-go"><span class="token keyword">type</span> Cmd <span class="token keyword">struct</span> <span class="token punctuation">{<!-- --></span>  
+    Path         <span class="token builtin">string</span>　　　<span class="token comment">// 运行命令的路径，绝对路径或者相对路径  </span>
+    Args         <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>　 <span class="token comment">// 命令参数  </span>
+    Env          <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>   <span class="token comment">// 进程环境，如果环境为空，则使用当前进程的环境  </span>
+    Dir          <span class="token builtin">string</span>　　　<span class="token comment">// 指定command的工作目录，如果dir为空，则comman在调用进程所在当前目录中运行  </span>
+    Stdin        io<span class="token punctuation">.</span>Reader　<span class="token comment">// 标准输入，如果stdin是nil的话，进程从null device中读取（os.DevNull），stdin也可以时一个</span>
+    						<span class="token comment">// 文件，否则的话则在运行过程中再开一个goroutine去/读取标准输入  </span>
+    Stdout       io<span class="token punctuation">.</span>Writer  <span class="token comment">// 标准输出  </span>
+    Stderr       io<span class="token punctuation">.</span>Writer　<span class="token comment">// 错误输出，如果这两个（Stdout和Stderr）为空的话，则command运行时将响应的文件描述符连接到</span>
+    						<span class="token comment">// os.DevNull  </span>
+    ExtraFiles   <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">*</span>os<span class="token punctuation">.</span>File <span class="token comment">// 打开的文件描述符切片，可为进程添加fd，比如 socket </span>
+    SysProcAttr  <span class="token operator">*</span>syscall<span class="token punctuation">.</span>SysProcAttr <span class="token comment">// 系统的进程属性</span>
+    Process      <span class="token operator">*</span>os<span class="token punctuation">.</span>Process    <span class="token comment">// Process是底层进程，只启动一次，就是 os.StartProcess 返回的进程对象</span>
+    ProcessState <span class="token operator">*</span>os<span class="token punctuation">.</span>ProcessState　　<span class="token comment">// ProcessState包含一个退出进程的信息，当进程调用Wait或者Run时便会产生该信息．  </span>
+<span class="token punctuation">}</span>  
+</code></pre> 
+<p>Output() 和 CombinedOutput() 不能够同时使用，因为command的标准输出只能有一个，同时使用的话便会定义了两个，便会报错。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Cmd<span class="token punctuation">)</span> <span class="token function">Run</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>
+</code></pre> 
+<p>开始指定命令并且等待他执行结束，如果命令能够成功执行完毕，则返回nil，否则的话边会产生错误。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Cmd<span class="token punctuation">)</span> <span class="token function">Start</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>　
+</code></pre> 
+<p>使某个命令开始执行，但是并不等到他执行结束，这点和Run命令有区别．然后<code>需要手动调用Wait方法</code>等待命令执行完毕并且释放响应的资源。如果你想将 <code>Wait</code>方法分开执行的话可以使用<code>Start</code>，否则的话没必要使用。</p> 
+<p>一个command只能使用Start()或者Run()中的一个启动命令，不能两个同时使用。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Cmd<span class="token punctuation">)</span> <span class="token function">StderrPipe</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>io<span class="token punctuation">.</span>ReadCloser<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>　　
+</code></pre> 
+<p>StderrPipe返回一个pipe，这个管道连接到command的标准错误，当command命令退出时，Wait将关闭这些pipe。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Cmd<span class="token punctuation">)</span> <span class="token function">StdinPipe</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>io<span class="token punctuation">.</span>WriteCloser<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>　
+</code></pre> 
+<p>StdinPipe返回一个连接到command标准输入的管道pipe。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Cmd<span class="token punctuation">)</span> <span class="token function">StdoutPipe</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>io<span class="token punctuation">.</span>ReadCloser<span class="token punctuation">,</span> <span class="token builtin">error</span><span class="token punctuation">)</span>     
+</code></pre> 
+<p>StdoutPipe返回一个连接到command标准输出的管道pipe。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token punctuation">(</span>c <span class="token operator">*</span>Cmd<span class="token punctuation">)</span> <span class="token function">Wait</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token builtin">error</span>　
+</code></pre> 
+<p>Wait等待command退出，他必须和Start一起使用，如果命令能够顺利执行完并顺利退出则返回nil，否则的话便会返回error，其中Wait会是放掉所有与cmd命令相关的资源。</p> 
+<h5><a id="_386"></a>守护进程</h5> 
+<p>由以上可知，golang程序开启守护进程就很容易了。</p> 
+<pre><code class="prism language-go"><span class="token keyword">var</span> daemonFlag <span class="token operator">=</span> <span class="token string">"-d"</span>
+args <span class="token operator">:=</span> os<span class="token punctuation">.</span>Args
+daemon <span class="token operator">:=</span> <span class="token boolean">false</span>
+<span class="token keyword">for</span> k<span class="token punctuation">,</span> v <span class="token operator">:=</span> <span class="token keyword">range</span> args <span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">if</span> v <span class="token operator">==</span> daemonFlag <span class="token punctuation">{<!-- --></span>
+		daemon <span class="token operator">=</span> <span class="token boolean">true</span>
+		args<span class="token punctuation">[</span>k<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token string">""</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">if</span> daemon <span class="token punctuation">{<!-- --></span>
+	util<span class="token punctuation">.</span><span class="token function">Daemonize</span><span class="token punctuation">(</span>args<span class="token operator">...</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">// 运行你的程序</span>
+	<span class="token operator">...</span><span class="token operator">...</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">func</span> <span class="token function">Daemonize</span><span class="token punctuation">(</span>args <span class="token operator">...</span><span class="token builtin">string</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">var</span> arg <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+	<span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span> <span class="token operator">&gt;</span> <span class="token number">1</span> <span class="token punctuation">{<!-- --></span>
+		arg <span class="token operator">=</span> args<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">:</span><span class="token punctuation">]</span>
+	<span class="token punctuation">}</span>
+	cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span>args<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> arg<span class="token operator">...</span><span class="token punctuation">)</span>
+	cmd<span class="token punctuation">.</span>Env <span class="token operator">=</span> os<span class="token punctuation">.</span><span class="token function">Environ</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	cmd<span class="token punctuation">.</span><span class="token function">Start</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>只需要在加上 <code>-d</code> 即可实现后台运行。<br> 例如：<code>./voteapi serve -d</code></p> 
+<p>父进程先于子进程退出，不需要使用Wait。</p> 
+<h5><a id="_422"></a>补充说明</h5> 
+<p>golang中的<code>os/exec</code>不同于传统的<code>fork/exec</code>实现，它并不会将父进程中打开的所有文件描述符传递给子进程，准确来说，golang中打开的 fd，都会被强制带上 <code>O_CLOEXEC</code> 标志位，这样新进程被创建成功的同时，内核就会将子进程中继承过去的 fd 关掉了，因此，需要传递什么 fd ，还需要自己动手传参。</p> 
+<p>我们追踪 <code>os.OpenFile</code> 函数，就能看到 <code>syscall.O_CLOEXEC</code></p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token function">openFile</span><span class="token punctuation">(</span>name <span class="token builtin">string</span><span class="token punctuation">,</span> flag <span class="token builtin">int</span><span class="token punctuation">,</span> perm FileMode<span class="token punctuation">)</span> <span class="token punctuation">(</span>file <span class="token operator">*</span>File<span class="token punctuation">,</span> err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	r<span class="token punctuation">,</span> e <span class="token operator">:=</span> syscall<span class="token punctuation">.</span><span class="token function">Open</span><span class="token punctuation">(</span><span class="token function">fixLongPath</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">,</span> flag<span class="token operator">|</span>syscall<span class="token punctuation">.</span>O_CLOEXEC<span class="token punctuation">,</span> <span class="token function">syscallMode</span><span class="token punctuation">(</span>perm<span class="token punctuation">)</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> e <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> <span class="token boolean">nil</span><span class="token punctuation">,</span> e
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span> <span class="token function">newFile</span><span class="token punctuation">(</span>r<span class="token punctuation">,</span> name<span class="token punctuation">,</span> <span class="token string">"file"</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token boolean">nil</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>首先，对于 Stdin, Stdout, Stderr 三个，可以通过 Cmd 结构体来传递，如果不传的，会默认填充为<code>/dev/null</code>。如果还需要传递其他fd，可以传递到<code>cmd.ExtraFiles</code></p> 
+<pre><code class="prism language-go"><span class="token keyword">var</span> fn <span class="token operator">=</span> <span class="token string">"testproc_f1.txt"</span>
+<span class="token keyword">var</span> isChild <span class="token builtin">bool</span>
+<span class="token keyword">var</span> openfile <span class="token operator">*</span>os<span class="token punctuation">.</span>File
+
+<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	isChild <span class="token operator">=</span> os<span class="token punctuation">.</span><span class="token function">Getenv</span><span class="token punctuation">(</span><span class="token string">"IS_CHILD"</span><span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token string">""</span>
+
+	<span class="token keyword">if</span> <span class="token operator">!</span>isChild <span class="token punctuation">{<!-- --></span>
+		openfile<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">=</span> os<span class="token punctuation">.</span><span class="token function">OpenFile</span><span class="token punctuation">(</span>fn<span class="token punctuation">,</span> os<span class="token punctuation">.</span>O_RDWR<span class="token operator">|</span>os<span class="token punctuation">.</span>O_APPEND<span class="token punctuation">,</span> os<span class="token punctuation">.</span>ModePerm<span class="token punctuation">)</span>
+		<span class="token keyword">defer</span> openfile<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+		openfile<span class="token punctuation">.</span><span class="token function">WriteString</span><span class="token punctuation">(</span><span class="token string">"father"</span><span class="token punctuation">)</span>
+	<span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">go</span> <span class="token function">handleSignals</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+	<span class="token keyword">for</span> <span class="token punctuation">{<!-- --></span>
+		time<span class="token punctuation">.</span><span class="token function">Sleep</span><span class="token punctuation">(</span><span class="token number">1</span> <span class="token operator">*</span> time<span class="token punctuation">.</span>Second<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">func</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">(</span>err <span class="token builtin">error</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	env <span class="token operator">:=</span> <span class="token function">append</span><span class="token punctuation">(</span>
+		os<span class="token punctuation">.</span><span class="token function">Environ</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+		<span class="token string">"IS_CHILD=1"</span><span class="token punctuation">,</span>
+	<span class="token punctuation">)</span>
+
+	path <span class="token operator">:=</span> os<span class="token punctuation">.</span>Args<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+	<span class="token keyword">var</span> args <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token builtin">string</span>
+	<span class="token keyword">if</span> <span class="token function">len</span><span class="token punctuation">(</span>os<span class="token punctuation">.</span>Args<span class="token punctuation">)</span> <span class="token operator">&gt;</span> <span class="token number">1</span> <span class="token punctuation">{<!-- --></span>
+		args <span class="token operator">=</span> os<span class="token punctuation">.</span>Args<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">:</span><span class="token punctuation">]</span>
+	<span class="token punctuation">}</span>
+
+	cmd <span class="token operator">:=</span> exec<span class="token punctuation">.</span><span class="token function">Command</span><span class="token punctuation">(</span>path<span class="token punctuation">,</span> args<span class="token operator">...</span><span class="token punctuation">)</span>
+	cmd<span class="token punctuation">.</span>Stdout <span class="token operator">=</span> os<span class="token punctuation">.</span>Stdout
+	cmd<span class="token punctuation">.</span>Stderr <span class="token operator">=</span> os<span class="token punctuation">.</span>Stderr
+	<span class="token comment">// cmd.ExtraFiles = []*os.File{openfile}</span>
+	cmd<span class="token punctuation">.</span>Env <span class="token operator">=</span> env
+
+	err <span class="token operator">=</span> cmd<span class="token punctuation">.</span><span class="token function">Start</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+		log<span class="token punctuation">.</span><span class="token function">Fatalf</span><span class="token punctuation">(</span><span class="token string">"Restart: Failed to launch, error: %v"</span><span class="token punctuation">,</span> err<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">return</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">func</span> <span class="token function">handleSignals</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">var</span> sig os<span class="token punctuation">.</span>Signal
+	sigChan <span class="token operator">:=</span> <span class="token function">make</span><span class="token punctuation">(</span><span class="token keyword">chan</span> os<span class="token punctuation">.</span>Signal<span class="token punctuation">,</span> <span class="token number">1024</span><span class="token punctuation">)</span>
+
+	signal<span class="token punctuation">.</span><span class="token function">Notify</span><span class="token punctuation">(</span>
+		sigChan<span class="token punctuation">,</span>
+		syscall<span class="token punctuation">.</span>SIGHUP<span class="token punctuation">,</span>
+		syscall<span class="token punctuation">.</span>SIGTERM<span class="token punctuation">,</span>
+	<span class="token punctuation">)</span>
+
+	pid <span class="token operator">:=</span> syscall<span class="token punctuation">.</span><span class="token function">Getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+	<span class="token keyword">for</span> <span class="token punctuation">{<!-- --></span>
+		sig <span class="token operator">=</span> <span class="token operator">&lt;-</span>sigChan
+		<span class="token keyword">switch</span> sig <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">case</span> syscall<span class="token punctuation">.</span>SIGHUP<span class="token punctuation">:</span>
+			log<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>pid<span class="token punctuation">,</span> <span class="token string">"Received SIGHUP. forking."</span><span class="token punctuation">)</span>
+			err <span class="token operator">:=</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+			<span class="token keyword">if</span> err <span class="token operator">!=</span> <span class="token boolean">nil</span> <span class="token punctuation">{<!-- --></span>
+				log<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span><span class="token string">"Fork err:"</span><span class="token punctuation">,</span> err<span class="token punctuation">)</span>
+			<span class="token punctuation">}</span>
+		<span class="token keyword">case</span> syscall<span class="token punctuation">.</span>SIGTERM<span class="token punctuation">:</span>
+			log<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>pid<span class="token punctuation">,</span> <span class="token string">"Received SIGTERM."</span><span class="token punctuation">)</span>
+		<span class="token keyword">default</span><span class="token punctuation">:</span>
+			log<span class="token punctuation">.</span><span class="token function">Printf</span><span class="token punctuation">(</span><span class="token string">"Received %v: nothing i care about...\n"</span><span class="token punctuation">,</span> sig<span class="token punctuation">)</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<pre><code class="prism language-bash"><span class="token function">ps</span> <span class="token parameter variable">-ef</span> <span class="token operator">|</span><span class="token function">grep</span> testproc
+root      <span class="token number">1248</span>  <span class="token number">1090</span>  <span class="token number">0</span> 09:42 pts/0    00:00:00 ./testproc
+
+<span class="token function">ls</span> <span class="token parameter variable">-l</span> /proc/1248/fd
+总用量 <span class="token number">0</span>
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:42 <span class="token number">0</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:42 <span class="token number">1</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:42 <span class="token number">2</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:42 <span class="token number">3</span> -<span class="token operator">&gt;</span> /data/www/golang/project/hashcompare/testproc_f1.txt
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:42 <span class="token number">4</span> -<span class="token operator">&gt;</span> anon_inode:<span class="token punctuation">[</span>eventpoll<span class="token punctuation">]</span>
+lr-x------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:42 <span class="token number">5</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936229</span><span class="token punctuation">]</span>
+l-wx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:42 <span class="token number">6</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936229</span><span class="token punctuation">]</span>
+
+<span class="token function">kill</span> <span class="token parameter variable">-SIGHUP</span> <span class="token number">1248</span>
+
+<span class="token function">ps</span> <span class="token parameter variable">-ef</span> <span class="token operator">|</span><span class="token function">grep</span> testproc
+root      <span class="token number">1248</span>  <span class="token number">1090</span>  <span class="token number">0</span> 09:42 pts/0    00:00:00 ./testproc
+root      <span class="token number">1258</span>  <span class="token number">1248</span>  <span class="token number">0</span> 09:44 pts/0    00:00:00 ./testproc
+
+<span class="token function">ls</span> <span class="token parameter variable">-l</span> /proc/1258/fd
+total <span class="token number">0</span>
+lr-x------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:44 <span class="token number">0</span> -<span class="token operator">&gt;</span> /dev/null
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:44 <span class="token number">1</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:44 <span class="token number">2</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:44 <span class="token number">3</span> -<span class="token operator">&gt;</span> anon_inode:<span class="token punctuation">[</span>eventpoll<span class="token punctuation">]</span>
+lr-x------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:44 <span class="token number">4</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936313</span><span class="token punctuation">]</span>
+l-wx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:44 <span class="token number">5</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936313</span><span class="token punctuation">]</span>
+</code></pre> 
+<p>可以看到 0 和 1，2是不同的，并且没有包含 testproc_f1.txt 文件。</p> 
+<p>其中 eventpoll 为信号监听用的。</p> 
+<p>我们打开<code>cmd.ExtraFiles = []*os.File{openfile}</code>前面注释，再次测试。</p> 
+<pre><code class="prism language-bash"><span class="token function">ps</span> <span class="token parameter variable">-ef</span> <span class="token operator">|</span><span class="token function">grep</span> testproc
+root      <span class="token number">1267</span>  <span class="token number">1090</span>  <span class="token number">0</span> 09:46 pts/0    00:00:00 ./testproc
+root      <span class="token number">1275</span>  <span class="token number">1267</span>  <span class="token number">0</span> 09:47 pts/0    00:00:00 ./testproc
+
+<span class="token function">ls</span> <span class="token parameter variable">-l</span> /proc/1275/fd
+total <span class="token number">0</span>
+lr-x------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:47 <span class="token number">0</span> -<span class="token operator">&gt;</span> /dev/null
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:47 <span class="token number">1</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:47 <span class="token number">2</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:47 <span class="token number">3</span> -<span class="token operator">&gt;</span> /data/www/golang/project/hashcompare/testproc_f1.txt
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:47 <span class="token number">4</span> -<span class="token operator">&gt;</span> anon_inode:<span class="token punctuation">[</span>eventpoll<span class="token punctuation">]</span>
+lr-x------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:47 <span class="token number">5</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936430</span><span class="token punctuation">]</span>
+l-wx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:47 <span class="token number">6</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936430</span><span class="token punctuation">]</span>
+</code></pre> 
+<p>通过 <code>cmd.ExtraFiles</code> 传入的 fd ，其标号从 3 开始，因为 0，1，2 已经被占用，现在的情况是，从操作系统层面已经完成了 fd 的传递和绑定，在代码层面想要使用这个 fd ，则需要将其构建成对象。</p> 
+<pre><code class="prism language-go"><span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	isChild <span class="token operator">=</span> os<span class="token punctuation">.</span><span class="token function">Getenv</span><span class="token punctuation">(</span><span class="token string">"IS_CHILD"</span><span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token string">""</span>
+
+	<span class="token keyword">if</span> <span class="token operator">!</span>isChild <span class="token punctuation">{<!-- --></span>
+		openfile<span class="token punctuation">,</span> <span class="token boolean">_</span> <span class="token operator">=</span> os<span class="token punctuation">.</span><span class="token function">OpenFile</span><span class="token punctuation">(</span>fn<span class="token punctuation">,</span> os<span class="token punctuation">.</span>O_RDWR<span class="token operator">|</span>os<span class="token punctuation">.</span>O_APPEND<span class="token punctuation">,</span> os<span class="token punctuation">.</span>ModePerm<span class="token punctuation">)</span>
+		<span class="token keyword">defer</span> openfile<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+		openfile<span class="token punctuation">.</span><span class="token function">WriteString</span><span class="token punctuation">(</span><span class="token string">"father"</span><span class="token punctuation">)</span>
+	<span class="token punctuation">}</span> <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+		f <span class="token operator">:=</span> os<span class="token punctuation">.</span><span class="token function">NewFile</span><span class="token punctuation">(</span><span class="token function">uintptr</span><span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"testproc_f1.txt"</span><span class="token punctuation">)</span>
+		<span class="token keyword">defer</span> f<span class="token punctuation">.</span><span class="token function">Close</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+		f<span class="token punctuation">.</span><span class="token function">WriteString</span><span class="token punctuation">(</span><span class="token string">"son"</span><span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">go</span> <span class="token function">handleSignals</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+	<span class="token keyword">for</span> <span class="token punctuation">{<!-- --></span>
+		time<span class="token punctuation">.</span><span class="token function">Sleep</span><span class="token punctuation">(</span><span class="token number">1</span> <span class="token operator">*</span> time<span class="token punctuation">.</span>Second<span class="token punctuation">)</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>有时候，一个进程打开的 fd 很多，比如有多个对外建立的socket连接，此时通过 lsof 命令看以看到更详细的信息</p> 
+<pre><code class="prism language-bash"><span class="token comment"># ls -l /proc/1299/fd</span>
+总用量 <span class="token number">0</span>
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">0</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">1</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">2</span> -<span class="token operator">&gt;</span> /dev/pts/0
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">3</span> -<span class="token operator">&gt;</span> /data/www/golang/project/hashcompare/testproc_f1.txt
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">4</span> -<span class="token operator">&gt;</span> anon_inode:<span class="token punctuation">[</span>eventpoll<span class="token punctuation">]</span>
+lr-x------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">5</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936660</span><span class="token punctuation">]</span>
+l-wx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">6</span> -<span class="token operator">&gt;</span> pipe:<span class="token punctuation">[</span><span class="token number">936660</span><span class="token punctuation">]</span>
+lrwx------ <span class="token number">1</span> root root <span class="token number">64</span> <span class="token number">11</span>月 <span class="token number">16</span> 09:53 <span class="token number">7</span> -<span class="token operator">&gt;</span> socket:<span class="token punctuation">[</span><span class="token number">936664</span><span class="token punctuation">]</span>
+
+<span class="token comment"># lsof -p 1299</span>
+COMMAND   PID <span class="token environment constant">USER</span>   FD      TYPE DEVICE SIZE/OFF     NODE NAME
+testproc <span class="token number">1299</span> root  cwd       DIR   <span class="token number">0,58</span>     <span class="token number">4096</span>      <span class="token number">415</span> /data/www/golang/project/hashcompare
+testproc <span class="token number">1299</span> root  rtd       DIR  <span class="token number">253,0</span>     <span class="token number">4096</span>      <span class="token number">128</span> /
+testproc <span class="token number">1299</span> root  txt       REG   <span class="token number">0,58</span>  <span class="token number">6223068</span>      <span class="token number">433</span> /data/www/golang/project/hashcompare/testproc
+testproc <span class="token number">1299</span> root  mem       REG  <span class="token number">253,0</span>  <span class="token number">2156240</span> <span class="token number">33632456</span> /usr/lib64/libc-2.17.so
+testproc <span class="token number">1299</span> root  mem       REG  <span class="token number">253,0</span>   <span class="token number">142144</span> <span class="token number">34128089</span> /usr/lib64/libpthread-2.17.so
+testproc <span class="token number">1299</span> root  mem       REG  <span class="token number">253,0</span>   <span class="token number">163312</span> <span class="token number">34127918</span> /usr/lib64/ld-2.17.so
+testproc <span class="token number">1299</span> root    0u      CHR  <span class="token number">136,0</span>      0t0        <span class="token number">3</span> /dev/pts/0
+testproc <span class="token number">1299</span> root    1u      CHR  <span class="token number">136,0</span>      0t0        <span class="token number">3</span> /dev/pts/0
+testproc <span class="token number">1299</span> root    2u      CHR  <span class="token number">136,0</span>      0t0        <span class="token number">3</span> /dev/pts/0
+testproc <span class="token number">1299</span> root    3u      REG   <span class="token number">0,58</span>      <span class="token number">166</span>      <span class="token number">435</span> /data/www/golang/project/hashcompare/testproc_f1.txt
+testproc <span class="token number">1299</span> root    4u  a_inode    <span class="token number">0,9</span>        <span class="token number">0</span>     <span class="token number">4554</span> <span class="token punctuation">[</span>eventpoll<span class="token punctuation">]</span>
+testproc <span class="token number">1299</span> root    5r     FIFO    <span class="token number">0,8</span>      0t0   <span class="token number">936660</span> pipe
+testproc <span class="token number">1299</span> root    6w     FIFO    <span class="token number">0,8</span>      0t0   <span class="token number">936660</span> pipe
+testproc <span class="token number">1299</span> root    7u     IPv6 <span class="token number">936664</span>      0t0      TCP *:6060 <span class="token punctuation">(</span>LISTEN<span class="token punctuation">)</span>
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/18e93acd64f2c90165e620004c3b217d/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">新手向【服务器安装Java运行环境】</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/a21414eed54d503ead10c45ff1bbe737/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">模数转换电路</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

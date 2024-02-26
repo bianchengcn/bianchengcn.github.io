@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Elasticsearch（中文分词）安装、基本操作使用 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Elasticsearch（中文分词）安装、基本操作使用" />
+<meta property="og:description" content="文章目录 概念倒排索引安装文件夹说明修改配置可视化界面 可视化使用创建索引查看健康状态信息删除索引查看索引 mapppings创建mapping分词测试修改mappgings 操作文档新增文档删除文档修改文档查询文档查询文档存不存在 文档乐观锁 分词测试分词指定索引分词standardsimplewhitespacestopkeyword中文分词器-ikik_max_wordik_smart自定义中文词库 概念 ES -&gt; 数据库
+索引 index -&gt; 表
+文档 document -&gt; 每一条记录
+字段 fields -&gt; 列，每一个属性
+分片（shard） ：把索引库拆分为多份，分别放在不同的节点上，比如有3个节点，3个节点的所有数据内容加在一起是一个完整的索引库。分别保存到三个节点上。可以水平扩展，提高吞吐量。
+备份（replica） ：每个shard的备份。
+倒排索引 倒排索引源于实际应用中需要根据属性的值来查找记录。这种索引表中的每一项都包括一个属性值和具有该属性值的各记录的地址。由于不是由记录来确定属性值，而是由属性值来确定记录的位置，因而称为倒排索引
+正排索引：
+根据文档的ID来获取文档的内容（根据Key去查Value的值，数据量大的时候检索的效率就会降低）
+倒排索引：
+根据文档的内容来进行分词。
+根据分词的内容来查到这些词在哪些文档中出现过，那么就会把这些文档的记录反馈出来。
+比如搜索 博客，那么就会把记录1,2,3都返回出来，搜索的效率比正排索引去数据库中查询高的多。
+词频： Csea在文档ID为1中出现，出现了1次（1:1）
+位置： Csea在文档ID为1中出现的是第一个位置(&lt; 1 &gt;)
+为什么使用词频、位置？
+这是因为，这是计算中的一个因子，是为了更加方便的去排序。
+出现的频率越高，文档和用户搜索的词条相关性就越大，那么就更加容易被用户所搜到。
+安装 VM虚拟机Centos7.3
+elasticsearch7.4.2
+Elasticsearch官网
+下载地址
+上传下载的ES到虚拟机
+# 解压 tar -zxvf elasticsearch-7.4.2-linux-x86_64.tar.gz # 移动ES mv elasticsearch-7.4.2 /usr/local # 进入目录 cd elasticsearch-7.4.2 # 新建一个data文件夹 mkdir data 文件夹说明 bin：包含了一些脚本文件" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/c344e3711d0c008ea500fcd0f34bb3eb/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-06-11T21:32:42+08:00" />
+<meta property="article:modified_time" content="2021-06-11T21:32:42+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Elasticsearch（中文分词）安装、基本操作使用</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><ul><li><a href="#_3" rel="nofollow">概念</a></li><li><a href="#_12" rel="nofollow">倒排索引</a></li><li><a href="#_31" rel="nofollow">安装</a></li><li><ul><li><a href="#_52" rel="nofollow">文件夹说明</a></li><li><a href="#_62" rel="nofollow">修改配置</a></li><li><a href="#_147" rel="nofollow">可视化界面</a></li></ul> 
+    </li><li><a href="#_153" rel="nofollow">可视化使用</a></li><li><ul><li><a href="#_154" rel="nofollow">创建索引</a></li><li><a href="#_164" rel="nofollow">查看健康状态信息</a></li><li><a href="#_168" rel="nofollow">删除索引</a></li><li><a href="#_175" rel="nofollow">查看索引</a></li></ul> 
+    </li><li><a href="#mapppings_186" rel="nofollow">mapppings</a></li><li><ul><li><a href="#mapping_189" rel="nofollow">创建mapping</a></li><li><a href="#_219" rel="nofollow">分词测试</a></li><li><a href="#mappgings_228" rel="nofollow">修改mappgings</a></li></ul> 
+    </li><li><a href="#_241" rel="nofollow">操作文档</a></li><li><ul><li><a href="#_243" rel="nofollow">新增文档</a></li><li><a href="#_260" rel="nofollow">删除文档</a></li><li><a href="#_265" rel="nofollow">修改文档</a></li><li><a href="#_273" rel="nofollow">查询文档</a></li><li><ul><li><a href="#_290" rel="nofollow">查询文档存不存在</a></li></ul> 
+     </li><li><a href="#_296" rel="nofollow">文档乐观锁</a></li></ul> 
+    </li><li><a href="#_307" rel="nofollow">分词</a></li><li><ul><li><a href="#_309" rel="nofollow">测试分词</a></li><li><a href="#_367" rel="nofollow">指定索引分词</a></li><li><a href="#standard_370" rel="nofollow">standard</a></li><li><a href="#simple_375" rel="nofollow">simple</a></li><li><a href="#whitespace_380" rel="nofollow">whitespace</a></li><li><a href="#stop_384" rel="nofollow">stop</a></li><li><a href="#keyword_387" rel="nofollow">keyword</a></li><li><a href="#ik_390" rel="nofollow">中文分词器-ik</a></li><li><a href="#ik_max_word_403" rel="nofollow">ik_max_word</a></li><li><a href="#ik_smart_450" rel="nofollow">ik_smart</a></li><li><a href="#_490" rel="nofollow">自定义中文词库</a></li></ul> 
+   </li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h4><a id="_3"></a>概念</h4> 
+<p>ES -&gt; 数据库<br> 索引 <strong>index</strong> -&gt; 表<br> 文档 <strong>document</strong> -&gt; 每一条记录<br> 字段 <strong>fields</strong> -&gt; 列，每一个属性</p> 
+<p><strong>分片（shard）</strong> ：把索引库拆分为多份，分别放在不同的节点上，比如有3个节点，3个节点的所有数据内容加在一起是一个完整的索引库。分别保存到三个节点上。可以水平扩展，提高吞吐量。<br> <strong>备份（replica）</strong> ：每个shard的备份。</p> 
+<h4><a id="_12"></a>倒排索引</h4> 
+<p><a href="https://baike.baidu.com/item/%E5%80%92%E6%8E%92%E7%B4%A2%E5%BC%95/11001569?fr=aladdin" rel="nofollow">倒排索引源于实际应用中需要根据属性的值来查找记录。这种索引表中的每一项都包括一个属性值和具有该属性值的各记录的地址。由于不是由记录来确定属性值，而是由属性值来确定记录的位置，因而称为倒排索引</a></p> 
+<p><strong>正排索引：</strong><br> 根据文档的ID来获取文档的内容（根据Key去查Value的值，数据量大的时候检索的效率就会降低）</p> 
+<p><strong>倒排索引：</strong><br> 根据文档的内容来进行分词。<br> 根据分词的内容来查到这些词在哪些文档中出现过，那么就会把这些文档的记录反馈出来。<br> 比如搜索 <strong>博客</strong>，那么就会把记录1,2,3都返回出来，搜索的效率比正排索引去数据库中查询高的多。</p> 
+<p><img src="https://images2.imgbox.com/4f/17/iBq0GvSx_o.png" alt=""><br> <strong>词频：</strong> Csea在文档ID为1中出现，出现了1次（1:1）<br> <strong>位置：</strong> Csea在文档ID为1中出现的是第一个位置(&lt; 1 &gt;)</p> 
+<p>为什么使用词频、位置？<br> 这是因为，这是计算中的一个因子，是为了更加方便的去排序。<br> 出现的频率越高，文档和用户搜索的词条相关性就越大，那么就更加容易被用户所搜到。</p> 
+<h4><a id="_31"></a>安装</h4> 
+<p>VM虚拟机Centos7.3<br> elasticsearch7.4.2</p> 
+<p><a href="https://www.elastic.co/cn/" rel="nofollow">Elasticsearch官网</a><br> <a href="https://www.elastic.co/cn/downloads/elasticsearch" rel="nofollow">下载地址</a></p> 
+<p>上传下载的ES到虚拟机<br> <img src="https://images2.imgbox.com/c1/bf/MDYQnidc_o.png" alt=""></p> 
+<pre><code class="prism language-powershell"><span class="token comment"># 解压</span>
+tar <span class="token operator">-</span>zxvf elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2<span class="token operator">-</span>linux<span class="token operator">-</span>x86_64<span class="token punctuation">.</span>tar<span class="token punctuation">.</span>gz
+<span class="token comment"># 移动ES</span>
+<span class="token function">mv</span> elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2 <span class="token operator">/</span>usr<span class="token operator">/</span>local
+<span class="token comment"># 进入目录</span>
+cd elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2
+<span class="token comment"># 新建一个data文件夹</span>
+mkdir <span class="token keyword">data</span>
+</code></pre> 
+<h5><a id="_52"></a>文件夹说明</h5> 
+<p>bin：包含了一些脚本文件<br> config：配置文件目录<br> JDK：java环境<br> lib：相关依赖jar文件<br> logs：日志文件<br> modules：es相关的模块<br> plugins：可以自己开发的插件<br> data：自己新建的，后续可以作为索引目录<br> <img src="https://images2.imgbox.com/2b/5e/r0SURQfb_o.png" alt=""></p> 
+<h5><a id="_62"></a>修改配置</h5> 
+<pre><code class="prism language-powershell">cd config
+<span class="token comment"># 编辑配置文件</span>
+vim elasticsearch<span class="token punctuation">.</span>yml
+</code></pre> 
+<p>配置文件</p> 
+<pre><code class="prism language-powershell"><span class="token comment"># 集群名称，默认是elasticsearch，单节点也可以命名</span>
+cluster<span class="token punctuation">.</span>name: csea<span class="token operator">-</span>elasticsearch
+<span class="token comment"># 节点名称</span>
+node<span class="token punctuation">.</span>name: es<span class="token operator">-</span>node1
+<span class="token comment"># 数据目录</span>
+path<span class="token punctuation">.</span><span class="token keyword">data</span>: <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2<span class="token operator">/</span><span class="token keyword">data</span>
+<span class="token comment"># 日志路径</span>
+path<span class="token punctuation">.</span>logs: <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2<span class="token operator">/</span>logs
+<span class="token comment"># 绑定地址，本地可以设置为0.0.0.0</span>
+network<span class="token punctuation">.</span>host: 0<span class="token punctuation">.</span>0<span class="token punctuation">.</span>0<span class="token punctuation">.</span>0
+<span class="token comment"># es启动端口</span>
+http<span class="token punctuation">.</span>port: 9200
+<span class="token comment"># 开启跨域</span>
+http<span class="token punctuation">.</span>cors<span class="token punctuation">.</span>enabled: true
+http<span class="token punctuation">.</span>cors<span class="token punctuation">.</span>allow<span class="token operator">-</span>origin: <span class="token string">"*"</span>
+<span class="token comment"># 发现节点，写自己配置的就行了${node.name}</span>
+cluster<span class="token punctuation">.</span>initial_master_nodes: <span class="token punctuation">[</span><span class="token string">"es-node1"</span><span class="token punctuation">]</span>
+</code></pre> 
+<p>修改JVM的配置</p> 
+<pre><code class="prism language-powershell">vim jvm<span class="token punctuation">.</span>options
+
+<span class="token comment"># 因为在虚拟机中，没有默认1g这么大，就先改成128m</span>
+<span class="token operator">-</span>Xms128m
+<span class="token operator">-</span>Xmx128m
+</code></pre> 
+<p><strong>由于启动ES不能由root用户启动，必须另外创一个用户启动</strong></p> 
+<pre><code class="prism language-powershell"><span class="token comment"># 查看当前执行命令的用户</span>
+whoami
+<span class="token comment"># 添加用户</span>
+useradd esuser
+cd cd <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2<span class="token operator">/</span>
+<span class="token comment"># 给esuser添加操作es文件夹的权限</span>
+chown <span class="token operator">-</span>R esuser <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2
+chown <span class="token operator">-</span>R esuser:esuser <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2
+<span class="token comment"># 切换用户</span>
+su esuser
+<span class="token comment"># 启动es</span>
+<span class="token punctuation">.</span><span class="token operator">/</span>elasticsearch
+</code></pre> 
+<p>启动的时候报了两个错误：</p> 
+<ol><li>es打开的最大文件数只有4096，至少65535</li><li>最大虚拟内存只有65530，至少262144<br> <img src="https://images2.imgbox.com/7a/8f/ltemtNKv_o.png" alt=""></li></ol> 
+<p>修改限制</p> 
+<pre><code class="prism language-powershell">su root
+vim <span class="token operator">/</span>etc<span class="token operator">/</span>security<span class="token operator">/</span>limits<span class="token punctuation">.</span>conf
+<span class="token comment"># 添加配置</span>
+<span class="token operator">*</span> soft nofile 65536
+<span class="token operator">*</span> hard nofile 131072
+<span class="token operator">*</span> soft nproc 2048
+<span class="token operator">*</span> hard nproc 4096
+
+vim <span class="token operator">/</span>etc<span class="token operator">/</span>sysctl<span class="token punctuation">.</span>conf
+<span class="token comment"># 添加配置</span>
+vm<span class="token punctuation">.</span>max_map_count=262145
+<span class="token comment"># 刷新配置文件</span>
+sysctl <span class="token operator">-</span>p
+
+<span class="token comment"># 重新启动es</span>
+su esuser
+<span class="token punctuation">.</span><span class="token operator">/</span>elasticsearch
+<span class="token comment"># 通过后台的方式运行</span>
+<span class="token punctuation">.</span><span class="token operator">/</span>elasticsearch <span class="token operator">-</span>d
+</code></pre> 
+<p>9200是web上的访问端口<br> 9300是es集群之间内部通讯的端口，内部是通过TCP进行通讯的<br> <img src="https://images2.imgbox.com/53/4b/bnFv1JaV_o.png" alt=""><br> <img src="https://images2.imgbox.com/8e/6e/WQvJNrC6_o.png" alt=""></p> 
+<h5><a id="_147"></a>可视化界面</h5> 
+<p><a href="https://github.com/mobz/elasticsearch-head">Github地址</a><br> chorme应用商店搜索elasticsearch-head插件安装即可</p> 
+<p><img src="https://images2.imgbox.com/ed/fc/5wSeFPSR_o.png" alt=""></p> 
+<h4><a id="_153"></a>可视化使用</h4> 
+<h5><a id="_154"></a>创建索引</h5> 
+<p><img src="https://images2.imgbox.com/0d/66/jgN9cfof_o.png" alt=""></p> 
+<p><img src="https://images2.imgbox.com/99/4f/245wRJ4Z_o.png" alt=""><br> <a href="https://www.elastic.co/guide/cn/elasticsearch/guide/current/_cluster_health.html#_cluster_health" rel="nofollow">集群健康值</a><br> <strong>green：</strong> 所有的主分片和副本分片都已分配。你的集群是 100% 可用的。<br> <strong>yellow：</strong> 所有的主分片已经分片了，但至少还有一个副本是缺失的。不会有数据丢失，所以搜索结果依然是完整的。不过，你的高可用性在某种程度上被弱化。如果 更多的 分片消失，你就会丢数据了。把 yellow 想象成一个需要及时调查的警告。<br> <strong>red：</strong> 至少一个主分片（以及它的全部副本）都在缺失中。这意味着你在缺少数据：搜索只能返回部分数据，而分配到这个分片上的写入请求会返回一个异常。</p> 
+<h5><a id="_164"></a>查看健康状态信息</h5> 
+<p>http://{IP}:{port}/_cluster/health<br> <img src="https://images2.imgbox.com/ab/4c/hzcO85ff_o.png" alt=""></p> 
+<h5><a id="_168"></a>删除索引</h5> 
+<p><strong>方式一：</strong><br> <img src="https://images2.imgbox.com/ef/e3/CmvApjNH_o.png" alt=""><br> <strong>方式二：</strong></p> 
+<p>Delete请求：http://{IP}:{port}/{索引名称}<br> <img src="https://images2.imgbox.com/e8/f0/PtJAGwlC_o.png" alt=""></p> 
+<h5><a id="_175"></a>查看索引</h5> 
+<p><strong>查看某个节点下全部的索引：</strong><br> Get请求：http://{IP}:{port}/_cat/indices?v<br> url后加上?v可以在返回的信息上面加上列名<br> <img src="https://images2.imgbox.com/ff/3a/WiLQHYPr_o.png" alt=""></p> 
+<p><strong>查看某个索引详情：</strong><br> Get请求：http://{IP}:{port}/{索引名称}<br> <img src="https://images2.imgbox.com/fb/1a/TzutkyLT_o.png" alt=""></p> 
+<h4><a id="mapppings_186"></a>mapppings</h4> 
+<p>映射，数据类型的设置，类似数据库的某个字段是什么类型的数据（varchar，int等）</p> 
+<h5><a id="mapping_189"></a>创建mapping</h5> 
+<p>Put请求：http://{IP}:{port}/{索引名称}</p> 
+<pre><code class="prism language-bash"><span class="token punctuation">{<!-- --></span>
+    <span class="token string">"mappings"</span><span class="token builtin class-name">:</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token string">"properties"</span>:<span class="token punctuation">{<!-- --></span>
+        	<span class="token comment"># 字段</span>
+            <span class="token string">"realname"</span>:<span class="token punctuation">{<!-- --></span>
+            	<span class="token comment"># 字段类型</span>
+                <span class="token string">"type"</span><span class="token builtin class-name">:</span><span class="token string">"text"</span>,
+                <span class="token comment"># 是否被索引</span>
+                <span class="token string">"index"</span>:true
+            <span class="token punctuation">}</span>,
+            <span class="token string">"username"</span>:<span class="token punctuation">{<!-- --></span>
+                <span class="token string">"type"</span><span class="token builtin class-name">:</span><span class="token string">"keyword"</span>,
+                <span class="token string">"index"</span>:false
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/36/aa/EUaBte6I_o.png" alt=""><br> <img src="https://images2.imgbox.com/1f/f7/R4LhC2yc_o.png" alt=""></p> 
+<p><strong>text类型是会被分词的，但是keyword是不会被分词，用来精确检索。这两者都是字符串，在老的版本中是string，后来把string拆分为了text和keyword。</strong></p> 
+<p><strong>当某个属性在ES中创建之后，是不支持修改的，只能删除重新创建！</strong></p> 
+<h5><a id="_219"></a>分词测试</h5> 
+<p>Get请求：http://{IP}:{port}/{索引名称}/_analyze<br> _analyze就是分词，分析的意思</p> 
+<p>使用text就会进行分词<br> <img src="https://images2.imgbox.com/75/aa/gSixBpvH_o.png" alt=""><br> 使用keyword就不会分词<br> <img src="https://images2.imgbox.com/b3/be/ib1h3ksD_o.png" alt=""></p> 
+<h5><a id="mappgings_228"></a>修改mappgings</h5> 
+<p>Post请求：http://{IP}:{port}/{索引名称}/_mapping<br> <img src="https://images2.imgbox.com/d2/ee/3TGUWk0g_o.png" alt=""><br> <img src="https://images2.imgbox.com/51/2d/a6Kdtdp6_o.png" alt=""></p> 
+<p>主要类型包括：<br> text、keyword<br> long、integer、short、byte<br> double、float<br> boolean、date、object<br> 数组不能混，类型一致，比如都是字符串数组</p> 
+<h4><a id="_241"></a>操作文档</h4> 
+<h5><a id="_243"></a>新增文档</h5> 
+<p>Post请求：http://{IP}:{port}/{索引名称}/_doc/{文档id}<br> 不主动添加文档ID，ES也会默认生成<br> <img src="https://images2.imgbox.com/6a/57/dx9PNVhm_o.png" alt=""></p> 
+<p>可以到数据浏览，选择对应的索引查看添加的数据<br> <img src="https://images2.imgbox.com/64/b6/WgrknlkJ_o.png" alt=""></p> 
+<p>首先可以看到，mappings自动映射了，并且在name和desc两个字段下，包含了fields，也就是说针对这个字段可以启动多种的索引模式。<br> ignore_above是指的当前这个属性索引的长度，超过了这个长度就会被忽略， 不会去使用了。<br> <img src="https://images2.imgbox.com/e1/9a/Q1w1jR9e_o.png" alt=""></p> 
+<p>可以直接在可视化界面中搜索，他会根据分词过滤<br> <img src="https://images2.imgbox.com/cb/c8/FEeNctOO_o.png" alt=""></p> 
+<h5><a id="_260"></a>删除文档</h5> 
+<p>Delete请求：http://{IP}:{port}/{索引名称}/_doc/{文档id}<br> <img src="https://images2.imgbox.com/55/45/8tsxhMGP_o.png" alt=""><br> 每一次的执行，version都是往上累加，也就是这并不是真正的物理删除，是逻辑删除，数据还是在磁盘中的，只有到磁盘中的文件越来越多了，才会去被动清理。</p> 
+<h5><a id="_265"></a>修改文档</h5> 
+<p><strong>方式一，增量修改：</strong><br> Post请求：http://{IP}:{port}/{索引名称}/_doc/{文档id}/_update<br> <img src="https://images2.imgbox.com/c5/49/WMMwcZH5_o.png" alt=""><br> <strong>方式二，全量修改：</strong><br> Put请求：http://{IP}:{port}/{索引名称}/_doc/{文档id}<br> <img src="https://images2.imgbox.com/98/b2/BBwjHZTx_o.png" alt=""></p> 
+<h5><a id="_273"></a>查询文档</h5> 
+<p><strong>根据ES主键查询：</strong><br> Get请求：http://{IP}:{port}/{索引名称}/_doc/{文档id}<br> <img src="https://images2.imgbox.com/4a/01/dbfI66Ig_o.png" alt=""></p> 
+<p><strong>查询文档下的所有数据：</strong><br> Get请求：http://{IP}:{port}/{索引名称}/_doc/_search<br> <img src="https://images2.imgbox.com/71/06/r1W89cdI_o.png" alt=""><br> took：耗时<br> hits：命中记录数<br> max_socre：搜索匹配度</p> 
+<p><strong>选择字段查询：</strong><br> Get请求：http://{IP}:{port}/{索引名称}/_doc/{文档id}?_source={字段},{字段}<br> Get请求：http://{IP}:{port}/{索引名称}/_doc/_search?_source={字段},{字段}<br> <img src="https://images2.imgbox.com/d9/18/bpiW1RqL_o.png" alt=""></p> 
+<h6><a id="_290"></a>查询文档存不存在</h6> 
+<p>推荐使用Head请求，因为使用Head请求时，如果文档存在，请求会返回200，如果不存在则返回404。<br> 如果使用Get去请求也可以，但是返回的的数据体比较大，从下面两张图中可以看出，相差了几倍，如果数据量更大的时候就相差的更大。<br> <img src="https://images2.imgbox.com/2b/de/BFFYgThr_o.png" alt=""><br> <img src="https://images2.imgbox.com/0b/fe/wEBUQHLM_o.png" alt=""></p> 
+<h5><a id="_296"></a>文档乐观锁</h5> 
+<p>首先查看一下当前要修改文档的信息，注意 <strong>_seq_no</strong> 、<strong>_primary_term</strong> 两个值（这是新版本中的乐观锁控制，老版本中使用 <strong>version</strong> 进行控制）<br> <img src="https://images2.imgbox.com/a2/1c/3ytiCFKC_o.png" alt=""><br> 使用乐观锁进行更新操作，如下需要带上 <strong>_seq_no</strong> 、<strong>_primary_term</strong>两个值，当操作成功之后，<strong>_seq_no</strong>是一直会累加（类似于version）。</p> 
+<p>Post请求：http://{IP}:{port}/{索引名称}/_doc/{文档id}/_update?if_seq_no={_seq_no}&amp;if_primary_term={_primary_term}<br> <strong>老版本中就是使用?version进行控制</strong><br> <img src="https://images2.imgbox.com/bb/5c/vxbLc81m_o.png" alt=""><br> 如果没有按照最新的 <strong>_seq_no</strong> 、<strong>_primary_term</strong> 值进行请求，进出出现如下提示：<br> <img src="https://images2.imgbox.com/49/ee/NGoank7o_o.png" alt=""></p> 
+<h4><a id="_307"></a>分词</h4> 
+<h5><a id="_309"></a>测试分词</h5> 
+<p>Get请求：http://{IP}:{port}/_analyze<br> <img src="https://images2.imgbox.com/a3/bf/ALpHewMA_o.png" alt=""></p> 
+<pre><code class="prism language-bash"><span class="token punctuation">{<!-- --></span>
+	<span class="token comment"># standard是默认的标准分词器</span>
+    <span class="token string">"analyzer"</span><span class="token builtin class-name">:</span><span class="token string">"standard"</span>,
+    <span class="token string">"text"</span><span class="token builtin class-name">:</span><span class="token string">"Csea is a good blog"</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>结果：</p> 
+<pre><code class="prism language-bash"><span class="token punctuation">{<!-- --></span>
+    <span class="token string">"tokens"</span><span class="token builtin class-name">:</span> <span class="token punctuation">[</span>
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"csea"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">0</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">4</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"&lt;ALPHANUM&gt;"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">0</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"is"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">5</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">7</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"&lt;ALPHANUM&gt;"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">1</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"a"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">8</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">9</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"&lt;ALPHANUM&gt;"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">2</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"good"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">10</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">14</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"&lt;ALPHANUM&gt;"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">3</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"blog"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">15</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">19</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"&lt;ALPHANUM&gt;"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">4</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">]</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><strong>ES中默认对于中文的分词是一个字一个字进行拆分的，需要扩展安装中午分词器</strong></p> 
+<h5><a id="_367"></a>指定索引分词</h5> 
+<p>Get请求：http://{IP}:{port}/{索引名称}/_analyze<br> <img src="https://images2.imgbox.com/61/91/t2y0RGa4_o.png" alt=""></p> 
+<h5><a id="standard_370"></a>standard</h5> 
+<p>ES的默认分词器</p> 
+<ol><li>所有的大写字母会转为小写</li><li>内容中出现数字也会进行分词</li></ol> 
+<h5><a id="simple_375"></a>simple</h5> 
+<ol><li>会按照非字母进行拆分，比如don’t会拆分为don 和t</li><li>所有的大写字母也会转为小写，如Csea转为csea</li><li>内容中如果包含1、2、3的数字，他会进行去除，不会进行分词</li></ol> 
+<h5><a id="whitespace_380"></a>whitespace</h5> 
+<ol><li>按照空格进行分词，如 Csea,I 这样就是一个分词</li><li>大写字母不会转为小写</li></ol> 
+<h5><a id="stop_384"></a>stop</h5> 
+<ol><li>会去除取用的助词，如 a，the等</li></ol> 
+<h5><a id="keyword_387"></a>keyword</h5> 
+<ol><li>整一段内容就是一个分词，如My name is Csea. 这就是一个分词</li></ol> 
+<h5><a id="ik_390"></a>中文分词器-ik</h5> 
+<p><a href="https://github.com/medcl/elasticsearch-analysis-ik">elasticsearch-analysis-ik</a></p> 
+<p>在Release里下载对应的版本，我这里是7.4.2</p> 
+<pre><code class="prism language-powershell"><span class="token comment"># 解压到指定目录下</span>
+unzip elasticsearch<span class="token operator">-</span>analysis<span class="token operator">-</span>ik<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2<span class="token punctuation">.</span>zip <span class="token operator">-</span>d <span class="token operator">/</span>usr<span class="token operator">/</span>local<span class="token operator">/</span>elasticsearch<span class="token operator">-</span>7<span class="token punctuation">.</span>4<span class="token punctuation">.</span>2<span class="token operator">/</span>plugins<span class="token operator">/</span>ik
+</code></pre> 
+<p><strong>重启es即可生效</strong></p> 
+<h5><a id="ik_max_word_403"></a>ik_max_word</h5> 
+<p>会将文本做最细粒度的拆分，会穷尽各种可能的组合。<br> <img src="https://images2.imgbox.com/d1/dc/BnwcBXxC_o.png" alt=""><br> 分词结果</p> 
+<pre><code class="prism language-bash"><span class="token punctuation">{<!-- --></span>
+    <span class="token string">"tokens"</span><span class="token builtin class-name">:</span> <span class="token punctuation">[</span>
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"来回"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">0</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">2</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_WORD"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">0</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"回路"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">1</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">3</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_WORD"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">1</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"路上"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">2</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">4</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_WORD"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">2</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"很"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">4</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">5</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_CHAR"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">3</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"堵"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">5</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">6</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_CHAR"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">4</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">]</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="ik_smart_450"></a>ik_smart</h5> 
+<p>会做最粗粒度的拆分</p> 
+<p><img src="https://images2.imgbox.com/f2/b6/678PUaZE_o.png" alt=""><br> 分词结果</p> 
+<pre><code class="prism language-bash"><span class="token punctuation">{<!-- --></span>
+    <span class="token string">"tokens"</span><span class="token builtin class-name">:</span> <span class="token punctuation">[</span>
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"来回"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">0</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">2</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_WORD"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">0</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"路上"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">2</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">4</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_WORD"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">1</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"很"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">4</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">5</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_CHAR"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">2</span>
+        <span class="token punctuation">}</span>,
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token string">"token"</span><span class="token builtin class-name">:</span> <span class="token string">"堵"</span>,
+            <span class="token string">"start_offset"</span><span class="token builtin class-name">:</span> <span class="token number">5</span>,
+            <span class="token string">"end_offset"</span><span class="token builtin class-name">:</span> <span class="token number">6</span>,
+            <span class="token string">"type"</span><span class="token builtin class-name">:</span> <span class="token string">"CN_CHAR"</span>,
+            <span class="token string">"position"</span><span class="token builtin class-name">:</span> <span class="token number">3</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">]</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="_490"></a>自定义中文词库</h5> 
+<p><img src="https://images2.imgbox.com/31/0f/dvjSPwtz_o.png" alt=""><br> <img src="https://images2.imgbox.com/3c/2e/7gj0StlR_o.png" alt=""></p> 
+<pre><code class="prism language-powershell">vim IKAnalyzer<span class="token punctuation">.</span>cfg<span class="token punctuation">.</span>xml
+</code></pre> 
+<p><img src="https://images2.imgbox.com/85/2d/mXPEYSqu_o.png" alt=""></p> 
+<pre><code class="prism language-powershell"><span class="token comment"># 编辑自定义字典</span>
+vim custom<span class="token punctuation">.</span>dic
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a2/b3/n1tgRR3d_o.png" alt=""></p> 
+<p>重启ES生效</p> 
+<p>再次请求分词可以发现，自定义的分词已经生效<br> <img src="https://images2.imgbox.com/b6/a9/IC51hirN_o.png" alt=""><br> <img src="https://images2.imgbox.com/02/9d/rVQvmZtk_o.png" alt=""></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/2072b759ccb209902920426f68b8e4ac/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">CentOS7下普通账号通过systemctl管理服务需要输入root密码问题</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/9a763b4a9cc841883bed703ca9e86147/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Elasticsearch——集群搭建</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

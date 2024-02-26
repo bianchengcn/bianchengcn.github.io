@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>HBase整合Phoenix - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="HBase整合Phoenix" />
+<meta property="og:description" content="文章目录 一、简介1、Phoenix定义2、Phoenix架构 二、安装Phoenix1、安装 三、Phoenix操作1、Phoenix 数据映射2、Phoenix Shell操作3、Phoenix JDBC操作3.1 胖客户端3.2 瘦客户端 四、Phoenix二级索引1、为什么需要二级索引2、全局索引（global index）3、包含索引（covered index)4、本地索引（local index） 一、简介 1、Phoenix定义 1）官网地址：http://phoenix.apache.org/
+Phoenix是HBase的开源SQL皮肤。可以使用标准JDBC API代替HBase客户端API来创建表，插入数据和查询HBase数据。
+优点：使用简单，直接能写sql。
+缺点：效率没有自己设计rowKey再使用API高，性能较差。
+2、Phoenix架构 二、安装Phoenix 1、安装 将安装包上传到服务器目录
+解压安装包
+tar -zxvf apache-phoenix-5.0.0-HBase-2.0-bin.tar.gz -C /opt/module/ mv /opt/module/apache-phoenix-5.0.0-HBase-2.0-bin /opt/module/phoenix 复制server包并拷贝到各个节点Hadoop101、Hadoop102、Hadoop103的hbase/lib
+cp /opt/module/phoenix/phoenix-5.0.0-HBase-2.0-server.jar /opt/module/hbase/lib/ xsync /opt/module/hbase/lib/phoenix-5.0.0-HBase-2.0-server.jar 配置环境变量
+vim /etc/profile.d/my_env.sh 添加内容
+#phoenix export PHOENIX_HOME=/opt/module/phoenix export PHOENIX_CLASSPATH=$PHOENIX_HOME export PATH=$PATH:$PHOENIX_HOME/bin 在hbase-site.xml中添加支持二级索引的参数(如果不需要创建二级索引，不用不加)。之后分发到所有regionserver的节点上。
+vim /opt/module/hbase/conf/hbase-site.xml xsync /opt/module/hbase/conf/hbase-site.xml 配置内容
+&lt;property&gt; &lt;name&gt;hbase.regionserver.wal.codec&lt;/name&gt; &lt;value&gt;org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec&lt;/value&gt; &lt;/property&gt; &lt;property&gt; &lt;name&gt;hbase.region.server.rpc.scheduler.factory.class&lt;/name&gt; &lt;value&gt;org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory&lt;/value&gt; &lt;description&gt;Factory to create the Phoenix RPC Scheduler that uses separate queues for index and metadata updates&lt;/description&gt; &lt;/property&gt; &lt;property&gt; &lt;name&gt;hbase." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/393aa7e76c569da64f77c290cbb0c35c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-12-03T19:58:19+08:00" />
+<meta property="article:modified_time" content="2023-12-03T19:58:19+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">HBase整合Phoenix</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><a href="#_4" rel="nofollow">一、简介</a></li><li><ul><li><a href="#1Phoenix_6" rel="nofollow">1、Phoenix定义</a></li><li><a href="#2Phoenix_16" rel="nofollow">2、Phoenix架构</a></li></ul> 
+   </li><li><a href="#Phoenix_20" rel="nofollow">二、安装Phoenix</a></li><li><ul><li><a href="#1_22" rel="nofollow">1、安装</a></li></ul> 
+   </li><li><a href="#Phoenix_96" rel="nofollow">三、Phoenix操作</a></li><li><ul><li><a href="#1Phoenix__98" rel="nofollow">1、Phoenix 数据映射</a></li><li><a href="#2Phoenix_Shell_108" rel="nofollow">2、Phoenix Shell操作</a></li><li><a href="#3Phoenix_JDBC_187" rel="nofollow">3、Phoenix JDBC操作</a></li><li><ul><li><a href="#31__189" rel="nofollow">3.1 胖客户端</a></li><li><a href="#32__251" rel="nofollow">3.2 瘦客户端</a></li></ul> 
+   </li></ul> 
+   </li><li><a href="#Phoenix_313" rel="nofollow">四、Phoenix二级索引</a></li><li><ul><li><a href="#1_315" rel="nofollow">1、为什么需要二级索引</a></li><li><a href="#2global_index_324" rel="nofollow">2、全局索引（global index）</a></li><li><a href="#3covered_index_344" rel="nofollow">3、包含索引（covered index)</a></li><li><a href="#4local_index_356" rel="nofollow">4、本地索引（local index）</a></li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<hr> 
+<h3><a id="_4"></a>一、简介</h3> 
+<h4><a id="1Phoenix_6"></a>1、Phoenix定义</h4> 
+<p>1）官网地址：http://phoenix.apache.org/</p> 
+<p>Phoenix是HBase的开源SQL皮肤。可以使用标准JDBC API代替HBase客户端API来创建表，插入数据和查询HBase数据。</p> 
+<p>优点：使用简单，直接能写sql。</p> 
+<p>缺点：效率没有自己设计rowKey再使用API高，性能较差。</p> 
+<h4><a id="2Phoenix_16"></a>2、Phoenix架构</h4> 
+<p><img src="https://images2.imgbox.com/08/1b/07rH4BxB_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="Phoenix_20"></a>二、安装Phoenix</h3> 
+<h4><a id="1_22"></a>1、安装</h4> 
+<p>将安装包上传到服务器目录</p> 
+<p>解压安装包</p> 
+<pre><code class="prism language-shell"><span class="token function">tar</span> <span class="token parameter variable">-zxvf</span> apache-phoenix-5.0.0-HBase-2.0-bin.tar.gz <span class="token parameter variable">-C</span> /opt/module/
+<span class="token function">mv</span> /opt/module/apache-phoenix-5.0.0-HBase-2.0-bin /opt/module/phoenix
+</code></pre> 
+<p>复制server包并拷贝到各个节点<code>Hadoop101、Hadoop102、Hadoop103</code>的<code>hbase/lib</code></p> 
+<pre><code class="prism language-shell"><span class="token function">cp</span> /opt/module/phoenix/phoenix-5.0.0-HBase-2.0-server.jar /opt/module/hbase/lib/
+xsync /opt/module/hbase/lib/phoenix-5.0.0-HBase-2.0-server.jar
+</code></pre> 
+<p>配置环境变量</p> 
+<pre><code class="prism language-shell"><span class="token function">vim</span> /etc/profile.d/my_env.sh 
+</code></pre> 
+<p>添加内容</p> 
+<pre><code class="prism language-shell"><span class="token comment">#phoenix</span>
+<span class="token builtin class-name">export</span> <span class="token assign-left variable">PHOENIX_HOME</span><span class="token operator">=</span>/opt/module/phoenix
+<span class="token builtin class-name">export</span> <span class="token assign-left variable">PHOENIX_CLASSPATH</span><span class="token operator">=</span><span class="token variable">$PHOENIX_HOME</span>
+<span class="token builtin class-name">export</span> <span class="token assign-left variable"><span class="token environment constant">PATH</span></span><span class="token operator">=</span><span class="token environment constant">$PATH</span><span class="token builtin class-name">:</span><span class="token variable">$PHOENIX_HOME</span>/bin
+</code></pre> 
+<p>在hbase-site.xml中添加支持二级索引的参数(如果不需要创建二级索引，不用不加)。之后分发到所有regionserver的节点上。</p> 
+<pre><code class="prism language-shell"><span class="token function">vim</span> /opt/module/hbase/conf/hbase-site.xml
+xsync /opt/module/hbase/conf/hbase-site.xml 
+</code></pre> 
+<p>配置内容</p> 
+<pre><code class="prism language-properties">&lt;property&gt;
+    &lt;name&gt;hbase.regionserver.wal.codec&lt;/name&gt;
+    &lt;value&gt;org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec&lt;/value&gt;
+&lt;/property&gt;
+
+&lt;property&gt;
+    &lt;name&gt;hbase.region.server.rpc.scheduler.factory.class&lt;/name&gt;
+    &lt;value&gt;org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory&lt;/value&gt;
+&lt;description&gt;Factory to create the Phoenix RPC Scheduler that uses separate queues for index and metadata updates&lt;/description&gt;
+&lt;/property&gt;
+
+&lt;property&gt;
+    &lt;name&gt;hbase.rpc.controllerfactory.class&lt;/name&gt;
+    &lt;value&gt;org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory&lt;/value&gt;
+    &lt;description&gt;Factory to create the Phoenix RPC Scheduler that uses separate queues for index and metadata updates&lt;/description&gt;
+&lt;/property&gt;
+</code></pre> 
+<p>重启HBase</p> 
+<pre><code class="prism language-shell">stop-hbase.sh
+start-hbase.sh
+</code></pre> 
+<p>连接 phoenix</p> 
+<pre><code class="prism language-shell">/opt/module/phoenix/bin/sqlline.py hadoop101,hadoop102,hadoop103:2181
+</code></pre> 
+<h3><a id="Phoenix_96"></a>三、Phoenix操作</h3> 
+<h4><a id="1Phoenix__98"></a>1、Phoenix 数据映射</h4> 
+<p>Phoenix 将 HBase 的数据模型映射到关系型模型中。</p> 
+<p><img src="https://images2.imgbox.com/a2/56/5tJVEEb8_o.png" alt="在这里插入图片描述"></p> 
+<p>Phoenix中的主键会作为rowkey，非主键列作为普通字段。默认使用0作为列族，也可以在建表时使用 列族.列名 作为字段名，显式指定列族。</p> 
+<p>如果主键是联合主键，则会将主键字段拼接作为rowkey。</p> 
+<h4><a id="2Phoenix_Shell_108"></a>2、Phoenix Shell操作</h4> 
+<ul><li><strong>登录Phoenix</strong></li></ul> 
+<pre><code class="prism language-shell">/opt/module/phoenix/bin/sqlline.py hadoop101,hadoop102,hadoop103:2181
+</code></pre> 
+<ul><li><strong>创建表</strong></li></ul> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">TABLE</span> <span class="token keyword">IF</span> <span class="token operator">NOT</span> <span class="token keyword">EXISTS</span> student<span class="token punctuation">(</span>
+id <span class="token keyword">VARCHAR</span> <span class="token keyword">primary</span> <span class="token keyword">key</span><span class="token punctuation">,</span>
+name <span class="token keyword">VARCHAR</span><span class="token punctuation">,</span>
+addr <span class="token keyword">VARCHAR</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>在phoenix中，表名等会自动转换为大写，若要小写，使用双引号，如"us_population"。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">TABLE</span> <span class="token keyword">IF</span> <span class="token operator">NOT</span> <span class="token keyword">EXISTS</span> <span class="token string">"un_student"</span><span class="token punctuation">(</span>
+id <span class="token keyword">VARCHAR</span> <span class="token keyword">primary</span> <span class="token keyword">key</span><span class="token punctuation">,</span>
+name <span class="token keyword">VARCHAR</span><span class="token punctuation">,</span>
+addr <span class="token keyword">VARCHAR</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/30/09/vpwfhub7_o.png" alt="在这里插入图片描述"></p> 
+<p><img src="https://images2.imgbox.com/5f/3b/uTG9LoBV_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-sql"><span class="token comment">#	指定多个列的联合作为RowKey</span>
+<span class="token keyword">CREATE</span> <span class="token keyword">TABLE</span> <span class="token keyword">IF</span> <span class="token operator">NOT</span> <span class="token keyword">EXISTS</span> us_population <span class="token punctuation">(</span>
+State <span class="token keyword">CHAR</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">NOT</span> <span class="token boolean">NULL</span><span class="token punctuation">,</span>
+City <span class="token keyword">VARCHAR</span> <span class="token operator">NOT</span> <span class="token boolean">NULL</span><span class="token punctuation">,</span>
+Population <span class="token keyword">BIGINT</span>
+<span class="token keyword">CONSTRAINT</span> my_pk <span class="token keyword">PRIMARY</span> <span class="token keyword">KEY</span> <span class="token punctuation">(</span>state<span class="token punctuation">,</span> city<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>注意：Phoenix中建表，会在HBase中创建一张对应的表。为了减少数据对磁盘空间的占用，Phoenix默认会对HBase中的列名做编码处理。具体规则可参考官网链接：https://phoenix.apache.org/columnencoding.html，若不想对列名编码，可在建表语句末尾加上<code>COLUMN_ENCODED_BYTES = 0;</code></p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">TABLE</span> <span class="token keyword">IF</span> <span class="token operator">NOT</span> <span class="token keyword">EXISTS</span> student<span class="token punctuation">(</span>
+id <span class="token keyword">VARCHAR</span> <span class="token keyword">primary</span> <span class="token keyword">key</span><span class="token punctuation">,</span>
+name <span class="token keyword">VARCHAR</span><span class="token punctuation">,</span>
+addr <span class="token keyword">VARCHAR</span><span class="token punctuation">)</span>
+COLUMN_ENCODED_BYTES <span class="token operator">=</span> <span class="token number">0</span>
+<span class="token punctuation">;</span>
+</code></pre> 
+<ul><li><strong>插入或更新数据</strong></li></ul> 
+<pre><code class="prism language-sql">upsert执行时，判断如果主键存在就更新，不存在则执行插入。
+</code></pre> 
+<ul><li><strong>插入或更新数据</strong></li></ul> 
+<p>upsert执行时，判断如果主键存在就更新，不存在则执行插入。</p> 
+<pre><code class="prism language-sql">upsert <span class="token keyword">into</span> student <span class="token keyword">values</span><span class="token punctuation">(</span><span class="token string">'1001'</span><span class="token punctuation">,</span><span class="token string">'zhangsan'</span><span class="token punctuation">,</span><span class="token string">'beijing'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li><strong>查询记录</strong></li></ul> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> student<span class="token punctuation">;</span>
+<span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> student <span class="token keyword">where</span> id<span class="token operator">=</span><span class="token string">'1001'</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li><strong>删除记录</strong></li></ul> 
+<pre><code class="prism language-sql"><span class="token keyword">delete</span> <span class="token keyword">from</span> student <span class="token keyword">where</span> id<span class="token operator">=</span><span class="token string">'1001'</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li><strong>删除表</strong></li></ul> 
+<pre><code class="prism language-sql"><span class="token keyword">drop</span> <span class="token keyword">table</span> student<span class="token punctuation">;</span>
+</code></pre> 
+<ul><li><strong>退出命令行</strong></li></ul> 
+<pre><code class="prism language-sql"><span class="token operator">!</span>quit
+</code></pre> 
+<h4><a id="3Phoenix_JDBC_187"></a>3、Phoenix JDBC操作</h4> 
+<h5><a id="31__189"></a>3.1 胖客户端</h5> 
+<ul><li>胖客户端指将Phoenix的所有功能都集成在客户端，导致客户端代码打包后体积过大。</li></ul> 
+<p>pom依赖</p> 
+<pre><code class="prism language-xml"><span class="token comment">&lt;!--    胖客户端--&gt;</span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.apache.phoenix<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>phoenix-core<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>5.0.0-HBase-2.0<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>exclusions</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>exclusion</span><span class="token punctuation">&gt;</span></span>
+            <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.glassfish<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+            <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>javax.el<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>exclusion</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>exclusions</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.apache.hadoop<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>hadoop-common<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>2.7.2<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<p>测试代码：</p> 
+<pre><code class="prism language-java"><span class="token keyword">import</span> <span class="token import"><span class="token namespace">java<span class="token punctuation">.</span>sql<span class="token punctuation">.</span></span><span class="token operator">*</span></span><span class="token punctuation">;</span>
+
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">TestThickClient</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">[</span><span class="token punctuation">]</span> args<span class="token punctuation">)</span> <span class="token keyword">throws</span> <span class="token class-name">SQLException</span> <span class="token punctuation">{<!-- --></span>
+
+        <span class="token comment">// 1.添加链接</span>
+        <span class="token class-name">String</span> url <span class="token operator">=</span> <span class="token string">"jdbc:phoenix:hadoop101,hadoop102,hadoop103:2181"</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 2.获取连接</span>
+        <span class="token class-name">Connection</span> connection <span class="token operator">=</span> <span class="token class-name">DriverManager</span><span class="token punctuation">.</span><span class="token function">getConnection</span><span class="token punctuation">(</span>url<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 3.编译SQL语句</span>
+        <span class="token class-name">PreparedStatement</span> preparedStatement <span class="token operator">=</span> connection<span class="token punctuation">.</span><span class="token function">prepareStatement</span><span class="token punctuation">(</span><span class="token string">"select * from student"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 4.执行语句</span>
+        <span class="token class-name">ResultSet</span> resultSet <span class="token operator">=</span> preparedStatement<span class="token punctuation">.</span><span class="token function">executeQuery</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span><span class="token string">"==="</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">// 5.输出结果</span>
+        <span class="token keyword">while</span> <span class="token punctuation">(</span>resultSet<span class="token punctuation">.</span><span class="token function">next</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span>resultSet<span class="token punctuation">.</span><span class="token function">getString</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">":"</span> <span class="token operator">+</span> resultSet<span class="token punctuation">.</span><span class="token function">getString</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">":"</span> <span class="token operator">+</span> resultSet<span class="token punctuation">.</span><span class="token function">getString</span><span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token comment">// 6.关闭资源</span>
+        connection<span class="token punctuation">.</span><span class="token function">close</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/1b/22/6bxBItng_o.png" alt="在这里插入图片描述"></p> 
+<h5><a id="32__251"></a>3.2 瘦客户端</h5> 
+<ul><li>瘦客户端指将Phoenix的功能进行拆解，主要功能由服务端提供，只使用轻量级的客户端向服务端发送请求。</li></ul> 
+<p>服务上启动<code>hadoop101</code></p> 
+<pre><code class="prism language-shell">queryserver.py start
+</code></pre> 
+<p>pom文件</p> 
+<pre><code class="prism language-xml"><span class="token comment">&lt;!--    瘦客户端--&gt;</span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.apache.phoenix<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>phoenix-queryserver-client<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>5.0.0-HBase-2.0<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>com.google.protobuf<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>protobuf-java<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>3.21.4<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<p>测试代码</p> 
+<pre><code class="prism language-java"><span class="token keyword">import</span> <span class="token import"><span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>phoenix<span class="token punctuation">.</span>queryserver<span class="token punctuation">.</span>client<span class="token punctuation">.</span></span><span class="token class-name">ThinClientUtil</span></span><span class="token punctuation">;</span>
+<span class="token keyword">import</span> <span class="token import"><span class="token namespace">java<span class="token punctuation">.</span>sql<span class="token punctuation">.</span></span><span class="token operator">*</span></span><span class="token punctuation">;</span>
+
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">TestThinClient</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">[</span><span class="token punctuation">]</span> args<span class="token punctuation">)</span> <span class="token keyword">throws</span> <span class="token class-name">SQLException</span> <span class="token punctuation">{<!-- --></span>
+
+        <span class="token comment">// 1. 直接从瘦客户端获取链接</span>
+        <span class="token class-name">String</span> hadoop102 <span class="token operator">=</span> <span class="token class-name">ThinClientUtil</span><span class="token punctuation">.</span><span class="token function">getConnectionUrl</span><span class="token punctuation">(</span><span class="token string">"hadoop101"</span><span class="token punctuation">,</span> <span class="token number">8765</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span>hadoop102<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">// 2. 获取连接</span>
+        <span class="token class-name">Connection</span> connection <span class="token operator">=</span> <span class="token class-name">DriverManager</span><span class="token punctuation">.</span><span class="token function">getConnection</span><span class="token punctuation">(</span>hadoop102<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 3.编译SQL语句</span>
+        <span class="token class-name">PreparedStatement</span> preparedStatement <span class="token operator">=</span> connection<span class="token punctuation">.</span><span class="token function">prepareStatement</span><span class="token punctuation">(</span><span class="token string">"select * from student"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 4.执行语句</span>
+        <span class="token class-name">ResultSet</span> resultSet <span class="token operator">=</span> preparedStatement<span class="token punctuation">.</span><span class="token function">executeQuery</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 5.输出结果</span>
+        <span class="token keyword">while</span> <span class="token punctuation">(</span>resultSet<span class="token punctuation">.</span><span class="token function">next</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span>resultSet<span class="token punctuation">.</span><span class="token function">getString</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">":"</span> <span class="token operator">+</span> resultSet<span class="token punctuation">.</span><span class="token function">getString</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">":"</span> <span class="token operator">+</span> resultSet<span class="token punctuation">.</span><span class="token function">getString</span><span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+
+        <span class="token comment">// 6.关闭资源</span>
+        connection<span class="token punctuation">.</span><span class="token function">close</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/f8/e4/xh9rYcW3_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="Phoenix_313"></a>四、Phoenix二级索引</h3> 
+<h4><a id="1_315"></a>1、为什么需要二级索引</h4> 
+<ul><li>在HBase中查询时，必须指定rowkey。但是在Phoenix中，可以通过sql语句进行查询，在编写sql语句时，有事我们可能在不使用主键的情况下，进行过滤查询。此时好比是不使用rowkey，直接查询某一列。这样必须对某个表进行全表扫描，才能查询到指定的数据，效率低。</li><li>二级索引是针对列的索引，通过建立二级索引，可以在不使用主键进行查询的场景中提升查询效率。</li></ul> 
+<p><img src="https://images2.imgbox.com/52/86/WDoa9QfM_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="2global_index_324"></a>2、全局索引（global index）</h4> 
+<ul><li>Global Index是默认的索引格式，创建全局索引时，会在HBase中建立一张新表。也就是说索引数据和数据表是存放在不同的表中的，因此全局索引适用于多读少写的业务场景。</li><li>写数据的时候会消耗大量开销，因为索引表也要更新，而索引表是分布在不同的数据节点上的，跨节点的数据传输带来了较大的性能消耗。</li><li>在读数据的时候Phoenix会选择索引表来降低查询消耗的时间。</li></ul> 
+<p><strong>创建单个字段的全局索引</strong></p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">INDEX</span> my_index <span class="token keyword">ON</span> my_table <span class="token punctuation">(</span>my_col<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/79/06/x2gCY1XD_o.png" alt="在这里插入图片描述"></p> 
+<p>如果想查询的字段不是索引字段的话索引表不会被使用，也就是说不会带来查询速度的提升。</p> 
+<p><img src="https://images2.imgbox.com/37/62/f9TRrwSB_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="3covered_index_344"></a>3、包含索引（covered index)</h4> 
+<ul><li>包含索引会将指定的列作为rowkey，包含的列作为普通列建立索引。</li></ul> 
+<p>创建携带其他字段的全局索引</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">INDEX</span> my_index <span class="token keyword">ON</span> my_table <span class="token punctuation">(</span>v1<span class="token punctuation">)</span> INCLUDE <span class="token punctuation">(</span>v2<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/56/83/8DeIjUwH_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="4local_index_356"></a>4、本地索引（local index）</h4> 
+<ul><li>Local Index适用于写操作频繁的场景。</li><li>在数据表中新建一个列族来存储索引数据。避免了在写操作的时候往不同服务器的索引表中写索引带来的额外开销。</li></ul> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">LOCAL</span> <span class="token keyword">INDEX</span> my_index <span class="token keyword">ON</span> my_table <span class="token punctuation">(</span>my_column<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/74/b2/6wZeAQiq_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/f8592e732341ed7c6b6f6454b2b7f26c/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">使用LaTaX制作试卷</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/27b8b5e7476824057b99e27993f195b6/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">使用Prometheus监控Padavan路由器</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

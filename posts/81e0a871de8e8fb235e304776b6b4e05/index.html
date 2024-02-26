@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【Linux】System V 共享内存 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【Linux】System V 共享内存" />
+<meta property="og:description" content="文章目录 一、System V共享内存的原理共享内存的内核数据结构 二、共享内存的使用1. 创建shmget()系统调用创建shm在命令行中查询共享内存 2. 释放使用命令释放共享内存资源使用shmctl释放共享内存资源 3. 关联4. 去关联 三、用共享内存实现server&amp;client通信 一、System V共享内存的原理 共享内存让不同进程看到同一份资源的方式就是，在物理内存当中申请一块内存空间，然后将这块内存空间分别与各个进程各自的页表之间建立映射，再在虚拟地址空间当中开辟空间并将虚拟地址填充到各自页表的对应位置，使得虚拟地址和物理地址之间建立起对应关系，至此这些进程便看到了同一份物理内存，这块物理内存就叫做共享内存。
+共享内存的内核数据结构 在系统当中可能会有大量的进程在进行通信，因此系统当中就可能存在大量的共享内存，那么操作系统必然要对其进行管理，所以共享内存除了在内存当中真正开辟空间之外，系统一定还要为共享内存维护相关的内核数据结构。
+共享内存的数据结构如下：
+/* Obsolete, used only for backwards compatibility and libc5 compiles */ struct shmid_ds { struct ipc_perm shm_perm; /* operation perms */ int shm_segsz; /* size of segment (bytes) */ __kernel_time_t shm_atime; /* last attach time */ __kernel_time_t shm_dtime; /* last detach time */ __kernel_time_t shm_ctime; /* last change time */ __kernel_ipc_pid_t shm_cpid; /* pid of creator */ __kernel_ipc_pid_t shm_lpid; /* pid of last operator */ unsigned short shm_nattch; /* no." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/81e0a871de8e8fb235e304776b6b4e05/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-30T13:33:43+08:00" />
+<meta property="article:modified_time" content="2024-01-30T13:33:43+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【Linux】System V 共享内存</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-github-gist">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#System_V_3" rel="nofollow">一、System V共享内存的原理</a></li><li><ul><li><ul><li><a href="#_6" rel="nofollow">共享内存的内核数据结构</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#_71" rel="nofollow">二、共享内存的使用</a></li><li><ul><li><ul><li><a href="#1__73" rel="nofollow">1. 创建</a></li><li><ul><li><ul><li><a href="#shmgetshm_74" rel="nofollow">shmget()系统调用创建shm</a></li><li><a href="#_130" rel="nofollow">在命令行中查询共享内存</a></li></ul> 
+    </li></ul> 
+    </li><li><a href="#2__154" rel="nofollow">2. 释放</a></li><li><ul><li><ul><li><a href="#_156" rel="nofollow">使用命令释放共享内存资源</a></li><li><a href="#shmctl_164" rel="nofollow">使用shmctl释放共享内存资源</a></li></ul> 
+    </li></ul> 
+    </li><li><a href="#3__185" rel="nofollow">3. 关联</a></li><li><a href="#4__204" rel="nofollow">4. 去关联</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#serverclient_222" rel="nofollow">三、用共享内存实现server&amp;client通信</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="System_V_3"></a>一、System V共享内存的原理</h2> 
+<p>共享内存让不同进程看到同一份资源的方式就是，在物理内存当中申请一块内存空间，然后将这块内存空间分别与各个进程各自的页表之间建立映射，再在虚拟地址空间当中开辟空间并将虚拟地址填充到各自页表的对应位置，使得虚拟地址和物理地址之间建立起对应关系，至此这些进程便看到了同一份物理内存，这块物理内存就叫做共享内存。</p> 
+<h4><a id="_6"></a>共享内存的内核数据结构</h4> 
+<p>在系统当中可能会有大量的进程在进行通信，因此系统当中就可能存在大量的共享内存，那么操作系统必然要对其进行管理，所以共享内存除了在内存当中真正开辟空间之外，系统一定还要为共享内存维护相关的内核数据结构。</p> 
+<p>共享内存的数据结构如下：</p> 
+<pre><code class="prism language-c"><span class="token comment">/* Obsolete, used only for backwards compatibility and libc5 compiles */</span>
+<span class="token keyword">struct</span> <span class="token class-name">shmid_ds</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">struct</span> <span class="token class-name">ipc_perm</span>     shm_perm<span class="token punctuation">;</span>   <span class="token comment">/* operation perms */</span>
+    <span class="token keyword">int</span>         shm_segsz<span class="token punctuation">;</span>  <span class="token comment">/* size of segment (bytes) */</span>
+    __kernel_time_t     shm_atime<span class="token punctuation">;</span>  <span class="token comment">/* last attach time */</span>
+    __kernel_time_t     shm_dtime<span class="token punctuation">;</span>  <span class="token comment">/* last detach time */</span>
+    __kernel_time_t     shm_ctime<span class="token punctuation">;</span>  <span class="token comment">/* last change time */</span>
+    __kernel_ipc_pid_t  shm_cpid<span class="token punctuation">;</span>   <span class="token comment">/* pid of creator */</span>
+    __kernel_ipc_pid_t  shm_lpid<span class="token punctuation">;</span>   <span class="token comment">/* pid of last operator */</span>
+    <span class="token keyword">unsigned</span> <span class="token keyword">short</span>      shm_nattch<span class="token punctuation">;</span> <span class="token comment">/* no. of current attaches */</span>
+    <span class="token keyword">unsigned</span> <span class="token keyword">short</span>      shm_unused<span class="token punctuation">;</span> <span class="token comment">/* compatibility */</span>
+    <span class="token keyword">void</span>            <span class="token operator">*</span>shm_unused2<span class="token punctuation">;</span>   <span class="token comment">/* ditto - used by DIPC */</span>
+    <span class="token keyword">void</span>            <span class="token operator">*</span>shm_unused3<span class="token punctuation">;</span>   <span class="token comment">/* unused */</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>可以看到上面共享内存数据结构的第一个成员是shm_perm，shm_perm是一个ipc_perm类型的结构体变量，每个共享内存的key值存储在shm_perm这个结构体变量当中，其中ipc_perm结构体的定义如下：</p> 
+<pre><code class="prism language-c"><span class="token comment">/* Obsolete, used only for backwards compatibility and libc5 compiles */</span>
+<span class="token keyword">struct</span> <span class="token class-name">ipc_perm</span>
+<span class="token punctuation">{<!-- --></span>
+    __kernel_key_t  key<span class="token punctuation">;</span>
+    __kernel_uid_t  uid<span class="token punctuation">;</span>
+    __kernel_gid_t  gid<span class="token punctuation">;</span>
+    __kernel_uid_t  cuid<span class="token punctuation">;</span>
+    __kernel_gid_t  cgid<span class="token punctuation">;</span>
+    __kernel_mode_t mode<span class="token punctuation">;</span>
+    <span class="token keyword">unsigned</span> <span class="token keyword">short</span>  seq<span class="token punctuation">;</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>在Linux系统中，<code>key</code> 是一个关键字段，用于标识 System V IPC 对象的唯一性。对于共享内存（Shared Memory），<code>key</code> 的唯一性保证了在系统范围内的IPC对象之间的区分。<code>key</code> 是一个32位的整数值，用于唯一标识一个IPC对象，包括共享内存。开发者在创建IPC对象时可以指定一个 <code>key</code> 值，而系统会根据这个值来唯一地标识该对象。它的特性如下：</p> 
+<ul><li> <p><strong>唯一性：</strong> 每个IPC对象的 <code>key</code> 都应该是唯一的。在系统中，通过不同的 <code>key</code> 值来区分不同的共享内存段。如果两个共享内存段的 <code>key</code> 相同，它们将被视为同一IPC对象。</p> </li><li> <p><strong>用户自定义：</strong> 开发者可以自己选择 <code>key</code> 的值，通常可以使用 <code>ftok()</code> 函数将文件路径和项目标识符（project identifier）转换为 <code>key</code> 值。这种方法可以确保在不同的程序中使用相同的文件路径和项目标识符生成相同的 <code>key</code> 值，从而在不同的进程间共享同一个IPC对象。</p> </li></ul> 
+<p>我们待会实现server&amp;client通信就用到了这种方法，pathname和proj_id被server和client进程共用，以便使用 <code>ftok()</code> 来生成出相同的key，唯一确定共享的内存。</p> 
+<pre><code class="prism language-c"><span class="token keyword">const</span> std<span class="token operator">::</span>string pathname<span class="token operator">=</span><span class="token string">"/home/chen/linux-learning/shm"</span><span class="token punctuation">;</span>
+<span class="token keyword">const</span> <span class="token keyword">int</span> proj_id <span class="token operator">=</span> <span class="token number">0x11223344</span><span class="token punctuation">;</span>
+  
+<span class="token comment">// 共享内存的大小，建议设计成4096的整数倍</span>
+<span class="token keyword">const</span> <span class="token keyword">int</span> size <span class="token operator">=</span> <span class="token number">4096</span><span class="token punctuation">;</span>
+  
+<span class="token class-name">key_t</span> <span class="token function">GetKey</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">key_t</span> key <span class="token operator">=</span> <span class="token function">ftok</span><span class="token punctuation">(</span>pathname<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> proj_id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>key <span class="token operator">&lt;</span> <span class="token number">0</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        std<span class="token operator">::</span>cerr <span class="token operator">&lt;&lt;</span> <span class="token string">"errno: "</span> <span class="token operator">&lt;&lt;</span> errno 
+                  <span class="token operator">&lt;&lt;</span> <span class="token string">", errstring: "</span> <span class="token operator">&lt;&lt;</span> <span class="token function">strerror</span><span class="token punctuation">(</span>errno<span class="token punctuation">)</span> 
+                  <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<hr> 
+<h2><a id="_71"></a>二、共享内存的使用</h2> 
+<h4><a id="1__73"></a>1. 创建</h4> 
+<h6><a id="shmgetshm_74"></a>shmget()系统调用创建shm</h6> 
+<p>创建共享内存我们需要用shmget函数，<strong>shmget函数的函数原型如下：</strong><br> <img src="https://images2.imgbox.com/d3/1d/LWZJSwO9_o.png" alt="请添加图片描述"></p> 
+<p><strong>shmget的参数说明：</strong></p> 
+<ul><li>第一个参数key，表示待创建共享内存在系统当中的唯一标识。</li><li>第二个参数size，表示待创建共享内存的大小。</li><li>第三个参数shmflg，表示创建共享内存的方式。</li></ul> 
+<p><strong>shmget的返回值说明：</strong></p> 
+<ul><li>shmget调用成功，返回一个有效的共享内存标识符（用户层标识符）。</li><li>shmget调用失败，返回-1。</li></ul> 
+<blockquote> 
+ <p><strong>注意：</strong><br> 我们把具有标定某种资源能力的东西叫做<strong>句柄</strong>，而这里shmget函数的返回值实际上就是共享内存的句柄，这个句柄可以在用户层标识共享内存，当共享内存被创建后，我们在后续使用共享内存的相关接口时，都是<strong>需要通过这个句柄对指定共享内存进行各种操作</strong>。</p> 
+</blockquote> 
+<blockquote> 
+ <p><strong>说明一下参数key和shmflg：</strong></p> 
+ <ol><li><strong>关于传入shmget函数的第一个参数key，需要我们使用ftok函数进行获取</strong></li></ol> 
+ <hr> 
+ <p><strong>ftok函数的函数原型如下：</strong><br> <img src="https://images2.imgbox.com/88/61/lVNxNcnQ_o.png" alt="请添加图片描述"><br> ftok函数的作用就是，将一个已存在的路径名pathname和一个整数标识符proj_id转换成一个key值。将来在用shm实现进程间通信的时候，不同的进程使用相同的pathname和proj_id，通过ftok得到的key都是相同的，把key给到shmget即可获得相同的共享内存句柄。</p> 
+ <pre><code class="prism language-c"><span class="token keyword">const</span> std<span class="token operator">::</span>string pathname<span class="token operator">=</span><span class="token string">"/home/chen/linux-learning/shm"</span><span class="token punctuation">;</span>
+<span class="token keyword">const</span> <span class="token keyword">int</span> proj_id <span class="token operator">=</span> <span class="token number">0x11223344</span><span class="token punctuation">;</span>
+<span class="token keyword">const</span> <span class="token keyword">int</span> size <span class="token operator">=</span> <span class="token number">4096</span><span class="token punctuation">;</span><span class="token comment">// 共享内存的大小，建议设计成4096的整数倍</span>
+
+<span class="token class-name">key_t</span> <span class="token function">GetKey</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">key_t</span> key <span class="token operator">=</span> <span class="token function">ftok</span><span class="token punctuation">(</span>pathname<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> proj_id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>key <span class="token operator">&lt;</span> <span class="token number">0</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        std<span class="token operator">::</span>cerr <span class="token operator">&lt;&lt;</span> <span class="token string">"errno: "</span> <span class="token operator">&lt;&lt;</span> errno <span class="token operator">&lt;&lt;</span> <span class="token string">", errstring: "</span> <span class="token operator">&lt;&lt;</span> <span class="token function">strerror</span><span class="token punctuation">(</span>errno<span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">return</span> key<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+ <blockquote> 
+  <p>[!Question] <strong>为什么要用户自己设置key，而不是操作系统帮我们做？</strong><br> <code>ftok</code>函数的作用就是，将一个已存在的路径名<code>pathname</code>和一个整数标识符<code>proj_id</code>转换成一个<code>key</code>值。将来在用shm实现进程间通信的时候，不同的进程使用相同的<code>pathname</code>和<code>proj_id</code>，通过<code>ftok</code>得到的<code>key</code>都是相同的，而且这个<code>key</code>只有这些进程自己知道，把<code>key</code>给到<code>shmget</code>即可获得相同的共享内存的句柄，以使用约定的那块共享内存。</p> 
+ </blockquote> 
+ <hr> 
+ <ol start="2"><li><strong>第三个参数shmflg，常用的组合方式有以下两种：</strong></li></ol> 
+ <hr> 
+ <table><thead><tr><th>组合方式</th><th>作用</th></tr></thead><tbody><tr><td>IPC_CREAT</td><td>如果内核中不存在键值与key相等的共享内存，则新建一个共享内存并返回该共享内存的句柄；如果存在这样的共享内存，则直接返回该共享内存的句柄</td></tr><tr><td>PC_CREAT|IPC_EXCL</td><td>如果内核中不存在键值与key相等的共享内存，则新建一个共享内存并返回该共享内存的句柄；如果存在这样的共享内存，则出错返回</td></tr></tbody></table> 
+ <p>甚至可以设置权限 (int32位中的最低的9位) 指定授予所有者、组和全局的权限。格式和含义与open(2)的mode参数相同。<br> <img src="https://images2.imgbox.com/6b/91/dj5LR1G6_o.png" alt="请添加图片描述"></p> 
+</blockquote> 
+<h6><a id="_130"></a>在命令行中查询共享内存</h6> 
+<p>使用<code>ipcs</code>命令时，会默认列出消息队列、共享内存以及信号量相关的信息，若只想查看它们之间某一个的相关信息，可以选择携带以下<strong>选项：</strong></p> 
+<ul><li>-q：列出消息队列相关信息。</li><li>-m：列出共享内存相关信息。</li><li>-s：列出信号量相关信息。</li></ul> 
+<p>ipcs命令输出的每列信息的含义如下：</p> 
+<table><thead><tr><th>标题</th><th>含义</th></tr></thead><tbody><tr><td>key</td><td>系统区别各个共享内存的唯一标识</td></tr><tr><td>shmid</td><td>共享内存的用户层id（句柄）</td></tr><tr><td>owner</td><td>共享内存的拥有者</td></tr><tr><td>perms</td><td>共享内存的权限</td></tr><tr><td>bytes</td><td>共享内存的大小</td></tr><tr><td>nattch</td><td>关联共享内存的进程数</td></tr><tr><td>status</td><td>共享内存的状态</td></tr></tbody></table> 
+<blockquote> 
+ <p>[!Attention] 注意：</p> 
+ <ul><li>key: 不要在应用层使用，key只用来在内核中标识shm的唯一性！ - 类比文件描述符 <code>fd</code></li><li>shmid：应用这个共享内存的时候，我们使用shmid来进行操作共享内存。 - 类比 <code>FILE*</code></li></ul> 
+</blockquote> 
+<h4><a id="2__154"></a>2. 释放</h4> 
+<p>如果进程不主动删除创建的共享内存，那么共享内存就会一直存在，直到关机重启（system V IPC都是如此），同时也说明了IPC资源是由Linux内核提供并维护的。</p> 
+<h6><a id="_156"></a>使用命令释放共享内存资源</h6> 
+<p>可以使用<code>ipcrm -m shmid</code>命令释放指定id的共享内存资源</p> 
+<pre><code class="prism language-bash">ipcrm -m <span class="token punctuation">[</span>shmid<span class="token punctuation">]</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/b5/4c/yYwLRgxC_o.png" alt="请添加图片描述"></p> 
+<h6><a id="shmctl_164"></a>使用shmctl释放共享内存资源</h6> 
+<p><code>shmctl</code> 用于对共享内存段进行控制操作，可以实现共享内存的删除功能。下面是 <code>shmctl</code> 系统调用的函数原型：</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/ipc.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/shm.h&gt;</span></span>
+
+<span class="token keyword">int</span> <span class="token function">shmctl</span><span class="token punctuation">(</span><span class="token keyword">int</span> shmid<span class="token punctuation">,</span> <span class="token keyword">int</span> cmd<span class="token punctuation">,</span> <span class="token keyword">struct</span> <span class="token class-name">shmid_ds</span> <span class="token operator">*</span>buf<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li> <p><strong>参数说明：</strong></p> 
+  <ol><li><code>shmid</code>: 共享内存标识符，它是由 <code>shmget</code> 函数返回的标识符，用于唯一标识一个共享内存段。</li><li><code>cmd</code>: 控制命令，表示对共享内存的执行的操作。可以使用以下命令： 
+    <ul><li><code>IPC_STAT</code>: 获取共享内存的状态信息，将共享内存的信息填充到 <code>buf</code> 中。</li><li><code>IPC_SET</code>: 设置共享内存的状态信息，使用 <code>buf</code> 中提供的信息。</li><li><code>IPC_RMID</code>: 删除共享内存段，释放资源。</li></ul> </li><li><code>buf</code>: 一个指向 <code>struct shmid_ds</code> 结构的指针，用于传递或接收共享内存的状态信息。</li></ol> </li><li> <p><strong>返回值说明：</strong></p> 
+  <ul><li>成功时，返回0。</li><li>失败时，返回-1，并设置全局变量 <code>errno</code> 来指示错误的原因。</li></ul> </li></ul> 
+<h4><a id="3__185"></a>3. 关联</h4> 
+<p>将共享内存连接到进程地址空间我们需要用shmat函数，shmat函数的函数原型如下：</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/types.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/shm.h&gt;</span></span>
+
+<span class="token keyword">void</span> <span class="token operator">*</span><span class="token function">shmat</span><span class="token punctuation">(</span><span class="token keyword">int</span> shmid<span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">void</span> <span class="token operator">*</span>shmaddr<span class="token punctuation">,</span> <span class="token keyword">int</span> shmflg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li> <p><strong>shmat函数的参数说明</strong>：</p> 
+  <ul><li>第一个参数shmid，表示待关联共享内存的用户级标识符。</li><li>第二个参数shmaddr，指定共享内存映射到进程地址空间的某一地址，通常设置为NULL，表示让内核自己决定一个合适的地址位置。</li><li>第三个参数shmflg，表示关联共享内存时设置的某些属性。</li></ul> </li><li> <p><strong>shmat函数的返回值说明</strong>：</p> 
+  <ul><li>shmat调用成功，返回共享内存映射到进程地址空间中的起始地址。</li><li>shmat调用失败，返回(void*)-1。</li></ul> </li></ul> 
+<h4><a id="4__204"></a>4. 去关联</h4> 
+<p>取消共享内存与进程地址空间之间的关联我们需要用shmdt函数，shmdt函数的函数原型如下：</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/types.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/shm.h&gt;</span></span>
+
+<span class="token keyword">int</span> <span class="token function">shmdt</span><span class="token punctuation">(</span><span class="token keyword">const</span> <span class="token keyword">void</span> <span class="token operator">*</span>shmaddr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li> <p><strong>shmdt函数的参数说明</strong>：<br> 待去关联共享内存的起始地址，即调用shmat函数时得到的起始地址。</p> </li><li> <p><strong>shmdt函数的返回值说明</strong>：</p> 
+  <ul><li>shmdt调用成功，返回0。</li><li>shmdt调用失败，返回-1。</li></ul> </li></ul> 
+<h2><a id="serverclient_222"></a>三、用共享内存实现server&amp;client通信</h2> 
+<p>在知道了共享内存的创建、关联、去关联以及释放后，现在可以尝试让两个进程通过共享内存进行通信了。</p> 
+<p>为了让服务端和客户端在使用ftok函数获取key值时，能够得到同一种key值，那么服务端和客户端传入ftok函数的路径名和和整数标识符必须相同，这样才能生成同一种key值，进而找到同一个共享资源进行挂接。这里我们可以将这些需要共用的信息放入一个头文件当中，服务端和客户端共用这个头文件即可。</p> 
+<p>共用的头文件：comm.h</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">pragma</span> <span class="token expression">once</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;iostream&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;cstdlib&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;string&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;cstring&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/ipc.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/shm.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/types.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/stat.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;fcntl.h&gt;</span></span>
+
+<span class="token keyword">const</span> std<span class="token operator">::</span>string pathname <span class="token operator">=</span> <span class="token string">"/home/chen/linux-learning/shm"</span><span class="token punctuation">;</span>
+<span class="token keyword">const</span> <span class="token keyword">int</span> proj_id <span class="token operator">=</span> <span class="token number">0x112233</span><span class="token punctuation">;</span>
+
+<span class="token keyword">const</span> std<span class="token operator">::</span>string filename <span class="token operator">=</span> <span class="token string">"fifo"</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 共享内存的大小，建议设计成4096的整数倍</span>
+<span class="token keyword">const</span> <span class="token keyword">int</span> size <span class="token operator">=</span> <span class="token number">4096</span><span class="token punctuation">;</span>
+
+<span class="token class-name">key_t</span> <span class="token function">GetKey</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">key_t</span> key <span class="token operator">=</span> <span class="token function">ftok</span><span class="token punctuation">(</span>pathname<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> proj_id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>key <span class="token operator">&lt;</span> <span class="token number">0</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        std<span class="token operator">::</span>cerr <span class="token operator">&lt;&lt;</span> <span class="token string">"ftok, errno: "</span> <span class="token operator">&lt;&lt;</span> errno <span class="token operator">&lt;&lt;</span> <span class="token string">", errstring: "</span> <span class="token operator">&lt;&lt;</span> <span class="token function">strerror</span><span class="token punctuation">(</span>errno<span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">return</span> key<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+std<span class="token operator">::</span>string <span class="token function">ToHex</span><span class="token punctuation">(</span><span class="token keyword">int</span> id<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">char</span> buffer<span class="token punctuation">[</span><span class="token number">1024</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token function">snprintf</span><span class="token punctuation">(</span>buffer<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>buffer<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"0x%x"</span><span class="token punctuation">,</span> id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> buffer<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+
+<span class="token keyword">int</span> <span class="token function">CreateShmHelper</span><span class="token punctuation">(</span><span class="token class-name">key_t</span> key<span class="token punctuation">,</span> <span class="token keyword">int</span> flag<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">int</span> shmid <span class="token operator">=</span> <span class="token function">shmget</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> size<span class="token punctuation">,</span> flag<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>shmid <span class="token operator">&lt;</span> <span class="token number">0</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        std<span class="token operator">::</span>cerr <span class="token operator">&lt;&lt;</span> <span class="token string">"shmget, errno: "</span> <span class="token operator">&lt;&lt;</span> errno <span class="token operator">&lt;&lt;</span> <span class="token string">", errstring: "</span> <span class="token operator">&lt;&lt;</span> <span class="token function">strerror</span><span class="token punctuation">(</span>errno<span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">int</span> <span class="token function">CreateShm</span><span class="token punctuation">(</span><span class="token class-name">key_t</span> key<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// 如果内核中不存在键值与key相等的共享内存，则新建一个共享内存并返回该共享内存的句柄；</span>
+    <span class="token comment">// 如果存在这样的共享内存，则出错返回</span>
+    <span class="token keyword">return</span> <span class="token function">CreateShmHelper</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> IPC_CREAT <span class="token operator">|</span> IPC_EXCL <span class="token operator">|</span> <span class="token number">0666</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">int</span> <span class="token function">GetShm</span><span class="token punctuation">(</span><span class="token class-name">key_t</span> key<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token comment">// 如果内核中不存在键值与key相等的共享内存，则新建一个共享内存并返回该共享内存的句柄；</span>
+    <span class="token comment">// 如果存在这样的共享内存，则直接返回该共享内存的句柄</span>
+    <span class="token keyword">return</span> <span class="token function">CreateShmHelper</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> IPC_CREAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+bool <span class="token function">MakeFifo</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">int</span> n <span class="token operator">=</span> <span class="token function">mkfifo</span><span class="token punctuation">(</span>filename<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">0666</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>n <span class="token operator">&lt;</span> <span class="token number">0</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        std<span class="token operator">::</span>cerr <span class="token operator">&lt;&lt;</span> <span class="token string">"mkfifo, errno: "</span> <span class="token operator">&lt;&lt;</span> errno <span class="token operator">&lt;&lt;</span> <span class="token string">", errstring: "</span> <span class="token operator">&lt;&lt;</span> <span class="token function">strerror</span><span class="token punctuation">(</span>errno<span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token keyword">return</span> false<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"mkfifo success... read"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+    <span class="token keyword">return</span> true<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>server端负责创建共享内存，server和client挂接到同一块共享内存之后，client先向共享内存写入‘a’，再通过命名管道fifo来通知server写入完毕，server端的read就读到了管道中的数据，开始打印共享内存中的内容。</p> 
+<p>server.cpp：</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"comm.hpp"</span></span>
+
+<span class="token keyword">class</span> <span class="token class-name">Init</span>
+<span class="token punctuation">{<!-- --></span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token function">Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// 使用管道通信</span>
+        <span class="token keyword">bool</span> r <span class="token operator">=</span> <span class="token function">MakeFifo</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>r<span class="token punctuation">)</span> <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        key_t key <span class="token operator">=</span> <span class="token function">GetKey</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//获取key值</span>
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"key: "</span> <span class="token operator">&lt;&lt;</span> key <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token comment">// sleep(3);</span>
+
+        <span class="token comment">// key vs shmid</span>
+        <span class="token comment">// key: 不要在应用层使用，只用来在内核中标识shm的唯一性！  类比fd</span>
+        <span class="token comment">// shmid：应用这个共享内存的时候，我们使用shmid来进行操作共享内存   类比FILE*</span>
+
+        shmid <span class="token operator">=</span> <span class="token function">CreateShm</span><span class="token punctuation">(</span>key<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"shmid: "</span> <span class="token operator">&lt;&lt;</span> shmid <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token comment">// sleep(5);</span>
+
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"开始将shm映射到进程的地址空间中"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        s <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">shmat</span><span class="token punctuation">(</span>shmid<span class="token punctuation">,</span> <span class="token keyword">nullptr</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"映射完成"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+
+        fd <span class="token operator">=</span> <span class="token function">open</span><span class="token punctuation">(</span>filename<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> O_RDONLY<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// 打开管道，阻塞等待</span>
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"fd: "</span> <span class="token operator">&lt;&lt;</span> fd <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token operator">~</span><span class="token function">Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// sleep(5);</span>
+        <span class="token function">shmdt</span><span class="token punctuation">(</span>s<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"开始将shm从进程的地址空间中移除"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+
+        <span class="token comment">// sleep(5);</span>
+        <span class="token function">shmctl</span><span class="token punctuation">(</span>shmid<span class="token punctuation">,</span> IPC_RMID<span class="token punctuation">,</span> <span class="token keyword">nullptr</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"开始将shm从OS中删除"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+
+        <span class="token function">close</span><span class="token punctuation">(</span>fd<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">unlink</span><span class="token punctuation">(</span>filename<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">int</span> shmid<span class="token punctuation">;</span>
+    <span class="token keyword">int</span> fd<span class="token punctuation">;</span>
+    <span class="token keyword">char</span><span class="token operator">*</span> s<span class="token punctuation">;</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    Init init<span class="token punctuation">;</span>
+
+    <span class="token comment">// todo</span>
+    <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        <span class="token comment">// wait</span>
+        <span class="token keyword">int</span> code <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        ssize_t n <span class="token operator">=</span> <span class="token function">read</span><span class="token punctuation">(</span>init<span class="token punctuation">.</span>fd<span class="token punctuation">,</span> <span class="token operator">&amp;</span>code<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>code<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>n <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">)</span>
+        <span class="token punctuation">{<!-- --></span>
+            std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"共享内存的内容："</span> <span class="token operator">&lt;&lt;</span> init<span class="token punctuation">.</span>s <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+            <span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>n <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+        <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">break</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>client.cpp：</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;iostream&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;cstring&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/ipc.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/shm.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"comm.hpp"</span></span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+    key_t key <span class="token operator">=</span> <span class="token function">GetKey</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">int</span> shmid <span class="token operator">=</span> <span class="token function">GetShm</span><span class="token punctuation">(</span>key<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">char</span><span class="token operator">*</span> s <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">shmat</span><span class="token punctuation">(</span>shmid<span class="token punctuation">,</span> <span class="token keyword">nullptr</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"attach shm done"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+    <span class="token keyword">int</span> fd <span class="token operator">=</span> <span class="token function">open</span><span class="token punctuation">(</span>filename<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> O_WRONLY<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// sleep(10);</span>
+    <span class="token keyword">char</span> c <span class="token operator">=</span> <span class="token string">'a'</span><span class="token punctuation">;</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token punctuation">;</span> c <span class="token operator">&lt;=</span> <span class="token string">'e'</span><span class="token punctuation">;</span> c<span class="token operator">++</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{<!-- --></span>
+        s<span class="token punctuation">[</span>c <span class="token operator">-</span> <span class="token string">'a'</span><span class="token punctuation">]</span> <span class="token operator">=</span> c<span class="token punctuation">;</span>
+        std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"client write: "</span> <span class="token operator">&lt;&lt;</span> c <span class="token operator">&lt;&lt;</span> <span class="token string">" done!"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+        <span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 通知server写入完毕</span>
+        <span class="token keyword">int</span> code <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token function">write</span><span class="token punctuation">(</span>fd<span class="token punctuation">,</span> <span class="token operator">&amp;</span>code<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>code<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token function">shmdt</span><span class="token punctuation">(</span>s<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"detach shm done"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+
+    <span class="token comment">//sleep(5);</span>
+    <span class="token function">close</span><span class="token punctuation">(</span>fd<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    std<span class="token operator">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"管道写端关闭！！"</span> <span class="token operator">&lt;&lt;</span> std<span class="token operator">::</span>endl<span class="token punctuation">;</span>
+    <span class="token comment">//sleep(5);</span>
+
+    <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<blockquote> 
+ <p>[!Question] 两个问题：</p> 
+ <ol><li><strong>为什么server一定会等待client把要写进共享内存中的数据写完？</strong><br> 实际上server端的read系统调用在读取管道数据的时候，是阻塞等待的，就是说server会卡在read来等待client向管道里写数据，管道里有数据write才会读到数据并返回。也就是说管道里没有数据，程序就卡在read这里了。</li></ol> 
+ <hr> 
+ <ol start="2"><li><strong>不启动client，server就不会继续，为什么？</strong><br> <img src="https://images2.imgbox.com/4e/53/ndD1pgzO_o.png" alt="请添加图片描述"><br> 因为server要打开管道的读端，但是会阻塞等待，因为要等到client把管道的写端打开，server中的open才会停止阻塞等待并返回。</li></ol> 
+ <hr> 
+ <p><strong>梳理一下就是：</strong></p> 
+ <ul><li> <p>在创建一个命名管道（FIFO）之后，如果进程1打开了读端，而其他进程迟迟不打&gt;开它的写端，<code>open</code> 函数在进程1中通常会阻塞，等待直到有其他进程打开了端。</p> </li><li> <p>在默认情况下，打开一个管道的读端或写端，如果对应的另一端没有被打开，打开操作会一直阻塞，直到另一端被打开为止。这是因为管道的通信是基于两个进程之间的协作的，当一个进程试图打开读端时，它可能期望有其他进程打开相应的写端，并且在没有写端打开的情况下，读端打开可能会被阻塞。</p> </li><li> <p>启动了client之后，server正常打印。当client把管道的写端的fd关闭的时候，server这边的read会直接返回0，server中的死循环被break，然后调用init的析构进行资源清理，然后正常退出。</p> </li></ul> 
+</blockquote> 
+<p>运行之前可以使用以下监控脚本时刻关注共享内存的资源分配情况：</p> 
+<pre><code class="prism language-bash"><span class="token keyword">while</span> <span class="token builtin class-name">:</span><span class="token punctuation">;</span> <span class="token keyword">do</span> ipcs -m<span class="token punctuation">;</span><span class="token builtin class-name">echo</span> <span class="token string">"###################################"</span><span class="token punctuation">;</span><span class="token function">sleep</span> <span class="token number">1</span><span class="token punctuation">;</span><span class="token keyword">done</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ee/e8/BIItr4C9_o.png" alt="请添加图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/bf6f78db6acc2d12f8ab727f53028c8f/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">K8S搭建（centos）完整版</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/7e72acef270a690b49d352e380fd624e/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Tiff格式图片</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

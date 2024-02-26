@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>在GPU上运行pytorch程序（指定单/多显卡) - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="在GPU上运行pytorch程序（指定单/多显卡)" />
+<meta property="og:description" content="目录 1. 使用CUDA_VISIBLE_DEVICES
+2. 使用cuda()和torch.cuda.set_device()
+3. 使用device
+4. 使用torch.nn.DataParallel
+1. 使用CUDA_VISIBLE_DEVICES 使用CUDA_VISIBLE_DEVICES设置显卡https://blog.csdn.net/qq_43307074/article/details/127659967 2. 使用cuda()和torch.cuda.set_device() torch.cuda常用指令https://blog.csdn.net/qq_43307074/article/details/127628498?spm=1001.2014.3001.5501方法1和方法2可以同时使用，比如在运行代码时使用：
+CUDA_VISIBLE_DEVICES=2,3 python test.py 而在代码内部又指定：
+model.cuda(1) 那么model会在GPU3上运行。原理是CUDA_VISIBLE_DEVICES遍历当前可见的设备，并从零开始为可见设备编号。CUDA_VISIBLE_DEVICES使得只有GPU2,3可见，程序就会把这两张显卡编号为GPU0,1,2,3，cuda(1)把model加载到了GPU1上，则实际使用的显卡是GPU3。
+如果利用.cuda()或torch.cuda.set_device()把模型加载到多个显卡上，而实际上只使用一张显卡运行程序的话，那么程序会把模型加载到第一显卡上，在运行代码时使用：
+CUDA_VISIBLE_DEVICES=2,3 python test.py 而在代码内部又指定：
+model.cuda(&#39;cuda:1,0&#39;) 那么model会在GPU3上运行。
+3. 使用device 3.1. 检查所用的device import torch x = torch.tensor([[1,2,3],[4,5,6]]) print(x.device) 3.2. 模型/数据指定GPU，具体有以下几种形式： import torch cuda = torch.device(&#39;cuda:0&#39;/&#39;cuda&#39;) x = torch.tensor([1,2,3],device = cuda) print(x.device) import torch device = torch.device(&#39;cuda:0&#39;/&#39;cuda&#39;) x = torch.rand((4,5)).to(device) print(x.device) import torch x = torch.tensor([1,2,3],device = torch.device(&#39;cuda:0&#39;/&#39;cuda&#39;) print(x.device) import torch device = torch." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/6e28d3799fbd64d5a8e80a94a1fc3a45/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-11-05T00:03:44+08:00" />
+<meta property="article:modified_time" content="2022-11-05T00:03:44+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">在GPU上运行pytorch程序（指定单/多显卡)</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h3 id="main-toc"><span style="color:#333333;"><strong>目录</strong></span></h3> 
+<p id="-toc" style="margin-left:0px;"></p> 
+<p id="1.%20%E4%BD%BF%E7%94%A8CUDA_VISIBLE_DEVICES-toc" style="margin-left:0px;"><a href="#1.%20%E4%BD%BF%E7%94%A8CUDA_VISIBLE_DEVICES" rel="nofollow"><span style="color:#333333;">1. 使用CUDA_VISIBLE_DEVICES</span></a></p> 
+<p id="2.%20%E4%BD%BF%E7%94%A8cuda()%E5%92%8Ctorch.cuda.set_device()-toc" style="margin-left:0px;"><a href="#2.%20%E4%BD%BF%E7%94%A8cuda%28%29%E5%92%8Ctorch.cuda.set_device%28%29" rel="nofollow"><span style="color:#333333;">2. 使用cuda()和torch.cuda.set_device()</span></a></p> 
+<p id="3.%20%E4%BD%BF%E7%94%A8device-toc" style="margin-left:0px;"><a href="#3.%20%E4%BD%BF%E7%94%A8device" rel="nofollow"><span style="color:#333333;">3. 使用device</span></a></p> 
+<p id="4.%20%E4%BD%BF%E7%94%A8torch.nn.DataParallel-toc" style="margin-left:0px;"><a href="#4.%20%E4%BD%BF%E7%94%A8torch.nn.DataParallel" rel="nofollow"><span style="color:#333333;">4. 使用torch.nn.DataParallel</span></a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h2 id="1.%20%E4%BD%BF%E7%94%A8CUDA_VISIBLE_DEVICES"><span style="color:#333333;"><strong>1. 使用CUDA_VISIBLE_DEVICES</strong></span></h2> 
+<h2 id="%E4%BD%BF%E7%94%A8CUDA_VISIBLE_DEVICES%E8%AE%BE%E7%BD%AE%E6%98%BE%E5%8D%A1https%3A%2F%2Fblog.csdn.net%2Fqq_43307074%2Farticle%2Fdetails%2F127659967"><span style="color:#333333;"><a class="link-info has-card" href="https://blog.csdn.net/qq_43307074/article/details/127659967" title="使用CUDA_VISIBLE_DEVICES设置显卡"><span class="link-card-box"><span class="link-title">使用CUDA_VISIBLE_DEVICES设置显卡</span><span class="link-link"><img alt="" class="link-link-icon" src="https://images2.imgbox.com/0b/48/wQNuvTqM_o.png">https://blog.csdn.net/qq_43307074/article/details/127659967</span></span></a></span></h2> 
+<h2 id="2.%20%E4%BD%BF%E7%94%A8cuda()%E5%92%8Ctorch.cuda.set_device()"><strong><span style="color:#333333;">2. 使用cuda()和torch.cuda.set_device()</span></strong></h2> 
+<p><span style="color:#333333;"><a class="has-card" href="https://blog.csdn.net/qq_43307074/article/details/127628498?spm=1001.2014.3001.5501" title="torch.cuda常用指令"><span class="link-card-box"><span class="link-title">torch.cuda常用指令</span><span class="link-link"><img alt="" class="link-link-icon" src="https://images2.imgbox.com/f2/a5/MEli15tQ_o.png">https://blog.csdn.net/qq_43307074/article/details/127628498?spm=1001.2014.3001.5501</span></span></a>方法1和方法2可以同时使用，比如在运行代码时使用：</span></p> 
+<pre><code class="language-python">CUDA_VISIBLE_DEVICES=2,3 python test.py</code></pre> 
+<p><span style="color:#333333;">而在代码内部又指定：</span></p> 
+<pre><code class="language-python">model.cuda(1)</code></pre> 
+<p style="text-align:justify;"><span style="color:#333333;">那么model会在GPU3上运行。原理是CUDA_VISIBLE_DEVICES遍历当前可见的设备，并从零开始为可见设备编号。CUDA_VISIBLE_DEVICES使得只有GPU2,3可见，程序就会把这两张显卡编号为GPU0,1,2,3，cuda(1)把model加载到了GPU1上，则实际使用的显卡是GPU3。</span></p> 
+<p style="text-align:justify;"><span style="color:#333333;">如果利用.cuda()或torch.cuda.set_device()把模型加载到多个显卡上，而实际上只使用一张显卡运行程序的话，那么程序会把模型加载到第一显卡上，在运行代码时使用：</span></p> 
+<pre><code class="language-python">CUDA_VISIBLE_DEVICES=2,3 python test.py</code></pre> 
+<p style="text-align:justify;"><span style="color:#333333;">而在代码内部又指定：</span></p> 
+<pre><code class="language-python">model.cuda('cuda:1,0')</code></pre> 
+<p style="text-align:justify;"><span style="color:#333333;">那么model会在GPU3上运行。</span></p> 
+<h2 id="3.%20%E4%BD%BF%E7%94%A8device" style="text-align:justify;"><span style="color:#333333;"><strong>3. 使用device</strong></span></h2> 
+<h4 id="3.1.%20%E6%A3%80%E6%9F%A5%E6%89%80%E7%94%A8%E7%9A%84device"><span style="color:#333333;"><strong>3.1. 检查所用的device</strong></span></h4> 
+<pre><code class="language-python">import torch
+x = torch.tensor([[1,2,3],[4,5,6]])
+print(x.device)
+</code></pre> 
+<p class="img-center"><img alt="" height="19" src="https://images2.imgbox.com/84/49/kAiCbLz4_o.png" width="408"></p> 
+<h4 id="3.2.%20%E6%A8%A1%E5%9E%8B%2F%E6%95%B0%E6%8D%AE%E6%8C%87%E5%AE%9AGPU%EF%BC%8C%E5%85%B7%E4%BD%93%E6%9C%89%E4%BB%A5%E4%B8%8B%E5%87%A0%E7%A7%8D%E5%BD%A2%E5%BC%8F%EF%BC%9A"><a id="5tensorGPU_48"></a><span style="color:#333333;"><strong>3.2. 模型/数据指定GPU，具体有以下几种形式：</strong></span></h4> 
+<pre><code class="language-python">import torch
+cuda = torch.device('cuda:0'/'cuda')
+x = torch.tensor([1,2,3],device = cuda)
+print(x.device)
+</code></pre> 
+<pre><code class="language-python">import torch
+device = torch.device('cuda:0'/'cuda')
+x = torch.rand((4,5)).to(device)
+print(x.device)</code></pre> 
+<pre><code class="language-python">import torch
+x = torch.tensor([1,2,3],device = torch.device('cuda:0'/'cuda')
+print(x.device)
+</code></pre> 
+<pre><code class="language-python">import torch
+device = torch.device('cuda:0'/'cuda')
+...
+net = net.to(device)
+print(net.device)</code></pre> 
+<p><span style="color:#333333;"> 经典写法：</span></p> 
+<pre><code class="language-python">device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")</code></pre> 
+<p class="img-center"><img alt="" height="20" src="https://images2.imgbox.com/59/e5/VLnx05mc_o.png" width="539"></p> 
+<p><span style="color:#333333;">如果想要在其他GPU上运行，举例如下：</span></p> 
+<pre><code class="language-python">import torch
+import os 
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'
+
+cuda = torch.device('cuda:1')
+x = torch.tensor([[1,2,3]],device = cuda)
+print(x.device)</code></pre> 
+<h2 id="4.%20%E4%BD%BF%E7%94%A8torch.nn.DataParallel"><span style="color:#333333;"><strong>4. 使用torch.nn.DataParallel</strong></span></h2> 
+<p><span style="color:#333333;"><strong>多卡数据并行一般使用torch.nn.DataParallel</strong></span></p> 
+<pre><code class="language-python">torch.nn.DataParallel(model,device_ids)
+举例：
+torch.nn.DataParallel(model, device_ids=device_ids)
+torch.nn.DataParallel(modul, device_ids=[x1,x2,x3,x4,x5,x6,x7])
+# 使用的GPU一定是编号连续的
+torch.nn.DataParallel(model,device_ids = range(torch.cuda.device_count()) )</code></pre> 
+<p style="text-align:justify;"><span style="color:#333333;">其中model是需要运行的模型，device_ids指定部署模型的显卡，数据类型是list/device。</span></p> 
+<p style="text-align:justify;"><span style="color:#333333;">device_ids中的第一个GPU（即device_ids[0]）和model.cuda()或torch.cuda.set_device()中的第一个GPU序号应保持一致，否则会报错。此外如果两者的第一个GPU序号都不是0,比如设置为：</span></p> 
+<pre><code class="language-python">model=torch.nn.DataParallel(model,device_ids=[2,3])
+model.cuda(2)</code></pre> 
+<p style="text-align:justify;"><span style="color:#333333;">那么程序可以在GPU2和GPU3上正常运行。device_ids的默认值是使用可见的GPU，不设置model.cuda()或torch.cuda.set_device()等效于设置了model.cuda(0)</span></p> 
+<p><span style="color:#333333;">具体举例如下：</span></p> 
+<pre><code class="language-python">model = model.cuda() 
+device_ids = [0, 1] 	
+model = torch.nn.DataParallel(model, device_ids=device_ids)</code></pre> 
+<pre><code class="language-python">model  = model.to(device)
+model = nn.DataParallel(model, device_ids=[0,1,2,3])</code></pre> 
+<pre><code class="language-python">device_ids = [0, 1]
+model = torch.nn.DataParallel(model, device_ids=device_ids).cuda()</code></pre> 
+<p style="text-align:justify;"><span style="color:#333333;">所有的数据要先load到主GPU上，然后再分发给每个GPU去train，因此应当将model先放到GPU上，然后在进行并行训练。</span></p> 
+<p></p> 
+<h2 id="%E5%8F%82%E8%80%83"><span style="color:#333333;">参考</span></h2> 
+<p><a class="link-info has-card" href="https://zhuanlan.zhihu.com/p/166161217" rel="nofollow" title="在pytorch中指定显卡"><span class="link-card-box"><span class="link-title">在pytorch中指定显卡</span><span class="link-link"><img alt="" class="link-link-icon" src="https://images2.imgbox.com/e0/71/kBHrKKp3_o.png">https://zhuanlan.zhihu.com/p/166161217</span></span></a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0421369217e3df8b0ecbac32f57f1130/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">网络安全必学SQL注入</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/400cadda5d14241b94008d2a52ea9e0b/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">机器学习实战—集成学习</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

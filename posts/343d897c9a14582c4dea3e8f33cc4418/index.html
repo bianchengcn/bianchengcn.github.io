@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Uni-app 详情页 播放视频功能 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Uni-app 详情页 播放视频功能" />
+<meta property="og:description" content="逻辑：
+1.课程详情页加载后，用token判断用户是否登录，登录状态则调用checkAuth的接口（只传入courseId），后端会返回hasAuth为true/false
+2.点击某一章节时，登录状态则调用checkAuth的接口（传入courseId &amp; chapterId），后端会返回hasAuth为true/false和videoId，如果这俩都有，则跳页面到视频播放页
+3.跳转到视频播放页，加载完毕：请求课程详情接口、getPlay接口（传入courseId &amp; chapterId）——后端返回formt,videoURL,duration等
+功能：
+4.自动跳转至上次播放时间：
+加载完视频播放页，调checkHistory得到上次的记录——接着使用视频控制进度的组件uni.createVideoContext的seek方法，将checkHistory返回的lastTime传入
+5.记录播放历史：
+video标签上绑定@timeupdate方法，这个方法在播放进度变化时触发，也就是只要在播放就在不停的触发，所以每次进入方法都this.timer&#43;&#43;,当它等于25时也就是每隔6s，调用recordHistory记录播放进度的接口，并使this.timer变回为1
+6.倍速播放：
+下载f-drop-menu插件，绑定videoList，以及changeSpeed事件，使用视频控制进度的组件uni.createVideoContext的playbackRate方法
+7.下一节／重学一次
+在data中，分别用new Map来new空的实例对象 ，Map字典数据结构是为了方便以[键，值]的形式存储数据，给每个小节做标记。
+在初次进入视频页，调课程详情接口时，返回的数据是章嵌套节的结构。所以先循环章，再循环节，将这个实例对象使用set方法，将小节信息设置成键值对的数组，目的是为了给每个小节做标记。
+给video绑定了ended事件——在播放结束时用这个实例对象的get方法查找读取key对应的键值，找到下一个章节对应的信息。
+判断——如果下个章节有内容，就提示下一节/重学的选项。
+8.视频防盗
+在video标签中加上视频来源，否则后端会判断为为非法入侵。
+&lt;template&gt; &lt;view class=&#34;course-play&#34;&gt; &lt;u-navbar title=&#34;视频&#34; class=&#34;header&#34;&gt;&lt;/u-navbar&gt; &lt;video id=&#34;myVideo&#34; :src=&#34;videoUrl&#34; controls :header=&#34;{&#39;Referer&#39;:&#39;http://testapp.cn&#39;}&#34; :poster=&#34;cover&#34; @timeupdate=&#34;timeupdate&#34; @ended=&#34;playEnded&#34; class=&#34;video-play&#34;&gt;&lt;/video&gt; &lt;view class=&#34;video-control&#34;&gt; &lt;view class=&#34;&#34; @tap=&#34;dropSpeed&#34;&gt;倍速：{{speed}}&lt;/view&gt; &lt;f-drop-menu :list=&#34;videoList&#34; v-model=&#34;show&#34; @click=&#34;changeSpeed&#34;&gt;&lt;/f-drop-menu&gt; &lt;/view&gt; &lt;view class=&#34;tabs&#34;&gt; &lt;u-tabs-swiper ref=&#34;uTabs&#34; :list=&#34;list&#34; :current=&#34;current&#34; @change=&#34;tabsChange&#34; :is-scroll=&#34;false&#34; swiperWidth=&#34;750&#34;&gt;&lt;/u-tabs-swiper&gt; &lt;/view&gt; &lt;swiper class=&#34;swiper&#34; :current=&#34;swiperCurrent&#34;&gt; &lt;swiper-item class=&#34;swiper-item&#34;&gt; &lt;scroll-view scroll-y style=&#34;height: 800rpx;width: 100%;&#34;&gt; &lt;u-collapse accordion class=&#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/343d897c9a14582c4dea3e8f33cc4418/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-01-12T19:31:16+08:00" />
+<meta property="article:modified_time" content="2022-01-12T19:31:16+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Uni-app 详情页 播放视频功能</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>逻辑：</p> 
+<p>1.课程详情页加载后，用token判断用户是否登录，登录状态则调用checkAuth的接口（只传入courseId），后端会返回hasAuth为true/false</p> 
+<p>2.点击某一章节时，登录状态则调用checkAuth的接口（传入courseId &amp; chapterId），后端会返回hasAuth为true/false和videoId，如果这俩都有，则跳页面到视频播放页</p> 
+<p>3.跳转到视频播放页，加载完毕：请求课程详情接口、getPlay接口（传入courseId &amp; chapterId）——后端返回formt,videoURL,duration等</p> 
+<p>功能：</p> 
+<p><span style="color:#fe2c24;">4.自动跳转至上次播放时间：</span></p> 
+<p>        加载完视频播放页，调checkHistory得到上次的记录——接着使用视频控制进度的组件uni.createVideoContext的seek方法，将checkHistory返回的lastTime传入</p> 
+<p><span style="color:#fe2c24;">5.记录播放历史：</span></p> 
+<p>        video标签上绑定@timeupdate方法，这个方法在播放进度变化时触发，也就是只要在播放就在不停的触发，所以每次进入方法都this.timer++,当它等于25时也就是每隔6s，调用recordHistory记录播放进度的接口，并使this.timer变回为1</p> 
+<p><span style="color:#fe2c24;">6.倍速播放：</span></p> 
+<p>        下载f-drop-menu插件，绑定videoList，以及changeSpeed事件，使用视频控制进度的组件uni.createVideoContext的playbackRate方法</p> 
+<p><span style="color:#fe2c24;">7.下一节／重学一次</span></p> 
+<p>        在data中，分别用new Map来new空的实例对象 ，Map字典数据结构是为了方便以[键，值]的形式存储数据，给每个小节做标记。</p> 
+<p>        在初次进入视频页，调课程详情接口时，返回的数据是章嵌套节的结构。所以先循环章，再循环节，将这个实例对象使用set方法，将小节信息设置成键值对的数组，目的是为了给每个小节做标记。</p> 
+<p>        给video绑定了ended事件——在播放结束时用这个实例对象的get方法查找读取key对应的键值，找到下一个章节对应的信息。</p> 
+<p>        判断——如果下个章节有内容，就提示下一节/重学的选项。</p> 
+<p><span style="color:#fe2c24;">8.视频防盗</span></p> 
+<p>        在video标签中加上视频来源，否则后端会判断为为非法入侵。</p> 
+<pre><code class="language-javascript">&lt;template&gt;
+  &lt;view class="course-play"&gt;
+    &lt;u-navbar title="视频" class="header"&gt;&lt;/u-navbar&gt;
+    &lt;video id="myVideo" :src="videoUrl" controls :header="{'Referer':'http://testapp.cn'}" :poster="cover"
+      @timeupdate="timeupdate" @ended="playEnded" class="video-play"&gt;&lt;/video&gt;
+    &lt;view class="video-control"&gt;
+      &lt;view class="" @tap="dropSpeed"&gt;倍速：{<!-- -->{speed}}&lt;/view&gt;
+      &lt;f-drop-menu :list="videoList" v-model="show" @click="changeSpeed"&gt;&lt;/f-drop-menu&gt;
+    &lt;/view&gt;
+    &lt;view class="tabs"&gt;
+      &lt;u-tabs-swiper ref="uTabs" :list="list" :current="current" @change="tabsChange" :is-scroll="false"
+        swiperWidth="750"&gt;&lt;/u-tabs-swiper&gt;
+    &lt;/view&gt;
+    &lt;swiper class="swiper" :current="swiperCurrent"&gt;
+      &lt;swiper-item class="swiper-item"&gt;
+        &lt;scroll-view scroll-y style="height: 800rpx;width: 100%;"&gt;
+          &lt;u-collapse accordion class="ui-collapse" :border="false" event-type="close"&gt;
+            &lt;u-collapse-item :title="item.chapterName" :open="index === 0" v-for="(item,index) in catalogueList"
+              :key="item.id"&gt;
+              &lt;view class="child-item" v-for="child in item.children" :key="child.id"
+                :class="child.id === current ? 'collapse-active':''" @tap="goPlay(child)"&gt;
+                &lt;view class="video-box"&gt;视频&lt;/view&gt;
+                &lt;view class="content-box"&gt;{<!-- -->{child.chapterName}}&lt;/view&gt;
+              &lt;/view&gt;
+            &lt;/u-collapse-item&gt;
+          &lt;/u-collapse&gt;
+        &lt;/scroll-view&gt;
+      &lt;/swiper-item&gt;
+      &lt;swiper-item class="swiper-item"&gt;
+        &lt;scroll-view scroll-y style="height: 800rpx;width: 100%;"&gt;
+          &lt;Download :downloadList="downloadList"&gt;&lt;/Download&gt;
+        &lt;/scroll-view&gt;
+      &lt;/swiper-item&gt;
+    &lt;/swiper&gt;
+    &lt;u-toast ref="uToast" /&gt;
+  &lt;/view&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+  import {
+    mapState
+  } from 'vuex'
+  import Download from '@/common/course-detail/download/index.vue'
+  import courseApi from '@/service/coursedetail.js'
+  import playApi from '@/service/play.js'
+  export default {
+    data() {
+      return {
+        speed: 'X1.0',
+        show: false, //默认不显示
+        videoList: [{
+          name: '0.5',
+          style: {
+
+          }
+        }, {
+          name: '1.0',
+          style: {
+
+          }
+        }, {
+          name: '1.25',
+          style: {
+
+          }
+        }, {
+          name: '1.5',
+          style: {
+
+          }
+        }],
+        courseId: null,
+        chapterId: null,
+        swiperCurrent: 0,
+        current: 0,
+        list: [{
+          name: '目录'
+        }, {
+          name: '下载笔记代码'
+        }],
+        downloadList: [],
+        catalogueList: [],
+        clientHeight: 0,
+        cover: null, // 封面图
+        videoUrl: null, // 视频
+        totalTime: null, // 总时长
+        timer: 1, // 控制
+        indexMap: new Map(), //保存
+        maps: new Map(),
+        videoContext: null, // 视频控制组件
+      }
+    },
+    computed: {
+      ...mapState({
+        userInfo: state =&gt; state.user.userInfo
+      }),
+      curId() {
+        // curId 
+        if (this.chapterId !== 0) {
+          return this.chapterId
+        } else {
+          // 第一个章节里面第一个小节
+          return this.catalogueList[0].children[0].id
+        }
+      },
+    },
+    components: {
+      Download
+    },
+    onReady() {
+      //视频进度控制组件
+      this.videoContext = uni.createVideoContext('myVideo')
+      // 动态获取头部高
+      const query = uni.createSelectorQuery().in(this);
+      query.select('.header').boundingClientRect(data =&gt; {
+        uni.getSystemInfo({
+          success: (res) =&gt; {
+            this.clientHeight = res.screenHeight - data.height
+          }
+        });
+      }).exec();
+      // video
+      query.select('.video-play').boundingClientRect(data =&gt; {
+        this.clientHeight = this.clientHeight - data.height
+      }).exec();
+      // video-control
+      query.select('.video-control').boundingClientRect(data =&gt; {
+        this.clientHeight = this.clientHeight - data.height
+      }).exec();
+      // 切换
+      query.select('.tabs').boundingClientRect(data =&gt; {
+        this.clientHeight = this.clientHeight - data.height
+      }).exec();
+    },
+    onLoad(params) {
+      this.courseId = params.courseId
+      this.chapterId = params.chapterId
+      // 如果是点击了重学跳过来的 就有restudy
+      let restudy = params.restudy
+      this.__init()
+      if (!restudy) {
+        this.checkHistory()
+      }
+    },
+    methods: {
+      //点击倍速
+      dropSpeed() {
+        this.show = !this.show
+      },
+      //切换倍速
+      changeSpeed(item) {
+        this.speed = 'X' + item.name
+        this.videoContext.playbackRate(Number(item.name))
+        this.show = false
+      },
+      __init() {
+        // 获取课程 详情
+        //获取课程详情
+        courseApi.getClassDetail({
+          classId: this.courseId
+        }).then(res =&gt; {
+          if (res.meta.code === '200') {
+            //当前课程的目录
+            this.catalogueList = res.data.data.bizCourseChapters
+            //笔记代码
+            this.downloadList = res.data.data.bizCourseAttachments
+            let idx = 0;
+            //先循环章
+            res.data.data.bizCourseChapters.map((item, index) =&gt; {
+              //再循环节 
+              item.children.map((ele) =&gt; {
+                //本课程所有小节 组成一个不重复的数组 给每个小节做标记
+                this.indexMap.set(ele.id, idx) // 节 [{'节ID'，0},{'节ID',1}]
+                this.maps.set('chapter_' + idx, ele) //[{'chapter_0'，节信息},{'chapter_1',节信息}]
+                idx++
+              })
+            })
+          } else { //非200
+
+          }
+        }).catch(err =&gt; {
+          console.log(err)
+        })
+        // 视频播放
+        playApi.getPlay({
+          courseId: this.courseId,
+          chapterId: this.chapterId
+        }).then(res =&gt; {
+          if (res.meta.code === '200') {
+            let playInfoList = res.data.playInfo.playInfoList
+            let chapterInfo = res.data.chapterInfo //封面图
+            let arr = playInfoList.filter(item =&gt; {
+              if (item.format === 'mp4') {
+                return item
+              }
+            })
+            console.log(arr) //[{}]
+            let obj = arr[0] //含videoUrl,format,duration的对象
+            this.videoUrl = obj.playURL
+            this.totalTime = obj.duration
+            this.cover = chapterInfo.chapterLitpic
+          }
+        }).catch(err =&gt; {
+          console.log(err)
+        })
+
+      },
+      //查询上一次播放的进度
+      checkHistory() {
+        playApi.checkHistory({
+          memberId: this.userInfo.id,
+          courseId: this.courseId,
+          chapterId: this.chapterId
+        }).then(res =&gt; {
+          if (res.meta.code === '200') { //查询到进度 并且用控件调整进度
+            this.videoContext.seek(Number(res.data.data.lastTime))
+          }
+        }).catch(err =&gt; {
+          console.log(err)
+        })
+      },
+      //历史记录
+      recordHistory(lastTime) {
+        playApi.recordHistory({
+          chapterId: this.chapterId,
+          courseId: this.courseId,
+          memberId: this.userInfo.id,
+          lastTime: lastTime //上次观看时间
+        }).then(res =&gt; {
+          if (res.meta.code === '200') { //记录成功
+            this.timer = 1
+          } else {
+            //记录失败
+          }
+        }).catch(err =&gt; {
+          console.log(err)
+        })
+      },
+      //播放进度变化时触发 历史记录 存储播放进度
+      timeupdate(e) {
+        let curTime = e.detail.currentTime
+        console.log(curTime)
+        if (this.timer === 25) {
+          //调一次记录历史记录的接口
+          this.recordHistory(curTime)
+          console.log('记录')
+        }
+        this.timer++ //每次变化+1
+      },
+      //播放结束
+      playEnded(e) {
+        this.recordHistory(this.totalTime)
+        // this.indexMap.set(ele.id,idx)// 节 [{'节ID'，0},{'节ID',1}]
+        // this.maps.set('chapter_'+idx,ele)//[{'chapter_0'，节信息},{'chapter_1',节信息}]
+        //查找对应项
+        let index = this.indexMap.get(this.chapterId); //idx
+        let nextChapter = this.maps.get('chapter_' + (index + 1)) //后面一章的节信息
+        if (nextChapter) { //如果后面还有
+          //下一个小节 视频
+          uni.showModal({
+            title: '提示',
+            content: '继续下一小节',
+            confirmText: '下一小节',
+            cancelText: '重学',
+            success: res =&gt; {
+              if (res.confirm) {
+                //继续学 下一小节
+                uni.redirectTo({
+                  url: '/pages/course-play/course-play?courseId=' + this.courseId + '&amp;chapterId=' +
+                    nextChapter.id
+                })
+              } else if (res.cancel) {
+                //重学
+                uni.redirectTo({
+                  url: '/pages/course-play/course-play?courseId=' + this.courseId + '&amp;chapterId=' + this
+                    .chapterId + '&amp;restudy=' + 'true'
+                })
+              }
+            }
+          });
+        } else {
+          this.$refs.uToast.show({
+            title: '恭喜你学完本课程',
+            type: 'success',
+            icon: false
+          })
+        }
+      },
+      //播放另一个章节
+      goPlay() {
+        this.chapterId = child.id
+        //关闭当前页 重定向
+        uni.redirectTo({
+          url: '/pages/course-play/course-play?courseId=' + this.courseId + '&amp;chapterId=' + child.id
+        })
+      },
+      tabsChange(){
+        
+      }
+    }
+  }
+&lt;/script&gt;</code></pre> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/c0eb72c38fda414736a8d098196710cc/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">vue3-巧用指令</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/5cd852c0b648fcc88889a207d37028a3/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【Verilog-41】Verilog中强度strength的用法</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

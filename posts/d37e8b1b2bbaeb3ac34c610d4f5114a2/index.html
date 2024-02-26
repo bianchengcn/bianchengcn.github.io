@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【Linux】System V 共享内存、消息队列、信号量 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【Linux】System V 共享内存、消息队列、信号量" />
+<meta property="og:description" content="🍎作者：阿润菜菜
+📖专栏：Linux系统编程
+文章目录 system V共享内存介绍理解共享内存IPC实现共享内存IPC认识接口代码实现 深入理解什么是同步与互斥共享内存的内核数据结构IPC资源的组织方式（多态）共享内存的优点和缺点（管道和shm分别数据拷贝次数） 认识信号量System V 消息队列 system V共享内存介绍 System V 共享内存是一种进程间通信的机制，它允许多个进程共享一块物理内存区域（称为“段”）。System V 共享内存的优点是效率高，因为进程之间不需要复制数据；缺点是需要进程之间进行同步，以避免数据的不一致性。共享内存区是最快的IPC形式。一旦这样的内存映射到共享它的进程的地址空间，这些进程间数据传递不再涉及到
+内核，换句话说是进程不再通过执行进入内核的系统调用来传递彼此的数据 示意图：
+理解共享内存IPC 进程凭什么独立？每个进程拥有自己独立的进程地址空间mm_struct，自己独立的映射的物理内存空间。进程独立性的实现主要依赖于操作系统和硬件的支持。操作系统通过为每个进程分配独立的虚拟地址空间，使得每个进程都有自己的代码和数据空间，这样不会被其他进程干扰。硬件通过内存管理单元（MMU）来实现虚拟地址到物理地址的映射，以及分页或分段的方式来划分内存空间。操作系统还通过进程调度算法来控制每个进程的执行顺序和时间片，以及通过进程同步和通信机制来协调多个进程之间的关系。实现进程间通信的第一个前提就是如何让不同的进程看到同一份资源，匿名管道我们是通过子进程继承父进程打开的资源，命名管道是通过两个进程都打开具有唯一性标识的命名管道文件，而共享内存其实是通过OS创建一块shm（共享内存块），然后通过MMU将shm的地址分别映射到两个进程的各自地址空间当中，那么两个进程就可以通过这份虚拟起始地址来进行进程间通信。
+在应用层也就是用户层，我们只能操作虚拟地址，但内核中会有MMU进行虚拟地址的映射，所以进程在IPC时，只需要操纵虚拟地址即可，从虚拟地址中读取或向虚拟地址中进行写入，这样就完成了共享内存式的IPC。所以通过让不同的进程，看到同一份物理内存块的方式，就叫做共享内存！为什么说共享内存是最快的IPC形式？
+共享内存是一种进程间通信（IPC）的方式，它允许多个进程访问同一块逻辑内存，从而实现数据的快速交换。共享内存是最快的IPC形式，因为它避免了数据在进程间的复制，而是直接在内存中读写。要使用共享内存，需要用到一些函数，如shmget, shmat, shmdt, shmctl等。这些函数可以创建、映射、分离、控制共享内存段。共享内存的优点是高效和灵活，缺点是没有提供同步机制，需要借助其他手段来实现进程间的同步访问，而且共享内存没有任何保护机制 那管道呢？系统接口有封装。
+实现共享内存IPC 认识接口 命令查看 共享内存是否已经存在
+ipcs -m 查看共享内存
+ipcrm -m 用于删除共享内存 — 注意使用shmid进行删除 类比于文件描述符
+System V 共享内存的API包括以下几个系统调用：
+shmget(2)：创建一个新的段或获取一个已存在的段的标识符（ID）。这个ID是用来在其他API中引用段的。shmat(2)：将一个已存在的段映射到调用进程的虚拟地址空间中。这样，进程就可以通过指针来访问共享内存中的数据。shmdt(2)：将一个段从调用进程的虚拟地址空间中解除映射。这样，进程就不能再访问共享内存中的数据。shmctl(2)：对一个段进行控制操作，例如修改它的权限、获取它的状态信息、删除它等。 1.shmget()函数是用来创建或打开一块共享内存的，它的原型是：int shmget (key_t key, size_t size, int shmflg);
+第一个参数key是一个非零整数，它为共享内存段提供一个外部名，可以用IPC_PRIVATE或ftok()函数生成。shmget()函数成功时返回一个与key相关的共享内存标识符（非负整数），用于后续的共享内存函数。调用失败返回-1。
+第二个参数size是以字节为单位指定需要共享的内存容量。所有的内存分配操作都是以页为单位的，所以如果申请的内存大小不是页的整数倍，会被向上取整到最近的页大小。
+第三个参数shmflg是一组标志位，它可以指定权限标志、创建标志和排他标志。权限标志与文件的读写权限一样，如0644表示允许创建者读写，其他用户只读。创建标志IPC_CREAT表示如果共享内存不存在，则创建一个新的共享内存，否则打开已有的共享内存。排他标志IPC_EXCL表示只有在共享内存不存在时，才创建新的共享内存，否则返回错误。
+共享内存的大小是以4kb为单位的，这是巧合吗？是这样的（对应磁盘文件系统）：这里第二个参数是共享内存的大小，一般建议将开辟的共享内存大小设置为4KB的整数倍，内存划分内存块的基本单位是Page，大小刚好是4KB，所以建议将大小设置为4KB的整数倍，如果你设置成4097什么的，有点浪费内存，因为实际内核会开辟8KB大小的空间。
+2.shmat()函数用来将共享内存段连接到进程的地址空间，它的原型是：void * shmat (int shmid, const void *shmaddr, int shmflg);
+第一个参数shmid是由shmget()函数返回的共享内存标识符。第二个参数shmaddr指定共享内存连接到当前进程中的地址位置，通常为NULL，表示让系统来选择共享内存的地址。第三个参数shmflg是一组标志位，可以指定SHM_RDONLY表示共享内存只读，或者默认为0表示可读可写。调用成功时返回一个指向共享内存第一个字节的指针，如果调用失败返回-1。
+3.shmdt()函数用来将共享内存从当前进程中分离，它的原型是：int shmdt (const void *shmaddr);" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d37e8b1b2bbaeb3ac34c610d4f5114a2/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-04-27T21:42:32+08:00" />
+<meta property="article:modified_time" content="2023-04-27T21:42:32+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【Linux】System V 共享内存、消息队列、信号量</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <blockquote> 
+ <p>🍎<strong>作者：</strong><a href="https://blog.csdn.net/weixin_62676865?type=blog"><strong>阿润菜菜</strong></a><br> 📖<strong>专栏：</strong><a href="https://blog.csdn.net/weixin_62676865/category_12123651.html?spm=1001.2014.3001.5482"><strong>Linux系统编程</strong></a></p> 
+</blockquote> 
+<hr> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#system_V_5" rel="nofollow">system V共享内存介绍</a></li><li><a href="#IPC_14" rel="nofollow">理解共享内存IPC</a></li><li><a href="#IPC_24" rel="nofollow">实现共享内存IPC</a></li><li><ul><li><a href="#_25" rel="nofollow">认识接口</a></li><li><a href="#_70" rel="nofollow">代码实现</a></li></ul> 
+  </li><li><a href="#_211" rel="nofollow">深入理解</a></li><li><ul><li><a href="#_212" rel="nofollow">什么是同步与互斥</a></li><li><a href="#_233" rel="nofollow">共享内存的内核数据结构</a></li><li><a href="#IPC_262" rel="nofollow">IPC资源的组织方式（多态）</a></li><li><a href="#shm_275" rel="nofollow">共享内存的优点和缺点（管道和shm分别数据拷贝次数）</a></li></ul> 
+  </li><li><a href="#_286" rel="nofollow">认识信号量</a></li><li><a href="#System_V__298" rel="nofollow">System V 消息队列</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="system_V_5"></a>system V共享内存介绍</h2> 
+<ol><li>System V 共享内存是一种进程间通信的机制，它允许多个进程<strong>共享一块物理内存区域</strong>（称为“段”）。System V 共享内存的优点是效率高，因为进程之间不需要复制数据；缺点是<strong>需要进程之间进行同步，以避免数据的不一致性</strong>。</li><li>共享内存区是<strong>最快的IPC形式</strong>。一旦这样的内存映射到共享它的进程的地址空间，这些进程间数据传递不再涉及到<br> 内核，换句话说是进程不再通过执行进入内核的系统调用来传递彼此的数据</li></ol> 
+<p>示意图：<br> <img src="https://images2.imgbox.com/c6/3a/0UflpFHn_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="IPC_14"></a>理解共享内存IPC</h2> 
+<ol><li><mark>进程凭什么独立</mark>？每个进程拥有自己独立的进程地址空间mm_struct，自己独立的映射的物理内存空间。进程独立性的实现主要依赖于操作系统和硬件的支持。<strong>操作系统通过为每个进程分配独立的虚拟地址空间，使得每个进程都有自己的代码和数据空间，这样不会被其他进程干扰。硬件通过内存管理单元（MMU）来实现虚拟地址到物理地址的映射，以及分页或分段的方式来划分内存空间。</strong></li><li>操作系统还通过进程调度算法来控制每个进程的执行顺序和时间片，以及通过进程同步和通信机制来协调多个进程之间的关系。</li><li><mark>实现进程间通信的<strong>第一个前提就是如何让不同的进程看到同一份资源</strong></mark>，匿名管道我们是通过子进程继承父进程打开的资源，命名管道是通过两个进程都打开具有唯一性标识的命名管道文件，而共享内存其实是<strong>通过OS创建一块shm（共享内存块）</strong>，然后通过MMU将shm的地址分别<strong>映射到两个进程的各自地址空间当</strong>中，那么两个进程就可以通过这份虚拟起始地址来进行进程间通信。<br> 在应用层也就是用户层，我们只能操作虚拟地址，但内核中会有MMU进行虚拟地址的映射，所以进程在IPC时，只需要操纵虚拟地址即可，从虚拟地址中读取或向虚拟地址中进行写入，这样就完成了共享内存式的IPC。</li><li><mark><strong>所以通过让不同的进程，看到同一份物理内存块的方式，就叫做共享内存！</strong></mark></li><li><mark><strong>为什么说共享内存是最快的IPC形式</strong>？</mark><br> 共享内存是一种进程间通信（IPC）的方式，它<strong>允许多个进程访问同一块逻辑内存</strong>，<strong>从而实现数据的快速交换</strong>。<strong>共享内存是最快的IPC形式，因为它避免了数据在进程间的复制，而是直接在内存中读写</strong>。要使用共享内存，需要用到一些函数，如shmget, shmat, shmdt, shmctl等。这些函数可以创建、映射、分离、控制共享内存段。共享内存的优点是高效和灵活，缺点是没有提供同步机制，需要借助其他手段来实现进程间的同步访问，而且共享内存没有任何保护机制 那管道呢？系统接口有封装。<br> <img src="https://images2.imgbox.com/06/b9/LzbSJsTk_o.png" alt="在这里插入图片描述"></li></ol> 
+<h2><a id="IPC_24"></a>实现共享内存IPC</h2> 
+<h3><a id="_25"></a>认识接口</h3> 
+<p><mark>命令查看 共享内存是否已经存在</mark><br> ipcs -m 查看共享内存<br> ipcrm -m 用于删除共享内存 — 注意使用shmid进行删除 类比于文件描述符</p> 
+<p>System V 共享内存的API包括以下几个系统调用：</p> 
+<ul><li>shmget(2)：创建一个新的段或获取一个已存在的段的标识符（ID）。这个ID是用来在其他API中引用段的。</li><li>shmat(2)：将一个已存在的段映射到调用进程的虚拟地址空间中。这样，进程就可以通过指针来访问共享内存中的数据。</li><li>shmdt(2)：将一个段从调用进程的虚拟地址空间中解除映射。这样，进程就不能再访问共享内存中的数据。</li><li>shmctl(2)：对一个段进行控制操作，例如修改它的权限、获取它的状态信息、删除它等。</li></ul> 
+<p>1.<mark>shmget()函数是用来创建或打开一块共享内存的，它的原型是</mark>：<code>int shmget (key_t key, size_t size, int shmflg);</code></p> 
+<p>第一个参数key是一个非零整数，它为共享内存段提供一个外部名，可以用IPC_PRIVATE或ftok()函数生成。shmget()函数成功时返回一个与key相关的共享内存标识符（非负整数），用于后续的共享内存函数。调用失败返回-1。</p> 
+<p>第二个参数size是以字节为单位指定需要共享的内存容量。所有的内存分配操作都是以页为单位的，所以如果申请的内存大小不是页的整数倍，会被向上取整到最近的页大小。</p> 
+<p>第三个参数shmflg是一组标志位，它可以指定权限标志、创建标志和排他标志。权限标志与文件的读写权限一样，如0644表示允许创建者读写，其他用户只读。创建标志IPC_CREAT表示如果共享内存不存在，则创建一个新的共享内存，否则打开已有的共享内存。排他标志IPC_EXCL表示只有在共享内存不存在时，才创建新的共享内存，否则返回错误。</p> 
+<p><mark><strong>共享内存的大小是以4kb为单位的，这是巧合吗</strong></mark>？是这样的（对应磁盘文件系统）：这里第二个参数是共享内存的大小，一般建议将开辟的共享内存大小设置为4KB的整数倍，内存划分内存块的基本单位是Page，大小刚好是4KB，所以建议将大小设置为4KB的整数倍，如果你设置成4097什么的，有点浪费内存，因为实际内核会开辟8KB大小的空间。</p> 
+<p>2.<mark>shmat()函数用来将共享内存段连接到进程的地址空间，它的原型是</mark>：<code>void * shmat (int shmid, const void *shmaddr, int shmflg);</code></p> 
+<p>第一个参数shmid是由shmget()函数返回的共享内存标识符。第二个参数shmaddr指定共享内存连接到当前进程中的地址位置，通常为NULL，表示让系统来选择共享内存的地址。第三个参数shmflg是一组标志位，可以指定SHM_RDONLY表示共享内存只读，或者默认为0表示可读可写。调用成功时返回一个指向共享内存第一个字节的指针，如果调用失败返回-1。</p> 
+<p>3.<mark>shmdt()函数用来将共享内存从当前进程中分离，它的原型是</mark>：<code>int shmdt (const void *shmaddr);</code></p> 
+<p>参数shmaddr是shmat()函数返回的地址指针，调用成功时返回0，失败时返回-1。注意，将共享内存分离并不是删除它，只是使该共享内存对当前进程不再可用。</p> 
+<p>4.<mark>shmctl()函数用来控制共享内存的状态，它的原型是</mark>：<code>int shmctl (int shmid, int command, struct shmid_ds *buf);</code></p> 
+<p>第一个参数shmid是shmget()函数返回的共享内存标识符。第二个参数command是要采取的操作，<mark><strong>可以取以下三个值：</strong></mark></p> 
+<p>IPC_STAT：把shmid_ds结构中的数据设置为共享内存的当前关联值，即用共享内存的当前关联值覆盖shmid_ds的值。</p> 
+<p>IPC_SET：如果进程有足够的权限，就把共享内存的当前关联值设置为shmid_ds结构中给出的值。</p> 
+<p>IPC_RMID：删除共享内存段。</p> 
+<p>第三个参数buf是一个结构指针，它指向共享内存模式和访问权限的结构。调用成功时返回0，失败时返回-1。</p> 
+<h3><a id="_70"></a>代码实现</h3> 
+<p>下面是一个使用System V 共享内存的示例程序，它由两个部分组成：writer.c和reader.c。writer.c负责创建一个共享内存段，并向其中写入一些字符串；reader.c负责读取共享内存段中的字符串，并打印出来。</p> 
+<p>writer.c:</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/ipc.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/shm.h&gt;</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">SHM_SIZE</span> <span class="token expression"><span class="token number">1024</span> </span><span class="token comment">// size of shared memory</span></span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">int</span> shmid<span class="token punctuation">;</span> <span class="token comment">// shared memory ID</span>
+    <span class="token class-name">key_t</span> key<span class="token punctuation">;</span> <span class="token comment">// key to locate shared memory</span>
+    <span class="token keyword">char</span> <span class="token operator">*</span>shm<span class="token punctuation">;</span> <span class="token comment">// pointer to shared memory</span>
+
+    <span class="token comment">// create a key using a file name and a char</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>key <span class="token operator">=</span> <span class="token function">ftok</span><span class="token punctuation">(</span><span class="token string">"writer.c"</span><span class="token punctuation">,</span> <span class="token char">'A'</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"ftok"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// create a shared memory segment</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>shmid <span class="token operator">=</span> <span class="token function">shmget</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> SHM_SIZE<span class="token punctuation">,</span> IPC_CREAT <span class="token operator">|</span> <span class="token number">0666</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"shmget"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// attach the shared memory segment to the process</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>shm <span class="token operator">=</span> <span class="token function">shmat</span><span class="token punctuation">(</span>shmid<span class="token punctuation">,</span> <span class="token constant">NULL</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span><span class="token punctuation">)</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"shmat"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// write some strings to the shared memory</span>
+    <span class="token function">strcpy</span><span class="token punctuation">(</span>shm<span class="token punctuation">,</span> <span class="token string">"Hello, world!"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    shm <span class="token operator">+=</span> <span class="token function">strlen</span><span class="token punctuation">(</span><span class="token string">"Hello, world!"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">strcpy</span><span class="token punctuation">(</span>shm<span class="token punctuation">,</span> <span class="token string">"This is an example of System V shared memory."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    shm <span class="token operator">+=</span> <span class="token function">strlen</span><span class="token punctuation">(</span><span class="token string">"This is an example of System V shared memory."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">strcpy</span><span class="token punctuation">(</span>shm<span class="token punctuation">,</span> <span class="token string">"Goodbye!"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// wait until reader finishes reading</span>
+    <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token operator">*</span>shm <span class="token operator">!=</span> <span class="token char">'*'</span><span class="token punctuation">)</span>
+        <span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// detach the shared memory segment from the process</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">shmdt</span><span class="token punctuation">(</span>shm<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"shmdt"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>reader.c:</p> 
+<pre><code class="prism language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/ipc.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/shm.h&gt;</span></span>
+
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">SHM_SIZE</span> <span class="token expression"><span class="token number">1024</span> </span><span class="token comment">// size of shared memory</span></span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">int</span> shmid<span class="token punctuation">;</span> <span class="token comment">// shared memory ID</span>
+    <span class="token class-name">key_t</span> key<span class="token punctuation">;</span> <span class="token comment">// key to locate shared memory</span>
+    <span class="token keyword">char</span> <span class="token operator">*</span>shm<span class="token punctuation">;</span> <span class="token comment">// pointer to shared memory</span>
+    <span class="token keyword">char</span> <span class="token operator">*</span>s<span class="token punctuation">;</span>   <span class="token comment">// pointer to traverse shared memory</span>
+
+    <span class="token comment">// create a key using a file name and a char</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>key <span class="token operator">=</span> <span class="token function">ftok</span><span class="token punctuation">(</span><span class="token string">"writer.c"</span><span class="token punctuation">,</span> <span class="token char">'A'</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"ftok"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// get the shared memory segment</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>shmid <span class="token operator">=</span> <span class="token function">shmget</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> SHM_SIZE<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"shmget"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// attach the shared memory segment to the process</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>shm <span class="token operator">=</span> <span class="token function">shmat</span><span class="token punctuation">(</span>shmid<span class="token punctuation">,</span> <span class="token constant">NULL</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span><span class="token punctuation">)</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"shmat"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// read the strings from the shared memory</span>
+    s <span class="token operator">=</span> shm<span class="token punctuation">;</span>
+    <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token operator">*</span>s <span class="token operator">!=</span> <span class="token char">'\0'</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%s\n"</span><span class="token punctuation">,</span> s<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        s <span class="token operator">+=</span> <span class="token function">strlen</span><span class="token punctuation">(</span>s<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// write a '*' to the shared memory to indicate reading is done</span>
+    <span class="token operator">*</span>shm <span class="token operator">=</span> <span class="token char">'*'</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// detach the shared memory segment from the process</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">shmdt</span><span class="token punctuation">(</span>shm<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"shmdt"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>为了运行这个示例程序，我们需要先编译writer.c和reader.c，然后先运行writer，再运行reader。运行结果如下：</p> 
+<pre><code class="prism language-Shell">$ gcc writer.c -o writer
+$ gcc reader.c -o reader
+$ ./writer &amp;
+[1] 1234
+$ ./reader
+Hello, world!
+This is an example of System V shared memory.
+Goodbye!
+[1]+  Done                    ./writer
+$
+</code></pre> 
+<p><a href="https://gitee.com/sid-learning/linux-programming/tree/master/%E5%85%B1%E4%BA%AB%E5%86%85%E5%AD%98/" rel="nofollow"><strong>实现共享内存服务端和客户端的通信：查看我的代码仓库</strong></a></p> 
+<p><mark><strong>补充知识</strong></mark> — 命令操作</p> 
+<p>ipcs 查看进程间通信资源/ipcrm 删除进程间通信资源</p> 
+<pre><code>  -m 针对共享内存的操作
+
+ -q	针对消息队列的操作
+ 
+-s	针对信号量的操作
+
+-a	针对所有资源的操作
+</code></pre> 
+<h2><a id="_211"></a>深入理解</h2> 
+<h3><a id="_212"></a>什么是同步与互斥</h3> 
+<ul><li>同步是指协调多个进程的执行顺序，使得某些进程在执行某些操作之前必须等待其他进程完成一些操作。例如，一个进程要读取一个文件，必须等待另一个进程写入该文件。</li><li>互斥是指保证多个进程对共享资源的访问不会发生冲突，使得某些资源在一个时间段内只能被一个进程使用。例如，一个进程要打印一份文档，必须等待打印机空闲。</li></ul> 
+<p>OS中常用的同步与互斥机制有：</p> 
+<ul><li>信号量与PV操作：信号量是一个整数变量，表示可用资源的数量。PV操作是两个原子操作，用于对信号量进行加减操作。P操作表示申请一个资源，如果资源不足则阻塞；V操作表示释放一个资源，如果有等待的进程则唤醒。</li><li>管程：管程是一种高级的同步机制，它是一种封装了共享数据和对数据操作的过程的数据结构。管程内部有一个互斥锁和若干条件变量，用于实现对共享数据的互斥访问和同步控制。</li></ul> 
+<p>本节介绍互斥的四个相关概念 ：</p> 
+<p><img src="https://images2.imgbox.com/c9/bb/MkDRriAW_o.png" alt="在这里插入图片描述"></p> 
+<ol><li><mark><strong>什么是临界资源？</strong></mark></li></ol> 
+<ul><li>临界资源是指一次仅允许一个进程使用的共享资源，如打印机、磁带机等。临界资源需要互斥访问，即同一时间只能有一个进程访问，否则会导致数据不一致或资源冲突。</li><li>临界区是指每个进程中访问临界资源的那段代码，如对打印机的操作。临界区需要设置进入区和退出区，以检查和控制对临界资源的访问。进入区要判断是否可以进入临界区，如果可以则设置标志或锁；退出区要释放标志或锁，以便其他进程可以进入。</li></ul> 
+<p>2.<mark><strong>什么是原子性？</strong></mark></p> 
+<ul><li><mark>原子性是指一个操作或一组操作要么全部执行成功，要么全部不执行，不会被其他进程或中断打断</mark>。原子性是实现临界区互斥的一个重要条件，因为如果在进入区或退出区被打断，就会导致死锁或饥饿等问题。原子性可以通过硬件指令或软件方法来实现。</li></ul> 
+<h3><a id="_233"></a>共享内存的内核数据结构</h3> 
+<p>下面是OS给用户暴露的一部分shm的内核数据结构，因为OS要进行管理，所以实际在底层中其结构更为复杂，里面的key被封装到ipc_perm结构体里面，ipc_perm又被封装到shmid_ds{}结构体内部。</p> 
+<p><img src="https://images2.imgbox.com/b4/2d/PC4PfYmx_o.png" alt="在这里插入图片描述"><br> <mark>内核中的ipc_perm结构体是用来描述IPC对象的权限和所有者的</mark><br> 它的定义如下：</p> 
+<pre><code class="prism language-c"><span class="token keyword">struct</span> <span class="token class-name">ipc_perm</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">key_t</span> key<span class="token punctuation">;</span> <span class="token comment">// 调用shmget()时给出的关键字</span>
+    <span class="token class-name">uid_t</span> uid<span class="token punctuation">;</span> <span class="token comment">// 共享内存所有者的有效用户ID</span>
+    <span class="token class-name">gid_t</span> gid<span class="token punctuation">;</span> <span class="token comment">// 共享内存所有者所属组的有效组ID</span>
+    <span class="token class-name">uid_t</span> cuid<span class="token punctuation">;</span> <span class="token comment">// 共享内存创建者的有效用户ID</span>
+    <span class="token class-name">gid_t</span> cgid<span class="token punctuation">;</span> <span class="token comment">// 共享内存创建者所属组的有效组ID</span>
+    <span class="token keyword">unsigned</span> <span class="token keyword">short</span> mode<span class="token punctuation">;</span> <span class="token comment">// 权限 + SHM_DEST和SHM_LOCKED标志</span>
+    <span class="token keyword">unsigned</span> <span class="token keyword">short</span> seq<span class="token punctuation">;</span> <span class="token comment">// 序列号</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>结构中的mode域类似于文件的stat结构的mode域，但是不可以有执行权限。mode值描述如下：</p> 
+<table><thead><tr><th align="center">操作者</th><th align="center">读</th><th align="center">写（更改 更新）</th></tr></thead><tbody><tr><td align="center">用户</td><td align="center">0400</td><td align="center">0200</td></tr><tr><td align="center">组</td><td align="center">0040</td><td align="center">0020</td></tr><tr><td align="center">其他</td><td align="center">0004</td><td align="center">0002</td></tr></tbody></table> 
+<p><mark>IPC对象包括共享内存、消息队列和信号量，它们都是用来进行进程通信的一些资源。</mark><br> <mark>IPC对象的创建、访问和控制都需要使用ipc_perm结构体中信息</mark></p> 
+<h3><a id="IPC_262"></a>IPC资源的组织方式（多态）</h3> 
+<ol><li></ol> 
+<p>对于System V标准的IPC资源组织方式来说，资源的获取与释放操作，他们的接口相似度非常高，<br> 所以OS要对这些同一标准的各个通信机制进行管理，他们都有各自的内核数据结构，但都非常的相似，OS系统可以通过数组的方式对这些System V标准的IPC资源进行管理。</p> 
+<ol start="2"><li></ol> 
+<p>结构体的第一个成员地址，在数字上和结构体对象本身的地址是相同的。虽然他们类型不同，但是地址的字面值是相同的，所以我们可以只存储这些内核数据结构的第一个字段的地址，用一个指针数组来进行存储，因为虽然这些IPC资源的内核数据结构不同，但是他们的第一个字段的类型都是相同的，都是struct ipc_perm，所以我们可以用指针数组来进行管理。<br> 当要访问具体的某个IPC资源的内核数据结构时，我们可以将数组中的内容拿出来，将其强转成对应的IPC资源内核数据结构的类型，也就是转成结构体类型，那么此时这个指针指向的就不再是struct ipc_perm类型的结构体了，而是变为struct shmid_ds或struct semid_ds或struct msqid_ds这几种IPC内核数据结构类型的结构体，此时我们就可以具体的访问某个IPC资源了。<br> 上面能够这么做的原因其实是因为，结构体的地址和结构体中第一个字段的地址 在字面值上是相同的，只是他们类型不同罢了，我们可以通过类型强转的方式，让指针指向不同的结构体。<br> 3.<br> 下面组织IPC资源的方式不就是多态吗？右边三个资源就是派生类，左边是存储基类指针的指针数组，基类指针指向哪个派生类结构体，就调用哪个派生类结构体里的方法成员，只不过在Linux这里是通过指针类型强转的方式来实现的。<br> <img src="https://images2.imgbox.com/e3/a6/24XaLwnp_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="shm_275"></a>共享内存的优点和缺点（管道和shm分别数据拷贝次数）</h3> 
+<ol><li></ol> 
+<p><mark>共享内存的优点：所有进程间通信中速度最快的，只要向shmat返回的虚拟地址写入数据，另一个进程直接就可以通过他自己的shmat返回的虚拟地址读取到共享内存中的数据，效率非常的高，因为共享内存能大大减少数据的拷贝次数</mark>。</p> 
+<ol start="2"><li></ol> 
+<p><mark>综合考虑管道和共享内存，考虑键盘输入和显示器输出，管道和共享内存分别有几次数据拷贝呢</mark>？如果细算的话其实是6次和4次，如果不细算的话是4次和2次。<br> 有一种说法，喜欢把缓冲区分为内核缓冲区和程序缓冲区，程序缓冲区指的是语言级别你所能见到的所有能够存放数据的空间，这些都可以叫做程序缓冲区，是一种笼统的叫法。<br> 管道由于要调用read和write接口，则必须定义buffer，在读端和写端分别都定义出一个buffer，实际数据会先从stdin到buffer里面，再从buffer到pipe的内核级缓冲区中，然后再从内核级缓冲区到读端的buffer中，最后再从读端的buffer拷贝到stdout的用户级缓冲区，这样算就是4次。<br> 共享内存无须调用read或write接口，shmat会直接返回虚拟地址，所以只需将stdin的数据拷贝到虚拟地址里面，然后MMU会将虚拟地址进行映射，另一端的进程可以直接通过虚拟地址看到左边进程映射到shm的数据，所以另一端进程也只需要将虚拟地址的数据拷贝到stdout的缓冲区即可，这样算就是2次。<br> 但我们知道键盘输入的缓冲区实际上是先到内核标准输入缓冲区中的，cin或scanf等标准输入都是从内核标准输入缓冲区中拿数据的。并且在输出时，printf或cout等标准输出其实是先将数据输出到内核标准输出缓冲区的，然后才是将数据输出到stdout也就是显示器文件内部的用户级缓冲区。所以如果把这两步考虑上，那么管道和共享内存将各自增加两次的数据拷贝。<br> <img src="https://images2.imgbox.com/39/a9/PjeIF5Pe_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="_286"></a>认识信号量</h2> 
+<p>现实生活中，我们在看电影之前，一定要先买票，看电影，看完走人。<br> <mark>在OS内部访问临界资源：一定要先申请信号量资源，在使用，然后释放信号量资源 。</mark><br> 信号量的本质是一个<strong>计数器</strong>，通常用来表示公共资源中，资源数量多少的问题。当访问没有保护的公共资源时，会产生数据不一致的问题，我们将被保护起来的公共资源称为临界资源，但大部分资源其实都是独立的。公共资源(内存，文件，网络等)都是要通过代码来进行访问的，这些代码我们称为临界区，其余未访问公共资源的代码称为非临界区。</p> 
+<p><mark>当信号量为0时（count），OS挂起阻塞进程。那么是谁在申请信号量? 进程在申请！那前提就是 所有进程都要看到同一块信号量啊！ 那就得是共享资源，必须保证自己的++ 操作 — <strong>是原子性的</strong>！</mark></p> 
+<p>只要访问公共资源，我们就必须对公共资源进行保护。所有的进程在访问公共资源之前，都必须申请sem信号量，申请sem信号量不就需要先看到同一份sem信号量吗？那么其实sem信号量本身就是公共资源，所以信号量也必须保证自身操作的安全性，那么信号量的++或- -等操作也都必须得是原子性的，要么做成功，要么就回到最初状态<br> <img src="https://images2.imgbox.com/29/6f/IRvmcTdy_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="System_V__298"></a>System V 消息队列</h2> 
+<p>1.消息队列提供了一个从一个进程向另外一个进程发送一块数据的方法</p> 
+<p>2.每个数据块都被认为是有一个类型，接收者进程接收的数据块可以有不同的类型值</p> 
+<p>3.IPC资源必须删除，否则不会自动清除，除非重启，所以system V IPC资源的生命周期随内核</p> 
+<p>内核也给我们提供了获取消息队列和控制消息队列的系统接口<br> <img src="https://images2.imgbox.com/d8/9c/hnKTHEyh_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/233d0cd79e1640934c055b437d17afc8/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Matlab画图彩色变黑白</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/30aea9be0362f50d5c7704f48d2ec19d/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Matlab读取excel文件中的数据</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

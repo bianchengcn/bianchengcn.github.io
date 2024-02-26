@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>通过字符设备驱动分布操作进行6个灯的操作（ioctl） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="通过字符设备驱动分布操作进行6个灯的操作（ioctl）" />
+<meta property="og:description" content="头文件：
+#ifndef __MYLED_H__ #define __MYLED_H__ typedef struct { volatile unsigned int MODER; // 0x00 volatile unsigned int OTYPER; // 0x04 volatile unsigned int OSPEEDR; // 0x08 volatile unsigned int PUPDR; // 0x0C volatile unsigned int IDR; // 0x10 volatile unsigned int ODR; // 0x14 volatile unsigned int BSRR; // 0x18 volatile unsigned int LCKR; // 0x1C volatile unsigned int AFRL; // 0x20 volatile unsigned int AFRH; // 0x24 volatile unsigned int BRR; // 0x28 volatile unsigned int res; volatile unsigned int SECCFGR; // 0x30 }gpio_t; //GPIOE基地址 #define PHY_GPIOE_ADDR 0x50006000 #define PHY_GPIOF_ADDR 0x50007000 #define PHY_GPIOZ_ADDR 0x54004000 //RCC基地址：0x50000A28 #define PHY_RCC_LED1 0x50000A28 #define PHY_RCC_LED4 0x50000210 #define LED_ON _IOW(&#39;a&#39;,1,int) #define LED_OFF _IOW(&#39;a&#39;,0,int) enum{ LED1, LED2, LED3, LED4, LED5, LED6, }; #endif 内核文件：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/24b160d21061831ab48a02cee81a9c65/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-03-22T20:21:39+08:00" />
+<meta property="article:modified_time" content="2023-03-22T20:21:39+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">通过字符设备驱动分布操作进行6个灯的操作（ioctl）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>头文件：</p> 
+<pre><code class="language-cs">#ifndef __MYLED_H__
+#define __MYLED_H__
+
+typedef struct {
+	volatile unsigned int MODER;   // 0x00
+	volatile unsigned int OTYPER;  // 0x04
+	volatile unsigned int OSPEEDR; // 0x08
+	volatile unsigned int PUPDR;   // 0x0C
+	volatile unsigned int IDR;     // 0x10
+	volatile unsigned int ODR;     // 0x14
+	volatile unsigned int BSRR;    // 0x18
+	volatile unsigned int LCKR;    // 0x1C 
+	volatile unsigned int AFRL;    // 0x20 
+	volatile unsigned int AFRH;    // 0x24
+	volatile unsigned int BRR;     // 0x28
+	volatile unsigned int res;
+	volatile unsigned int SECCFGR; // 0x30
+}gpio_t;
+
+//GPIOE基地址
+#define PHY_GPIOE_ADDR 0x50006000
+#define PHY_GPIOF_ADDR 0x50007000
+
+#define PHY_GPIOZ_ADDR 0x54004000
+//RCC基地址：0x50000A28
+#define PHY_RCC_LED1 0x50000A28
+#define PHY_RCC_LED4 0x50000210
+
+#define LED_ON _IOW('a',1,int)
+#define LED_OFF _IOW('a',0,int)
+enum{
+	LED1,
+	LED2,
+	LED3,
+    LED4,
+    LED5,
+    LED6,
+};
+
+#endif</code></pre> 
+<p>内核文件：</p> 
+<pre><code class="language-cpp">#include &lt;linux/init.h&gt;
+#include &lt;linux/module.h&gt;
+#include &lt;linux/cdev.h&gt;
+#include&lt;linux/fs.h&gt;
+#include&lt;linux/uaccess.h&gt;
+#include&lt;linux/slab.h&gt;
+#include &lt;linux/io.h&gt;
+#include "mydev.h"
+#define CNAME "myled"
+
+char kbuf[128] = {0};
+gpio_t* virt_gpioe = NULL;
+gpio_t* virt_gpiof = NULL;
+gpio_t* virt_gpioz = NULL;
+unsigned int* virt_rcc = NULL;
+unsigned int* virt_rcc4 = NULL;
+
+struct cdev *cdev;
+dev_t devno;
+unsigned int minor=0;
+
+#define LED1_ON  (virt_gpioe-&gt;ODR |= (0x1 &lt;&lt; 10))
+#define LED1_OFF  (virt_gpioe-&gt;ODR &amp;= (~(0x1 &lt;&lt; 10)))
+#define LED2_ON  (virt_gpiof-&gt;ODR |= (0x1 &lt;&lt; 10))
+#define LED2_OFF  (virt_gpiof-&gt;ODR &amp;= (~(0x1 &lt;&lt; 10)))
+#define LED3_ON  (virt_gpioe-&gt;ODR |= (0x1 &lt;&lt; 8))
+#define LED3_OFF  (virt_gpioe-&gt;ODR &amp;= (~(0x1 &lt;&lt; 8)))
+
+#define LED4_ON  (virt_gpioz-&gt;ODR |= (0x1 &lt;&lt; 5))
+#define LED4_OFF  (virt_gpioz-&gt;ODR &amp;= (~(0x1 &lt;&lt; 5)))
+
+#define LED5_ON  (virt_gpioz-&gt;ODR |= (0x1 &lt;&lt; 6))
+#define LED5_OFF  (virt_gpioz-&gt;ODR &amp;= (~(0x1 &lt;&lt; 6)))
+
+#define LED6_ON  (virt_gpioz-&gt;ODR |= (0x1 &lt;&lt; 7))
+#define LED6_OFF  (virt_gpioz-&gt;ODR &amp;= (~(0x1 &lt;&lt; 7)))
+
+
+#if 0
+unsigned int major =0;//动态申请主设备号
+#else
+unsigned int major=500;//静态态指定主设备号
+#endif
+struct class *cls;
+struct device *dev;
+//open 
+int mycdev_open(struct inode *inode, struct file *file)
+{
+    printk("%s:%s:%d\n",__FILE__,__func__,__LINE__);
+    return 0;
+}
+//read
+ssize_t  mycdev_read(struct file *file, char *ubuf, size_t size, loff_t *off)
+{
+    printk("%s:%s:%d\n",__FILE__,__func__,__LINE__);
+    return 0;
+}
+//write
+ssize_t  mycdev_write(struct file *file, const char  *ubuf, size_t size, loff_t *off)
+{
+    printk("%s:%s:%d\n",__FILE__,__func__,__LINE__);
+    return 0;
+}
+//close
+int  mycdev_close(struct inode *inode, struct file *file)
+{
+    printk("%s:%s:%d\n",__FILE__,__func__,__LINE__);
+    return 0;
+}
+
+long myled_ioctl (struct file *file, unsigned int cmd, unsigned long args)
+{
+
+    //1.判断cmd switch(cmd)
+    //2.判断操作哪盏灯进行点亮 copy_from_user
+    int whitch;
+    int ret;
+    switch(cmd)
+    {
+    case LED_ON:
+        ret = copy_from_user(&amp;whitch,(void*)args,sizeof(int));
+        if(ret)
+        {
+            printk("copy from user is error\n");
+            return -EIO;
+        }
+        switch (whitch)
+        {
+            case LED1:
+                LED1_ON;
+                break;
+            case LED2:
+                LED2_ON;
+                break;
+            case LED3:
+                LED3_ON;
+                break;
+            case LED4:
+                LED4_ON;
+                break;
+            case LED5:
+                LED5_ON;
+                break;
+            case LED6:
+                LED6_ON;
+                break;
+        }
+    break;
+    case LED_OFF:
+        ret = copy_from_user(&amp;whitch,(void*)args,sizeof(int));
+        if(ret)
+        {
+            printk("copy from user is error\n");
+            return -EIO;
+        }
+        switch (whitch)
+        {
+            case LED1:
+                LED1_OFF;
+                break;
+            case LED2:
+                LED2_OFF;
+                break;
+            case LED3:
+                LED3_OFF;
+                break;
+            case LED4:
+                LED4_OFF;
+                break;
+            case LED5:
+                LED5_OFF;
+                break;
+            case LED6:
+                LED6_OFF;
+                break;
+        }
+        break;    
+    }
+    return 0;
+}
+struct file_operations fops=
+{
+    .open=mycdev_open,
+    .read=mycdev_read,
+    .write=mycdev_write,
+    .release=mycdev_close,
+    .unlocked_ioctl = myled_ioctl,
+
+
+};
+static int __init mycdev_init(void)
+{
+        int ret,i;
+        // 1.分配对象
+        cdev =cdev_alloc();
+        if(cdev==NULL)
+        {
+            printk("分配对象失败\n");
+            return -ENOMEM;
+            goto ERR1;
+        }
+        printk("分配对象空间成功\n");
+        //2.对象初始化
+        cdev_init(cdev,&amp;fops);
+        //3.设备资源的申请（设备号）
+        if(major==0)//动态申请
+        {
+            ret=alloc_chrdev_region(&amp;devno,minor,6,"myled");
+            if(ret)
+            {
+                printk("动态申请设备号失败\n");
+                goto ERR2;
+            }
+            major=MAJOR(devno);//获取主设备号
+            minor=MINOR(devno);//获取次设备号
+        }
+        else if(major&gt;0)//静态指定主设备号
+        {
+            ret=register_chrdev_region(MKDEV(major,minor),6,"myled");
+            if(ret)
+            {
+                printk("静态申请设备号失败\n");
+                goto ERR2;
+            }
+        }
+        //4.注册
+        ret=cdev_add(cdev,MKDEV(major,minor),6);
+        if(ret)
+        {
+            printk("驱动对象注册进内核失败\n");
+            goto ERR3;
+        }
+        printk("驱动对象注册进内核成功\n");
+        //5.向上提交目录
+        cls=class_create(THIS_MODULE,"mycdev");
+        if(IS_ERR(cls))
+        {
+            printk("向上提交目录失败\n");
+            goto ERR4;
+        }
+        printk("向上提交目录成功\n");
+        //6.向上提交设备节点信息
+        for(i=0;i&lt;6;i++)
+        {
+            dev=device_create(cls,NULL,MKDEV(major,i),NULL,"mycdev%d",i);
+            if(IS_ERR(dev))
+            {
+                printk("向上提交节点信息失败\n");
+                goto ERR5;
+            }
+        }
+        printk("向上提交设备节点成功\n");
+
+    //执行led操作
+    //4.将物理地址映射为虚拟地址
+    //4.1 将rcc地址映射
+    virt_rcc = ioremap(PHY_RCC_LED1,4);    
+    if(virt_rcc == NULL)
+    {
+        printk("rcc ioremap is error\n");
+        return -ENOMEM;
+    }
+
+    virt_rcc4 = ioremap(PHY_RCC_LED4,4);
+    if(virt_rcc4 == NULL)
+    {
+        printk("rcc4 ioremap is error\n");
+        return -ENOMEM;
+    }
+    //映射GPIOE地址
+    virt_gpioe = ioremap(PHY_GPIOE_ADDR,sizeof(gpio_t));
+    if(virt_gpioe== NULL)
+    {
+        printk("virt_gpioe ioremap is error\n");
+        return -ENOMEM;
+    }
+    //映射GPIOF地址
+    virt_gpiof = ioremap(PHY_GPIOF_ADDR,sizeof(gpio_t));
+    if(virt_gpiof== NULL)
+    {
+        printk("virt_gpiof ioremap is error\n");
+        return -ENOMEM;
+    }
+    //映射GPIOZ
+    virt_gpioz = ioremap(PHY_GPIOZ_ADDR,sizeof(gpio_t));
+    if(virt_gpioz== NULL)
+    {
+        printk("virt_gpiof ioremap is error\n");
+        return -ENOMEM;
+    }
+
+    //5.对led1----&gt;PE10引脚初始化  对led3----&gt;PE8引脚初始化 
+    *virt_rcc |= (0x1 &lt;&lt; 4);//5.1 使能GPIOE组时钟[4]=1
+    virt_gpioe-&gt;MODER &amp;= (~(0x3 &lt;&lt; 20));//5.2 设置PE10引脚为输出模式 [21:20] = 01
+    virt_gpioe-&gt;MODER |= (0x1 &lt;&lt; 20);
+    virt_gpioe-&gt;ODR &amp;= (~(0x1 &lt;&lt; 10)); //5.3 设置PE10引脚输出低电平
+
+    //6. 对led2----&gt;PF10引脚初始化
+    *virt_rcc |= (0x1 &lt;&lt; 5);//5.1 使能GPIOF组时钟[5]=1
+    virt_gpiof-&gt;MODER &amp;= (~(0x3 &lt;&lt; 20));//5.2 设置PF10引脚为输出模式 [21:20] = 01
+    virt_gpiof-&gt;MODER |= (0x1 &lt;&lt; 20);
+    virt_gpiof-&gt;ODR &amp;= (~(0x1 &lt;&lt; 10)); //5.3 设置PF10引脚输出低电平 
+
+    //7.对led3----&gt;PE8引脚初始化 
+    virt_gpioe-&gt;MODER &amp;= (~(0x3 &lt;&lt; 16));//5.2 设置PE8引脚为输出模式 [17:16] = 01
+    virt_gpioe-&gt;MODER |= (0x1 &lt;&lt; 16);
+    virt_gpioe-&gt;ODR &amp;= (~(0x1 &lt;&lt; 8)); //5.3 设置PE8引脚输出低电平
+
+    //8.对led4,led5,led6----&gt;PZ5,PZ6,PZ7引脚初始化
+
+    virt_gpioz-&gt;MODER &amp;= (~(0x3 &lt;&lt; 10));//5.2 设置PE8引脚为输出模式 [17:16] = 01
+    virt_gpioz-&gt;MODER |= (0x1 &lt;&lt; 10);
+    virt_gpioz-&gt;ODR &amp;= (~(0x1 &lt;&lt; 5)); //5.3 设置PE8引脚输出低电平
+
+    virt_gpioz-&gt;MODER &amp;= (~(0x3 &lt;&lt; 12));//5.2 设置PE8引脚为输出模式 [17:16] = 01
+    virt_gpioz-&gt;MODER |= (0x1 &lt;&lt; 12);
+    virt_gpioz-&gt;ODR &amp;= (~(0x1 &lt;&lt; 6)); //5.3 设置PE8引脚输出低电平
+
+    virt_gpioz-&gt;MODER &amp;= (~(0x3 &lt;&lt; 14));//5.2 设置PE8引脚为输出模式 [17:16] = 01
+    virt_gpioz-&gt;MODER |= (0x1 &lt;&lt; 14);
+    virt_gpioz-&gt;ODR &amp;= (~(0x1 &lt;&lt; 7)); //5.3 设置PE8引脚输出低电平
+
+    return 0;
+ERR5:
+    //将前面提交成功的设备信息销毁
+    for(--i;i&gt;=0;i--)
+    {
+        device_destroy(cls,MKDEV(major,i));
+    }
+    //销毁目录
+    class_destroy(cls);
+    
+ERR4:
+    cdev_del(cdev);
+ERR3:
+    unregister_chrdev_region(MKDEV(major,minor),3);
+ERR2:
+    kfree(cdev);
+ERR1:
+     return ret;
+}   
+
+static void __exit mycdev_exit(void)
+{
+    int i;
+    /*
+        1.销毁设备节点
+        2.销毁目录
+        3.注销驱动对象
+        4.释放设备资源（s设备号）
+        5.释放对象空间
+    */
+   //2.取消地址映射
+    iounmap(virt_rcc);
+    iounmap(virt_rcc4);
+    iounmap(virt_gpioe);
+    iounmap(virt_gpiof);
+    iounmap(virt_gpioz);
+   
+    for(i=0;i&lt;3;i++)
+    {
+        device_destroy(cls,MKDEV(major,i));
+    }
+    class_destroy(cls);
+    cdev_del(cdev);
+    unregister_chrdev_region(MKDEV(major,minor),3);
+    kfree(cdev);
+
+}
+module_init(mycdev_init);
+module_exit(mycdev_exit);
+MODULE_LICENSE("GPL");</code></pre> 
+<p>测试文件：</p> 
+<pre><code class="language-cs">#include &lt;stdio.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;errno.h&gt;
+#include &lt;string.h&gt;
+#include &lt;sys/ioctl.h&gt;
+#include "mydev.h"
+
+int main(int argc,const char * argv[])
+{
+    char buf[128] = {0};
+    int whitch;
+    int fd = -1;
+    fd = open("/dev/mycdev0",O_RDWR);
+    if(fd == -1)
+    {
+        perror("open is error\n");
+        return -1;
+    }
+
+    while(1)
+    {
+        whitch = LED1;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+        whitch = LED2;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+        whitch = LED3;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+        whitch = LED4;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+        whitch = LED5;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+        whitch = LED6;
+        ioctl(fd,LED_ON,&amp;whitch);
+        sleep(1);
+        ioctl(fd,LED_OFF,&amp;whitch);
+        sleep(1);
+
+    }
+
+
+    close(fd);
+    return 0;
+}</code></pre> 
+<p>工程管理文件：</p> 
+<pre><code class="language-bash">ARCH ?=x86
+modname ?= mydev
+ifeq ($(ARCH),arm)
+#定义一个变量，存放linux内核源码目录，arm架构
+KERNEDIR:=/home/ubuntu/linux-5.10.61
+#x86架构
+else
+KERNEDIR:=/lib/modules/$(shell uname -r)/build
+#定义一个变量，开启一个终端，执行pwd命令
+endif
+PWD:=$(shell pwd)
+
+all:
+	@#-C:跳转到内核顶层目录下,读取内核顶层目录下的Makefile文件
+	@#在内核源码顶层目录下执行:make M=$(shell pwd) modules
+	@#M=$(shell pwd)：回到当前目录下，只编译当前目录下的文件
+	@#make modules:采用模块化方式进行编译
+	make -C $(KERNEDIR) M=$(shell pwd) modules
+
+clean:
+	make -C $(KERNEDIR) M=$(shell pwd) clean
+
+#指定模块化方式编译的文件
+obj-m:=$(modname).o</code></pre> 
+<p>运行效果：</p> 
+<p><img alt="" height="535" src="https://images2.imgbox.com/16/34/PgsqLUuY_o.png" width="945"></p> 
+<p><img alt="" height="364" src="https://images2.imgbox.com/03/52/WR5phvHT_o.png" width="839"></p> 
+<p> </p> 
+<p> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/ee71c17f17f3f1bc8bcc7abdeed5e681/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">MySQL进阶-索引（复习笔记）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/493c5b069d47e0d77dea600877b4ad63/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">虚拟化技术KVM和XEN概述</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

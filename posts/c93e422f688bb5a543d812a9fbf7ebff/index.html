@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Maya、3dsMax开发——中文命名规律，uv通道查找失败问题，Python2、Python3中unicode转字面string - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Maya、3dsMax开发——中文命名规律，uv通道查找失败问题，Python2、Python3中unicode转字面string" />
+<meta property="og:description" content="若使用C&#43;&#43;的FBX SDK开发，可以跳转下方官方手册目录查看说明！
+1. 规律 起因是发现同样的fbx文件导入maya和max后，由于模型自身默认自带中文名，在Autodesk这两个软件中的名称不同（对比Maya2020（左）、3ds Max2022（右）。可能是默认编码方式原因）
+中文命名在maya后台中，通过fbxRootNode.GetChild(0).GetName()得到的是unicode格式
+u&#39;\u5e73\u9762&#39; # 平面
+而实际上在场景中它的名字是一个string
+’FBXASC229FBXASC185FBXASC179FBXASC233FBXASC157FBXASC162‘
+规律十分简单：将unicode用UTF-8编码，得到的bytes（Python3）或string（Python2）的样式为：
+b&#39;\x e5\x b9\x b3\x e9\x 9d\x a2&#39; 仔细观察可发现，e5、b9、b3、e9、9d、a2六个十六进制的数字转化为十进制分别为229、185、179、233、157、162。正好是每个FBXASC前缀后面带的三个数字。
+2.问题 maya中用户无法将mesh名字改成中文或者带有其他“非法字符”的名字。但是如果mesh在导入之前就是中文名字，导入后就是这一长串FBXASC格式。（可能是因为maya2020默认编码方式为Ascii）这并不影响普通用户使用，因为它即使导出maya后，它存储的仍然是unicode格式，重新导入max后，还是能正常显示中文“平面”。
+然而这可苦了开发者。理论上既然mesh的name保存的是unicode，其他对于命名的搜索，应该也是按unicode格式。但Autodesk剑走偏锋，例如像uv通道的获取方式就是按照FBXASC这个命名搜索的。如例：
+fbxMeshName = ... DGpath = om.MDagPath.getAPathTo(om.MSelectionList().add(fbxMeshName).getDependNode(0)) 上例为fbx sdk官方文档中按照mesh名称（fbxMeshName）获取其uv通道的写法。若使用Unicode，在om.MSelectionList().add(fbxMeshName)时就丢失了查找对象，导致getDependNode(0)查找空的对象，报错。但是如果使用FBXASC...进行查找则能成功找到uv通道。
+3.代码 了解了规律后，要做的事情非常简单。但是Python这个时候跳出来说：“让我再压榨你一点时间罢”。
+原因在于Maya2020使用的是Python2，Maya直到2022版本才改用Python3，而3ds Max则是在2021版本兼容Python2 &amp; Python3，2022版以后则为Python3。
+Python3：
+unicode_str = u&#39;\u5e73\u9762&#39; print(type(unicode_str)) hex_str = unicode_str.encode(&#39;UTF-8&#39;) print(hex_str,type(hex_str)) h = hex_str.hex() print(h,type(h)) # &lt;class &#39;str&#39;&gt; # b&#39;\xe5\xb9\xb3\xe9\x9d\xa2&#39; &lt;class &#39;bytes&#39;&gt; # e5b9b3e99da2 &lt;class &#39;str&#39;&gt; Python3的hex()函数可以直接将bytes转换为string格式。往后的字符操作略去。
+Python2：
+unicode_str = u&#39;\u5e73\u9762&#39; print(&#39;------------------------&#39;) print(type(unicode_str)) h = unicode_str." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/c93e422f688bb5a543d812a9fbf7ebff/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-23T14:48:10+08:00" />
+<meta property="article:modified_time" content="2023-08-23T14:48:10+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Maya、3dsMax开发——中文命名规律，uv通道查找失败问题，Python2、Python3中unicode转字面string</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>若使用C++的FBX SDK开发，可以跳转下方官方手册目录查看说明！</p> 
+<h4>1. 规律</h4> 
+<p>        起因是发现同样的fbx文件导入maya和max后，由于模型自身默认自带中文名，在Autodesk这两个软件中的名称不同（对比Maya2020（左）、3ds Max2022（右）。可能是默认编码方式原因）</p> 
+<p><img alt="" height="240" src="https://images2.imgbox.com/13/f0/YyQ4avI5_o.png" width="305"><img alt="" height="242" src="https://images2.imgbox.com/ef/e9/hcjnAapg_o.png" width="228"></p> 
+<p>        中文命名在maya后台中，通过fbxRootNode.GetChild(0).GetName()得到的是unicode格式</p> 
+<blockquote> 
+ <p>u'\u<strong>5e73</strong>\u<strong>9762</strong>'   # 平面</p> 
+</blockquote> 
+<p>        而实际上在场景中它的名字是一个string</p> 
+<blockquote> 
+ <p>’FBXASC<strong>229</strong>FBXASC<strong>185</strong>FBXASC<strong>179</strong>FBXASC<strong>233</strong>FBXASC<strong>157</strong>FBXASC<strong>162</strong>‘</p> 
+</blockquote> 
+<p>        规律十分简单：<strong>将unicode用UTF-8编码，得到的bytes（Python3）或string（Python2）的样式为：</strong></p> 
+<blockquote>
+  b'\x 
+ <strong>e5</strong>\x 
+ <strong>b9</strong>\x 
+ <strong>b3</strong>\x 
+ <strong>e9</strong>\x 
+ <strong>9d</strong>\x 
+ <strong>a2</strong>' 
+</blockquote> 
+<p>        <strong>仔细观察可发现，e5、b9、b3、e9、9d、a2六个十六进制的数字转化为十进制分别为229、185、179、233、157、162。正好是每个FBXASC前缀后面带的三个数字。</strong></p> 
+<p></p> 
+<h4><strong>2.问题</strong></h4> 
+<p>        maya中用户无法将mesh名字改成中文或者带有其他“非法字符”的名字。但是如果mesh在导入之前就是中文名字，导入后就是这一长串FBXASC格式。（可能是因为maya2020默认编码方式为Ascii）这并不影响普通用户使用，因为它即使导出maya后，它存储的仍然是unicode格式，重新导入max后，还是能正常显示中文“平面”。</p> 
+<p>        然而这可苦了开发者。理论上既然mesh的name保存的是unicode，其他对于命名的搜索，应该也是按unicode格式。但Autodesk剑走偏锋，例如像uv通道的获取方式就是按照FBXASC这个命名搜索的。如例：</p> 
+<pre><code class="language-python">fbxMeshName = ...
+DGpath = om.MDagPath.getAPathTo(om.MSelectionList().add(fbxMeshName).getDependNode(0))</code></pre> 
+<p>        上例为fbx sdk官方文档中按照mesh名称（fbxMeshName）获取其uv通道的写法。若使用Unicode，在om.MSelectionList().add(fbxMeshName)时就丢失了查找对象，导致getDependNode(0)查找空的对象，报错。但是如果使用FBXASC...进行查找则能成功找到uv通道。</p> 
+<p></p> 
+<h4>3.代码</h4> 
+<p>        了解了规律后，要做的事情非常简单。但是Python这个时候跳出来说：“让我再压榨你一点时间罢”。</p> 
+<p>       <strong> 原因在于Maya2020使用的是Python2，Maya直到2022版本才改用Python3，而3ds Max则是在2021版本兼容Python2 &amp; Python3，2022版以后则为Python3。</strong></p> 
+<p>        Python3：</p> 
+<pre><code class="language-python">unicode_str = u'\u5e73\u9762'
+print(type(unicode_str))
+hex_str = unicode_str.encode('UTF-8')
+print(hex_str,type(hex_str))
+h = hex_str.hex()
+print(h,type(h))
+
+# &lt;class 'str'&gt;
+# b'\xe5\xb9\xb3\xe9\x9d\xa2' &lt;class 'bytes'&gt;
+# e5b9b3e99da2 &lt;class 'str'&gt;</code></pre> 
+<p>        Python3的hex()函数可以直接将bytes转换为string格式。往后的字符操作略去。</p> 
+<p>        Python2：</p> 
+<pre><code class="language-python">unicode_str = u'\u5e73\u9762'
+print('------------------------')
+print(type(unicode_str))
+h = unicode_str.encode('UTF-8')
+print(h,type(h))
+result = ''
+for hli in h:
+    print('ord()',ord(hli),type(ord(hli)))
+    result += 'FBXASC' + str(ord(hli))
+print(result)
+
+# ------------------------
+# &lt;type 'unicode'&gt;
+# ('\xe5\xb9\xb3\xe9\x9d\xa2', &lt;type 'str'&gt;)
+# ('ord()', 229, &lt;type 'int'&gt;)
+# ('ord()', 185, &lt;type 'int'&gt;)
+# ('ord()', 179, &lt;type 'int'&gt;)
+# ('ord()', 233, &lt;type 'int'&gt;)
+# ('ord()', 157, &lt;type 'int'&gt;)
+# ('ord()', 162, &lt;type 'int'&gt;)
+# FBXASC229FBXASC185FBXASC179FBXASC233FBXASC157FBXASC162</code></pre> 
+<p>        Python2的ord()函数则能将string类型的Unicode直接解码成十进制。</p> 
+<p>        二者不能共存的原因读者可以自己试试。这边给出报错结论。将py2方法放进py3环境：</p> 
+<blockquote> 
+ <p>TypeError: ord() expected string of length 1, but int found</p> 
+</blockquote> 
+<p>        将py3方法放入py2环境：</p> 
+<blockquote> 
+ <p># 错误: AttributeError: file &lt;maya console&gt; line 5: 'str' object has no attribute 'hex' # </p> 
+</blockquote> 
+<h4>4.官方手册</h4> 
+<p><a href="https://help.autodesk.com/view/FBX/2019/ENU/?guid=FBX_Developer_Help_scripting_with_python_fbx_list_of_python_fbx_classes_html" rel="nofollow" title="FBX SDK Help | List of Python Fbx classes | Autodesk">FBX SDK Help | List of Python Fbx classes | Autodesk</a></p> 
+<p>这是python环境下拥有的fbx class。至于相比于C++的使用则写在/Scripting with Python FBX/Difference between FBX SDK and Python FBX。</p> 
+<p>同时C++似乎有一个API能够直接将字符编码方式转换（虽然本人使用python开发，没有使用过。非常可惜Autodesk并没有将这个功能放到Python FBX中，导致这个文章的出现（悲</p> 
+<p><a href="https://help.autodesk.com/view/FBX/2019/ENU/?guid=FBX_Developer_Help_fbx_sdk_object_model_supported_string_formats_html" rel="nofollow" title="FBX SDK Help | Supported string formats | Autodesk">FBX SDK Help | Supported string formats | Autodesk</a></p> 
+<p>同时，Maya API手册也是极好的（喜不自胜</p> 
+<p><a href="https://help.autodesk.com/view/MAYAUL/2020/ENU/?guid=__cpp_ref_index_html" rel="nofollow" title="Maya Help | C++ API Reference: Maya API Reference | Autodesk">Maya Help | C++ API Reference: Maya API Reference | Autodesk</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/6df702fceee381da3df2faaac17152ea/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">.bat批处理打开多个程序</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1247555aef3bd4c75804ff1901f29c6b/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">微信小程序插件之微信同声传译</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

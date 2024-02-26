@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>java中异步socket类的实现和源代码 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="java中异步socket类的实现和源代码" />
+<meta property="og:description" content="java中异步socket类的实现和源代码
+我们知道,java中socket类一般操作都是同步进行，常常在read的时候socket就会阻塞直到有数据可读或socket连接断开的时候才返回，虽然可以设置超时返回，但是这样比较低效，需要做一个循环来不停扫描数据是否可读。看来，在同一个线程中，要是想实现异步读写不太容易。
+下面介绍的这个类实现了伪异步socket通讯。基本思想就是在现有socket类的基础上进行封装，当socket连接建立成功后，立即创建一个socket数据接收线程，专门负责阻塞式的socket读取(read)，而当前线程负责数据的发送(send)。另外定义了一个接口，包括了socket的各种事件的回调。我们要实现这个接口，在接口实现类中创建异步socket对象，并且传递接口类到异步socket对象中，目的是有socket事件的时候回调我们的方法。
+下面是接口：
+SocketExHandler.java package com.ly.net;
+import java.net.*; /**
+* Title: * Description:
+* Copyright: Copyright (c) 2001
+* Company: http://dozb.blogchina.com
+* @author dozb
+* @version 1.0
+*/
+/**
+* 异步Socket Client Interface
+* 使用方法：
+* 1.定义类 MySocketClientEx 实现SocketExHandler接口,实现 OnReceive OnClose OnConnect 事件
+* 2.在类中实现start方法 MySocketEx = new SocketEx(this,ip,port)
+* 3.在类中实现stop方法 delete MySocketEx
+* 4.当有数据到达时会触发OnReceive事件
+* 5.当对方SOCKET关闭时会触发OnClose事件
+* 6.当SOCKET建立时会触发OnConnect事件
+*/
+/**
+* 异步Socket Server Interface
+* 使用方法：
+* 1." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/11b7a36d498e9c3e7b6d82b03fdc2ca4/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-07T19:01:54+08:00" />
+<meta property="article:modified_time" content="2023-08-07T19:01:54+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">java中异步socket类的实现和源代码</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">java</span><span style="color:#666666;">中异步</span><span style="color:#666666;">socket</span><span style="color:#666666;">类的实现和源代码</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">我们知道</span><span style="color:#666666;">,java</span><span style="color:#666666;">中</span><span style="color:#666666;">socket</span><span style="color:#666666;">类一般操作都是同步进行，常常在</span><span style="color:#666666;">read</span><span style="color:#666666;">的时候</span><span style="color:#666666;">socket</span><span style="color:#666666;">就会阻塞直到有数据可读或</span><span style="color:#666666;">socket</span><span style="color:#666666;">连接断开的时候才返回，虽然可以设置超时返回，但是这样比较低效，需要做一个循环来不停扫描数据是否可读。看来，在同一个线程中，要是想实现异步读写不太容易。</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">下面介绍的这个类实现了伪异步</span><span style="color:#666666;">socket</span><span style="color:#666666;">通讯。基本思想就是在现有</span><span style="color:#666666;">socket</span><span style="color:#666666;">类的基础上进行封装，当</span><span style="color:#666666;">socket</span><span style="color:#666666;">连接建立成功后，立即创建一个</span><span style="color:#666666;">socket</span><span style="color:#666666;">数据接收线程，专门负责阻塞式的</span><span style="color:#666666;">socket</span><span style="color:#666666;">读取</span><span style="color:#666666;">(read)</span><span style="color:#666666;">，而当前线程负责数据的发送</span><span style="color:#666666;">(send)</span><span style="color:#666666;">。另外定义了一个接口，包括了</span><span style="color:#666666;">socket</span><span style="color:#666666;">的各种事件的回调。我们要实现这个接口，在接口实现类中创建异步</span><span style="color:#666666;">socket</span><span style="color:#666666;">对象，并且传递接口类到异步</span><span style="color:#666666;">socket</span><span style="color:#666666;">对象中，目的是有</span><span style="color:#666666;">socket</span><span style="color:#666666;">事件的时候回调我们的方法。</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">下面是接口：</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#0000FF;">SocketExHandler.java</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">package com.ly.net;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.net.*;   </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Title:        </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Description:</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Copyright:    Copyright (c) 2001</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Company:      http://dozb.blogchina.com</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @author          dozb</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @version 1.0</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * </span><span style="color:#000000;">异步Socket Client Interface</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * </span><span style="color:#000000;">使用方法：</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 1.</span><span style="color:#000000;">定义类 MySocketClientEx 实现SocketExHandler接口,实现 OnReceive OnClose OnConnect 事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 2.</span><span style="color:#000000;">在类中实现start方法 MySocketEx = new SocketEx(this,ip,port)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 3.</span><span style="color:#000000;">在类中实现stop方法 delete MySocketEx</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 4.</span><span style="color:#000000;">当有数据到达时会触发OnReceive事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 5.</span><span style="color:#000000;">当对方SOCKET关闭时会触发OnClose事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 6.</span><span style="color:#000000;">当SOCKET建立时会触发OnConnect事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * </span><span style="color:#000000;">异步Socket Server Interface</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * </span><span style="color:#000000;">使用方法：</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 1.</span><span style="color:#000000;">定义类 MySocketServerEx 实现SocketExHandler接口,实现 OnReceive OnListen  OnClose OnAccept  事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 2.</span><span style="color:#000000;">在类中实现start方法 MySocketEx = new ServerSocketEx(this,ip,port)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 3.</span><span style="color:#000000;">在类中实现stop方法 delete MySocketEx</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 4.</span><span style="color:#000000;">当开始监听时会触发OnListen事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 5.</span><span style="color:#000000;">当SOCKET关闭时会触发OnClose事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * 6.</span><span style="color:#000000;">当有客户端SOCKET要建立连接时会触发OnAccept事件</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">public interface SocketExHandler</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当客户端sock数据到达时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnReceive(Object socket,byte buf[],int nLen);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当客户端sock连接建立成功时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnConnect(Object socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当服务端sock监听开始时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnListen(Object socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当服务端sock接受一个新的sock连接时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnAccept(Object socket,SocketEx ClientSocket) ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当sock关闭时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnClose(Object socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;">　 </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">下面是异步客户端</span><span style="color:#666666;">socket</span><span style="color:#666666;">类：</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#0000FF;">SocketEx.java</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">package com.ly.net;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.io.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.net.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.util.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import com.ly.net.SocketExHandler;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Title:        </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Description:</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Copyright:    Copyright (c) 2001</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Company:      http://dozb.blogchina.com</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @author          dozb</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @version 1.0</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">public class SocketEx implements Runnable</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public static final boolean isdebug = true;//</span><span style="color:#000000;">调试</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         *</span><span style="color:#000000;">构造函数.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public SocketEx(SocketExHandler seh,Socket ClientSocket){this.seh = seh;thisSocket = ClientSocket;     InitNotify();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public SocketEx(SocketExHandler seh,String host,int port) throws IOException {this.seh = seh;thisSocket = new Socket(host,port);InitNotify();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public SocketEx(SocketExHandler seh, InetAddress address, int port ) throws IOException {this.seh = seh;thisSocket = new Socket(address, port);InitNotify();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public SocketEx(SocketExHandler seh, String host, int port, InetAddress localAddr, int localPort ) throws IOException {this.seh = seh;thisSocket = new Socket(host,port,localAddr,localPort );InitNotify();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public SocketEx(SocketExHandler seh, InetAddress address, int port, InetAddress localAddr, int localPort ) throws IOException {this.seh = seh;thisSocket = new Socket(address, port, localAddr,localPort );InitNotify();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">实现Socket的可见方法.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public synchronized void close() throws IOException   {IsRunning = false;thisSocket.close();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public InetAddress getInetAddress() {return thisSocket.getInetAddress();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public InputStream getInputStream() throws IOException{      return thisSocket.getInputStream(); }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public InetAddress getLocalAddress() { return thisSocket.getLocalAddress() ; }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public int getLocalPort() {    return thisSocket.getLocalPort() ; }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public OutputStream getOutputStream() throws IOException{return thisSocket.getOutputStream(); }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public int getPort() { return thisSocket.getPort() ; }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public int getSoLinger() throws SocketException{      return thisSocket.getSoLinger(); }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public synchronized int getSoTimeout() throws SocketException {      return thisSocket.getSoTimeout(); }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public boolean getTcpNoDelay() throws SocketException {      return thisSocket.getTcpNoDelay(); }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void setSoLinger( boolean on, int val ) throws SocketException {     thisSocket.setSoLinger(on,val); }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public synchronized void setSoTimeout( int timeout ) throws SocketException {thisSocket.setSoTimeout( timeout ) ; }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void setTcpNoDelay( boolean on ) throws SocketException {thisSocket.setTcpNoDelay(on); }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public String toString() {     return thisSocket.toString() ; }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">获取Socket</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public Socket GetSocket(){return thisSocket;}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">初始化异步Socket</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void ShowMsg(String Msg)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(isdebug)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        System.out.println(Msg);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void InitNotify()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(NotifyThread != null) return ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        biStream = new BufferedInputStream(getInputStream());</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        thisSocket.setSoTimeout(0);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }catch(IOException e){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        ShowMsg("InitNotify() IOException.");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                IsRunning = true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                NotifyThread = new Thread(this,"SocketEx_NoitfyThread");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                NotifyThread.setDaemon(true);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                NotifyThread.start();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        seh.OnConnect(this);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">关闭Socket</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void Close()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }catch(Exception eclose){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        ShowMsg("Close() Exception.");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        protected void finalize() throws Throwable</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                Close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                super.finalize();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * Thread </span><span style="color:#000000;">运行</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void run()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                while(IsRunning){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(getInputStream().read(buf,0,1) &lt;= 0)//</span><span style="color:#000000;">试读一个字节</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        DoClose();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        return ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(!DoReceive(getInputStream().available()))</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        return ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }catch(Exception e){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                ShowMsg("run() Exception.");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                DoClose();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                return ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                Thread.sleep(0); //</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }catch(InterruptedException e){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                ShowMsg("run() InterruptedException.");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                DoClose();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                return ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">当有数据到达时的回调方法.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private boolean DoReceive(int nCanReadCount)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        int len = 0,nCurrReadCount=0,nStart=1;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        do{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                for(int i=nStart;i&lt; BUFLEN;i++)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        buf[i]=0;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(nCanReadCount == 0)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                                seh.OnReceive(this,buf,nStart);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        return true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(nCanReadCount &gt;(BUFLEN-2))</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        nCurrReadCount = BUFLEN-2;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                else</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        nCurrReadCount = nCanReadCount;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                len = biStream.read(buf,nStart,nCurrReadCount);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(len == 0)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        DoClose();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        return false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                nCanReadCount -= len;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                buf[len+nStart] = 0;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                seh.OnReceive(this,buf,len+nStart);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                nStart = 0;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }while(nCanReadCount &gt;0);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            }catch(Exception excpt){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        ShowMsg("DoReceive() Exception.");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        DoClose();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        return false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                return true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">当Socket建立连接时的回调方法.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void DoConnect()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        seh.OnConnect(this);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">当Socket关闭时的回调方法.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void DoClose()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      if(IsRunning)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        Close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          seh.OnClose(this);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        IsRunning = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }catch(Exception e){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        ShowMsg("DoClose() Exception.");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">以下实现不要改动!!!!</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private Thread NotifyThread=null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private boolean IsRunning = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private Socket thisSocket = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private static final int BUFLEN = 4097;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private byte buf[] = new byte[BUFLEN];</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private BufferedInputStream biStream = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private SocketExHandler seh=null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;">　 </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">下面是异步</span><span style="color:#666666;">socketserver</span><span style="color:#666666;">类：</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#0000FF;">ServerSocketEx .java</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">package com.ly.net;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.io.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.net.*;   </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.util.*;  </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Title:        </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Description:</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Copyright:    Copyright (c) 2001</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Company:      http://dozb.blogchina.com</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @author          dozb</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @version 1.0</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">public class ServerSocketEx extends ServerSocket implements Runnable</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">以下实现不要改动!!!!</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public ServerSocketEx(SocketExHandler seh, int port ) throws IOException {super(port);this.seh = seh; Listen();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public ServerSocketEx(SocketExHandler seh, int port, int backlog ) throws IOException {super(port,backlog);this.seh = seh;    Listen();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public ServerSocketEx(SocketExHandler seh, int port, int backlog, InetAddress bindAddr ) throws IOException {super(port,backlog, bindAddr);this.seh = seh;Listen();}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void setTimeout(int timeout) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            this.timeout = timeout;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public static Vector GetClientPool(){return ClientPool;};</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public static void CloseAllClients(){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                for(int i=0;i&lt; ClientPool.size();i++)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                SocketEx s=(SocketEx)ClientPool.elementAt(i);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(s != null) s.close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }catch(Exception e){}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                ClientPool.removeAllElements(); </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public static void PutClient(SocketEx s){ClientPool.addElement(s);};</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">关闭Socket</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void Close()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                IsRunning = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }catch(Exception eclose){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        protected void finalize() throws Throwable</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                Close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                super.finalize();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * Thread </span><span style="color:#000000;">运行</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */     </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void run()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                while(IsRunning){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        acceptConnections();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                DoClose();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        // -------------------- Private methods</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void Listen() throws IOException</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                InitNotify();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        seh.OnListen(this);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">初始化异步Socket</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void InitNotify()throws IOException</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(NotifyThread != null) return ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        setSoTimeout(this.timeout);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                } catch( IOException ex ) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                    IsRunning=false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                    throw ex;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                IsRunning = true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                NotifyThread = new Thread(this,"ServerSocketEx_NoitfyThread");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                NotifyThread.setDaemon(true);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                NotifyThread.start();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         * </span><span style="color:#000000;">当Socket关闭时的回调方法.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">         */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private void DoClose()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                seh.OnClose(this);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                //NotifyThread.stop();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }catch(Exception e){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    private void processSocket(Socket s) throws IOException</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                SocketEx se = new SocketEx(seh,s);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                PutClient(se);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(seh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        seh.OnAccept(this,se);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    private void acceptConnections() {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        try {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            if(IsRunning == false)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                return;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        Socket socket = acceptSocket();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        if(IsRunning != false &amp;&amp; socket != null) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                            processSocket(socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        } catch(Throwable e) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            IsRunning = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  private Socket acceptSocket() {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        Socket accepted = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        try {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            if(IsRunning == true) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                accepted = accept();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(IsRunning == false) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(null != accepted) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                    accepted.close();  // rude, but unlikely!</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                    accepted = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        } catch(InterruptedIOException iioe) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            // normal part -- should happen regularly so</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            // that the endpoint can release if the server</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            // is shutdown.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            // you know, i really wish that there was a</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            // way for the socket to timeout without</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            // tripping an exception. Exceptions are so</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            // 'spensive.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        } catch (SocketException e) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            if (IsRunning != false) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                IsRunning = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        } catch(Throwable e) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            IsRunning = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        return accepted;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">  </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    private static final int TIMEOUT = 5000;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    private int timeout = TIMEOUT;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private Thread NotifyThread=null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private boolean IsRunning=false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private SocketExHandler seh=null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        private static Vector ClientPool=new Vector();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;">　 </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">下面是几个工具类：</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#0000FF;">TimerClient.java</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">package com.ly.util;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * TimerClient Interface</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @version 1.0, 8 October 1995</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">public interface TimerClient</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  void timerEvent(int id);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#0000FF;">TimerCtl.java</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">package com.ly.util;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.util.Vector;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.util.Enumeration;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">//import com.borland.jb.util.Diagnostic;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Timer Component</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Note:</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *  - The successful operation of this timer requires clients to execute simple, short</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *    code snippets when called back by the engine.  Otherwise the queue's delivery</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *    mechanism will be held up</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Further work:</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *  - When Thread.Interrupt is implemented we can switch from the busy wait model to</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *    the calculated wait model.  Without the interrupt the thread waits for the</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *    calculated interval before waking up.  This is a problem if another shorter</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *    request arrives.  For now we'll assume the minimum resolution of the timer is</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *    100ms.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @version 1.0, 2 October 1995</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> *</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">public class TimerCtl</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  static TimerTasks timerTasks;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public TimerCtl() {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  /*</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  * Start a timer running</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public static void startTimer(TimerClient client, int eventId, long delay, boolean repeat) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // create the timer if necessary</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    if (timerTasks == null) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      timerTasks = new TimerTasks();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      timerTasks.start();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    //Diagnostic.out.println("TIMER: startTimer"+eventId);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // add the new task to the queue</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    timerTasks.add(client, eventId, delay, repeat);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  /*</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  * Stop a timer</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public static void stopTimer(TimerClient client, int eventId) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    //Diagnostic.out.println("TIMER: stopTimer"+eventId);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    if(timerTasks != null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        timerTasks.end(client, eventId);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">class TimerTasks extends Thread</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  Vector tasks = new Vector();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  boolean suspended = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  boolean sleeping = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   * Thread task runner</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public void run() {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // Loop forever</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    while (true) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      long sleepTime = 0;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // Ensure that the tasks class is protected</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      synchronized (tasks) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //Diagnostic.out.println("TIMER: Tick");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        // Scan the job list for any jobs which may fire.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        // Mark one-shot jobs for deletion</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        // Calculate the maximum time we can sleep for</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        sleepTime = scan();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        // Delete DeletePending jobs.  DeletePending jobs result from one-shots which have</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        // been sent, and repeat jobs which have been cancelled.  Jobs may have been</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        // cancelled during the Scan process.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        purge();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // Suspend timer if necessary</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      if (tasks.size() == 0) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //Diagnostic.out.println("TIMER: Suspend");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        try {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          synchronized(this) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            suspended = true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            wait();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        catch (InterruptedException e) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      else {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //Diagnostic.out.println("TIMER: Suggested Sleeping for "+sleepTime);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if (sleepTime &gt;= 0) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          try {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            sleeping = true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            sleep(sleepTime);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            sleeping = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          catch (InterruptedException i) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            //Diagnostic.out.println("TIMER: Caught me napping");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   * Add a new task</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public void add(TimerClient client, int eventId, long delay, boolean repeat) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    TimerTask t = new TimerTask(client, eventId, delay, repeat);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    synchronized (tasks) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      tasks.addElement((Object)t);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // Want instant response - wake the thread if it's napping</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // unfortunately the interrupt() method is not working</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">//    if (sleeping)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">//      interrupt();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    if (suspended) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      synchronized(this) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        notify();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //Diagnostic.out.println("TIMER: Resume");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        suspended = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   * Find the job and mark it for deletion</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public void end(TimerClient client, int eventId) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    synchronized (tasks) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      for (int i = 0; i &lt; tasks.size(); i++) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        TimerTask t = (TimerTask)tasks.elementAt(i);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //if (!t.deletePending &amp;&amp; t.client == client &amp;&amp; t.eventId == eventId)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if (t.deletePending == false &amp;&amp; t.client == client &amp;&amp; t.eventId == eventId) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          // JPBS - if we don't reset 'repeat', deletePending will be set again</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          t.repeat = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          t.deletePending = true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">          break;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  /**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   * Clear out all the dead wood</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  void purge() {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    for (int i = 0; i &lt; tasks.size(); i++) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      TimerTask t = (TimerTask)tasks.elementAt(i);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      if (t.deletePending) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //Diagnostic.out.println("TIMER: purged");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        tasks.removeElementAt(i);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        i--;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  long scan() {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // The value added to the current time determines the MAX time until</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // the next scan</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // This is 100 now since thread.interrupt() is not implemented</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    long nextTime = System.currentTimeMillis() + 100;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    for (int i = 0; i &lt; tasks.size(); i++) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      TimerTask t = (TimerTask)tasks.elementAt(i);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // if not already deletePending, test (and possibly send the event)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // as a result, the job may be flagged for deletion.</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // May also be a non-repeating job and so require self deletion</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      if (!t.deletePending)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        t.test();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // if the task didn't get deleted - see what it contributes to the time</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      if (!t.deletePending)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        nextTime = Math.min(nextTime, t.timeNext);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      //Diagnostic.out.println("TIMER: Scanning "+t.eventId+" "+(t.deletePending == true ? "DEL" : ""));</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    return nextTime - System.currentTimeMillis();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">class TimerTask</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  TimerClient client;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  int         eventId;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  long        timePrev;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  long        timeDelay;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  long        timeNext;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  boolean repeat;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  boolean deletePending;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public TimerTask(TimerClient client, int eventId, long timeDelay, boolean repeat) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    this.client = client;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    this.eventId = eventId;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    this.timeDelay = timeDelay;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    this.repeat = repeat;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    // schedule the next click - now + delay</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    timeNext = System.currentTimeMillis() + timeDelay;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    deletePending = false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    //Diagnostic.out.println("TIMER: Adding New Task");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  public void test() {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    if (System.currentTimeMillis() &gt;= timeNext) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      //Diagnostic.out.println("TIMER: fire");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // Fire the event</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      client.timerEvent(eventId);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      // Update the next time</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      timeNext = System.currentTimeMillis() + timeDelay;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">      deletePending = !repeat;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">  }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;">　 </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">下面是使用上面的异步</span><span style="color:#666666;">socket</span><span style="color:#666666;">类，做的</span><span style="color:#666666;">demo</span><span style="color:#666666;">开发</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#0000FF;">DemoAppSocketHandler.java</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">package com.ly.net;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.net.*;   </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.util.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Title:        </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Description:</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Copyright:    Copyright (c) 2001</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Company:      http://dozb.blogchina.com</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @author          dozb</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @version 1.0</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">public interface DemoAppSocketHandler</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当客户端sock有数据到达时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnProcessCmd(Object socket,String FromArea,String ToArea,String ChannNo,String MainFun,String SubFun,Vector ParamList);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当客户端sock连接建立成功时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnConnect(Object socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当服务端sock监听开始时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnListen(Object socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当服务端sock接受一个新的sock连接时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnAccept(Object socket,SocketEx ClientSocket) ;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">当sock关闭时触发</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnClose(Object socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#0000FF;">DemoAppSocket.java</span> </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">package com.ly.net;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.io.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import java.util.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">import com.ly.util.*;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">/**</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Title:        </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Description:</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Copyright:    Copyright (c) 2001</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * Company:      http://dozb.blogchina.com</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @author          dozb</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> * @version 1.0</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;"> */</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">//</span><span style="color:#000000;">这个类是异步socket 客户端和服务端的使用演示</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">//</span><span style="color:#000000;">对于客户端，实现了断开后自动连接</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">//</span><span style="color:#000000;">这个类是SocketExHandler 和 TimerClient 接口的实现</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">public class DemoAppSocket implements SocketExHandler,TimerClient{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //Sock</span><span style="color:#000000;">构造函数</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public DemoAppSocket(DemoAppSocketHandler issh,boolean isServer,String ip,int port) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                this.issh = issh;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                this.isServer = isServer;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                this.ip = ip;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(this.ip == null) this.ip = "";</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                this.port = port;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(this.port &lt;0) this.port = 0;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   //</span><span style="color:#000000;">调用完构造后调用这个函数创建sock对象</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void create()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if(!start())</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            TimerCtl.startTimer(this,eventId,30*1000,true);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   //</span><span style="color:#000000;">这个方法一般不需要直接调用</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   public boolean start()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(this.isServer) return startServer(); else return startClient();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   //</span><span style="color:#000000;">停止socket       </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   public void stop()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        TimerCtl.stopTimer(this,eventId);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(this.isServer) stopServer(); else stopClient();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   //</span><span style="color:#000000;">发送socket消息   </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   public boolean SendCmd(Object socket,String strCmd)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                SocketEx currSocketEx = (SocketEx)socket;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(!isServer &amp;&amp; currSocketEx==null) currSocketEx = socketEx; </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if(currSocketEx == null) return false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">       try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            PrintWriter Sender = new PrintWriter(currSocketEx.getOutputStream(),true);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            Sender.print(strCmd);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            Sender.flush();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            return true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }catch(Exception e)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            return false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                                </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   //</span><span style="color:#000000;">发送socket消息   </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   public boolean SendCmd(Object socket,String FromArea,String ToArea,String ChannNo,String MainFun,String SubFun,String Param)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        String strCmd = FromArea + ToArea + ChannNo + MainFun+SubFun+"&amp;"+Param+"&amp;";</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                return SendCmd(socket,strCmd);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //</span><span style="color:#000000;">获得IP地址</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   public String getIp()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                return ip;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   //</span><span style="color:#000000;">获得端口号 </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   public int getPort()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                return port;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">   }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        protected boolean startClient()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if(socketEx != null) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            socketEx.close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            }catch(IOException e){};</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            socketEx = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            socketEx = new SocketEx(this,ip,port);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            TimerCtl.stopTimer(this,eventId);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            return true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }catch(IOException e)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            socketEx = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        return false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        protected boolean startServer()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">       if(serverSocketEx != null) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            serverSocketEx.close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            }catch(IOException e){};</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            serverSocketEx = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            serverSocketEx = new ServerSocketEx(this,port);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            TimerCtl.stopTimer(this,eventId);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            return true;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }catch(IOException e)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            serverSocketEx = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        return false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        protected void stopServer()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if(serverSocketEx != null) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            serverSocketEx.close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            }catch(IOException e){};</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            serverSocketEx = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        protected void stopClient()</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        if(socketEx != null) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            try{<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            socketEx.close();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            }catch(IOException e){};</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">            socketEx = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    public void timerEvent(int id)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        start();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        static public String[] DealStr(String strS)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           int CMDHEAD_LEN = 22;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           String[] ret = new String[2];//0</span><span style="color:#000000;">留下的字符串1完整的CMD</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                ret[0]=strS;//</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                //</span><span style="color:#000000;">假如只有一个&amp;或没有&amp;则不完整</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           int FirstPos=strS.indexOf("&amp;");</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           if(FirstPos==-1)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                   return ret;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           if(FirstPos != CMDHEAD_LEN-1) </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                   strS = strS.substring(FirstPos+1);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                   return DealStr(strS);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           int nSecondPos = strS.indexOf("&amp;",FirstPos+1);     </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           if(nSecondPos&lt;0) </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                   return ret;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           //</span><span style="color:#000000;">可能格式不正确了</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           if(strS.length()&lt; CMDHEAD_LEN)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                   return ret;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           ret[1] = strS.substring(0,nSecondPos+1);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           ret[0]=strS.substring(nSecondPos+1); </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           return ret;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnReceive(Object socket,byte buf[],int nLen){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        String ReceiveBuff = sReceiveBuf + (new String(buf,0,nLen));</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                do//</span><span style="color:#000000;">分解成单个的命令串</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        String strCmd[] = DealStr(ReceiveBuff);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        ReceiveBuff = strCmd[0];</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        if(strCmd[1]==null || strCmd[1].equals("")) break;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        System.out.println(strCmd[1]);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        String FromArea=strCmd[1].substring(0,6);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        String ToArea=strCmd[1].substring(6,12);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        String ChannNo=strCmd[1].substring(12,15);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        String MainFun=strCmd[1].substring(15,18);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        String SubFun=strCmd[1].substring(18,21);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        String Param =strCmd[1].substring(22,strCmd[1].length()-1);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        Vector ParamList=new Vector();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        int nLastPos=0;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        while(true)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                int nPos = Param.indexOf(",",nLastPos);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                if(nPos &lt;0)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        ParamList.add(Param.substring(nLastPos));</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        //                              System.out.println(Param.substring(nLastPos));</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                        break;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                String sParam = Param.substring(nLastPos,nPos);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                ParamList.add(sParam);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">//                              System.out.println(sParam);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                                nLastPos = nPos+1;     </span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;">                        </span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        DoProcessCmd(socket,FromArea,ToArea,ChannNo,MainFun,SubFun,ParamList);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                }while(true);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                sReceiveBuf = ReceiveBuff;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(sReceiveBuf == null) sReceiveBuf=null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    protected void DoProcessCmd(Object socket,String FromArea,String ToArea,String ChannNo,String MainFun,String SubFun,Vector ParamList)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(issh !=null)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                        issh.OnProcessCmd(socket,FromArea,ToArea,ChannNo,MainFun, SubFun, ParamList);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnConnect(Object socket)</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           if(issh !=null) issh.OnConnect(socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnListen(Object socket){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           if(issh !=null) issh.OnListen(socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnAccept(Object socket,SocketEx ClientSocket) {<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">           if(issh !=null) issh.OnAccept(socket,ClientSocket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        public void OnClose(Object socket){<!-- --></span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                notifyAll();</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        TimerCtl.startTimer(this,eventId,30*1000,true);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">                if(issh !=null) issh.OnClose(socket);</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    }</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    //Socket</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    SocketEx socketEx = null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        ServerSocketEx serverSocketEx=null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    final int eventId = 1;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">    String sReceiveBuf="";</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        DemoAppSocketHandler issh=null;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        boolean isServer=false;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        String ip="127.0.0.1";</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">        int port=20000;</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#C0C0C0;"><span style="color:#000000;">}</span></span></p> 
+<p style="margin-left:.0001pt;text-align:left;"><span style="background-color:#FFFFFF;"><span style="color:#666666;">通过这种方式，可以高效地使用</span><span style="color:#666666;">socket</span><span style="color:#666666;">通讯，在异步</span><span style="color:#666666;">socket</span><span style="color:#666666;">版本没有发布以前，不失是一种解决问题的方法。</span><span style="color:#666666;">:)</span></span></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/072c1bef58171f7cf84fe3510d452f3b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">vue/react使用vite插件将png图片转换为svg格式</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1dd4018e0c217180fbea800905045890/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">python实现简单的爬虫功能</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

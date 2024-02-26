@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>STM32RTC实时时钟实验讲解，从入门到放弃。 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="STM32RTC实时时钟实验讲解，从入门到放弃。" />
+<meta property="og:description" content="STM32RTC实时时钟实验讲解，从入门到放弃。 文章目录 STM32RTC实时时钟实验讲解，从入门到放弃。 前言一、RTCRTC是什么？RTC工作过程及寄存器 二、实验部分步骤分解代码部分 总结 前言 本文参考了网上的博文，并加以归纳总结，帮助新手从入门到放弃 。
+提示：以下是本篇文章正文内容:
+一、RTC RTC是什么？ RTC(Real Time Clock):实时时钟,是指可以像时钟一様输出实际时间的电子设备，一般会是集成电路，因此也称为时钟芯片。总之，RTC只是个能靠电池维持运行的32位定时器，并不像实时时钟芯片，读出来就是年月日。RTC就只一个定时器而已，掉电之后所有信息都会丢失，因此我们需要找一个地方来存储这些信息，于是就找到了备份寄存器（BKP）。因为它掉电后仍然可以通过纽扣电池供电，所以能时刻保存这些数据。 STM32 的实时时钟（RTC）是一个独立的定时器。 STM32 的 RTC 模块拥有一组连续计数的计数器，在相应软件配置下，可提供时钟日历的功能。修改计数器的值可以重新设置系统当前的时间和日期。
+RTC和后备寄存器通过一个开关供电，在VDD有效时该开关选择VDD供电，否则由VBAT引脚供电。后备寄存器(10个16位的寄存器)可以用于在关闭VDD时，保存20个字节的用户应用数据。 RTC和后寄存器不会被系统或电源复位源复位；当从待机模式唤醒时，也不会被复位。实时时钟具有一组连续行的计数器，可以通过适当的软件提供日历时钟功能，还具有闹钟中断和阶段性中断功能。 RTC的驱动时钟可以是一个使用外部晶体的32.768kHz的振荡器、内部低功耗RC振荡器或高速的外部时钟经128分频。内部低功耗RC振荡器的典型频率为40kHz。为补偿天然晶体的偏差，可以通过输出一个512Hz的信号对RTC的时钟进行校准。 RTC具有一个32位的可编程计数器，使用比较寄存器可以进行长时间的测量。有一个20位的预分频器用于时基时钟，默认情况下时钟为32.768kHz时，它将产生一个1秒长的时间基准。
+因为RTC 模块和时钟配置系统(RCC_BDCR 寄存器)是在后备区域，即在系统复位或从待机模式唤醒后 RTC 的设置和时间维持不变。但是在系统复位后，会自动禁止访问后备寄存器和 RTC，以防止对后备区域(BKP)的意外写操作。所以在要设置时间之前， 先要取消备份区域（BKP）写保护，我们就先看一下，RTC的工作过程。
+RTC工作过程及寄存器 图中浅灰色的部分都是属于备份域的,在VDD掉电时可在VBAT的驱动下继续运行.这部分仅包括RTC的分频器,计数器,和闹钟控制器.若VDD电源有效,RTC可以触发RTC_Second(秒中断)、RTC_Overflow(溢出事件)和RTC_Alarm(闹钟中断).从结构图可以看到到,其中的定时器溢出事件无法被配置为中断.如果STM32原本处于待机状态,可由闹钟事件或WKUP事件(外部唤醒事件,属于EXTI模块,不属于RTC)使它退出待机模式.闹钟事件是在计数器RTC_CNT的值等于闹钟寄存器RTC_ALR的值时触发的.
+因为RTC的寄存器是属于备份域,所以它的所有寄存器都是16位的.它的计数RTC_CNT的32位由RTC_CNTL和RTC_CNTH两个寄存器组成,分别保存计数值的低16位和高16位.在配置RTC模块的时钟时,把输入的32768Hz的RTCCLK进行32768分频得到实际驱动计数器的时钟TR_CLK = RTCCLK/37768 = 1Hz,计时周期为1秒,计时器在TR_CLK的驱动下计数,即每秒计数器RTC_CNT的值加1(常用)
+RTC只是一个时钟，但与RTC相连的有两个系统时钟，一个是APB1接口的PCLK1另一个是RTC时钟。这样，RTC功能也就分为两个部分：第一部分，APB1接口部分，与APB1总线相连，MCU也就是通过这条总线对其进行读写操作。另一部分，RTC核，由一系列可编程计数器组成，这部分又再细分为两个组件：预分频模块与32位可编程计数器。预分频模块用来产生最长为1秒的RTC时间基准，而32位的可编程的计数器可被初始化为当前的系统时间。
+RTC核心模块
+第一模块：RTC的预分频模块（可编程产生1s的RTC时间基准TR_CLK）20位的预分频器，如果在 RTC_CR 寄存器中设置了相应的允许位，则在每个TR_CLK 周期中 RTC 产生一个中断(秒中断)。
+第二模块：32位计数器（可初始化当前系统时间），可被初始化为当前的系统时间，一个 32 位的时钟计数器，按秒钟计算，可以记录 4294967296 秒，约合 136 年 左右，作为一般应用，这已经是足够了的。（RTC_CNT是一个32位寄存器,可存储的最大值为(232-1),这样的话就是在232秒之后溢出,大概换算为:Time = 2 32 /365/24/60/60大约等于136年）感兴趣的可以看一下UNIX时间戳；
+闹钟寄存器RTC_ALR：
+RTC 还有一个闹钟寄存器 RTC_ALR，用于产生闹钟。系统时间按 TR_CLK 周期累加并与存储在 RTC_ALR 寄存器中的可编程时间相比较，如果 RTC_CR 控制寄存器中设置了相应允许位，比较匹配时将产生一个闹钟中断 由于RTC内核完全独立与APB1接口，软件只能通过APB1的接口访问RTC的预分频值、计数器值和闹钟值，相关的寄存器值是在APB1时钟进行重新同步的RTC上升沿被更新，所以在读取RTC寄存器曾经被禁止的APB1接口前，必须等待RTC_CRL寄存器的PSF位被置1。 需要了解一下RTC的原理，先来看一下相关的寄存器。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d3b6f01e437d5771087e1fdf37f08a7c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-02-09T22:19:43+08:00" />
+<meta property="article:modified_time" content="2021-02-09T22:19:43+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">STM32RTC实时时钟实验讲解，从入门到放弃。</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="STM32RTC_0"></a>STM32RTC实时时钟实验讲解，从入门到放弃。</h3> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><a href="#STM32RTC_0" rel="nofollow">STM32RTC实时时钟实验讲解，从入门到放弃。</a></li></ul> 
+  </li><li><a href="#_6" rel="nofollow">前言</a></li><li><a href="#RTC_14" rel="nofollow">一、RTC</a></li><li><ul><li><a href="#RTC_16" rel="nofollow">RTC是什么？</a></li><li><a href="#RTC_22" rel="nofollow">RTC工作过程及寄存器</a></li></ul> 
+  </li><li><a href="#_124" rel="nofollow">二、实验部分</a></li><li><ul><li><a href="#_125" rel="nofollow">步骤分解</a></li><li><a href="#_274" rel="nofollow">代码部分</a></li></ul> 
+  </li><li><a href="#_597" rel="nofollow">总结</a></li></ul> 
+</div> 
+<p></p> 
+<hr color="#000000" size='1"'> 
+<h2><a id="_6"></a>前言</h2> 
+<p><font color="#999AAA">本文参考了网上的博文，并加以归纳总结，帮助新手<s>从入门到放弃</s> 。</font></p> 
+<hr color="#000000" size='1"'> 
+<p><font color="#999AAA">提示：以下是本篇文章正文内容:</font></p> 
+<h2><a id="RTC_14"></a>一、RTC</h2> 
+<h3><a id="RTC_16"></a>RTC是什么？</h3> 
+<p><strong>RTC</strong>(Real Time Clock):实时时钟,是<font color="#1E90FF"><strong>指可以像时钟一様输出实际时间的电子设备，一般会是集成电路，因此也称为时钟芯片。</strong></font>总之，RTC只是个能靠电池维持运行的<strong>32位定时器</strong>，并不像实时时钟芯片，读出来就是年月日。RTC就只一个定时器而已，掉电之后所有信息都会丢失，因此我们需要找一个地方来存储这些信息，于是就找到了<strong>备份寄存器（BKP）</strong>。因为它掉电后仍然可以通过纽扣电池供电，所以能时刻保存这些数据。 STM32 的实时时钟（RTC）是一个独立的定时器。 STM32 的 RTC 模块拥有一组连续计数的计数器，在相应软件配置下，可提供<em>时钟日历</em>的功能。修改计数器的值可以重新设置系统当前的时间和日期。</p> 
+<blockquote> 
+ <p><font color="#2F4F4F">RTC和后备寄存器通过一个开关供电，在VDD有效时该开关选择VDD供电，否则由VBAT引脚供电。后备寄存器(10个16位的寄存器)可以用于在关闭VDD时，保存20个字节的用户应用数据。 RTC和后寄存器不会被系统或电源复位源复位；当从待机模式唤醒时，也不会被复位。实时时钟具有一组连续行的计数器，可以通过适当的软件提供日历时钟功能，还具有闹钟中断和阶段性中断功能。 RTC的驱动时钟可以是一个使用外部晶体的32.768kHz的振荡器、内部低功耗RC振荡器或高速的外部时钟经128分频。内部低功耗RC振荡器的典型频率为40kHz。为补偿天然晶体的偏差，可以通过输出一个512Hz的信号对RTC的时钟进行校准。 RTC具有一个32位的可编程计数器，使用比较寄存器可以进行长时间的测量。有一个20位的预分频器用于时基时钟，默认情况下时钟为<strong>32.768kHz</strong>时，它将产生一个1秒长的时间基准。</font></p> 
+</blockquote> 
+<p>因为RTC 模块和时钟配置系统(RCC_BDCR 寄存器)是在后备区域，即在系统复位或从待机模式唤醒后 RTC 的设置和时间维持不变。但是在系统复位后，会<strong>自动禁止访问</strong>后备寄存器和 RTC，以防止对后备区域(BKP)的意外写操作。所以在要设置时间之前， 先要取消备份区域（BKP）写保护，我们就先看一下，RTC的工作过程。</p> 
+<h3><a id="RTC_22"></a>RTC工作过程及寄存器</h3> 
+<p><img src="https://images2.imgbox.com/91/33/AfNaBk4Y_o.png" alt="在这里插入图片描述"><br> 图中浅灰色的部分都是属于<font color="#1E90FF"><strong>备份域</strong></font>的,在VDD掉电时可在VBAT的驱动下继续运行.这部分仅包括RTC的分频器,计数器,和闹钟控制器.若VDD电源有效,RTC可以触发RTC_Second(秒中断)、RTC_Overflow(溢出事件)和RTC_Alarm(闹钟中断).从结构图可以看到到,其中的定时器溢出事件无法被配置为中断.如果STM32原本处于待机状态,可由闹钟事件或WKUP事件(外部唤醒事件,属于EXTI模块,不属于RTC)使它退出待机模式.闹钟事件是在计数器RTC_CNT的值等于闹钟寄存器RTC_ALR的值时触发的.</p> 
+<p>因为RTC的寄存器是属于备份域,所以它的所有寄存器都是16位的.它的计数RTC_CNT的32位由RTC_CNTL和RTC_CNTH两个寄存器组成,分别保存计数值的低16位和高16位.在配置RTC模块的时钟时,把输入的32768Hz的RTCCLK进行32768分频得到实际驱动计数器的时钟TR_CLK = RTCCLK/37768 = 1Hz,计时周期为1秒,计时器在TR_CLK的驱动下计数,即每秒计数器RTC_CNT的值加1(常用)</p> 
+<p>RTC只是一个时钟，但与RTC相连的有两个系统时钟，一个是APB1接口的PCLK1另一个是RTC时钟。这样，RTC功能也就分为两个部分：第一部分，APB1接口部分，与APB1总线相连，MCU也就是通过这条总线对其进行读写操作。另一部分，RTC核，由一系列可编程计数器组成，这部分又再细分为两个组件：预分频模块与32位可编程计数器。预分频模块用来产生最长为1秒的RTC时间基准，而32位的可编程的计数器可被初始化为当前的系统时间。</p> 
+<p><strong>RTC核心模块</strong></p> 
+<p>第一模块：RTC的预分频模块（可编程产生1s的RTC时间基准TR_CLK）20位的预分频器，如果在 RTC_CR 寄存器中设置了相应的允许位，则在每个TR_CLK 周期中 RTC 产生一个中断(秒中断)。</p> 
+<p>第二模块：32位计数器（可初始化当前系统时间），可被初始化为当前的系统时间，一个 32 位的时钟计数器，按秒钟计算，可以记录 4294967296 秒，约合 <strong>136 年</strong> 左右，作为一般应用，这已经是足够了的。（RTC_CNT是一个32位寄存器,可存储的最大值为(2<sup>32</sup>-1),这样的话就是在2<sup>32</sup>秒之后溢出,大概换算为:Time = 2 <sup>32</sup> /365/24/60/60大约等于136年）感兴趣的可以看一下<font color="#1E90FF">UNIX时间戳</font>；</p> 
+<p><strong>闹钟寄存器RTC_ALR：</strong><br> <font color="#999AAA"></font></p> RTC 还有一个闹钟寄存器 RTC_ALR，用于产生闹钟。系统时间按 TR_CLK 周期累加并与存储在 RTC_ALR 寄存器中的可编程时间相比较，如果 RTC_CR 控制寄存器中设置了相应允许位，比较匹配时将产生一个闹钟中断 由于RTC内核完全独立与APB1接口，软件只能通过APB1的接口访问RTC的预分频值、计数器值和闹钟值，相关的寄存器值是在APB1时钟进行重新同步的RTC上升沿被更新，所以在读取RTC寄存器曾经被禁止的APB1接口前，必须等待RTC_CRL寄存器的PSF位被置1。 
+<p>需要了解一下RTC的原理，先来看一下相关的寄存器。<br> <strong>RTC 的控制寄存器</strong></p> 
+<blockquote> 
+ <p>RTC_CRL：</p> 
+ <p>0位：进入秒中断后，可判断该位为1决定发生了中断，必须写0清除</p> 
+ <p>3位：寄存器同步标志位，没有同步之前，不被允许修改RTC_CRT/CRL的值，必须先判断该位为1时，同步了。</p> 
+ <p>4位：在修改RTC_CNT/RTC_ALR/RTC_PRL的值前，必须置该位为1，进入配置模式。</p> 
+ <p>5位：RTC操作位，由硬件操作，软件只读，判断该位为1时，表示上一次操作已经完成，才可进行下一次操作。</p> 
+ <p>RTC_CRH：0-3位置1，允许溢出中断、闹钟中断、秒中断。</p> 
+</blockquote> 
+<p>RTC 总共有 2 个控制寄存器 RTC_CRH 和 RTC_CRL，且两个都是 16 位的。</p> 
+<p><img src="https://images2.imgbox.com/9e/50/uEB3g6xu_o.png" alt="在这里插入图片描述"><br> 该寄存器用来控制中断的，我们本次实验将要用到秒钟中断，所以在该寄存器必须设置最低位为 1，以允许秒钟中断。</p> 
+<p><img src="https://images2.imgbox.com/37/42/SxBhYejs_o.png" alt="在这里插入图片描述"><br> 本次我们用到的是该寄存器的 <strong>0、3~5</strong> 这几个位。</p> 
+<p><strong>第 0 位</strong>是<font color="#1E90FF">秒钟标志位</font>，我们在进入闹钟中断的时候，通过判断这位来决定是不是发生了秒钟中断。然后必须通过软件将该位清零（写0）。<br> <strong>第 3 位</strong>为<font color="#1E90FF">寄存器同步标志位</font>，我们在修改控制寄存器 RTC_CRH/CRL 之前，必须先判断该位，是否已经同步了，如果没有则等待同步，在没同步的情况下修改 RTC_CRH/CRL 的值是不行的。<br> <strong>第 4 位</strong>为<font color="#1E90FF">配置标位</font>，在软件修改 RTC_CNT/RTC_ALR/RTC_PRL 的值的时候，必须先软件置位该位，以允许进入配置模式。<br> <strong>第 5 位</strong>为 <font color="#1E90FF">RTC 操作位</font>，该位由硬件操作，软件只读。通过该位可以判断上次对 RTC 寄存器的操作是否完成，如果没有，我们必须等待上一次操作结束才能开始下一次操作。</p> 
+<p><strong>RTC 预分频装载寄存器</strong></p> 
+<blockquote> 
+ <p><strong>TRC_PRLH</strong>：低4位有效，存放PRL的19-16位</p> 
+ <p><strong>TRC_PRLL</strong>：存放PRL的前16位</p> 
+</blockquote> 
+<p>也有 2 个寄存器组成， <strong>RTC_PRLH</strong> 和<strong>RTC_PRLL</strong>。这两个寄存器用来配置 RTC 时钟的分频数的，比如我们使用外部 32.768K 的晶振作为时钟的输入频率，那么我们要设置这两个寄存器的值为 32767，以得到一秒钟的计数频率。<br> RTC_PRLH 的各位描述如图 20.1.4 所示：<br> <img src="https://images2.imgbox.com/1f/bb/wsCHEoUo_o.png" alt="在这里插入图片描述"><br> 从图 20.1.4 可以看出， <strong>RTC_PRLH</strong> 只有低四位有效，用来存储 PRL 的 19~16 位。而 PRL的前 16 位，存放在 <strong>RTC_PRLL</strong> 里面，寄存器 <strong>RTC_PRLL</strong> 的各位描述如图 20.1.5 所示：<br> <img src="https://images2.imgbox.com/e2/2d/uHRRWcps_o.png" alt="在这里插入图片描述"><br> <strong>RTC 预分频器余数寄存器</strong></p> 
+<p>该寄存器也有 2 个寄存器组成 <strong>RTC_DIVH</strong> 和 <strong>RTC_DIVL</strong>，这两个寄存器的作用就是用来获得比秒钟更为准确的时钟，比如可以得到 0.1 秒，或者 0.01 秒等。该寄存器的值自减的，用于保存还需要多少时钟周期获得一个秒信号。在一次秒钟更新后，由硬件重新装载。这两个寄存器和 RTC 预分频装载寄存器的各位是一样的。</p> 
+<p><strong>RTC 计数器寄存器 RTC_CNT</strong></p> 
+<blockquote> 
+ <p>2个16位寄存器组成，共32位RTC_CNTH、RTC_CNTL：用来存放秒钟值</p> 
+</blockquote> 
+<p>该寄存器由 2 个 16位的寄存器组成 <strong>RTC_CNTH</strong> 和 <strong>RTC_CNTL</strong>，总共 32 位，用来记录秒钟值（一般情况下）。此两个计数器也比较简单，我们也不多说了。注意一点，在修改这个寄存器的时候要先进入配置模式。</p> 
+<p><strong>RTC 闹钟寄存器</strong></p> 
+<blockquote> 
+ <p><strong>RTC_ALRH、RTC_ALRL</strong>：</p> 
+ <p>用来记录闹钟产生的时间，当<strong>RTC_CNT</strong>与<strong>RTC_ALR</strong>的值相等时，则产生闹钟中断，条件是使能了中断且进入了寄存器的配置模式了。</p> 
+</blockquote> 
+<p>该寄存器也是由 2 个 16 为<br> 的寄存器组成 <strong>RTC_ALRH</strong> 和 <strong>RTC_ALRL</strong>。总共也是 32 位，用来标记闹钟产生的时间（以秒为单位），如果 <strong>RTC_CNT</strong> 的值与 <strong>RTC_ALR</strong> 的值相等，并使能了中断的话，会产生一个闹钟中断。该寄存器的修改也要进入配置模式才能进行。</p> 
+<p><strong>STM32 的备份寄存器</strong></p> 
+<blockquote> 
+ <p>执行如下操作对备份寄存器和RTC进行访问</p> 
+ <p>1）设置寄存器<strong>RCC_APB1ENR</strong>的<strong>PWREN</strong>和<strong>BKPEN</strong>位打开电源和后备时钟</p> 
+ <p>2）电源后备寄存器（<strong>PWR_CR</strong>）的<strong>DBP</strong>位使能对后备寄存器和RTC的访问。</p> 
+</blockquote> 
+<p>备份寄存器是 42 个 16 位的寄存器（大容量），可用来存储 84 个字节的用户应用程序数据。他们处在备份域里，当 VDD 电源被切断，他们仍然由 VBAT （备用电源）维持供电。即使系统在待机模式下被唤醒，或系统复位或电源复位时，他们也不会被复位。此外， BKP 控制寄存器用来管理侵入检测和 RTC 校准功能，这里我们不作介绍。复位后，对备份寄存器和 RTC 的访问被禁止，并且备份域被保护以防止可能存在的意外的写操作。执行以下操作可以使能对备份寄存器和 RTC 的访问：<br> 1）通过设置寄存器 <strong>RCC_APB1ENR</strong> 的 <strong>PWREN</strong> 和 <strong>BKPEN</strong> 位来打开电源和后备接口的时钟<br> 2）电源控制寄存器(<strong>PWR_CR</strong>)的 <strong>DBP</strong> 位来使能对后备寄存器和 RTC 的访问。我们一般用 BKP 来存储 RTC 的校验值或者记录一些重要的数据，相当于一个 EEPROM，不过这个 EEPROM 并不是真正的 EEPROM，而是需要电池来维持它的数据。关于 BKP 的详细介绍请看《STM32 参考手册》的第 47 页， 5.1 一节。<br> 备份区域控制寄存器RCC_BDCR<br> <img src="https://images2.imgbox.com/dd/30/rMORuSy0_o.png" alt="在这里插入图片描述"><br> RTC 的时钟源选择及使能设置都是通过这个寄存器来实现的，所以我们在 RTC 操作之前先要通过这个寄存器选择 RTC 的时钟源，然后才能开始其他的操作。<br> 提到时钟源，就要讲解一下,RTC的时钟源来源：<br> <font color="#FF00FF"><br> <strong>1,高速外部时钟的128分频:HSE/128;<br> 2,低速内部时钟LSI;<br> 3,低速外部时钟LSE;</strong></font></p> 
+<h2><a id="_124"></a>二、实验部分</h2> 
+<h3><a id="_125"></a>步骤分解</h3> 
+<p><font color="#FFA500"> <strong>1. 使能电源时钟和备份区域时钟<br> 2. 取消备份区写保护<br> 3. 复位备份区域，开启外部低速振荡器<br> 4. 选择 RTC 时钟，并使能<br> 5. 设置 RTC 的分频，以及配置 RTC 时钟<br> 6. 更新配置，设置 RTC 中断分组<br> 7. 编写中断服务函数</strong></font></p> 
+<p>RTC 相关的库函数在文件 stm32f10x_rtc.c 和 stm32f10x_rtc.h 文件中， BKP 相关的库函数在<br> 文件 stm32f10x_bkp.c 和文件 stm32f10x_bkp.h 文件中</p> 
+<hr color="#FF0000" size='1"'> 
+<p>1、RTC时钟源和时钟操作函数；<br> void RCC_RTCCLKConfig(uint32_t CLKSource);//时钟源选择；<br> void RCC_RTCCLKCmd(FunctionalState NewState);//时钟使能；<br> 2、RTC初始化函数<br> ErrorStatus RTC_Init(RTC_InitTypeDef* RTC_InitStruct);<br> trypedef struct<br> {<!-- --><br> uint32_t RTC_HourFormat;//小时格式：24/12<br> uint32_t RTC_AsynchPrediv;//异步分频系数<br> uint32_t RTC_SynchPrediv;//同步分频系数；<br> }RTC_InitTypeDef;<br> 3、日历配置相关函数<br> ErrorStatus RTC_SetTime(uint32_t RTC_Format,RTC_TimeTypeDef* RTC_TimeStruct);<br> void RTC_GetTime(uint32_t RTC_Format,RTC_TimeTypeDef* RTC_TimeStruct);<br> ErrorStatus RTC_SetDate(uint32_t RTC_Format,RTC_Dae TypeDef* RTC_DataStruct);<br> void RTC_GetDate(uint32_t RTC_Format,RTC_Date TypeDef* RTC_DateStruct);<br> uint32_t RTC_GetSubSecond(void);<br> 4、RTC闹钟相关函数<br> ErrorStatus RTC_AlarmCmd(uint32_t RTC_Alarm,FunctionalState NewState);<br> void RTC_SetAlarm();<br> void RTC_GetAlarm();<br> void RTC_AlarmSubSecondConfig();<br> uint32_t RTC_GetAlarmSubSecond(uint32_t RTC_Alarm);<br> 5、RTC周期唤醒相关函数：<br> void RTC_WakeUpClockConfig();<br> void RTC_SetWakeUpCounter();<br> uint32_t RTC_GetWakeUpCounter(void);<br> RTC_WakeUpCmd(DISABLE);//关闭WAKEUP<br> 6、RTC中断配置以及状态相关函数<br> void RTC_ITConfig();<br> FlagStatus RTC_GetFlgStatus(uint32_t RTC_FLAG);<br> void RTC_ClearFlag(uint32_t RTC_FLAG);<br> ITStatus RTC_GetITStatus(uint32_t RTC_IT);<br> void RTC_ClearITPendingBit();<br> 7、RTC相关约束函数<br> void RTC_WriteProtectionCmd();//取消写保护<br> ErrorStatus RTC_EnterInitNode();//进入配hi模式，RTC_ISR_INITF位设置位1<br> void RTC_ExitInitMode(void);//退出初始化模式<br> 8、其他函数<br> uint32_t RTC_ReadBackupRegister();<br> void RTC_WriteBackupRegister();<br> void RTC_ITConfig();</p> 
+<hr color="#000000" size='1"'> 
+<p><strong>1. 使能电源时钟和备份区域时钟</strong><br> 前面已经介绍了，我们要访问 RTC 和备份区域就必须先使能电源时钟和备份区域时钟。</p> 
+<pre><code class="prism language-c"><span class="token function">RCC_APB1PeriphClockCmd</span><span class="token punctuation">(</span>RCC_APB1Periph_PWR <span class="token operator">|</span> RCC_APB1Periph_BKP<span class="token punctuation">,</span> ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><strong>2. 取消备份区写保护</strong><br> 要向备份区域写入数据，就要先取消备份区域写保护（写保护在每次硬复位之后被使能），否则是无法向备份区域写入数据的。我们需要用到向备份区域写入一个字节，来标记时钟已经配置过了，这样避免每次复位之后重新配置时钟。 取消备份区域写保护的库函数实现方法是：</p> 
+<pre><code class="prism language-c"><span class="token function">PWR_BackupAccessCmd</span><span class="token punctuation">(</span>ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//使能 RTC 和后备寄存器访问</span>
+</code></pre> 
+<p><strong>3. 复位备份区域，开启外部低速振荡器</strong><br> 在取消备份区域写保护之后，我们可以先对这个区域复位，以清除前面的设置，当然这个<br> 操作不要每次都执行，因为备份区域的复位将导致之前存在的数据丢失，所以要不要复位，要看情况而定。然后我们使能外部低速振荡器，注意这里一般要先判断 RCC_BDCR 的 LSERDY位来确定低速振荡器已经就绪了才开始下面的操作。</p> 
+<pre><code class="prism language-c"><span class="token function">BKP_DeInit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//复位备份区域</span>
+<span class="token function">RCC_LSEConfig</span><span class="token punctuation">(</span>RCC_LSE_ON<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">// 开启外部低速振荡器</span>
+</code></pre> 
+<p><strong>4.选择 RTC 时钟，并使能。</strong><br> 这里我们将通过 RCC_BDCR 的 RTCSEL 来选择选择外部 LSI 作为 RTC 的时钟。然后通过RTCEN 位使能 RTC 时钟。</p> 
+<pre><code class="prism language-c"><span class="token function">RCC_RTCCLKConfig</span><span class="token punctuation">(</span>RCC_RTCCLKSource_LSE<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//选择 LSE 作为 RTC 时钟</span>
+</code></pre> 
+<p>对于 RTC 时钟的选择，还有 RCC_RTCCLKSource_LSI 和 RCC_RTCCLKSource_HSE_Div128两个，顾名思义，前者为 LSI，后者为 HSE 的 128 分频，这在时钟系统章节有讲解过。使能 RTC 时钟的函数是：</p> 
+<pre><code class="prism language-c"><span class="token function">RCC_RTCCLKCmd</span><span class="token punctuation">(</span>ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//使能 RTC 时钟</span>
+</code></pre> 
+<p><strong>5.设置 RTC 的分频，以及配置 RTC 时钟。</strong><br> 在开启了 RTC 时钟之后，我们要做的就是设置 RTC 时钟的分频数，通过 RTC_PRLH 和RTC_PRLL 来设置，然后等待 RTC 寄存器操作完成，并同步之后，设置秒钟中断。然后设置RTC 的允许配置位（RTC_CRH 的 CNF 位）， 设置时间（其实就是设置 RTC_CNTH 和 RTC_CNTL两个寄存器）。 下面我们一一这些步骤用到的库函数：在进行 RTC 配置之前首先要打开允许配置位(CNF)，库函数是：</p> 
+<pre><code class="prism language-c"><span class="token function">RTC_EnterConfigMode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">/// 允许配置</span>
+</code></pre> 
+<p>在配置完成之后，千万别忘记更新配置同时退出配置模式，函数是：</p> 
+<pre><code class="prism language-c"><span class="token function">RTC_ExitConfigMode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//退出配置模式， 更新配置</span>
+</code></pre> 
+<p>设置 RTC 时钟分频数， 库函数是：</p> 
+<pre><code class="prism language-c"><span class="token keyword">void</span> <span class="token function">RTC_SetPrescaler</span><span class="token punctuation">(</span>uint32_t PrescalerValue<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>这个函数只有一个入口参数，就是 RTC 时钟的分频数，很好理解。<br> 然后是设置秒中断允许， RTC 使能中断的函数是：</p> 
+<pre><code class="prism language-c"><span class="token keyword">void</span> <span class="token function">RTC_ITConfig</span><span class="token punctuation">(</span>uint16_t RTC_IT<span class="token punctuation">,</span> FunctionalState NewState<span class="token punctuation">)</span>；
+</code></pre> 
+<p>这个函数的第一个参数是设置秒中断类型，这些通过宏定义定义的。 对于使能秒中断方法是：</p> 
+<pre><code class="prism language-c"><span class="token function">RTC_ITConfig</span><span class="token punctuation">(</span>RTC_IT_SEC<span class="token punctuation">,</span> ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//使能 RTC 秒中断</span>
+</code></pre> 
+<p>下一步便是设置时间了，设置时间实际上就是设置 RTC 的计数值，时间与计数值之间是需要换算的。库函数中设置 RTC 计数值的方法是：</p> 
+<pre><code class="prism language-c"><span class="token keyword">void</span> <span class="token function">RTC_SetCounter</span><span class="token punctuation">(</span>uint32_t CounterValue<span class="token punctuation">)</span><span class="token comment">//最后在配置完成之后</span>
+</code></pre> 
+<p><strong>6.更新配置，设置 RTC 中断分组。</strong><br> 在设置完时钟之后，我们将配置更新同时退出配置模式，这里还是通过 RTC_CRH 的 CNF<br> 来实现。</p> 
+<pre><code class="prism language-c"><span class="token function">RTC_ExitConfigMode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//退出配置模式，更新配置</span>
+</code></pre> 
+<p>在退出配置模式更新配置之后我们在备份区域 BKP_DR1 中写入 0X5050 代表我们已经初始化过时钟了，下次开机（或复位）的时候，先读取 BKP_DR1 的值，然后判断是否是 0X5050 来决定是不是要配置。接着我们配置 RTC 的秒钟中断，并进行分组。<br> 往备份区域写用户数据的函数是：</p> 
+<pre><code class="prism language-c"><span class="token keyword">void</span> <span class="token function">BKP_WriteBackupRegister</span><span class="token punctuation">(</span>uint16_t BKP_DR<span class="token punctuation">,</span> uint16_t Data<span class="token punctuation">)</span>；
+</code></pre> 
+<p>这个函数的第一个参数就是寄存器的标号了，这个是通过宏定义定义的。 比如我们要往<br> BKP_DR1 写入 0x5050，方法是：</p> 
+<pre><code class="prism language-c"><span class="token function">BKP_WriteBackupRegister</span><span class="token punctuation">(</span>BKP_DR1<span class="token punctuation">,</span> <span class="token number">0X5050</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>同时，有写便有读，读取备份区域指定寄存器的用户数据的函数是</p> 
+<pre><code class="prism language-c">uint16_t <span class="token function">BKP_ReadBackupRegister</span><span class="token punctuation">(</span>uint16_t BKP_DR<span class="token punctuation">)</span>；
+</code></pre> 
+<p><strong>7. 编写中断服务函数</strong><br> 我们要编写中断服务函数，在秒钟中断产生的时候，读取当前的时间值，并显示到<br> oled 模块上。</p> 
+<h3><a id="_274"></a>代码部分</h3> 
+<font color="#999AAA"> rtc.c文件代码 </font> 
+<pre><code class="prism language-c"><span class="token comment">//注意：代码中的乱码，复制在keil5中可以恢复，便于读者编译运行。</span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"sys.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"delay.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"usart.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"rtc.h"</span> 		    </span>
+
+_calendar_obj calendar<span class="token punctuation">;</span><span class="token comment">//Ê±ÖÓ½á¹¹Ìå </span>
+ 
+<span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">RTC_NVIC_Config</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>	
+  NVIC_InitTypeDef NVIC_InitStructure<span class="token punctuation">;</span>
+	NVIC_InitStructure<span class="token punctuation">.</span>NVIC_IRQChannel <span class="token operator">=</span> RTC_IRQn<span class="token punctuation">;</span>		<span class="token comment">//RTCÈ«¾ÖÖÐ¶Ï</span>
+	NVIC_InitStructure<span class="token punctuation">.</span>NVIC_IRQChannelPreemptionPriority <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>	<span class="token comment">//ÏÈÕ¼ÓÅÏÈ¼¶1Î»,´ÓÓÅÏÈ¼¶3Î»</span>
+	NVIC_InitStructure<span class="token punctuation">.</span>NVIC_IRQChannelSubPriority <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>	<span class="token comment">//ÏÈÕ¼ÓÅÏÈ¼¶0Î»,´ÓÓÅÏÈ¼¶4Î»</span>
+	NVIC_InitStructure<span class="token punctuation">.</span>NVIC_IRQChannelCmd <span class="token operator">=</span> ENABLE<span class="token punctuation">;</span>		<span class="token comment">//Ê¹ÄÜ¸ÃÍ¨µÀÖÐ¶Ï</span>
+	<span class="token function">NVIC_Init</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>NVIC_InitStructure<span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//¸ù¾ÝNVIC_InitStructÖÐÖ¸¶¨µÄ²ÎÊý³õÊ¼»¯ÍâÉèNVIC¼Ä´æÆ÷</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">//ÊµÊ±Ê±ÖÓÅäÖÃ</span>
+<span class="token comment">//³õÊ¼»¯RTCÊ±ÖÓ,Í¬Ê±¼ì²âÊ±ÖÓÊÇ·ñ¹¤×÷Õý³£</span>
+<span class="token comment">//BKP-&gt;DR1ÓÃÓÚ±£´æÊÇ·ñµÚÒ»´ÎÅäÖÃµÄÉèÖÃ</span>
+<span class="token comment">//·µ»Ø0:Õý³£</span>
+<span class="token comment">//ÆäËû:´íÎó´úÂë</span>
+
+u8 <span class="token function">RTC_Init</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//¼ì²éÊÇ²»ÊÇµÚÒ»´ÎÅäÖÃÊ±ÖÓ</span>
+	u8 temp<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token function">RCC_APB1PeriphClockCmd</span><span class="token punctuation">(</span>RCC_APB1Periph_PWR <span class="token operator">|</span> RCC_APB1Periph_BKP<span class="token punctuation">,</span> ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜPWRºÍBKPÍâÉèÊ±ÖÓ   </span>
+	<span class="token function">PWR_BackupAccessCmd</span><span class="token punctuation">(</span>ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜºó±¸¼Ä´æÆ÷·ÃÎÊ  </span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">BKP_ReadBackupRegister</span><span class="token punctuation">(</span>BKP_DR1<span class="token punctuation">)</span> <span class="token operator">!=</span> <span class="token number">0x5050</span><span class="token punctuation">)</span>		<span class="token comment">//´ÓÖ¸¶¨µÄºó±¸¼Ä´æÆ÷ÖÐ¶Á³öÊý¾Ý:¶Á³öÁËÓëÐ´ÈëµÄÖ¸¶¨Êý¾Ý²»Ïàºõ</span>
+		<span class="token punctuation">{<!-- --></span>	 			
+		<span class="token function">BKP_DeInit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//¸´Î»±¸·ÝÇøÓò 	</span>
+		<span class="token function">RCC_LSEConfig</span><span class="token punctuation">(</span>RCC_LSE_ON<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//ÉèÖÃÍâ²¿µÍËÙ¾§Õñ(LSE),Ê¹ÓÃÍâÉèµÍËÙ¾§Õñ</span>
+		<span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token function">RCC_GetFlagStatus</span><span class="token punctuation">(</span>RCC_FLAG_LSERDY<span class="token punctuation">)</span> <span class="token operator">==</span> RESET<span class="token operator">&amp;&amp;</span>temp<span class="token operator">&lt;</span><span class="token number">250</span><span class="token punctuation">)</span>	<span class="token comment">//¼ì²éÖ¸¶¨µÄRCC±êÖ¾Î»ÉèÖÃÓë·ñ,µÈ´ýµÍËÙ¾§Õñ¾ÍÐ÷</span>
+			<span class="token punctuation">{<!-- --></span>
+			temp<span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token function">delay_ms</span><span class="token punctuation">(</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>temp<span class="token operator">&gt;=</span><span class="token number">250</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token number">1</span><span class="token punctuation">;</span><span class="token comment">//³õÊ¼»¯Ê±ÖÓÊ§°Ü,¾§ÕñÓÐÎÊÌâ	    </span>
+		<span class="token function">RCC_RTCCLKConfig</span><span class="token punctuation">(</span>RCC_RTCCLKSource_LSE<span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//ÉèÖÃRTCÊ±ÖÓ(RTCCLK),Ñ¡ÔñLSE×÷ÎªRTCÊ±ÖÓ    </span>
+		<span class="token function">RCC_RTCCLKCmd</span><span class="token punctuation">(</span>ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜRTCÊ±ÖÓ  </span>
+		<span class="token function">RTC_WaitForLastTask</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//µÈ´ý×î½üÒ»´Î¶ÔRTC¼Ä´æÆ÷µÄÐ´²Ù×÷Íê³É</span>
+		<span class="token function">RTC_WaitForSynchro</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//µÈ´ýRTC¼Ä´æÆ÷Í¬²½  </span>
+		<span class="token function">RTC_ITConfig</span><span class="token punctuation">(</span>RTC_IT_SEC<span class="token punctuation">,</span> ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//Ê¹ÄÜRTCÃëÖÐ¶Ï</span>
+		<span class="token function">RTC_WaitForLastTask</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//µÈ´ý×î½üÒ»´Î¶ÔRTC¼Ä´æÆ÷µÄÐ´²Ù×÷Íê³É</span>
+		<span class="token function">RTC_EnterConfigMode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">/// ÔÊÐíÅäÖÃ	</span>
+		<span class="token function">RTC_SetPrescaler</span><span class="token punctuation">(</span><span class="token number">32767</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//ÉèÖÃRTCÔ¤·ÖÆµµÄÖµ</span>
+		<span class="token function">RTC_WaitForLastTask</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//µÈ´ý×î½üÒ»´Î¶ÔRTC¼Ä´æÆ÷µÄÐ´²Ù×÷Íê³É</span>
+		<span class="token function">RTC_Set</span><span class="token punctuation">(</span><span class="token number">2021</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">9</span><span class="token punctuation">,</span><span class="token number">17</span><span class="token punctuation">,</span><span class="token number">40</span><span class="token punctuation">,</span><span class="token number">00</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">//ÉèÖÃÊ±¼ä	</span>
+		<span class="token function">RTC_ExitConfigMode</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//ÍË³öÅäÖÃÄ£Ê½  </span>
+		<span class="token function">BKP_WriteBackupRegister</span><span class="token punctuation">(</span>BKP_DR1<span class="token punctuation">,</span> <span class="token number">0X5050</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//ÏòÖ¸¶¨µÄºó±¸¼Ä´æÆ÷ÖÐÐ´ÈëÓÃ»§³ÌÐòÊý¾Ý</span>
+		<span class="token punctuation">}</span>
+	<span class="token keyword">else</span><span class="token comment">//ÏµÍ³¼ÌÐø¼ÆÊ±</span>
+		<span class="token punctuation">{<!-- --></span>
+
+		<span class="token function">RTC_WaitForSynchro</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//µÈ´ý×î½üÒ»´Î¶ÔRTC¼Ä´æÆ÷µÄÐ´²Ù×÷Íê³É</span>
+		<span class="token function">RTC_ITConfig</span><span class="token punctuation">(</span>RTC_IT_SEC<span class="token punctuation">,</span> ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜRTCÃëÖÐ¶Ï</span>
+		<span class="token function">RTC_WaitForLastTask</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//µÈ´ý×î½üÒ»´Î¶ÔRTC¼Ä´æÆ÷µÄÐ´²Ù×÷Íê³É</span>
+		<span class="token punctuation">}</span>
+	<span class="token function">RTC_NVIC_Config</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//RCTÖÐ¶Ï·Ö×éÉèÖÃ		    				     </span>
+	<span class="token function">RTC_Get</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//¸üÐÂÊ±¼ä	</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span> <span class="token comment">//ok</span>
+
+<span class="token punctuation">}</span>		 				    
+<span class="token comment">//RTCÊ±ÖÓÖÐ¶Ï</span>
+<span class="token comment">//Ã¿Ãë´¥·¢Ò»´Î  </span>
+<span class="token comment">//extern u16 tcnt; </span>
+<span class="token keyword">void</span> <span class="token function">RTC_IRQHandler</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>		 
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">RTC_GetITStatus</span><span class="token punctuation">(</span>RTC_IT_SEC<span class="token punctuation">)</span> <span class="token operator">!=</span> RESET<span class="token punctuation">)</span><span class="token comment">//ÃëÖÓÖÐ¶Ï</span>
+	<span class="token punctuation">{<!-- --></span>							
+		<span class="token function">RTC_Get</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//¸üÐÂÊ±¼ä   </span>
+ 	<span class="token punctuation">}</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">RTC_GetITStatus</span><span class="token punctuation">(</span>RTC_IT_ALR<span class="token punctuation">)</span><span class="token operator">!=</span> RESET<span class="token punctuation">)</span><span class="token comment">//ÄÖÖÓÖÐ¶Ï</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">RTC_ClearITPendingBit</span><span class="token punctuation">(</span>RTC_IT_ALR<span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//ÇåÄÖÖÓÖÐ¶Ï	  	</span>
+	  <span class="token function">RTC_Get</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>				<span class="token comment">//¸üÐÂÊ±¼ä   </span>
+  	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Alarm Time:%d-%d-%d %d:%d:%d\n"</span><span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>w_year<span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>w_month<span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>w_date<span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>hour<span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>min<span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>sec<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//Êä³öÄÖÁåÊ±¼ä	</span>
+		
+  	<span class="token punctuation">}</span> 				  								 
+	<span class="token function">RTC_ClearITPendingBit</span><span class="token punctuation">(</span>RTC_IT_SEC<span class="token operator">|</span>RTC_IT_OW<span class="token punctuation">)</span><span class="token punctuation">;</span>		<span class="token comment">//ÇåÄÖÖÓÖÐ¶Ï</span>
+	<span class="token function">RTC_WaitForLastTask</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	  	    						 	   	 
+<span class="token punctuation">}</span>
+<span class="token comment">//ÅÐ¶ÏÊÇ·ñÊÇÈòÄêº¯Êý</span>
+<span class="token comment">//ÔÂ·Ý   1  2  3  4  5  6  7  8  9  10 11 12</span>
+<span class="token comment">//ÈòÄê   31 29 31 30 31 30 31 31 30 31 30 31</span>
+<span class="token comment">//·ÇÈòÄê 31 28 31 30 31 30 31 31 30 31 30 31</span>
+<span class="token comment">//ÊäÈë:Äê·Ý</span>
+<span class="token comment">//Êä³ö:¸ÃÄê·ÝÊÇ²»ÊÇÈòÄê.1,ÊÇ.0,²»ÊÇ</span>
+u8 <span class="token function">Is_Leap_Year</span><span class="token punctuation">(</span>u16 year<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>			  
+	<span class="token keyword">if</span><span class="token punctuation">(</span>year<span class="token operator">%</span><span class="token number">4</span><span class="token operator">==</span><span class="token number">0</span><span class="token punctuation">)</span> <span class="token comment">//±ØÐëÄÜ±»4Õû³ý</span>
+	<span class="token punctuation">{<!-- --></span> 
+		<span class="token keyword">if</span><span class="token punctuation">(</span>year<span class="token operator">%</span><span class="token number">100</span><span class="token operator">==</span><span class="token number">0</span><span class="token punctuation">)</span> 
+		<span class="token punctuation">{<!-- --></span> 
+			<span class="token keyword">if</span><span class="token punctuation">(</span>year<span class="token operator">%</span><span class="token number">400</span><span class="token operator">==</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token number">1</span><span class="token punctuation">;</span><span class="token comment">//Èç¹ûÒÔ00½áÎ²,»¹ÒªÄÜ±»400Õû³ý 	   </span>
+			<span class="token keyword">else</span> <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>   
+		<span class="token punctuation">}</span><span class="token keyword">else</span> <span class="token keyword">return</span> <span class="token number">1</span><span class="token punctuation">;</span>   
+	<span class="token punctuation">}</span><span class="token keyword">else</span> <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>	
+<span class="token punctuation">}</span>	 			   
+<span class="token comment">//ÉèÖÃÊ±ÖÓ</span>
+<span class="token comment">//°ÑÊäÈëµÄÊ±ÖÓ×ª»»ÎªÃëÖÓ</span>
+<span class="token comment">//ÒÔ1970Äê1ÔÂ1ÈÕÎª»ù×¼</span>
+<span class="token comment">//1970~2099ÄêÎªºÏ·¨Äê·Ý</span>
+<span class="token comment">//·µ»ØÖµ:0,³É¹¦;ÆäËû:´íÎó´úÂë.</span>
+<span class="token comment">//ÔÂ·ÝÊý¾Ý±í											 </span>
+u8 <span class="token keyword">const</span> table_week<span class="token punctuation">[</span><span class="token number">12</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token punctuation">{<!-- --></span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">4</span><span class="token punctuation">,</span><span class="token number">6</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">5</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">5</span><span class="token punctuation">}</span><span class="token punctuation">;</span> <span class="token comment">//ÔÂÐÞÕýÊý¾Ý±í	  </span>
+<span class="token comment">//Æ½ÄêµÄÔÂ·ÝÈÕÆÚ±í</span>
+<span class="token keyword">const</span> u8 mon_table<span class="token punctuation">[</span><span class="token number">12</span><span class="token punctuation">]</span><span class="token operator">=</span><span class="token punctuation">{<!-- --></span><span class="token number">31</span><span class="token punctuation">,</span><span class="token number">28</span><span class="token punctuation">,</span><span class="token number">31</span><span class="token punctuation">,</span><span class="token number">30</span><span class="token punctuation">,</span><span class="token number">31</span><span class="token punctuation">,</span><span class="token number">30</span><span class="token punctuation">,</span><span class="token number">31</span><span class="token punctuation">,</span><span class="token number">31</span><span class="token punctuation">,</span><span class="token number">30</span><span class="token punctuation">,</span><span class="token number">31</span><span class="token punctuation">,</span><span class="token number">30</span><span class="token punctuation">,</span><span class="token number">31</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+u8 <span class="token function">RTC_Set</span><span class="token punctuation">(</span>u16 syear<span class="token punctuation">,</span>u8 smon<span class="token punctuation">,</span>u8 sday<span class="token punctuation">,</span>u8 hour<span class="token punctuation">,</span>u8 min<span class="token punctuation">,</span>u8 sec<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	u16 t<span class="token punctuation">;</span>
+	u32 seccount<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>syear<span class="token operator">&lt;</span><span class="token number">1970</span><span class="token operator">||</span>syear<span class="token operator">&gt;</span><span class="token number">2099</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token number">1</span><span class="token punctuation">;</span>	   
+	<span class="token keyword">for</span><span class="token punctuation">(</span>t<span class="token operator">=</span><span class="token number">1970</span><span class="token punctuation">;</span>t<span class="token operator">&lt;</span>syear<span class="token punctuation">;</span>t<span class="token operator">++</span><span class="token punctuation">)</span>	<span class="token comment">//°ÑËùÓÐÄê·ÝµÄÃëÖÓÏà¼Ó</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Is_Leap_Year</span><span class="token punctuation">(</span>t<span class="token punctuation">)</span><span class="token punctuation">)</span>seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token number">31622400</span><span class="token punctuation">;</span><span class="token comment">//ÈòÄêµÄÃëÖÓÊý</span>
+		<span class="token keyword">else</span> seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token number">31536000</span><span class="token punctuation">;</span>			  <span class="token comment">//Æ½ÄêµÄÃëÖÓÊý</span>
+	<span class="token punctuation">}</span>
+	smon<span class="token operator">-</span><span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span>
+	<span class="token keyword">for</span><span class="token punctuation">(</span>t<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>t<span class="token operator">&lt;</span>smon<span class="token punctuation">;</span>t<span class="token operator">++</span><span class="token punctuation">)</span>	   <span class="token comment">//°ÑÇ°ÃæÔÂ·ÝµÄÃëÖÓÊýÏà¼Ó</span>
+	<span class="token punctuation">{<!-- --></span>
+		seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span>mon_table<span class="token punctuation">[</span>t<span class="token punctuation">]</span><span class="token operator">*</span><span class="token number">86400</span><span class="token punctuation">;</span><span class="token comment">//ÔÂ·ÝÃëÖÓÊýÏà¼Ó</span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Is_Leap_Year</span><span class="token punctuation">(</span>syear<span class="token punctuation">)</span><span class="token operator">&amp;&amp;</span>t<span class="token operator">==</span><span class="token number">1</span><span class="token punctuation">)</span>seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token number">86400</span><span class="token punctuation">;</span><span class="token comment">//ÈòÄê2ÔÂ·ÝÔö¼ÓÒ»ÌìµÄÃëÖÓÊý	   </span>
+	<span class="token punctuation">}</span>
+	seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span><span class="token punctuation">(</span>sday<span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">86400</span><span class="token punctuation">;</span><span class="token comment">//°ÑÇ°ÃæÈÕÆÚµÄÃëÖÓÊýÏà¼Ó </span>
+	seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span>hour<span class="token operator">*</span><span class="token number">3600</span><span class="token punctuation">;</span><span class="token comment">//Ð¡Ê±ÃëÖÓÊý</span>
+    seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span>min<span class="token operator">*</span><span class="token number">60</span><span class="token punctuation">;</span>	 <span class="token comment">//·ÖÖÓÃëÖÓÊý</span>
+	seccount<span class="token operator">+</span><span class="token operator">=</span>sec<span class="token punctuation">;</span><span class="token comment">//×îºóµÄÃëÖÓ¼ÓÉÏÈ¥</span>
+
+	<span class="token function">RCC_APB1PeriphClockCmd</span><span class="token punctuation">(</span>RCC_APB1Periph_PWR <span class="token operator">|</span> RCC_APB1Periph_BKP<span class="token punctuation">,</span> ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜPWRºÍBKPÍâÉèÊ±ÖÓ  </span>
+	<span class="token function">PWR_BackupAccessCmd</span><span class="token punctuation">(</span>ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜRTCºÍºó±¸¼Ä´æÆ÷·ÃÎÊ </span>
+	<span class="token function">RTC_SetCounter</span><span class="token punctuation">(</span>seccount<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//ÉèÖÃRTC¼ÆÊýÆ÷µÄÖµ</span>
+
+	<span class="token function">RTC_WaitForLastTask</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//µÈ´ý×î½üÒ»´Î¶ÔRTC¼Ä´æÆ÷µÄÐ´²Ù×÷Íê³É  	</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>	    
+<span class="token punctuation">}</span>
+
+<span class="token comment">//³õÊ¼»¯ÄÖÖÓ		  </span>
+<span class="token comment">//ÒÔ1970Äê1ÔÂ1ÈÕÎª»ù×¼</span>
+<span class="token comment">//1970~2099ÄêÎªºÏ·¨Äê·Ý</span>
+<span class="token comment">//syear,smon,sday,hour,min,sec£ºÄÖÖÓµÄÄêÔÂÈÕÊ±·ÖÃë   </span>
+<span class="token comment">//·µ»ØÖµ:0,³É¹¦;ÆäËû:´íÎó´úÂë.</span>
+u8 <span class="token function">RTC_Alarm_Set</span><span class="token punctuation">(</span>u16 syear<span class="token punctuation">,</span>u8 smon<span class="token punctuation">,</span>u8 sday<span class="token punctuation">,</span>u8 hour<span class="token punctuation">,</span>u8 min<span class="token punctuation">,</span>u8 sec<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	u16 t<span class="token punctuation">;</span>
+	u32 seccount<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>syear<span class="token operator">&lt;</span><span class="token number">1970</span><span class="token operator">||</span>syear<span class="token operator">&gt;</span><span class="token number">2099</span><span class="token punctuation">)</span><span class="token keyword">return</span> <span class="token number">1</span><span class="token punctuation">;</span>	   
+	<span class="token keyword">for</span><span class="token punctuation">(</span>t<span class="token operator">=</span><span class="token number">1970</span><span class="token punctuation">;</span>t<span class="token operator">&lt;</span>syear<span class="token punctuation">;</span>t<span class="token operator">++</span><span class="token punctuation">)</span>	<span class="token comment">//°ÑËùÓÐÄê·ÝµÄÃëÖÓÏà¼Ó</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Is_Leap_Year</span><span class="token punctuation">(</span>t<span class="token punctuation">)</span><span class="token punctuation">)</span>seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token number">31622400</span><span class="token punctuation">;</span><span class="token comment">//ÈòÄêµÄÃëÖÓÊý</span>
+		<span class="token keyword">else</span> seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token number">31536000</span><span class="token punctuation">;</span>			  <span class="token comment">//Æ½ÄêµÄÃëÖÓÊý</span>
+	<span class="token punctuation">}</span>
+	smon<span class="token operator">-</span><span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span>
+	<span class="token keyword">for</span><span class="token punctuation">(</span>t<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>t<span class="token operator">&lt;</span>smon<span class="token punctuation">;</span>t<span class="token operator">++</span><span class="token punctuation">)</span>	   <span class="token comment">//°ÑÇ°ÃæÔÂ·ÝµÄÃëÖÓÊýÏà¼Ó</span>
+	<span class="token punctuation">{<!-- --></span>
+		seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span>mon_table<span class="token punctuation">[</span>t<span class="token punctuation">]</span><span class="token operator">*</span><span class="token number">86400</span><span class="token punctuation">;</span><span class="token comment">//ÔÂ·ÝÃëÖÓÊýÏà¼Ó</span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Is_Leap_Year</span><span class="token punctuation">(</span>syear<span class="token punctuation">)</span><span class="token operator">&amp;&amp;</span>t<span class="token operator">==</span><span class="token number">1</span><span class="token punctuation">)</span>seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token number">86400</span><span class="token punctuation">;</span><span class="token comment">//ÈòÄê2ÔÂ·ÝÔö¼ÓÒ»ÌìµÄÃëÖÓÊý	   </span>
+	<span class="token punctuation">}</span>
+	seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span><span class="token punctuation">(</span>sday<span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">86400</span><span class="token punctuation">;</span><span class="token comment">//°ÑÇ°ÃæÈÕÆÚµÄÃëÖÓÊýÏà¼Ó </span>
+	seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span>hour<span class="token operator">*</span><span class="token number">3600</span><span class="token punctuation">;</span><span class="token comment">//Ð¡Ê±ÃëÖÓÊý</span>
+    seccount<span class="token operator">+</span><span class="token operator">=</span><span class="token punctuation">(</span>u32<span class="token punctuation">)</span>min<span class="token operator">*</span><span class="token number">60</span><span class="token punctuation">;</span>	 <span class="token comment">//·ÖÖÓÃëÖÓÊý</span>
+	seccount<span class="token operator">+</span><span class="token operator">=</span>sec<span class="token punctuation">;</span><span class="token comment">//×îºóµÄÃëÖÓ¼ÓÉÏÈ¥ 			    </span>
+	<span class="token comment">//ÉèÖÃÊ±ÖÓ</span>
+	<span class="token function">RCC_APB1PeriphClockCmd</span><span class="token punctuation">(</span>RCC_APB1Periph_PWR <span class="token operator">|</span> RCC_APB1Periph_BKP<span class="token punctuation">,</span> ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜPWRºÍBKPÍâÉèÊ±ÖÓ   </span>
+	<span class="token function">PWR_BackupAccessCmd</span><span class="token punctuation">(</span>ENABLE<span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//Ê¹ÄÜºó±¸¼Ä´æÆ÷·ÃÎÊ  </span>
+	<span class="token comment">//ÉÏÃæÈý²½ÊÇ±ØÐëµÄ!</span>
+	
+	<span class="token function">RTC_SetAlarm</span><span class="token punctuation">(</span>seccount<span class="token punctuation">)</span><span class="token punctuation">;</span>
+ 
+	<span class="token function">RTC_WaitForLastTask</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	<span class="token comment">//µÈ´ý×î½üÒ»´Î¶ÔRTC¼Ä´æÆ÷µÄÐ´²Ù×÷Íê³É  	</span>
+	
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>	    
+<span class="token punctuation">}</span>
+
+
+<span class="token comment">//µÃµ½µ±Ç°µÄÊ±¼ä</span>
+<span class="token comment">//·µ»ØÖµ:0,³É¹¦;ÆäËû:´íÎó´úÂë.</span>
+u8 <span class="token function">RTC_Get</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">static</span> u16 daycnt<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+	u32 timecount<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span> 
+	u32 temp<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+	u16 temp1<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>	  
+    timecount<span class="token operator">=</span><span class="token function">RTC_GetCounter</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	 
+ 	temp<span class="token operator">=</span>timecount<span class="token operator">/</span><span class="token number">86400</span><span class="token punctuation">;</span>   <span class="token comment">//µÃµ½ÌìÊý(ÃëÖÓÊý¶ÔÓ¦µÄ)</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>daycnt<span class="token operator">!=</span>temp<span class="token punctuation">)</span><span class="token comment">//³¬¹ýÒ»ÌìÁË</span>
+	<span class="token punctuation">{<!-- --></span>	  
+		daycnt<span class="token operator">=</span>temp<span class="token punctuation">;</span>
+		temp1<span class="token operator">=</span><span class="token number">1970</span><span class="token punctuation">;</span>	<span class="token comment">//´Ó1970Äê¿ªÊ¼</span>
+		<span class="token keyword">while</span><span class="token punctuation">(</span>temp<span class="token operator">&gt;=</span><span class="token number">365</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>				 
+			<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Is_Leap_Year</span><span class="token punctuation">(</span>temp1<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token comment">//ÊÇÈòÄê</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span><span class="token punctuation">(</span>temp<span class="token operator">&gt;=</span><span class="token number">366</span><span class="token punctuation">)</span>temp<span class="token operator">-</span><span class="token operator">=</span><span class="token number">366</span><span class="token punctuation">;</span><span class="token comment">//ÈòÄêµÄÃëÖÓÊý</span>
+				<span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>temp1<span class="token operator">++</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span><span class="token punctuation">}</span>  
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span> temp<span class="token operator">-</span><span class="token operator">=</span><span class="token number">365</span><span class="token punctuation">;</span>	  <span class="token comment">//Æ½Äê </span>
+			temp1<span class="token operator">++</span><span class="token punctuation">;</span>  
+		<span class="token punctuation">}</span>   
+		calendar<span class="token punctuation">.</span>w_year<span class="token operator">=</span>temp1<span class="token punctuation">;</span><span class="token comment">//µÃµ½Äê·Ý</span>
+		temp1<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token keyword">while</span><span class="token punctuation">(</span>temp<span class="token operator">&gt;=</span><span class="token number">28</span><span class="token punctuation">)</span><span class="token comment">//³¬¹ýÁËÒ»¸öÔÂ</span>
+		<span class="token punctuation">{<!-- --></span>
+			<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">Is_Leap_Year</span><span class="token punctuation">(</span>calendar<span class="token punctuation">.</span>w_year<span class="token punctuation">)</span><span class="token operator">&amp;&amp;</span>temp1<span class="token operator">==</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token comment">//µ±ÄêÊÇ²»ÊÇÈòÄê/2ÔÂ·Ý</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span><span class="token punctuation">(</span>temp<span class="token operator">&gt;=</span><span class="token number">29</span><span class="token punctuation">)</span>temp<span class="token operator">-</span><span class="token operator">=</span><span class="token number">29</span><span class="token punctuation">;</span><span class="token comment">//ÈòÄêµÄÃëÖÓÊý</span>
+				<span class="token keyword">else</span> <span class="token keyword">break</span><span class="token punctuation">;</span> 
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span> 
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">if</span><span class="token punctuation">(</span>temp<span class="token operator">&gt;=</span>mon_table<span class="token punctuation">[</span>temp1<span class="token punctuation">]</span><span class="token punctuation">)</span>temp<span class="token operator">-</span><span class="token operator">=</span>mon_table<span class="token punctuation">[</span>temp1<span class="token punctuation">]</span><span class="token punctuation">;</span><span class="token comment">//Æ½Äê</span>
+				<span class="token keyword">else</span> <span class="token keyword">break</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			temp1<span class="token operator">++</span><span class="token punctuation">;</span>  
+		<span class="token punctuation">}</span>
+		calendar<span class="token punctuation">.</span>w_month<span class="token operator">=</span>temp1<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">;</span>	<span class="token comment">//µÃµ½ÔÂ·Ý</span>
+		calendar<span class="token punctuation">.</span>w_date<span class="token operator">=</span>temp<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">;</span>  	<span class="token comment">//µÃµ½ÈÕÆÚ </span>
+	<span class="token punctuation">}</span>
+	temp<span class="token operator">=</span>timecount<span class="token operator">%</span><span class="token number">86400</span><span class="token punctuation">;</span>     		<span class="token comment">//µÃµ½ÃëÖÓÊý   	   </span>
+	calendar<span class="token punctuation">.</span>hour<span class="token operator">=</span>temp<span class="token operator">/</span><span class="token number">3600</span><span class="token punctuation">;</span>     	<span class="token comment">//Ð¡Ê±</span>
+	calendar<span class="token punctuation">.</span>min<span class="token operator">=</span><span class="token punctuation">(</span>temp<span class="token operator">%</span><span class="token number">3600</span><span class="token punctuation">)</span><span class="token operator">/</span><span class="token number">60</span><span class="token punctuation">;</span> 	<span class="token comment">//·ÖÖÓ	</span>
+	calendar<span class="token punctuation">.</span>sec<span class="token operator">=</span><span class="token punctuation">(</span>temp<span class="token operator">%</span><span class="token number">3600</span><span class="token punctuation">)</span><span class="token operator">%</span><span class="token number">60</span><span class="token punctuation">;</span> 	<span class="token comment">//ÃëÖÓ</span>
+	calendar<span class="token punctuation">.</span>week<span class="token operator">=</span><span class="token function">RTC_Get_Week</span><span class="token punctuation">(</span>calendar<span class="token punctuation">.</span>w_year<span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>w_month<span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>w_date<span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token comment">//»ñÈ¡ÐÇÆÚ   </span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>	 
+<span class="token comment">//»ñµÃÏÖÔÚÊÇÐÇÆÚ¼¸</span>
+<span class="token comment">//¹¦ÄÜÃèÊö:ÊäÈë¹«ÀúÈÕÆÚµÃµ½ÐÇÆÚ(Ö»ÔÊÐí1901-2099Äê)</span>
+<span class="token comment">//ÊäÈë²ÎÊý£º¹«ÀúÄêÔÂÈÕ </span>
+<span class="token comment">//·µ»ØÖµ£ºÐÇÆÚºÅ																						 </span>
+u8 <span class="token function">RTC_Get_Week</span><span class="token punctuation">(</span>u16 year<span class="token punctuation">,</span>u8 month<span class="token punctuation">,</span>u8 day<span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>	
+	u16 temp2<span class="token punctuation">;</span>
+	u8 yearH<span class="token punctuation">,</span>yearL<span class="token punctuation">;</span>
+	
+	yearH<span class="token operator">=</span>year<span class="token operator">/</span><span class="token number">100</span><span class="token punctuation">;</span>	yearL<span class="token operator">=</span>year<span class="token operator">%</span><span class="token number">100</span><span class="token punctuation">;</span> 
+	<span class="token comment">// Èç¹ûÎª21ÊÀ¼Í,Äê·ÝÊý¼Ó100  </span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>yearH<span class="token operator">&gt;</span><span class="token number">19</span><span class="token punctuation">)</span>yearL<span class="token operator">+</span><span class="token operator">=</span><span class="token number">100</span><span class="token punctuation">;</span>
+	<span class="token comment">// Ëù¹ýÈòÄêÊýÖ»Ëã1900ÄêÖ®ºóµÄ  </span>
+	temp2<span class="token operator">=</span>yearL<span class="token operator">+</span>yearL<span class="token operator">/</span><span class="token number">4</span><span class="token punctuation">;</span>
+	temp2<span class="token operator">=</span>temp2<span class="token operator">%</span><span class="token number">7</span><span class="token punctuation">;</span> 
+	temp2<span class="token operator">=</span>temp2<span class="token operator">+</span>day<span class="token operator">+</span>table_week<span class="token punctuation">[</span>month<span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>yearL<span class="token operator">%</span><span class="token number">4</span><span class="token operator">==</span><span class="token number">0</span><span class="token operator">&amp;&amp;</span>month<span class="token operator">&lt;</span><span class="token number">3</span><span class="token punctuation">)</span>temp2<span class="token operator">--</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span><span class="token punctuation">(</span>temp2<span class="token operator">%</span><span class="token number">7</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>	
+
+		  
+</code></pre> 
+<p>main.c文件</p> 
+<pre><code class="prism language-c"><span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"delay.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"sys.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"usart.h"</span>	</span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"rtc.h"</span> </span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"stm32f10x.h"</span></span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{<!-- --></span>
+	u8 t<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span>
+	<span class="token function">delay_init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	
+	<span class="token function">NVIC_PriorityGroupConfig</span><span class="token punctuation">(</span>NVIC_PriorityGroup_2<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">OLED_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">RTC_Init</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+ 	<span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">if</span><span class="token punctuation">(</span>t<span class="token operator">!=</span>calendar<span class="token punctuation">.</span>sec<span class="token punctuation">)</span>
+		<span class="token punctuation">{<!-- --></span>
+			t<span class="token operator">=</span>calendar<span class="token punctuation">.</span>sec<span class="token punctuation">;</span>
+			<span class="token comment">/*OLED_ShowNum(0,0,calendar.w_year,2,24);
+			OLED_ShowString(24,0,"-",24);
+			OLED_ShowNum(36,0,calendar.w_month,2,24);
+			OLED_ShowString(60,0,"-",24);
+			OLED_ShowNum(72,0,calendar.w_date,2,24);
+			*/</span>
+			<span class="token keyword">switch</span><span class="token punctuation">(</span>calendar<span class="token punctuation">.</span>week<span class="token punctuation">)</span>
+			<span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">case</span> <span class="token number">0</span><span class="token punctuation">:</span>
+					<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token string">"Sunday"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+				<span class="token keyword">case</span> <span class="token number">1</span><span class="token punctuation">:</span>
+					<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token string">"Monday"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+				<span class="token keyword">case</span> <span class="token number">2</span><span class="token punctuation">:</span>
+					<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token string">"Tuesday"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+				<span class="token keyword">case</span> <span class="token number">3</span><span class="token punctuation">:</span>
+					<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token string">"Wednesday"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+				<span class="token keyword">case</span> <span class="token number">4</span><span class="token punctuation">:</span>
+					<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token string">"Thursday"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+				<span class="token keyword">case</span> <span class="token number">5</span><span class="token punctuation">:</span>
+					<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token string">"friday"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+				<span class="token keyword">case</span> <span class="token number">6</span><span class="token punctuation">:</span>
+					<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token string">"Saturday"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span class="token keyword">break</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			
+			<span class="token function">OLED_ShowNum</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>hour<span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">24</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token string">"-"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">OLED_ShowNum</span><span class="token punctuation">(</span><span class="token number">36</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>min<span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">OLED_ShowString</span><span class="token punctuation">(</span><span class="token number">60</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span><span class="token string">"-"</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">OLED_ShowNum</span><span class="token punctuation">(</span><span class="token number">72</span><span class="token punctuation">,</span><span class="token number">0</span><span class="token punctuation">,</span>calendar<span class="token punctuation">.</span>sec<span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">24</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">OLED_Refresh_Gram</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token function">delay_ms</span><span class="token punctuation">(</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+
+<span class="token punctuation">}</span>
+
+
+
+
+
+</code></pre> 
+<hr color="#000000" size='1"'> 
+<h2><a id="_597"></a>总结</h2> 
+<p><font color="#999AAA">今天的文章就讲到这里，觉得写的还行的小伙伴，<strong>点赞加关注</strong>。如果还是看不懂的话，点击链接，<a href="https://www.bilibili.com/video/BV1kx411k7JT?p=40" rel="nofollow">小破站视频链接直达</a></font></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/92a4a60d649e24e500c7a6ecdf73ca66/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">解决uniapp map遮盖遮罩层</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/9a42f0e54320b21d00c6183858a556cd/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">python正则表达式匹配括号并删除_正则表达式去除中括号（符号）及里面包含的内容...</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

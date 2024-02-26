@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Mybatis中拦截器的使用场景和技巧 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Mybatis中拦截器的使用场景和技巧" />
+<meta property="og:description" content="场景描述 中小业务系统中，有时候会面临一些比较相似的业务场景。
+当XXX创建成功后，需要给XXX推送一条业务消息；当XXX更新的时候，需要给XXX推送一条业务提醒；当XXX创建OR更新的时候，需要将最新的数据推送到搜索引擎中，以方便其他业务系统在搜索引擎中能查询到；当XXX更新的时候，需要更新分布式缓存的XXX数据；…… 这些场景都有相似的特征，如下
+特征描述异步实际上与主流程关系不大，可以作为附属流程异步执行事务大多在事务结束之后执行并行可以串行执行，也可以并行执行，对最终结果影响不大 Mybatis拦截器 Mybatis提供了一些机制，可以允许我们在做数据库操作的时候进行我们额外的一些程序。当然，这看起来并没有JPA的EntityListener好用。
+但是通过这些机制，我们可以达成我们主要的目的，解耦合。（解耦合的好处显而易见，我们在关注主流程业务的时候，附属流程的业务也更容易扩展）
+下面是我们即将用到的一些简单概念，如下
+概念描述解耦解耦的本质就是将类之间的直接关系转换成间接关系观察者模式一种行为设计模式，允许你定义一种订阅机制，可在对象事件发生时通知多个“观察”该对象的其他对象。EventBus基于事件驱动，观察者们监听自己感兴趣的特定事件，进行相应的处理。 锚定事件发生 首先，我们要找到事件发生的地方，通常来说我们更愿意在业务代码里写
+Company company = new Company(); company.setCompanyName(companyName); companyMapper.insert(company); // 创建XXX成功后，触发了一些操作； doSomething(company); 复制代码 但是，这种方式是耦合的，我们在doSomething() 里发生的一些异常会影响到主流程，而每一次增加附属流程的改动，都会产生影响范围的蔓延。
+这里，我们使用Mybatis提供的一种方式来锚定事件发生
+@Component @Intercepts( { @Signature(method = &#34;update&#34;, type = Executor.class, args = { MappedStatement.class, Object.class }) }) public class EntityInterceptor implements Interceptor { private static final Logger LOGGER = LoggerFactory.getLogger(EntityInterceptor.class); @Override public Object intercept(Invocation invocation) throws Throwable { Object proceed = invocation.proceed(); try { Object[] args = invocation." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/ec7e7db5993d05641845dddde08469a9/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-11-09T13:17:10+08:00" />
+<meta property="article:modified_time" content="2022-11-09T13:17:10+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Mybatis中拦截器的使用场景和技巧</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h3>场景描述</h3> 
+<p>中小业务系统中，有时候会面临一些比较相似的业务场景。</p> 
+<ol><li>当<strong>XXX</strong>创建成功后，需要给<strong>XXX</strong>推送一条业务消息；</li><li>当<strong>XXX</strong>更新的时候，需要给<strong>XXX</strong>推送一条业务提醒；</li><li>当<strong>XXX</strong>创建OR更新的时候，需要将最新的数据推送到<strong>搜索引擎</strong>中，以方便其他业务系统在搜索引擎中能查询到；</li><li>当<strong>XXX</strong>更新的时候，需要更新<strong>分布式缓存</strong>的XXX数据；</li><li>……</li></ol> 
+<p>这些场景都有相似的特征，如下</p> 
+<table><thead><tr><th>特征</th><th>描述</th></tr></thead><tbody><tr><td>异步</td><td>实际上与主流程关系不大，可以作为附属流程异步执行</td></tr><tr><td>事务</td><td>大多在事务结束之后执行</td></tr><tr><td>并行</td><td>可以串行执行，也可以并行执行，对最终结果影响不大</td></tr></tbody></table> 
+<h3>Mybatis拦截器</h3> 
+<p><strong>Mybatis</strong>提供了一些机制，可以允许我们在做数据库操作的时候进行我们额外的一些程序。当然，这看起来并没有JPA的<strong>EntityListener</strong>好用。</p> 
+<p>但是通过这些机制，我们可以达成我们主要的目的，<strong>解耦合</strong>。（解耦合的好处显而易见，我们在关注主流程业务的时候，附属流程的业务也更容易扩展）</p> 
+<p>下面是我们即将用到的一些简单概念，如下</p> 
+<table><thead><tr><th>概念</th><th>描述</th></tr></thead><tbody><tr><td>解耦</td><td>解耦的本质就是将类之间的直接关系转换成间接关系</td></tr><tr><td>观察者模式</td><td>一种行为设计模式，允许你定义一种订阅机制，可在对象事件发生时通知多个“观察”该对象的其他对象。</td></tr><tr><td>EventBus</td><td>基于事件驱动，观察者们监听自己感兴趣的特定事件，进行相应的处理。</td></tr></tbody></table> 
+<h4>锚定事件发生</h4> 
+<p>首先，我们要找到事件发生的地方，通常来说我们更愿意在业务代码里写</p> 
+<pre><code>Company company = new Company();
+company.setCompanyName(companyName);
+companyMapper.insert(company);
+// 创建XXX成功后，触发了一些操作；
+doSomething(company);
+复制代码</code></pre> 
+<p>但是，这种方式是耦合的，我们在<strong>doSomething()</strong> 里发生的一些异常会影响到主流程，而每一次增加附属流程的改动，都会产生影响范围的蔓延。</p> 
+<p>这里，我们使用<strong>Mybatis</strong>提供的一种方式来<strong>锚定事件发生</strong></p> 
+<pre><code>@Component
+@Intercepts( {
+    @Signature(method = "update", type = Executor.class, args = {
+        MappedStatement.class,
+        Object.class
+    })
+})
+public class EntityInterceptor implements Interceptor {
+    private static final Logger LOGGER = LoggerFactory.getLogger(EntityInterceptor.class);
+
+    @Override
+    public Object intercept(Invocation invocation) throws Throwable {
+        Object proceed = invocation.proceed();
+        try {
+            Object[] args = invocation.getArgs();
+            MappedStatement ms = (MappedStatement) args[0];
+            Object params = args[1];
+            if (SqlCommandType.INSERT.equals(ms.getSqlCommandType())) {
+                insertCommond(params);
+            }
+            if (SqlCommandType.UPDATE.equals(ms.getSqlCommandType())) {
+                updateCommond(params);
+            }
+        } catch (Exception e) {
+            LOGGER.warn("entity change warning: {}", e.getMessage());
+        } finally {
+            return proceed;
+        }
+    }
+    
+        private void insertCommond(Object params) {
+        if (Objects.isNull(params)) {
+            return;
+        }
+        // 插入Company的事件
+        if (params instanceof Company) {
+            Company company = (Company) params;
+            CompanyEvent companyEvent =
+                new CompanyEvent(CompanyEvent.TOPIC_ADD, WebUtils.getOpenId(), CompanyVo.from(company));
+            SpringUtil.getApplicationContext().publishEvent(companyEvent);
+            LOGGER.info("[发布事件:{}] - [事件内容:{}]", CompanyEvent.TOPIC_ADD, JSON.toJSONString(companyEvent));
+        }
+    }
+}
+复制代码</code></pre> 
+<p>在这里，我们监听了<strong>Mybatis</strong>的<strong>Executor</strong>对象的<strong>update</strong>方法，来监听对象的新增和修改。</p> 
+<pre><code>package org.apache.ibatis.executor;
+
+public interface Executor {
+
+  int update(MappedStatement ms, Object parameter) throws SQLException;
+}
+复制代码</code></pre> 
+<p>当 <strong>Company</strong> 的 <strong>insert</strong> 事件发生时，我们发布了一条 <strong>CompanyEvent</strong> 的事件。</p> 
+<h4>订阅事件</h4> 
+<p>我们使用<strong>发布-订阅模型</strong>实现了解耦合，针对刚才发布的 <strong>CompanyEvent</strong> 事件，我们来写一个事件消费者。</p> 
+<pre><code>@Component
+public class CompanyListener {
+
+    /**
+     * 监听事件 - 公司.
+     *
+     * @param companyEvent 事件.
+     */
+    @Lazy
+    @Async
+    @TransactionalEventListener(
+        fallbackExecution = true,
+        phase = TransactionPhase.AFTER_COMPLETION,
+        classes = CompanyEvent.class)
+    public void doAsync(CompanyEvent companyEvent) {
+        LOGGER.info("[Company 订阅:{}] - [开始执行:{}]",
+            companyEvent.getTopic(), JSON.toJSONString(companyVo));
+    }
+}
+复制代码</code></pre> 
+<p>代码中涉及到一些注解，简单介绍下</p> 
+<table><thead><tr><th>注解</th><th>介绍</th></tr></thead><tbody><tr><td>@Component</td><td>会注册为Spring的一个Bean</td></tr><tr><td>@Lazy</td><td>该方法会异步执行</td></tr><tr><td>@TransactionalEventListener</td><td>在事务的不同阶段去触发执行该监听</td></tr></tbody></table> 
+<p>我们标注了该事件是在<strong>TransactionPhase.AFTER_COMPLETION</strong>（事务提交完成）这个事务节点进行事件处理。</p> 
+<h3>观察者模式</h3> 
+<p>上面使用了<strong>Spring</strong>的<strong>EventListener</strong>来实现的事件驱动，除此之外，还可以使用<strong>Guava</strong>的<strong>EventBus</strong>、<strong>Vert.x</strong>的<strong>EventBus</strong>等方式实现。</p> 
+<p>很多工具类提供了关于<strong>EventBus</strong>的实现，但是使用逻辑和方式上大多大同小异。</p> 
+<h3>总结</h3> 
+<p><strong>观察者模式</strong>、<strong>监听模式</strong>都有利于<strong>解耦合</strong>，根据业务诉求合理的进行开发设计，能为以后的扩展打下坚实的基础。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/151e65fadf8ee64c50ca259642393b3a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">windows/linux查看服务器CPU配置命令</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/e852447014e650a486d50edd6dc52d54/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">虚拟机与window互传文件</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

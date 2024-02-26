@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>mysql间隙锁demo分析 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="mysql间隙锁demo分析" />
+<meta property="og:description" content="概述 通常用的mysql都是innodb引擎；
+一般在update的时候用id都会认为是给行记录加锁；
+在使用非唯一索引更新时，会遇到临键锁（范围锁）；
+临键锁和表中的数据有关；
+mysq版本:8
+隔离级别：RR可重复读
+mysql的lockMode 查看锁的活动信息
+-- 当前活动的锁信息 SELECT * FROM performance_schema.data_locks; X,REC_NOT_GAP：X代表排他锁，REC_NOT_GAP代表行锁。综合起来就是对这条数据（索引项）添加了行级排他锁;IX：意向排它锁。上述案例中，给表添加了一个意向排它锁。当其他事务要对全表的数据进行加锁时，那么就不需要判断每一条数据是否被加锁了。X,GAP:X代表排他锁；GAP代表间隙锁（前开后开,即当前的lock_data中的索引值对应的id到最近的上一个id值之间的空隙被锁定了）supremum pseudo-record： 是 InnoDB 中定义的一种特殊记录，我们可以理解为 &#43;∞ X,GAPdemo说明 假设表中的数据如下,age有普通BTree索引，然后事务1更新其中age为24的数据；
+可以看到age=24对应的id=3加上了X排它锁,id=3的加上了行级排它锁；然后对age=24后面的age索引加了一个排他间隙锁，锁住了id范围为(3,5)时间的间隙;
+综上获得了id范围为[3,5)之间的锁
+-- 事务1操作 UPDATE user SET name = &#39;Vladimir&#39; WHERE age = 24; 临键锁 假设有如下表；且表中数据如下；
+-- 表结构如下 CREATE TABLE `user` ( `id` int NOT NULL AUTO_INCREMENT COMMENT &#39;主键&#39;, `name` varchar(255) DEFAULT NULL COMMENT &#39;姓名&#39;, `age` int DEFAULT NULL COMMENT &#39;年龄&#39;, PRIMARY KEY (`id`), KEY `idx_age` (`age`) ) ENGINE=InnoDB COMMENT=&#39;用户表&#39;; 捞点网图,间隙锁可以看做一个左开右闭的区间" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/f0661f0cf45ee36459a126209cb9af71/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-12-31T17:09:10+08:00" />
+<meta property="article:modified_time" content="2023-12-31T17:09:10+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">mysql间隙锁demo分析</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>概述</h3> 
+<p>通常用的mysql都是innodb引擎；<br> 一般在update的时候用id都会认为是给行记录加锁；</p> 
+<p>在使用非唯一索引更新时，会遇到临键锁（范围锁）；<br> 临键锁和表中的数据有关；</p> 
+<p><code>mysq版本</code>:<code>8</code><br> <code>隔离级别</code>：<code>RR</code>可重复读</p> 
+<h3><a id="mysqllockMode_11"></a>mysql的lockMode</h3> 
+<p><strong>查看锁的活动信息</strong></p> 
+<pre><code class="prism language-sql"><span class="token comment">-- 当前活动的锁信息</span>
+<span class="token keyword">SELECT</span> <span class="token operator">*</span> <span class="token keyword">FROM</span> performance_schema<span class="token punctuation">.</span>data_locks<span class="token punctuation">;</span>
+</code></pre> 
+<ul><li><strong>X,REC_NOT_GAP</strong>：<code>X代表排他锁</code>，<code>REC_NOT_GAP代表行锁</code>。综合起来就是对这条数据（索引项）添加了行级排他锁;</li><li><strong>IX</strong>：意向排它锁。上述案例中，给表添加了一个意向排它锁。当其他事务要对全表的数据进行加锁时，那么就不需要判断每一条数据是否被加锁了。</li><li><strong>X,GAP</strong>:<code>X</code>代表排他锁；<code>GAP</code>代表间隙锁（前开后开,即当前的<code>lock_data</code>中的索引值对应的<code>id</code>到<code>最近的上一个id值</code>之间的空隙被锁定了）</li><li><strong>supremum pseudo-record</strong>： 是 <code>InnoDB</code> 中定义的一种特殊记录，我们可以理解为 <code>+∞</code></li></ul> 
+<h3><a id="XGAPdemo_23"></a><code>X,GAP</code>demo说明</h3> 
+<p>假设表中的数据如下,<code>age有普通BTree</code>索引，然后<code>事务1</code>更新其中<code>age为24</code>的数据；<br> 可以看到<code>age=24</code>对应的<code>id=3</code>加上了<code>X排它锁</code>,<code>id=3</code>的加上了行级排它锁；然后对<code>age=24</code>后面的<code>age</code>索引加了一个排他间隙锁，锁住了<code>id</code>范围为<code>(3,5)</code>时间的间隙;</p> 
+<p>综上获得了<code>id</code>范围为<code>[3,5)</code>之间的锁</p> 
+<pre><code class="prism language-sql"><span class="token comment">-- 事务1操作</span>
+<span class="token keyword">UPDATE</span> <span class="token keyword">user</span> <span class="token keyword">SET</span> name <span class="token operator">=</span> <span class="token string">'Vladimir'</span> <span class="token keyword">WHERE</span> age <span class="token operator">=</span> <span class="token number">24</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/7d/68/V59PgUZt_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/a2/e6/v2Cmy2Ad_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="_43"></a>临键锁</h3> 
+<p>假设有如下表；且表中数据如下；</p> 
+<pre><code class="prism language-sql"><span class="token comment">-- 表结构如下</span>
+<span class="token keyword">CREATE</span> <span class="token keyword">TABLE</span> <span class="token identifier"><span class="token punctuation">`</span>user<span class="token punctuation">`</span></span> <span class="token punctuation">(</span>
+  <span class="token identifier"><span class="token punctuation">`</span>id<span class="token punctuation">`</span></span> <span class="token keyword">int</span> <span class="token operator">NOT</span> <span class="token boolean">NULL</span> <span class="token keyword">AUTO_INCREMENT</span> <span class="token keyword">COMMENT</span> <span class="token string">'主键'</span><span class="token punctuation">,</span>
+  <span class="token identifier"><span class="token punctuation">`</span>name<span class="token punctuation">`</span></span> <span class="token keyword">varchar</span><span class="token punctuation">(</span><span class="token number">255</span><span class="token punctuation">)</span> <span class="token keyword">DEFAULT</span> <span class="token boolean">NULL</span> <span class="token keyword">COMMENT</span> <span class="token string">'姓名'</span><span class="token punctuation">,</span>
+  <span class="token identifier"><span class="token punctuation">`</span>age<span class="token punctuation">`</span></span> <span class="token keyword">int</span> <span class="token keyword">DEFAULT</span> <span class="token boolean">NULL</span> <span class="token keyword">COMMENT</span> <span class="token string">'年龄'</span><span class="token punctuation">,</span>
+  <span class="token keyword">PRIMARY</span> <span class="token keyword">KEY</span> <span class="token punctuation">(</span><span class="token identifier"><span class="token punctuation">`</span>id<span class="token punctuation">`</span></span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+  <span class="token keyword">KEY</span> <span class="token identifier"><span class="token punctuation">`</span>idx_age<span class="token punctuation">`</span></span> <span class="token punctuation">(</span><span class="token identifier"><span class="token punctuation">`</span>age<span class="token punctuation">`</span></span><span class="token punctuation">)</span>
+<span class="token punctuation">)</span> <span class="token keyword">ENGINE</span><span class="token operator">=</span><span class="token keyword">InnoDB</span> <span class="token keyword">COMMENT</span><span class="token operator">=</span><span class="token string">'用户表'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>捞点网图,<code>间隙锁</code>可以看做一个<code>左开右闭的区间</code><br> <img src="https://images2.imgbox.com/80/59/aZiXPilH_o.png" alt="在这里插入图片描述"><br> 那么在<code>事务A</code>中<code>执行sql</code>;<br> 先<code>select查询</code>，查询到age=24的记录，然后继续向后查询，发现后一条是<code>age=32,age不等于24，向后查询结束</code>，所以在获取间隙锁<code>(24,32]</code>，同时当前<code>age=24</code>的记录会加上排它锁;</p> 
+<p>然后再向前查询前一条记录是<code>age=10，不等于24，向前查询结束</code>，然后会获取<code>(10，24]</code>的间隙锁;</p> 
+<p>综上所述，<code>INNDB</code>加锁首先定位到等于或者第一个大于目标值的叶子节点</p> 
+<p>事务A</p> 
+<pre><code class="prism language-sql"><span class="token comment">-- 根据非唯一索引列 UPDATE 某条记录</span>
+<span class="token keyword">UPDATE</span> <span class="token keyword">user</span> <span class="token keyword">SET</span> name <span class="token operator">=</span> <span class="token string">'Vladimir'</span> <span class="token keyword">WHERE</span> age <span class="token operator">=</span> <span class="token number">24</span><span class="token punctuation">;</span>
+<span class="token comment">-- 或根据非唯一索引列 锁住某条记录</span>
+<span class="token keyword">SELECT</span> <span class="token operator">*</span> <span class="token keyword">FROM</span> <span class="token keyword">user</span> <span class="token keyword">WHERE</span> age <span class="token operator">=</span> <span class="token number">24</span> <span class="token keyword">FOR</span> <span class="token keyword">UPDATE</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>在<code>事务B</code>中执行<code>sql</code>；会遇到间隙锁，会阻塞</p> 
+<pre><code class="prism language-sql"><span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> <span class="token keyword">user</span> <span class="token keyword">VALUES</span><span class="token punctuation">(</span><span class="token number">100</span><span class="token punctuation">,</span> <span class="token string">'Ezreal'</span><span class="token punctuation">,</span> <span class="token number">30</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>试验结果如下<br> <img src="https://images2.imgbox.com/a4/f5/Gvaqu5o4_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/d0/09/xJvnViPe_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-sql"><span class="token comment">-- 当前活动的锁信息</span>
+<span class="token keyword">SELECT</span> <span class="token operator">*</span> <span class="token keyword">FROM</span> performance_schema<span class="token punctuation">.</span>data_locks<span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a9/1e/YKlO7ARs_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/544236fd5e100d8b73736120e838aeca/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">远程连接工具SimpleRemote的下载与使用</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/521677b4efdd6d57d8b6cc548738ae02/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【JVM】第三章：类加载与字节码技术</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

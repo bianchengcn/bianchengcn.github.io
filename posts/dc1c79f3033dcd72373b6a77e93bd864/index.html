@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>HDMI ——CEC 协议详解以及待机唤醒 实现 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="HDMI ——CEC 协议详解以及待机唤醒 实现" />
+<meta property="og:description" content="本文讲解的是基于HDMI CEC的待机唤醒方案的设计。
+目录
+cec基本介绍
+CEC协议时序：
+CEC数据帧
+cec待机唤醒介绍
+待机唤醒的处理流程和实现
+cec基本介绍 如今常见的高清视频接口有HDMI,VGA,DP和DVI。HDMI（High-Definition Multimedia Interface）为当今主流的多媒体高速数字接口，下图为最常见的线缆引脚分布图。其中，CEC（Consumer Electronics Control）信号通过13引脚传输，作为HDMI接口的一部分。CEC总线作为控制信号被分离出来，使得在不增加数据占用宽带的情况下完成高速复杂的通信要求。
+CEC 是一套完整的单总线协议，电子设备可以借助CEC信号让使用可控制HDMI接口上所连接的装置，比如单独播放，系统待机，可以实现由单一遥控器控制所有HDMI连接的装置。最多15个设备，允许HDMI设备在没有用户干扰情况下互相命令控制。
+CEC 是与其他HDMI信号分开的电信号。这允许设备在睡眠模式下禁止其高速电路，但是可以被CEC唤醒。他是一个单独的共享总线，直接连接在设备上的所有HDMI端口间，可以流过所有完全断电的设备。
+总线是开路集电极线，有点像IIC，被动上拉至3.3V，设备拉低进行数据传输。
+与IIC相似之处：低速串行总线；采用无源上拉的集电极开路；速度受分布电容影响；接收器可以将发送的1位转换为0：发送1比特并观察是否转换为0以查看是否丢失；面向字节都附加一个应答位；特殊的启动信息
+与IIC不同之处：单线并不是两根线；以固定时序发送比特；低速串行总线（417bit/s）；四个地址位；定义了动态地址分配协议；标头包括发起者和收件人地址；没有特殊停止信号，每个字节附加一个消息结束标志；没有读操作，通过获取请求获取响应帧，所有数据均从数据发送；每个设备都必须能够作为主设备传输数据；地址后字节数据有详细规定说明。
+CEC协议时序： bit Timing
+每个位从线拉低（下降沿）开始，保持时间表示位值，之后拉高，直至后续位开始
+正常数据位长为2.40.35ms。保持低电平0.6±0.2ms为逻辑1；保持低电平1.5±0.2ms表示逻辑0。接收器在下降沿后1.05±0.2ms对线路进行采样，然后在下降沿1.9±0.15ms开始观察下一位。
+接收者可以将传输的传输的1bt转换为0通过在下降沿后0.35s拉低总线并保持直到表示逻辑0的电平时间。这个通常用于确认传输。
+每个帧都有起始位，通过拉低总线3.7±0.2ms,然后允许上升，总持续时间为4.5±0.2ms。在观察总线空闲之后，任何设备都可以发送起始位。（通常5位时间，但成功后立即传输7位时间，以促进总线的公平共享，以及传输失败和重传之间的3位时间。)
+对于单接收消息，应答位类似于C:以1位发送，接收器将其下拉至0以确认该位字节。（根据下面给出的波形可以看出，ack位的波形为逻辑1，但是为什么逻辑分析仪解析的值为0呢？是因为接收器将其下拉至0 以确认该位字节）
+对于广播消息，应答位被反转：仍然作为1位发送，但被拒绝该字节的任何接收器下拉到0位。每个CEC帧的第一个字节包含4位源和目标地址头。如果寻址目标存在，则它确认该字节。由除标题之外的任何内容组成的帧是pig,它只检查另个设备的存在。
+地址15（1111B)用于广播地址（作为目的地）和未注册的设备（作为源），它们尚未选择不同的地址。一些设备不需要接收非广播的消息，因此可以永久使用地址15。需要接收寻址消息的设备需要自己的地址。设备通过pig它获取地址，如果ping未被确认，则设备声明它。如果确认ping,则设备尝试另个地址。
+第二个字节是操作码，它指定要执行的操作，以及后续数据字节的数量及含义。
+CEC数据帧 cec帧结构 = 起始位&#43;引导块&#43;数据块
+Start（bit）&#43; Header Block &#43; Data Block 1(opcode block) &#43; Data Block 2 (operand blocks)
+注：
+Block定义：Data(8 bit) &#43; EOM(1 bit) &#43; ACK(1 bit)
+Header Block定义：Initiator(4 bit) &#43; Destination(4 bit) &#43; EOM(1 bit) &#43; ACK(1 bit)" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/dc1c79f3033dcd72373b6a77e93bd864/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-10-24T15:00:38+08:00" />
+<meta property="article:modified_time" content="2023-10-24T15:00:38+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">HDMI ——CEC 协议详解以及待机唤醒 实现</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>本文讲解的是基于HDMI CEC的待机唤醒方案的设计。</p> 
+<p id="main-toc"><strong>目录</strong></p> 
+<p id="cec%E5%9F%BA%E6%9C%AC%E4%BB%8B%E7%BB%8D-toc" style="margin-left:0px;"><a href="#cec%E5%9F%BA%E6%9C%AC%E4%BB%8B%E7%BB%8D" rel="nofollow">cec基本介绍</a></p> 
+<p id="CEC%E5%8D%8F%E8%AE%AE%E6%97%B6%E5%BA%8F%EF%BC%9A-toc" style="margin-left:0px;"><a href="#CEC%E5%8D%8F%E8%AE%AE%E6%97%B6%E5%BA%8F%EF%BC%9A" rel="nofollow">CEC协议时序：</a></p> 
+<p id="CEC%E6%95%B0%E6%8D%AE%E5%B8%A7-toc" style="margin-left:0px;"><a href="#CEC%E6%95%B0%E6%8D%AE%E5%B8%A7" rel="nofollow">CEC数据帧</a></p> 
+<p id="cec%E5%BE%85%E6%9C%BA%E5%94%A4%E9%86%92%E4%BB%8B%E7%BB%8D-toc" style="margin-left:0px;"><a href="#cec%E5%BE%85%E6%9C%BA%E5%94%A4%E9%86%92%E4%BB%8B%E7%BB%8D" rel="nofollow">cec待机唤醒介绍</a></p> 
+<p id="%E5%BE%85%E6%9C%BA%E5%94%A4%E9%86%92%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B%E5%92%8C%E5%AE%9E%E7%8E%B0-toc" style="margin-left:0px;"><a href="#%E5%BE%85%E6%9C%BA%E5%94%A4%E9%86%92%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B%E5%92%8C%E5%AE%9E%E7%8E%B0" rel="nofollow">待机唤醒的处理流程和实现</a></p> 
+<p style="margin-left:0px;"></p> 
+<h2 id="cec%E5%9F%BA%E6%9C%AC%E4%BB%8B%E7%BB%8D">cec基本介绍</h2> 
+<p>如今常见的高清视频接口有HDMI,VGA,DP和DVI。HDMI（High-Definition Multimedia Interface）为当今主流的多媒体高速数字接口，下图为最常见的线缆引脚分布图。其中，CEC（Consumer Electronics Control）信号通过13引脚传输，作为HDMI接口的一部分。CEC总线作为控制信号被分离出来，使得在不增加数据占用宽带的情况下完成高速复杂的通信要求。</p> 
+<p><img alt="" height="507" src="https://images2.imgbox.com/a2/f9/NnApJ6h7_o.png" width="846"></p> 
+<p>CEC 是一套完整的单总线协议，电子设备可以借助CEC信号让使用可控制HDMI接口上所连接的装置，比如单独播放，系统待机，可以实现由单一遥控器控制所有HDMI连接的装置。最多15个设备，允许HDMI设备在没有用户干扰情况下互相命令控制。</p> 
+<p>CEC 是与其他HDMI信号分开的电信号。这允许设备在睡眠模式下禁止其高速电路，但是可以被CEC唤醒。他是一个单独的共享总线，直接连接在设备上的所有HDMI端口间，可以流过所有完全断电的设备。</p> 
+<p>总线是开路集电极线，有点像IIC，被动上拉至3.3V，设备拉低进行数据传输。</p> 
+<p>与IIC相似之处：低速串行总线；采用无源上拉的集电极开路；速度受分布电容影响；接收器可以将发送的1位转换为0：发送1比特并观察是否转换为0以查看是否丢失；面向字节都附加一个应答位；特殊的启动信息</p> 
+<p>与IIC不同之处：单线并不是两根线；以固定时序发送比特；低速串行总线（417bit/s）；四个地址位；定义了动态地址分配协议；标头包括发起者和收件人地址；没有特殊停止信号，每个字节附加一个消息结束标志；没有读操作，通过获取请求获取响应帧，所有数据均从数据发送；每个设备都必须能够作为主设备传输数据；地址后字节数据有详细规定说明。</p> 
+<h2 id="CEC%E5%8D%8F%E8%AE%AE%E6%97%B6%E5%BA%8F%EF%BC%9A">CEC协议时序：</h2> 
+<p>bit Timing</p> 
+<p><img alt="" height="795" src="https://images2.imgbox.com/5a/3e/BonWJXQ2_o.png" width="1158"></p> 
+<p>每个位从线拉低（下降沿）开始，保持时间表示位值，之后拉高，直至后续位开始</p> 
+<p>正常数据位长为2.40.35ms。保持低电平0.6±0.2ms为逻辑1；保持低电平1.5±0.2ms表示逻辑0。接收器在下降沿后1.05±0.2ms对线路进行采样，然后在下降沿1.9±0.15ms开始观察下一位。</p> 
+<p>接收者可以将传输的传输的1bt转换为0通过在下降沿后0.35s拉低总线并保持直到表示逻辑0的电平时间。这个通常用于确认传输。</p> 
+<p>每个帧都有起始位，通过拉低总线3.7±0.2ms,然后允许上升，总持续时间为4.5±0.2ms。在观察总线空闲之后，任何设备都可以发送起始位。（通常5位时间，但成功后立即传输7位时间，以促进总线的公平共享，以及传输失败和重传之间的3位时间。)</p> 
+<p>对于单接收消息，应答位类似于C:以1位发送，接收器将其下拉至0以确认该位字节。（根据下面给出的波形可以看出，ack位的波形为逻辑1，但是为什么逻辑分析仪解析的值为0呢？是因为接收器将其下拉至0 以确认该位字节）</p> 
+<p>对于广播消息，应答位被反转：仍然作为1位发送，但被拒绝该字节的任何接收器下拉到0位。每个CEC帧的第一个字节包含4位源和目标地址头。如果寻址目标存在，则它确认该字节。由除标题之外的任何内容组成的帧是pig,它只检查另个设备的存在。</p> 
+<p>地址15（1111B)用于广播地址（作为目的地）和未注册的设备（作为源），它们尚未选择不同的地址。一些设备不需要接收非广播的消息，因此可以永久使用地址15。需要接收寻址消息的设备需要自己的地址。设备通过pig它获取地址，如果ping未被确认，则设备声明它。如果确认ping,则设备尝试另个地址。</p> 
+<p>第二个字节是操作码，它指定要执行的操作，以及后续数据字节的数量及含义。</p> 
+<h2 id="CEC%E6%95%B0%E6%8D%AE%E5%B8%A7">CEC数据帧</h2> 
+<p>cec帧结构 = 起始位+引导块+数据块</p> 
+<p><img alt="" height="417" src="https://images2.imgbox.com/47/80/FnZsuoz0_o.png" width="879"></p> 
+<p>Start（bit）+ Header Block + Data Block 1(opcode block) + Data Block 2 (operand blocks)</p> 
+<p>注：</p> 
+<p>Block定义：Data(8 bit) + EOM(1 bit) + ACK(1 bit)</p> 
+<p>Header Block定义：Initiator(4 bit) + Destination(4 bit) + EOM(1 bit) + ACK(1 bit)</p> 
+<p>所有的引导块和数据块都是10bit。</p> 
+<p>块结构：</p> 
+<p><img alt="" height="175" src="https://images2.imgbox.com/12/c9/eRjytG5L_o.png" width="609"></p> 
+<p>帧结构：</p> 
+<p><img alt="" height="207" src="https://images2.imgbox.com/27/0b/FNNVphZm_o.png" width="1200"></p> 
+<p>逻辑分析仪采集解析的一条完整的cec消息：</p> 
+<p><img alt="" height="244" src="https://images2.imgbox.com/a1/99/vy0OyDwD_o.png" width="1200"></p> 
+<h2 id="cec%E5%BE%85%E6%9C%BA%E5%94%A4%E9%86%92%E4%BB%8B%E7%BB%8D">cec待机唤醒介绍</h2> 
+<p>当一个CEC设备连接到CEC网络中时，其会通过ping的方式获取到自身的逻辑地址。各个设备类型的逻辑地址如下所示，其中总共有16个逻辑地址，而有些设备具有多个逻辑地址，如录音设备就有1、2、9三个不同的逻辑地址。</p> 
+<p><img alt="" height="304" src="https://images2.imgbox.com/20/4b/A5cb36Pr_o.png" width="342"></p> 
+<p>待机唤醒的场景如下：</p> 
+<p><img alt="" height="441" src="https://images2.imgbox.com/de/b1/sf995u67_o.png" width="757"></p> 
+<p>其中，playback device 可以是碟机等设备，当TV处于待机状态时，用户可以使用碟机的遥控器或者开机键唤醒碟机后，碟机会发送或消息来唤醒TV，当source需要将输出显示在TV上时，source必须同时发送和消息。其中，消息的操作码为0x04，,的操作码为0x82。</p> 
+<h2 id="%E5%BE%85%E6%9C%BA%E5%94%A4%E9%86%92%E7%9A%84%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B%E5%92%8C%E5%AE%9E%E7%8E%B0">待机唤醒的处理流程和实现</h2> 
+<p><img alt="" height="722" src="https://images2.imgbox.com/f0/fe/rLdVpMrn_o.png" width="195"></p> 
+<p>这里只配置接收端，在接收到cec开机信号后唤醒即可，所以下面对接受流程进行说明：</p> 
+<p>cec初始化配置：</p> 
+<p>本次基于极海APM32F107RC 芯片，接收CEC信号的GPIO口为：PB0</p> 
+<p>使用外部中断 和 定时器（TMR4）外设计数的方法 实现CEC信号的接收采集</p> 
+<p>所以初始化配置需要使能GPIO口，配置定时器和外部中断</p> 
+<pre><code>void apm_eint0_rising_config(void) //配置外部中断为上升沿触发
+{
+    
+    EINT_Config_T EINT_InitStructure2; //上升沿触发结构体
+    EINT_InitStructure2.line = EINT_LINE_0;
+    EINT_InitStructure2.mode = EINT_MODE_INTERRUPT;
+    EINT_InitStructure2.trigger = EINT_TRIGGER_RISING;
+    EINT_InitStructure2.lineCmd = ENABLE;
+    EINT_Config(&amp;EINT_InitStructure2);
+}
+void apm_eint0_falling_config(void)//配置外部中断为下降沿触发
+{
+    EINT_Config_T EINT_InitStructure1; //下降沿触发结构体
+    EINT_InitStructure1.line = EINT_LINE_0;
+    EINT_InitStructure1.mode = EINT_MODE_INTERRUPT;
+    EINT_InitStructure1.trigger = EINT_TRIGGER_FALLING;
+    EINT_InitStructure1.lineCmd = ENABLE;
+    EINT_Config(&amp;EINT_InitStructure1);
+}
+//cec 初始化
+void apm_cec_init(void)
+{
+    GPIO_Config_T gpioConfig;
+
+    TMR_BaseConfig_T baseConfig;
+    
+    //使能时钟
+    RCM_EnableAPB1PeriphClock(RCM_APB1_PERIPH_TMR4);
+    RCM_EnableAPB2PeriphClock(RCM_APB2_PERIPH_GPIOB);
+    
+    
+    //初始化GPIO_PB0,浮空输入
+    gpioConfig.pin = GPIO_PIN_0;
+    gpioConfig.mode = GPIO_MODE_IN_FLOATING;
+    gpioConfig.speed = GPIO_SPEED_50MHz;
+    GPIO_Config(GPIOB, &amp;gpioConfig);
+    
+    GPIO_ConfigEINTLine(GPIO_PORT_SOURCE_B,GPIO_PIN_SOURCE_0);//设置IO口与中断的映射关系
+    
+    EINT_ClearStatusFlag(EINT_LINE_0);
+    
+    apm_eint0_falling_config();//外部中断初始为下降沿触发
+    
+    NVIC_EnableIRQRequest(EINT0_IRQn, 2, 1);
+    
+    //初始化定时器
+    baseConfig.period        = 65000;//设定计数器自动重装值,65ms更新
+    baseConfig.division      = 71;//预分频器,1M的计数频率,1us加1
+    baseConfig.clockDivision = TMR_CLOCK_DIV_1;//设置时钟分割
+    baseConfig.countMode     = TMR_COUNTER_MODE_UP;//TIM向上计数模式
+    TMR_ConfigTimeBase(TMR4,&amp;baseConfig);
+    
+    TMR_ClearIntFlag(TMR4,TMR_INT_UPDATE);
+    
+    TMR_EnableInterrupt(TMR4,TMR_INT_UPDATE);//允许更新中断 
+
+    //使能中断分组及优先级
+    NVIC_EnableIRQRequest(TMR4_IRQn,2,2);
+    
+    TMR_Enable(TMR4);//使能定时器3
+
+}</code></pre> 
+<p>cec信号接收处理：</p> 
+<p>当触发外部中断并且设备处于待机状态时，根据cec波形以及时序要求解析CEC信号，通过判断opcode数据位的值 从而判断是否唤醒。</p> 
+<pre><code>//接收一个cec  帧
+void apm_cec_receive_frame(void)
+{
+    if(EINT_ReadIntFlag(EINT_LINE_0)) //外部中断
+    {
+        if(apm_get_power_status() == POWER_OFF_STATUS)  //当前状态不是开机
+        {
+        if(CEC_State == CEC_STATE_IDLE)
+        {  
+            //如果波形状态为空闲，开启定时器3计数
+            TMR_ConfigCounter(TMR4,0);
+            TMR_Enable(TMR4);
+            cec_previous_time = TMR_ReadCounter(TMR4);
+            //SKG_INFO("cec_previous_time: %d\r\n",cec_previous_time);
+            apm_eint0_rising_config(); //上升沿触发
+            updatecnt = 0;
+            CEC_State = CEC_STATE_START; //波形为起始码接收状态
+        }
+        else
+        {
+            cec_current_time = TMR_ReadCounter(TMR4); //读取当前捕获值
+            //SKG_INFO("cec_current_time: %d\r\n",cec_current_time);
+            if(updatecnt == 0)
+            {
+                //计算当前时间    //时间间隔=当前时间-前一时间
+                cec_interval_time = abs(cec_current_time - cec_previous_time);
+            }
+            else
+            {
+                cec_interval_time = abs(0x186A0 * updatecnt - cec_previous_time);
+                cec_interval_time += cec_current_time;
+            }
+            cec_previous_time = cec_current_time;//将当前时间设置为前一个时间
+            updatecnt = 0; //计数器的范围返回0状态
+                
+            //SKG_INFO("cec_interval_time: %d\r\n",cec_interval_time);
+                
+            if(CEC_State == CEC_STATE_START)
+            {
+                //低电平时间在3.5ms —— 3.9ms之间
+                if((cec_interval_time &gt; 3500) &amp;&amp; (cec_interval_time &lt; 3900))
+                {
+                    CEC_State = CEC_STATE_STARTEND; //起始结束接收状态
+                }
+                else
+                {
+                    
+                    //SKG_INFO("debug 0 cec_interval_time: %d\r\n",cec_interval_time);
+                    CEC_State = CEC_STATE_IDLE;
+                }
+                    apm_eint0_falling_config(); //下降沿触发
+                }
+                else if(CEC_State == CEC_STATE_STARTEND)
+                {
+                    //起始结束的低电平区间4ms --- 1.2ms
+                    if((cec_interval_time &gt; 300) &amp;&amp; (cec_interval_time &lt; 1300))
+                    {
+                        cec_byte = 0;
+                        CEC_State = CEC_STATE_HEADERLOW; //header block 数据位的低电平
+                        apm_eint0_rising_config(); //上升沿触发
+                    }
+                    else
+                    {
+                        //SKG_INFO("debug 1 cec_interval_time:%d\r\n",cec_interval_time);
+                        //SKG_INFO("AAAAAAAAAAAAAAAAAA\r\n");
+                        CEC_State = CEC_STATE_IDLE;
+                        apm_eint0_falling_config();  //如果波形采集异常，中断回到初始状态下降沿触发
+                    }
+                    
+                }
+                else if(CEC_State == CEC_STATE_HEADERLOW)
+                {
+                    //逻辑1    低电平300-900
+                    if((cec_interval_time &gt; 300) &amp;&amp; (cec_interval_time &lt; 900))
+                    {
+                        headerdata &lt;&lt;= 1;
+                        headerdata |= 1;
+                        cec_byte++;
+                        CEC_State = CEC_STATE_HEADERHIGH; //header block  数据位高电平
+                    }
+                    //逻辑0    低电平1200-1800 
+                    else if((cec_interval_time &gt; 1200) &amp;&amp; (cec_interval_time &lt; 1800))
+                    {
+                        headerdata &lt;&lt;= 1;
+                        cec_byte++;
+                        CEC_State = CEC_STATE_HEADERHIGH;
+                    }
+                    else
+                    {
+                        CEC_State = CEC_STATE_IDLE;
+                        //SKG_INFO("debug 2 cec_interval_time:%d\r\n",cec_interval_time);
+                    }
+
+                    apm_eint0_falling_config();//下降沿触发
+                }
+                else if(CEC_State == CEC_STATE_HEADERHIGH)
+                {
+                    //如果上一次低电平的时间+当前高电平的时间在2.05ms-2.75ms，说明data bit传输正确
+                    if(2050 &lt; (cec_pre_interval_time + cec_interval_time) &lt; 2750)
+                    {
+                        CEC_State = CEC_STATE_HEADERLOW;
+                    }
+                    else
+                    {
+                        //SKG_INFO("debug 3 cec_interval_time:%d\r\n",cec_interval_time);
+                        CEC_State = CEC_STATE_IDLE;
+                    }
+                    if(cec_byte == 10) //header block 字节接收完成
+                    {
+                        //head_src = headerdata &gt;&gt; 6;
+                        head_src = headerdata &gt;&gt; 2;
+                        //head_src = headerdata;
+                        headerdata = 0;
+                        CEC_State = CEC_STATE_CODELOW; //data block  数据位低电平接收
+                    }
+                    apm_eint0_rising_config(); //上升沿触发
+                }
+                else if(CEC_State == CEC_STATE_CODELOW)
+                {
+                    //逻辑1    低电平300-900
+                    if((cec_interval_time &gt; 300) &amp;&amp; (cec_interval_time &lt; 900))
+                    {
+                        codedata &lt;&lt;= 1;
+                        codedata |= 1;
+                        cec_byte++;
+                        CEC_State = CEC_STATE_CODEHIGH; //data block  数据位高电平
+                    }
+                    //逻辑0    低电平1200-1800
+                    else if((cec_interval_time &gt; 1200) &amp;&amp; (cec_interval_time &lt; 1800))
+                    {
+                        codedata &lt;&lt;= 1;
+                        cec_byte++;
+                        CEC_State = CEC_STATE_CODEHIGH;
+                    }
+                    else
+                    {
+                        //SKG_INFO("debug 4 cec_interval_time:%d\r\n",cec_interval_time);
+                        CEC_State = CEC_STATE_IDLE;
+                    }
+                    
+                    apm_eint0_falling_config();//下降沿触发
+                }
+                else if(CEC_State == CEC_STATE_CODEHIGH)
+                {
+                    //如果上一次低电平的时间+当前高电平的时间在2.05ms-2.75ms，说明data bit传输正确
+                    if(2050 &lt; (cec_pre_interval_time + cec_interval_time) &lt; 2750)
+                    {
+                        CEC_State = CEC_STATE_CODELOW;
+                    }
+                    else
+                    {
+                        //SKG_INFO("debug 5 cec_interval_time:%d\r\n",cec_interval_time);
+                        CEC_State = CEC_STATE_IDLE;
+                    }
+                                        if(cec_byte == 18)
+                    {
+                        opcode = codedata;
+                        codedata = 0;
+                        CEC_State = CEC_STATE_IDLE;
+                    }
+                    apm_eint0_rising_config(); //上升沿触发
+                }
+            }
+            cec_pre_interval_time = cec_interval_time;
+        }
+    }
+}
+                    </code></pre> 
+<p>波形的处理流程是  使用状态标志位  的变化来表示接收的字节</p> 
+<pre><code>typedef enum
+{
+    CEC_STATE_IDLE=0,        //0  初始为空闲
+    CEC_STATE_START,        //1  起始位
+    CEC_STATE_STARTEND,     //2     起始位结束
+    CEC_STATE_HEADERLOW,    //3  head block  数据位低电平
+    CEC_STATE_HEADERHIGH,  //4  head block  数据位高电平
+    CEC_STATE_CODELOW,     //5  data block  数据位低电平
+    CEC_STATE_CODEHIGH,    //6  data block  数据位高电平
+}CEC_State_enum;</code></pre> 
+<p>处理过程中没有单独解析ack和eom，字节只接收两个，一个header   10位数据，一个opcode  8位数据。</p> 
+<p>波形处理流程：</p> 
+<p>第一次进入中断为空闲，开启定时器计数并读取当前计数值，状态改为起始位接收，中断改为上升沿触发</p> 
+<p>第二次进入中断读取定时器的值，减去前一次计数器的值，就是起始位低电平维持的时间，判断时间是否为在协议范围，把触发改为下降沿，如果在范围内将状态改为起始位结束状态</p> 
+<p>第三次进入中断 依然是计算出时间的差值，判断高电平维持的时间范围，在范围内则起始位接收完成，将状态改为接收header clock，把中断改为上升沿触发</p> 
+<p>第四次进入中断  由于上一次是下降沿触发，所以时间的差值就是低电平的持续时间，判断时间的范围得到逻辑0或逻辑1，逻辑1 headerdata  </p> 
+<p>数据处理后将状态改为HEADERHIGH  ，中断改为下降沿触发</p> 
+<p>下一次进入中断  时间的差值就是高电平的持续时间，进入HEADERHIGH 条件判断，当前的时间差值+上一次的时间差值就是数据传输的总时间，判断总时间是否在范围，在范围将状态改为HEADERLOW，中断改为上升沿触发，接收处理下一位数据，接收的数据位达到10位，将状态改为接收data clock。Data的接收处理和header相同。接收的数据位达到18位就将数据保存，状态改为空闲。</p> 
+<pre><code>void apm_cec_ctrl_handle(void)
+{
+    if(opcode == CEC_VIEW_ON || opcode == ACTIVE_SOURSE)
+    {
+        if(apm_get_power_status() == POWER_OFF_STATUS)
+        {    
+            power_on();            
+        }
+
+    }
+}</code></pre> 
+<p>在实际调试过程中可以根据需求和现象，调整电平时间判断范围，加入EOM位的判断作为数据传输结束的标志，加大数据的接收范围等。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/dae7bb124d086bef52d50d63d48fa423/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Java中配置RabbitMQ基本步骤</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/4316f584ab70ca566ac516709112e9b6/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">单片机设计_RTC时钟（ACM32F403）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

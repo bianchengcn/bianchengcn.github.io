@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>STM32F103按键操作的另一种实现——状态机 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="STM32F103按键操作的另一种实现——状态机" />
+<meta property="og:description" content="#ifndef _KEY_H_ #define _KEY_H_ #include &#34;HAL_gpio.h&#34; // 换成STM32F103对应的GPIO库 #include &#34;type.h&#34; // type.h主要是一些类型的重命名 #define KEY_UP_GRP GPIOA #define KEY_UP_IDX GPIO_Pin_9 #define KEY_UP_IS_DOWN() GPIO_ReadInputDataBit(KEY_UP_GRP, KEY_UP_IDX) #define KEY_UP_CONFIG() GPIOConfig(KEY_UP_GRP, KEY_UP_IDX, GPIO_Mode_IPU) // 这个函数我在之前帖子里面写过 #define KEY_DOWN_GRP GPIOA #define KEY_DOWN_IDX GPIO_Pin_10 #define KEY_DOWN_IS_DOWN() GPIO_ReadInputDataBit(KEY_DOWN_GRP, KEY_DOWN_IDX) #define KEY_DOWN_CONFIG() GPIOConfig(KEY_DOWN_GRP, KEY_DOWN_IDX, GPIO_Mode_IPU) #define KEY_FUNC_GRP GPIOA #define KEY_FUNC_IDX GPIO_Pin_11 #define KEY_FUNC_IS_DOWN() GPIO_ReadInputDataBit(KEY_FUNC_GRP, KEY_FUNC_IDX) #define KEY_FUNC_CONFIG() GPIOConfig(KEY_FUNC_GRP, KEY_FUNC_IDX, GPIO_Mode_IPU) #define KEY_TURN_GRP GPIOA #define KEY_TURN_IDX GPIO_Pin_12 | GPIO_Pin_13 #define KEY_TURN_IS_DOWN() GPIO_ReadInputDataBit(KEY_TURN_GRP, KEY_TURN_IDX) #define KEY_TURN_CONFIG() GPIOConfig(KEY_TURN_GRP, KEY_TURN_IDX, GPIO_Mode_IPU) //==================================================================================== typedef enum { CONFIRM_KEY = 1, FUNC_KEY, UP_KEY, DOWN_KEY } key_event_t; #define state_keyUp 0 //初始状态,未按键 #define state_keyDown 1 //键被按下 #define state_keyLong 2 //长按 #define state_keyTime 3 //按键计时态 #define return_keyUp 0x00 //初始状态 #define return_keyPressed 0x01 //键被按过,普通按键 #define return_keyLong 0x02 //长按 #define return_keyAuto 0x04 //自动连发 #define key_down 0 //按下 #define key_up 0xf0 //未按时的key有效位键值 #define key_longTimes 100 //10ms一次,200次即2秒,定义长按的判定时间 #define key_autoTimes 20 //连发时间定义,20*10=200,200毫秒发一次 #define KEYS1_VALUE 0xe0 //keyS1 按下 #define KEYS2_VALUE 0xd0 //keyS2 按下 #define KEYS3_VALUE 0xb0 //keyS3 按下 #define KEYS4_5_VALUE 0x70 //keyS4_5 按下 //==================================================================================== void KeyProcess(void); //T0定时器调用的工作函数 void KeyTimerInit(void); #endif /* _KEY_H_ */ #include &lt;stdio." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/ca581cb0c2d27b7cc7ac4eecb5d3ee3e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2016-09-08T12:55:41+08:00" />
+<meta property="article:modified_time" content="2016-09-08T12:55:41+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">STM32F103按键操作的另一种实现——状态机</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p></p> 
+<pre><code class="language-cpp">#ifndef _KEY_H_
+#define _KEY_H_
+
+#include "HAL_gpio.h" // 换成STM32F103对应的GPIO库
+#include "type.h"     // type.h主要是一些类型的重命名
+
+#define KEY_UP_GRP         GPIOA
+#define KEY_UP_IDX         GPIO_Pin_9
+#define KEY_UP_IS_DOWN()   GPIO_ReadInputDataBit(KEY_UP_GRP, KEY_UP_IDX)
+#define KEY_UP_CONFIG()    GPIOConfig(KEY_UP_GRP, KEY_UP_IDX, GPIO_Mode_IPU) // 这个函数我在之前帖子里面写过
+
+#define KEY_DOWN_GRP       GPIOA
+#define KEY_DOWN_IDX       GPIO_Pin_10
+#define KEY_DOWN_IS_DOWN() GPIO_ReadInputDataBit(KEY_DOWN_GRP, KEY_DOWN_IDX)
+#define KEY_DOWN_CONFIG()  GPIOConfig(KEY_DOWN_GRP, KEY_DOWN_IDX, GPIO_Mode_IPU)
+
+#define KEY_FUNC_GRP       GPIOA
+#define KEY_FUNC_IDX       GPIO_Pin_11
+#define KEY_FUNC_IS_DOWN() GPIO_ReadInputDataBit(KEY_FUNC_GRP, KEY_FUNC_IDX)
+#define KEY_FUNC_CONFIG()  GPIOConfig(KEY_FUNC_GRP, KEY_FUNC_IDX, GPIO_Mode_IPU) 
+
+#define KEY_TURN_GRP       GPIOA
+#define KEY_TURN_IDX       GPIO_Pin_12 | GPIO_Pin_13
+#define KEY_TURN_IS_DOWN() GPIO_ReadInputDataBit(KEY_TURN_GRP, KEY_TURN_IDX)
+#define KEY_TURN_CONFIG()  GPIOConfig(KEY_TURN_GRP, KEY_TURN_IDX, GPIO_Mode_IPU)
+
+//====================================================================================
+typedef enum
+{
+  CONFIRM_KEY = 1,
+  FUNC_KEY,
+  UP_KEY,
+  DOWN_KEY
+} key_event_t;
+
+#define state_keyUp         0       //初始状态,未按键
+#define state_keyDown       1       //键被按下
+#define state_keyLong       2       //长按
+#define state_keyTime       3       //按键计时态
+
+#define return_keyUp        0x00    //初始状态
+#define return_keyPressed   0x01    //键被按过,普通按键
+#define return_keyLong      0x02    //长按
+#define return_keyAuto      0x04    //自动连发
+
+#define key_down            0       //按下
+#define key_up              0xf0    //未按时的key有效位键值
+#define key_longTimes       100     //10ms一次,200次即2秒,定义长按的判定时间
+#define key_autoTimes       20      //连发时间定义,20*10=200,200毫秒发一次
+
+
+#define KEYS1_VALUE         0xe0    //keyS1 按下
+#define KEYS2_VALUE         0xd0    //keyS2 按下
+#define KEYS3_VALUE         0xb0    //keyS3 按下
+#define KEYS4_5_VALUE       0x70    //keyS4_5 按下
+
+//====================================================================================
+void KeyProcess(void);  //T0定时器调用的工作函数
+void KeyTimerInit(void);
+
+#endif /* _KEY_H_ */
+</code></pre> 
+<pre><code class="language-cpp">#include &lt;stdio.h&gt;
+#include "key.h"
+#include "timer.h" // STM32F103定时器的配置
+
+static uint8_t
+key_get(void)       //获取P3口值
+{
+  if(KEY_UP_IS_DOWN() == key_down)
+  {
+    return KEYS1_VALUE;
+  }
+  if(KEY_DOWN_IS_DOWN() == key_down)
+  {
+    return KEYS2_VALUE;
+  }
+  if(KEY_FUNC_IS_DOWN() == key_down)
+  {
+    return KEYS3_VALUE;
+  }
+  if(KEY_TURN_IS_DOWN() == key_down)
+  {
+    return KEYS4_5_VALUE;
+  }
+
+  return key_up ;    //0xf0  没有任何按键
+}
+
+//函数每20ms被调用一次，而我们弹性按键过程时一般都20ms以上
+//所以每次按键至少调用本函数2次
+static uint8_t
+key_read(uint8_t* pKeyValue)
+{
+  static uint8_t  s_u8keyState = 0;        //未按，普通短按，长按,连发等状态
+  static uint16_t s_u16keyTimeCounts = 0;  //在计时状态的计数器
+  static uint8_t  s_u8LastKey = key_up ; //保存按键释放时的P3口数据
+
+  uint8_t keyTemp = 0;              //键对应io口的电平
+  int8_t key_return = 0;          //函数返回值
+  keyTemp = key_up &amp; key_get();  //提取所有的key对应的io口
+
+  switch(s_u8keyState)           //这里检测到的是先前的状态
+  {
+  case state_keyUp:   //如果先前是初始态，即无动作
+  {
+    if(key_up != keyTemp) //如果键被按下
+    {
+      s_u8keyState = state_keyDown; //更新键的状态，普通被按下
+    }
+  }
+  break;
+
+  case state_keyDown: //如果先前是被按着的
+  {
+    if(key_up != keyTemp) //如果现在还被按着
+    {
+      s_u8keyState = state_keyTime; //转换到计时态
+      s_u16keyTimeCounts = 0;
+      s_u8LastKey = keyTemp;     //保存键值
+    }
+    else
+    {
+      s_u8keyState = state_keyUp; //键没被按着，回初始态，说明是干扰
+    }
+  }
+  break;
+
+  case state_keyTime:  //如果先前已经转换到计时态(值为3)
+  {
+    //如果真的是手动按键,必然进入本代码块,并且会多次进入
+    if(key_up == keyTemp) //如果未按键
+    {
+      s_u8keyState = state_keyUp;
+      key_return = return_keyPressed;    //返回1,一次完整的普通按键
+      //程序进入这个语句块，说明已经有2次以上10ms的中断，等于已经消抖
+      //那么此时检测到按键被释放，说明是一次普通短按
+    }
+    else  //在计时态，检测到键还被按着
+    {
+      if(++s_u16keyTimeCounts &gt; key_longTimes) //时间达到2秒
+      {
+        s_u8keyState = state_keyLong;  //进入长按状态
+        s_u16keyTimeCounts = 0;      //计数器清空,便于进入连发重新计数
+        key_return = return_keyLong;   //返回state_keyLong
+      }
+      //代码中,在2秒内如果我们一直按着key的话,返回值只会是0,不会识别为短按或长按的
+    }
+  }
+  break;
+
+  case state_keyLong:  //在长按状态检测连发  ,每0.2秒发一次
+  {
+    if(key_up == keyTemp)
+    {
+      s_u8keyState = state_keyUp;
+    }
+    else //按键时间超过2秒时
+    {
+      if(++s_u16keyTimeCounts &gt; key_autoTimes)//10*20=200ms
+      {
+        s_u16keyTimeCounts = 0;
+        key_return = return_keyAuto;  //每0.2秒返回值的第2位置位(1&lt;&lt;2)
+      }//连发的时候,肯定也伴随着长按
+    }
+    key_return |= return_keyLong;  //0x02是肯定的,0x04|0x02是可能的
+  }
+  break;
+
+  default:
+    break;
+  }
+  *pKeyValue = s_u8LastKey ; //返回键值
+  return key_return;
+}
+
+</code></pre> 
+<pre><code class="language-cpp">// 这个函数就是要在中断中调用的。主要是使用事件队列的方式。
+void
+KeyProcess(void)
+{
+  uint8_t key_stateValue;
+  uint8_t keyValue = 0;
+  uint8_t* pKeyValue = &amp;keyValue;
+
+  key_stateValue = key_read(pKeyValue);
+
+  if ((return_keyPressed == key_stateValue) &amp;&amp; (*pKeyValue == KEYS1_VALUE))
+  {
+    //短按keyS1时改变对时状态，将其加入队列，队列的基本操作在将队列的时候写过。
+    if(QueueEventIsEmpty(g_state_manager.process-&gt;key_event) ||
+        (!QueueEventIsEmpty(g_state_manager.process-&gt;key_event) &amp;&amp;
+         !QUEUE_EVENT_IS_EQUEL(g_state_manager.process-&gt;key_event, UP_KEY)))
+    {
+      QueueEventPush(g_state_manager.process-&gt;key_event, UP_KEY);
+    }
+  }
+}
+
+//======================================================================================
+void
+KeyTimerInit(void)
+{
+  KEY_UP_CONFIG();
+  KEY_DOWN_CONFIG();
+  KEY_FUNC_CONFIG();
+  KEY_TURN_CONFIG();
+
+  // 20ms
+  TimerConfig(KEY_TIMER, KEY_TIMER_DIV, KEY_TIMER_PERIOD);
+  TimerDisable(KEY_TIMER);
+  TimerEnable(KEY_TIMER);
+}</code></pre>主要是描述一下按键状态机的思维，使用定时器中断的方法，按键按下将其加入队列中，在主函数的循环中实现出队。亲测可用。 
+<br> 
+<br> 
+<br> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/f72f41288cbf36a1bd7e86b6d030f1d3/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Url参数中出现&#43;、空格、=、%、&amp;、#等字符的解决办法</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/c194a92f869efcd68bd206ef906b5742/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Jquery的$.ajax防止重复提交的方法</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

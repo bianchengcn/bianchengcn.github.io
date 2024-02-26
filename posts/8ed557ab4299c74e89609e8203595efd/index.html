@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>操作系统——解决了我的一些困惑 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="操作系统——解决了我的一些困惑" />
+<meta property="og:description" content="目录
+1、电脑开机做了什么事情
+2、真正实现并行的计算机
+3、计算机中的淘汰算法 &amp; 分配算法 &amp; 调度算法 &amp; 空间管理
+4、什么是虚拟内存？为什么需要虚拟内存？最多可分配多少？
+5、TLB（快表）、分页存储（慢表）【二级、多级、分段、分页、段页】、虚拟内存
+6、高级语言程序——转换为可执行目标程序
+1、电脑开机做了什么事情 爆肝一晚上，希望用动画带你理解操作系统的启动_哔哩哔哩_bilibili
+首先，我们已经通过BIOS引导，安装了一个操作系统，并且划分了分区，还安装了软件
+现在开始开机： （自检-BIOS-MBR-PBR-初始化）
+CPU读取磁盘信息（执行BIOS引导程序——硬件自检）通过主引导记录MBR——找到磁盘分区 &amp; 操作系统的分区通过分区引导记录PBR——根据根目录找到启动管理程序执行操作系统的初始化程序——完成操作系统的初始化 补一下：（408小白，刚刚才开始复习操作系统，还搞不定那些分区什么的，虽然王道有讲，但是忘记了差不多了）
+电源开启后，计算机进行电源自检，确保各硬件设备正常。主板上的BIOS芯片被访问，执行Basic Input/Output System (BIOS)程序。BIOS负责初始化各硬件设备，并进行一系列自检，包括检查RAM、显示适配器等。BIOS通过读取硬盘驱动器的引导区（Master Boot Record，MBR）来加载引导程序。MBR位于分区表的第一个扇区，其中存储了引导程序的位置和大小信息。主要分为：【磁盘引导程序 和 分区表】（扫描分区表：分区表记录了D盘的位置，还有系统分区C盘等等，【普通盘】就是记录的数据，【系统盘】就是操作系统的程序）通过【MBR的引导程序】找到【系统分区】，读取【分区引导记录 - Partition Boot Record - PBR】，然后根据【根目录】找到【启动管理程序】，加载【操作系统的引导加载程序】（如果是Linux，就加载Linux，如果是Windows，就加载Windows）。完成后把【控制权】转交给【操作系统】。【操作系统内核】被加载入内存，并开始执行【初始化程序】。【初始化程序】负责配置系统环境、加载设备驱动程序和初始化各种子系统。【初始化过程】通常涉及加载一些核心组件、建立内存管理和进程管理结构，以及准备其他必要的系统资源。一旦初始化完成，操作系统进入【可用状态】，用户可以进行交互，并且其他应用程序可以在操作系 需要注意的是，不同的操作系统和计算机架构可能会有所不同，但基本过程大致相似。此外，硬盘分区和软件安装的细节通常在操作系统初始化之后完成。
+大佬补充：
+目前大多BIOS 都是FLASH存储，可烧写擦除，ROM只是针对用户使用而言的，防止固件程序被随意改动，按下开机键后首先执行上电，上电后权限移交给CPU和BIOS，而后bios再调用mbr表，同样S5-S0根据ACPI会同步执行掉电以达到低功耗。值得一提的是在计算机设计中固件不一定只有BIOS code，有部分挂载需要借助UEFI系统进行升级，同样针对用户来说也是ROM。同样BIOS FLASH内部不一定只有BIOS code，这部分是ODM针对需求定制来决定的。针对硬件层来说，第一层是上电，也就是会执行上电复位/使能/软复位的操作，第二层则是BIOS，第三层是mbr，第四层是fs（eg:NTFS，mbr需要根据fs的类型再进行find os boot），第五层是OS kernel（这之前可能也还有个OS boot），而后才是OS以及OS GUI。当然实际上都是由设计决定的。例如fs其实可以不止一层，kernel可以有kernel的fs，mbr可以有mbr的fs，OS由OS的fs，而磁盘也可能有自己的文件系统（即为固件管路或者存储矩阵管理）。过程还挺复杂的，我这边接触的也只是一个角度的（ACPI上的）
+注意：【uefi启动】
+现在已经是uefi启动了（原理都是差不多的，不过是uefi统一了框架）
+【针对UEFI启动&#43;单系统】在开机的10s内，你的电脑都干了什么？_哔哩哔哩_bilibili
+2、真正实现并行的计算机 并行处理计算机系统（parallel computer system）是指同时执行多个任务或多条指令或同时对多个数据项进行处理的计算机系统。
+早期的计算机是串行逐位处理的，称为串行计算机。
+并行处理计算机主要指以下两种类型的计算机：
+1、能同时执行多条指令或同时处理多个数据项的单中央处理器计算机；（超流水技术）
+2、多核处理机（可以有一个CPU多个核心）
+3、计算机中的淘汰算法 &amp; 分配算法 &amp; 调度算法 &amp; 空间管理 淘汰算法：
+1、进程调度（进程五状态的切换）
+2、页面调度（内存页面的置换）" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/8ed557ab4299c74e89609e8203595efd/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-11-26T20:37:04+08:00" />
+<meta property="article:modified_time" content="2023-11-26T20:37:04+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">操作系统——解决了我的一些困惑</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="1%E3%80%81%E7%94%B5%E8%84%91%E5%BC%80%E6%9C%BA%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88%E4%BA%8B%E6%83%85-toc" style="margin-left:40px;"><strong><a href="#1%E3%80%81%E7%94%B5%E8%84%91%E5%BC%80%E6%9C%BA%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88%E4%BA%8B%E6%83%85" rel="nofollow">1、电脑开机做了什么事情</a></strong></p> 
+<p id="2%E3%80%81%E7%9C%9F%E6%AD%A3%E5%AE%9E%E7%8E%B0%E5%B9%B6%E8%A1%8C%E7%9A%84%E8%AE%A1%E7%AE%97%E6%9C%BA-toc" style="margin-left:40px;"><strong><a href="#2%E3%80%81%E7%9C%9F%E6%AD%A3%E5%AE%9E%E7%8E%B0%E5%B9%B6%E8%A1%8C%E7%9A%84%E8%AE%A1%E7%AE%97%E6%9C%BA" rel="nofollow">2、真正实现并行的计算机</a></strong></p> 
+<p id="3%E3%80%81%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%B8%AD%E7%9A%84%E6%B7%98%E6%B1%B0%E7%AE%97%E6%B3%95%20%26%20%E5%88%86%E9%85%8D%E7%AE%97%E6%B3%95%20%26%20%E8%B0%83%E5%BA%A6%E7%AE%97%E6%B3%95%20%26%20%E7%A9%BA%E9%97%B4%E7%AE%A1%E7%90%86-toc" style="margin-left:40px;"><strong><a href="#3%E3%80%81%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%B8%AD%E7%9A%84%E6%B7%98%E6%B1%B0%E7%AE%97%E6%B3%95%20%26%20%E5%88%86%E9%85%8D%E7%AE%97%E6%B3%95%20%26%20%E8%B0%83%E5%BA%A6%E7%AE%97%E6%B3%95%20%26%20%E7%A9%BA%E9%97%B4%E7%AE%A1%E7%90%86" rel="nofollow">3、计算机中的淘汰算法 &amp; 分配算法 &amp; 调度算法 &amp; 空间管理</a></strong></p> 
+<p id="4%E3%80%81%E4%BB%80%E4%B9%88%E6%98%AF%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%EF%BC%9F%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%EF%BC%9F%E6%9C%80%E5%A4%9A%E5%8F%AF%E5%88%86%E9%85%8D%E5%A4%9A%E5%B0%91%EF%BC%9F-toc" style="margin-left:40px;"><strong><a href="#4%E3%80%81%E4%BB%80%E4%B9%88%E6%98%AF%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%EF%BC%9F%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%EF%BC%9F%E6%9C%80%E5%A4%9A%E5%8F%AF%E5%88%86%E9%85%8D%E5%A4%9A%E5%B0%91%EF%BC%9F" rel="nofollow">4、什么是虚拟内存？为什么需要虚拟内存？最多可分配多少？</a></strong></p> 
+<p id="5%E3%80%81TLB%EF%BC%88%E5%BF%AB%E8%A1%A8%EF%BC%89%E3%80%81%E5%88%86%E9%A1%B5%E5%AD%98%E5%82%A8%EF%BC%88%E6%85%A2%E8%A1%A8%EF%BC%89%E3%80%90%E4%BA%8C%E7%BA%A7%E3%80%81%E5%A4%9A%E7%BA%A7%E3%80%81%E5%88%86%E6%AE%B5%E3%80%81%E5%88%86%E9%A1%B5%E3%80%81%E6%AE%B5%E9%A1%B5%E3%80%91%E3%80%81%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98-toc" style="margin-left:40px;"><strong><a href="#5%E3%80%81TLB%EF%BC%88%E5%BF%AB%E8%A1%A8%EF%BC%89%E3%80%81%E5%88%86%E9%A1%B5%E5%AD%98%E5%82%A8%EF%BC%88%E6%85%A2%E8%A1%A8%EF%BC%89%E3%80%90%E4%BA%8C%E7%BA%A7%E3%80%81%E5%A4%9A%E7%BA%A7%E3%80%81%E5%88%86%E6%AE%B5%E3%80%81%E5%88%86%E9%A1%B5%E3%80%81%E6%AE%B5%E9%A1%B5%E3%80%91%E3%80%81%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98" rel="nofollow">5、TLB（快表）、分页存储（慢表）【二级、多级、分段、分页、段页】、虚拟内存</a></strong></p> 
+<p id="6%E3%80%81%E9%AB%98%E7%BA%A7%E8%AF%AD%E8%A8%80%E7%A8%8B%E5%BA%8F%E2%80%94%E2%80%94%E8%BD%AC%E6%8D%A2%E4%B8%BA%E5%8F%AF%E6%89%A7%E8%A1%8C%E7%9B%AE%E6%A0%87%E7%A8%8B%E5%BA%8F-toc" style="margin-left:40px;"><strong><a href="#6%E3%80%81%E9%AB%98%E7%BA%A7%E8%AF%AD%E8%A8%80%E7%A8%8B%E5%BA%8F%E2%80%94%E2%80%94%E8%BD%AC%E6%8D%A2%E4%B8%BA%E5%8F%AF%E6%89%A7%E8%A1%8C%E7%9B%AE%E6%A0%87%E7%A8%8B%E5%BA%8F" rel="nofollow">6、高级语言程序——转换为可执行目标程序</a></strong></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h3 id="1%E3%80%81%E7%94%B5%E8%84%91%E5%BC%80%E6%9C%BA%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88%E4%BA%8B%E6%83%85" style="background-color:transparent;margin-left:0px;text-align:justify;">1、电脑开机做了什么事情</h3> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><a href="https://www.bilibili.com/video/BV1mm4y1u7G6/" rel="nofollow" title="爆肝一晚上，希望用动画带你理解操作系统的启动_哔哩哔哩_bilibili">爆肝一晚上，希望用动画带你理解操作系统的启动_哔哩哔哩_bilibili</a></p> 
+</blockquote> 
+<p style="margin-left:0;text-align:justify;"><strong>首先，我们已经通过BIOS引导，安装了一个操作系统，并且划分了分区，还安装了软件</strong></p> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;">现在开始开机：   （自检-BIOS-MBR-PBR-初始化）</span></strong></p> 
+ <ol><li style="text-align:justify;"><strong>CPU读取磁盘信息（执行BIOS引导程序——硬件自检）</strong></li><li style="text-align:justify;"><strong>通过主引导记录MBR——找到磁盘分区 &amp; 操作系统的分区</strong></li><li style="text-align:justify;"><strong>通过分区引导记录PBR——根据根目录找到启动管理程序</strong></li><li style="text-align:justify;"><strong>执行操作系统的初始化程序——完成操作系统的初始化</strong></li></ol> 
+ <p style="text-align:justify;"><img alt="" height="255" src="https://images2.imgbox.com/69/74/EQrcQf7o_o.png" width="531"></p> 
+</blockquote> 
+<p style="margin-left:0;text-align:justify;"><span style="background-color:#d9d9d9;"><span style="color:#18191c;">补一下：（408小白，刚刚才开始复习操作系统，还搞不定那些分区什么的，虽然王道有讲，但是忘记了差不多了）</span></span></p> 
+<ol><li style="text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="color:#24292f;">电源开启后，计算机进行<span style="background-color:#FFFF00;">电源自检，确保各硬件设备正常</span>。</span></strong></span></li><li style="text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="color:#24292f;">主板上的</span></strong><strong><span style="color:#24292f;">BIOS</span></strong><strong><span style="color:#24292f;">芯片被访问，执行</span></strong><strong><span style="color:#24292f;">Basic Input/Output System (BIOS)</span></strong><strong><span style="color:#24292f;">程序。</span></strong><strong><span style="color:#24292f;">BIOS</span></strong><strong><span style="color:#24292f;">负责初始化各硬件设备，并<span style="background-color:#FFFF00;">进行一系列自检</span>，包括检查</span></strong><strong><span style="color:#24292f;">RAM</span></strong><strong><span style="color:#24292f;">、显示适配器等。</span></strong></span></li><li style="text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="color:#24292f;">BIOS</span></strong><strong><span style="color:#24292f;">通过<span style="background-color:#00FF00;">读取硬盘驱动器的引导区</span>（</span></strong><strong><span style="color:#24292f;">Master Boot Record</span></strong><strong><span style="color:#24292f;">，</span></strong><strong><span style="color:#24292f;">MBR</span></strong><strong><span style="color:#24292f;">）来加载引导程序。</span></strong><strong><span style="color:#24292f;">MBR</span></strong><strong><span style="color:#24292f;">位于分区表的第一个扇区，其中存储了引导程序的位置和大小信息。主要分为：【磁盘引导程序</span></strong><strong> </strong><strong><span style="color:#24292f;">和</span></strong><strong> </strong><strong><span style="color:#24292f;">分区表】（扫描分区表：分区表记录了</span></strong><strong><span style="color:#24292f;">D</span></strong><strong><span style="color:#24292f;">盘的位置，还有系统分区</span></strong><strong><span style="color:#24292f;">C</span></strong><strong><span style="color:#24292f;">盘等等，【普通盘】就是记录的数据，【系统盘】就是操作系统的程序）</span></strong></span></li><li style="text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="color:#24292f;">通过【</span></strong><strong><span style="color:#24292f;">MBR</span></strong><strong><span style="color:#24292f;">的引导程序】找到【系统分区】，读取【分区引导记录</span></strong><strong><span style="color:#24292f;"> - Partition Boot Record - PBR</span></strong><strong><span style="color:#24292f;">】，然后根据【根目录】找到【启动管理程序】，加载【操作系统的引导加载程序】（如果是</span></strong><strong><span style="color:#24292f;">Linux</span></strong><strong><span style="color:#24292f;">，就加载</span></strong><strong><span style="color:#24292f;">Linux</span></strong><strong><span style="color:#24292f;">，如果是</span></strong><strong><span style="color:#24292f;">Windows</span></strong><strong><span style="color:#24292f;">，就加载</span></strong><strong><span style="color:#24292f;">Windows</span></strong><strong><span style="color:#24292f;">）。完成后把【控制权】转交给【操作系统】。</span></strong></span></li><li style="text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="background-color:#00FF00;"><span style="color:#24292f;">【操作系统内核】被加载入内存，并开始执行【初始化程序】。【</span></span></strong><strong><span style="color:#24292f;">初始化程序<span style="background-color:#00FF00;">】</span>负责配置系统环境、加载设备驱动程序和初始化各种子系统。</span></strong></span></li><li style="text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="color:#24292f;">【初始化过程】通常涉及加载一些核心组件、建立内存管理和进程管理结构，以及准备其他必要的系统资源。</span></strong></span></li><li style="text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="color:#24292f;">一旦初始化完成，操作系统进入【可用状态】，用户可以进行交互，并且其他应用程序可以在操作系</span></strong></span></li></ol> 
+<blockquote> 
+ <p style="margin-left:0;text-align:left;"><span style="background-color:#f4f6f8;"><strong><span style="color:#24292f;">需要注意的是，不同的操作系统和计算机架构可能会有所不同，但基本过程大致相似。此外，硬盘分区和软件安装的细节通常在操作系统初始化之后完成。</span></strong></span></p> 
+</blockquote> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">大佬补充：</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><span style="background-color:#FFFFFF;"><span style="color:#18191c;">目前大多BIOS 都是FLASH存储，可烧写擦除，ROM只是针对用户使用而言的，防止固件程序被随意改动，按下开机键后首先执行上电，上电后权限移交给CPU和BIOS，而后bios再调用mbr表，同样S5-S0根据ACPI会同步执行掉电以达到低功耗。值得一提的是在计算机设计中固件不一定只有BIOS code，有部分挂载需要借助UEFI系统进行升级，同样针对用户来说也是ROM。同样BIOS FLASH内部不一定只有BIOS code，这部分是ODM针对需求定制来决定的。针对硬件层来说，第一层是上电，也就是会执行上电复位/使能/软复位的操作，第二层则是BIOS，第三层是mbr，第四层是fs（eg:NTFS，mbr需要根据fs的类型再进行find os boot），第五层是OS kernel（这之前可能也还有个OS boot），而后才是OS以及OS GUI。当然实际上都是由设计决定的。例如fs其实可以不止一层，kernel可以有kernel的fs，mbr可以有mbr的fs，OS由OS的fs，而磁盘也可能有自己的文件系统（即为固件管路或者存储矩阵管理）。<strong>过程还挺复杂的，我这边接触的也只是一个角度的（ACPI上的）</strong></span></span></p> 
+</blockquote> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#333333;">注意：【uefi启动】</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><span style="background-color:#FFFFFF;"><span style="color:#18191c;">现在已经是</span></span>uefi启动<span style="background-color:#FFFFFF;"><span style="color:#18191c;">了（原理都是差不多的，不过是uefi统一了框架）</span></span></p> 
+ <p style="margin-left:0;text-align:justify;"><a href="https://www.bilibili.com/video/BV1dK41117PT/" rel="nofollow" title="【针对UEFI启动+单系统】在开机的10s内，你的电脑都干了什么？_哔哩哔哩_bilibili">【针对UEFI启动+单系统】在开机的10s内，你的电脑都干了什么？_哔哩哔哩_bilibili</a><img alt="" height="177" src="https://images2.imgbox.com/a7/bd/azi0cOAd_o.png" width="510"></p> 
+</blockquote> 
+<h3 id="2%E3%80%81%E7%9C%9F%E6%AD%A3%E5%AE%9E%E7%8E%B0%E5%B9%B6%E8%A1%8C%E7%9A%84%E8%AE%A1%E7%AE%97%E6%9C%BA" style="margin-left:0;text-align:justify;">2、真正实现并行的计算机</h3> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><span style="background-color:#FFFFFF;"><span style="color:#18191c;">并行处理计算机系统（parallel computer system）是指同时执行多个任务或多条指令或同时对多个数据项进行处理的计算机系统。</span></span></p> 
+</blockquote> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><span style="background-color:#FFFFFF;"><span style="color:#18191c;">早期的计算机是串行逐位处理的，称为串行计算机。</span></span></p> 
+</blockquote> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">并行处理计算机主要指以下两种类型的计算机：</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">1</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、能同时执行多条指令或同时处理多个数据项的单中央处理器计算机；（超流水技术）</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">2</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、多核处理机（可以有一个CPU多个核心）</span></span></strong></p> 
+</blockquote> 
+<h3 id="3%E3%80%81%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%B8%AD%E7%9A%84%E6%B7%98%E6%B1%B0%E7%AE%97%E6%B3%95%20%26%20%E5%88%86%E9%85%8D%E7%AE%97%E6%B3%95%20%26%20%E8%B0%83%E5%BA%A6%E7%AE%97%E6%B3%95%20%26%20%E7%A9%BA%E9%97%B4%E7%AE%A1%E7%90%86" style="margin-left:0;text-align:justify;">3、计算机中的淘汰算法 &amp; 分配算法 &amp; 调度算法 &amp; 空间管理</h3> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;">淘汰算法：</span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">1</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、进程调度（进程五状态的切换）<a name="_Hlk148038313"></a></span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">2</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、页面调度（内存页面的置换）</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">3</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、高速缓存（Cache与TLB的内存块置换）</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">分配算法：</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">1</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、内存分配算法——离散分配、连续分配</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">2</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、进程资源分配——银行家算法</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">调度算法：</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">1、进程调度排队——6个（FIFO）</span></span></strong></p> 
+ <p style="text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">2、磁盘调度算法——6个</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">空间管理：</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">1</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、文件管理方法——4个（位示图）</span></span></strong></p> 
+</blockquote> 
+<h3 id="4%E3%80%81%E4%BB%80%E4%B9%88%E6%98%AF%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%EF%BC%9F%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%EF%BC%9F%E6%9C%80%E5%A4%9A%E5%8F%AF%E5%88%86%E9%85%8D%E5%A4%9A%E5%B0%91%EF%BC%9F" style="margin-left:0;text-align:justify;">4、什么是虚拟内存？为什么需要虚拟内存？最多可分配多少？</h3> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">0</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、操作系统——会默认给虚拟内存</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">微软官方文档——程序都需要虚拟内存的，不管你剩余内存有多少</span></span></strong><strong> </strong></p> 
+ <p style="margin-left:0;text-align:justify;"><a href="https://www.bilibili.com/read/cv26771965/?jump_opus=1" rel="nofollow" title="『面试问答』：什么是虚拟内存？为什么要有虚拟内存？ - 哔哩哔哩">『面试问答』：什么是虚拟内存？为什么要有虚拟内存？ - 哔哩哔哩</a></p> 
+</blockquote> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">1</span></span></strong><strong><span style="background-color:#FFFFFF;"><span style="color:#18191c;">、为什么进程使用的是虚拟内存，而不是真实的物理内存？</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">虚拟内存使得应用程序认为它拥有<span style="background-color:#FFFF00;">连续的可用的内存</span>（一个连续完整的地址空间)，而实际上，</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">它通常是<span style="background-color:#FFFF00;">被分隔成多个物理内存碎片</span>，还有部分暂时存储在外部磁盘存储器上，在需要时进行数据交换。</span></span></strong></p> 
+</blockquote> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">2</span></span></strong><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">、如果内存不够，我们可以手动设置虚拟内存的大小</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">对于系统上运行的进程来说：（虚拟内存的最大容量由计算机的地址结构决定的）</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">在32位系统上，最多可以拥有4GB（2的32次方）虚拟内存空间，</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">在64位系统上，则最多可以拥有256T（2的64次方）虚拟内存空间。</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">由于每个进程都有一个这么大的地址空间，导致所有进程的虚拟内存加起来，自然要比实际物理内存大得多。所以，并不是所有的虚拟内存都会分配物理内存，只有那些实际使用的虚拟内存才会分配物理内存。</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">当进程对某块虚拟内存进行读写时，CPU 就会去访问这块内存， 这时如果发现这块虚拟内存没有映射到物理内存， CPU 就会产生缺页中断，进程会从用户态切换到内核态，并将缺页中断交给内核的缺页中断函数处理，这时才会真正地为它分配物理内存。</span></span></strong></p> 
+</blockquote> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">3</span></span></strong><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">、总结</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">虚拟内存技术——扩充内存逻辑空间的技术</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#FF0000;">简单说——给程序加了一个映射，方便从离散的硬盘块中，快去取出并且替换</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">主要通过将部分程序的内存映射到磁盘上，然后在需要时再将其读入内存中来扩展可用地址空间。</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><span style="background-color:#d9d9d9;"><span style="color:#24292f;">优点——它提供了更大的地址空间，使程序能够访问比实际物理内存更多的内存。</span></span></p> 
+ <p style="margin-left:0;text-align:justify;"><span style="background-color:#d9d9d9;"><span style="color:#24292f;">缺点——由于需要从磁盘读取和写入数据，虚拟内存访问速度相对较慢，从而导致系统性能受到影响。</span></span></p> 
+</blockquote> 
+<p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">4</span></span></strong><strong><span style="background-color:#FFFF00;"><span style="color:#18191c;">、举一个例子</span></span></strong></p> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong>对于虚拟内存——就是老板（操作系统）给员工（程序）画的饼</strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;">画饼：</span></strong><strong>操作系统给程序说有100个房间（连续的内存空间）供他使用【这就是他虚拟的内存】</strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;">实际：</span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong>员工（程序）在真正使用那些<u>房间里面的东西时</u>【虚拟地址】，老板会进一步处理转换为内存上对应的【物理地址】</strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong>其实老板（操作系统）只会给分他10个房间【内存空间】，</strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong>并且总会及时的把没有在【内存空间】的地址，放到那【内存空间中】——页面置换</strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong>这样就让程序没有感知，感觉良好（实际上就是被坑了~）</strong></p> 
+</blockquote> 
+<p style="margin-left:0;text-align:justify;"><img alt="" height="724" src="https://images2.imgbox.com/9a/86/zKDKKTl8_o.png" width="912"></p> 
+<p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#FFFF00;">Swap</span></strong><strong><span style="background-color:#FFFF00;">分区</span></strong></p> 
+<p style="margin-left:0;text-align:justify;"><img alt="" height="228" src="https://images2.imgbox.com/3a/13/PsfcBGrh_o.png" width="579"></p> 
+<h3 id="5%E3%80%81TLB%EF%BC%88%E5%BF%AB%E8%A1%A8%EF%BC%89%E3%80%81%E5%88%86%E9%A1%B5%E5%AD%98%E5%82%A8%EF%BC%88%E6%85%A2%E8%A1%A8%EF%BC%89%E3%80%90%E4%BA%8C%E7%BA%A7%E3%80%81%E5%A4%9A%E7%BA%A7%E3%80%81%E5%88%86%E6%AE%B5%E3%80%81%E5%88%86%E9%A1%B5%E3%80%81%E6%AE%B5%E9%A1%B5%E3%80%91%E3%80%81%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98" style="margin-left:0;text-align:justify;">5、TLB（快表）、分页存储（慢表）【二级、多级、分段、分页、段页】、虚拟内存</h3> 
+<blockquote> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">CPU</span></span></strong><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">到Cache中——有TLB（快表）做地址转换（提高运行速度）</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">内存块到硬盘——有（慢表）做物理地址到虚拟地址的转换（方</span></span></strong><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">便程序运行）</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><strong><span style="background-color:#d9d9d9;"><span style="color:#18191c;">内存块到硬盘——有（虚拟内存）做地址转换（方便程序更好运行）</span></span></strong></p> 
+ <p style="margin-left:0;text-align:justify;"><img alt="" height="361" src="https://images2.imgbox.com/8e/b7/usVTTMW5_o.png" width="539"></p> 
+</blockquote> 
+<h3 id="6%E3%80%81%E9%AB%98%E7%BA%A7%E8%AF%AD%E8%A8%80%E7%A8%8B%E5%BA%8F%E2%80%94%E2%80%94%E8%BD%AC%E6%8D%A2%E4%B8%BA%E5%8F%AF%E6%89%A7%E8%A1%8C%E7%9B%AE%E6%A0%87%E7%A8%8B%E5%BA%8F" style="margin-left:0;text-align:justify;">6、高级语言程序——转换为可执行目标程序</h3> 
+<p style="margin-left:0;text-align:justify;"><img alt="" height="463" src="https://images2.imgbox.com/a0/c5/whGz9kKl_o.png" width="593"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/e001107f17f054ece2cbfadaa2834260/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">*javascript:使用对象保存数据</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/7b1064e88d224e159fd99fa8d9425ee8/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Addressable（7）Packed Assets打包资源数据配置</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

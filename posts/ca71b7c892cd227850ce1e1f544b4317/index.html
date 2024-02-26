@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【透过实验看Access、Trunk、Hybird原理】 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【透过实验看Access、Trunk、Hybird原理】" />
+<meta property="og:description" content="华为交换机的三种接口类型 Access（接入）接口 介绍 这种接口只能属于一个VLAN，只能接收和发送一个VLAN的数据，通常用于连接终端设备，比如PC或服务器。
+帧处理 收帧 本篇所言的收帧，指的是交换的端口从对端设备的收帧，而不是接收同一个交换机的另一个接口的帧，在交换机内部传输的帧都是带vlan标签的
+Access接口在从直连设备收到入站数据帧后，会判断这个数据帧是否携带VLAN标签，若不携带，则为数据帧插入本接口的PVID并进行下一步处理；若携带则判断数据帧的VLAN ID是否与本接口的PVID相同，若相同则进行下一步处理，若不同则丢弃。
+发帧 Access接口在发送出站数据帧之前，会判断这个要被转发的数据帧中携带的VLAN ID与出站接口的PVID是否相同，若相同则去掉VLAN标签进行转发；若不同则丢弃
+Trunk（干道）接口 介绍 这种接口能够接收和发送多个VLAN的数据，通常用于交换机之间的连接。
+帧处理 收帧 发帧 本篇所言的发帧，指的是交换的端口向对端设备的发帧，而不是发给同一个交换机的另一个接口的发帧。
+Trunk 接口在发送出站数据帧之前，会判断这个要被转发的数据帧中携带的VLAN ID是否与出站接口的PVID相同，若相同则去掉VLAN标签进行转发；若不同则判断本接口是否允许传输这个数据帧的 VLAN ID，若允许则转发，否则丢弃。
+也就是说，当数据所属VLAN为该Trunk接口的缺省VLAN时，Trunk接口才会去掉VLAN标签进行转发，其余的数据帧都是携带标签进行转发
+Hybrid（混合）接口 介绍 华为设备的接口的默认模式，这种接口能够接收和发送多个VLAN的数据，可以用于连接交换机之间的链路，也可以用于连接交换机与终端设备。
+帧处理 收帧 Trunk接口和Hybrid接口在接收入站数据时，处理方法是相同的
+发帧 hybrid接口与Trunk接口的不同：
+Trunk接口只摘除自己支持的vlan数据帧的vlan tag ；在转发其他VLAN的数据帧时，不会摘除数据帧的vlan tag。
+Hybrid接口能够以不携带vlan tag的方式发送多个VLAN的数据。
+不同接口配合下的应用实例 access接口&#43;trunk接口应用 同一个vlan中的设备跨交换机进行二层通信，不同vlan不能二层通信 本次实验是在ensp模拟器上完成的，下面是拓扑图
+这里将SW1和SW2之间相连的接口E0/0/2配置为Trunk接口，并且允许Trunk链路传输VLAN 5的数据；
+将SW1、SW2与PC相连的接口E0/0/1配置为Access接口，并且将这两个接口的PVID都配置为VLAN 5。
+SW1的接口配置：
+[SW1]vlan 5 ///系统视图配置命令 vlan 5，创建了 VLAN 5 [SW1-vlan5]quit [SW1]interface e0/0/2 ///进入接口G0/0/2的配置视图 [SW1-Ethernet0/0/2]port link-type trunk ///把交换机之间的互联接口配置为Trunk接口 [SW1-Ethernet0/0/2]port trunk allow-pass vlan 5 ///交换机所有接口在初始状态下都可以转发VLAN 1的流量，管理员还需要在 Trunk 接口上放行 VLAN 5 的流量 ///这里使用的命令是接口配置命令 port trunk allow-pass vlan {{vlan-id1[to vlan-id2]} | all}， ///管理员通过这一条命令可以同时放行多个VLAN的流量，也可以使用关键字all来放行所有VLAN的流量 [SW1-Ethernet0/0/2]quit [SW1]interface e0/0/1 ///进入了连接PC的接口 [SW1-Ethernet0/0/1]port link-type access ///将该接口配置为Access接口 [SW1-Ethernet0/0/1]port default vlan 5 ///使用命令port default vlan&lt;vlan-id&gt;将该接口的PVID变更为VLAN 5 ///还有一种方法能够将接口加入 VLAN，那就是在 VLAN 配置视图下，使用命令port interface-type interface-number向VLAN中添加接口 [SW1-Ethernet0/0/1]quit 检查接口配置的情况：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/ca71b7c892cd227850ce1e1f544b4317/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-04-14T19:03:08+08:00" />
+<meta property="article:modified_time" content="2023-04-14T19:03:08+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【透过实验看Access、Trunk、Hybird原理】</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="_0"></a>华为交换机的三种接口类型</h2> 
+<h3><a id="Access_1"></a>Access（接入）接口</h3> 
+<h4><a id="_2"></a>介绍</h4> 
+<p>这种接口只能属于一个VLAN，只能接收和发送一个VLAN的数据，通常用于连接终端设备，比如PC或服务器。</p> 
+<h4><a id="_4"></a>帧处理</h4> 
+<h5><a id="_5"></a>收帧</h5> 
+<p>本篇所言的收帧，指的是交换的端口从对端设备的收帧，而不是接收同一个交换机的另一个接口的帧，在交换机内部传输的帧都是带vlan标签的</p> 
+<p>Access接口在从直连设备收到入站数据帧后，会判断这个数据帧是否携带VLAN标签，若不携带，则为数据帧插入本接口的PVID并进行下一步处理；若携带则判断数据帧的VLAN ID是否与本接口的PVID相同，若相同则进行下一步处理，若不同则丢弃。<img src="https://images2.imgbox.com/2d/cb/0JrjgMWv_o.jpg" alt="access接口收帧" width="360" height="460"></p> 
+<h5><a id="_10"></a>发帧</h5> 
+<p>Access接口在发送出站数据帧之前，会判断这个要被转发的数据帧中携带的<strong>VLAN ID</strong>与出站接口的<strong>PVID</strong>是否<strong>相同</strong>，若相同则去掉VLAN标签进行转发；若不同则丢弃</p> 
+<h3><a id="Trunk_12"></a>Trunk（干道）接口</h3> 
+<h4><a id="_13"></a>介绍</h4> 
+<p>这种接口能够接收和发送多个VLAN的数据，通常用于交换机之间的连接。</p> 
+<h4><a id="_15"></a>帧处理</h4> 
+<h5><a id="_16"></a>收帧</h5> 
+<p><img src="https://images2.imgbox.com/20/9a/deJzR9AS_o.jpg" alt="trunk收帧" width="360" height="460"></p> 
+<h5><a id="_20"></a>发帧</h5> 
+<p>本篇所言的发帧，指的是交换的端口向对端设备的发帧，而不是发给同一个交换机的另一个接口的发帧。<br> Trunk 接口在发送出站数据帧之前，会判断这个要被转发的数据帧中携带的VLAN ID是否与出站接口的PVID相同，若相同则去掉VLAN标签进行转发；若不同则判断本接口是否允许传输这个数据帧的 VLAN ID，若允许则转发，否则丢弃。</p> 
+<p>也就是说，当数据所属VLAN为该Trunk接口的缺省VLAN时，Trunk接口才会去掉VLAN标签进行转发，其余的数据帧都是携带标签进行转发</p> 
+<p><img src="https://images2.imgbox.com/ae/75/t3NQfVP0_o.jpg" alt="在这里插入图片描述" width="360" height="460"></p> 
+<h3><a id="Hybrid_29"></a>Hybrid（混合）接口</h3> 
+<h4><a id="_30"></a>介绍</h4> 
+<p>华为设备的接口的<mark>默认模式</mark>，这种接口能够接收和发送多个VLAN的数据，可以用于连接交换机之间的链路，也可以用于连接交换机与终端设备。</p> 
+<h4><a id="_32"></a>帧处理</h4> 
+<h5><a id="_33"></a>收帧</h5> 
+<p>Trunk接口和Hybrid接口在接收入站数据时，处理方法是相同的</p> 
+<h5><a id="_35"></a>发帧</h5> 
+<p>hybrid接口与Trunk接口的不同：<br> Trunk接口只摘除自己支持的vlan数据帧的vlan tag ；在转发其他VLAN的数据帧时，不会摘除数据帧的vlan tag。<br> Hybrid接口能够以不携带vlan tag的方式发送多个VLAN的数据。</p> 
+<h2><a id="_39"></a>不同接口配合下的应用实例</h2> 
+<h3><a id="accesstrunk_40"></a>access接口+trunk接口应用</h3> 
+<h4><a id="vlanvlan_41"></a>同一个vlan中的设备跨交换机进行二层通信，不同vlan不能二层通信</h4> 
+<p>本次实验是在ensp模拟器上完成的，下面是拓扑图<br> <img src="https://images2.imgbox.com/21/c7/aUXlitHN_o.jpg" alt="拓扑结构" width="560" height="360"><br> 这里将SW1和SW2之间相连的接口E0/0/2配置为Trunk接口，并且允许Trunk链路传输VLAN 5的数据；<br> 将SW1、SW2与PC相连的接口E0/0/1配置为Access接口，并且将这两个接口的PVID都配置为VLAN 5。<br> SW1的接口配置：</p> 
+<pre><code>[SW1]vlan 5  ///系统视图配置命令 vlan 5，创建了 VLAN 5
+[SW1-vlan5]quit
+[SW1]interface e0/0/2       ///进入接口G0/0/2的配置视图
+[SW1-Ethernet0/0/2]port link-type trunk      ///把交换机之间的互联接口配置为Trunk接口
+[SW1-Ethernet0/0/2]port trunk allow-pass vlan 5    
+ ///交换机所有接口在初始状态下都可以转发VLAN 1的流量，管理员还需要在 Trunk 接口上放行 VLAN 5 的流量
+ ///这里使用的命令是接口配置命令 port trunk allow-pass vlan {<!-- -->{vlan-id1[to vlan-id2]} | all}，
+ ///管理员通过这一条命令可以同时放行多个VLAN的流量，也可以使用关键字all来放行所有VLAN的流量
+[SW1-Ethernet0/0/2]quit
+[SW1]interface e0/0/1   ///进入了连接PC的接口
+[SW1-Ethernet0/0/1]port link-type access   ///将该接口配置为Access接口
+[SW1-Ethernet0/0/1]port default vlan 5 ///使用命令port default vlan&lt;vlan-id&gt;将该接口的PVID变更为VLAN 5
+///还有一种方法能够将接口加入 VLAN，那就是在 VLAN 配置视图下，使用命令port interface-type interface-number向VLAN中添加接口
+[SW1-Ethernet0/0/1]quit
+</code></pre> 
+<p>检查接口配置的情况：</p> 
+<pre><code>[SW1]display vlan 5
+--------------------------------------------------------------------------------
+U: Up;         D: Down;         TG: Tagged;         UT: Untagged;
+MP: Vlan-mapping;               ST: Vlan-stacking;
+#: ProtocolTransparent-vlan;    *: Management-vlan;
+--------------------------------------------------------------------------------
+
+VID  Type    Ports                                                          
+--------------------------------------------------------------------------------
+5    common  UT:Eth0/0/1(U)          
+
+///VLAN 5条目下的UT:Eth0/0/1(U)表示E0/0/1接口能够传输VLAN 5的流量
+///并且由UT可以看出，它在转发VLAN 5的数据时会剥离VLAN标签，后面的(U)表示接口状态为Up；
+                                          
+             TG:Eth0/0/2(U)     GE0/0/2(D)                                      
+///TG:Eth0/0/2(U)则说明e0/0/2、GE0/0/2接口允许传输VLAN标签为5的数据，并且由TG可知，它在转发时会携带VLAN标签，后面的(U)表示接口状态为Up、（D）表示关闭。
+
+
+VID  Status  Property      MAC-LRN Statistics Description      
+--------------------------------------------------------------------------------
+5    enable  default       enable  disable    VLAN 0005                         
+</code></pre> 
+<p>对SW2交换机输入和SW1一样的命令后，pc1就可以和pc2进行二层通信了。</p> 
+<p>这儿有一个小插曲：在设置为trunk接口后，再换成access时，报错：</p> 
+<pre><code>[Huawei-Ethernet0/0/2]port link-type trunk
+[Huawei-Ethernet0/0/2]port link-type access
+[Huawei-Ethernet0/0/2]port link-type trunk  ///此时可以随意切换模式
+[Huawei-Ethernet0/0/2]port trunk allow-pass vlan 5   ///trunk下进行参数配置后，再切换模式就不成功了
+[Huawei-Ethernet0/0/2]port link-type access
+Error: Please renew the default configurations.
+[Huawei-Ethernet0/0/2]undo port trunk allow-pass vlan 5   /// 将第四行的命令前+undo 
+[Huawei-Ethernet0/0/2]port link-type access    ///再进行模式转换就不会报错了
+</code></pre> 
+<p>为了测试隔离效果，在SW2交换机的e0/0/6端口再连一台PC3，ip为192.168.1.6/24，网关与PC1、PC2相同。将该接口设置为vlan 6的access端口。<br> <img src="https://images2.imgbox.com/80/b6/4HG9bXCx_o.jpg" alt="测试拓扑" width="560" height="360"><br> 在SW2交换机上的配置命令如下：</p> 
+<pre><code>[Huawei]vlan 6  
+[Huawei-vlan6]q
+[Huawei]inter e0/0/6
+[Huawei-Ethernet0/0/6]port link-type access
+[Huawei-Ethernet0/0/6]port default vlan 6
+</code></pre> 
+<p>查看SW2上vlan6的信息</p> 
+<pre><code>[Huawei]display vlan 6
+VID  Type    Ports                                                          
+--------------------------------------------------------------------------------
+6    common  UT:Eth0/0/6(U)                   ///显示e0/0/6接口处于开启状态                           
+
+VID  Status  Property      MAC-LRN Statistics Description      
+--------------------------------------------------------------------------------
+6    enable  default       enable  disable    VLAN 0006                         
+</code></pre> 
+<p>实验结果：</p> 
+<p><img src="https://images2.imgbox.com/25/f5/EUVeqrkz_o.jpg" alt="结果" width="460" height="460"><br> 实验结果表示：这样配置后达到了以下效果</p> 
+<ul><li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" checked disabled> 通过虚拟的手段实现逻辑隔离</li><li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" checked disabled> 同vlan设备跨交换机进行二层通信</li></ul> 
+<h3><a id="hybrid_134"></a>hybrid接口应用</h3> 
+<h4><a id="vlan_2vlan_3vlan_2vlan_3_vlan_10__135"></a>vlan 2与vlan 3不能二层通信、vlan 2与vlan 3 都可以与vlan 10 二层通信</h4> 
+<p>假设一家公司拥有自己的服务器，所有员工必须能够访问服务器，但不同部门的员工之间不能直接进行访问。为了简化环境以便更清晰地说明问题，我们只建立3个VLAN：部门1的员工属于VLAN 2，部门2的员工属于VLAN 3，服务器属于VLAN 10。</p> 
+<p>而我们要通过Hybrid接口实现的效果是：</p> 
+<ul><li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled> VLAN 2和VLAN 3都能够与VLAN 10进行二层通信</li><li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled> VLAN 2和VLAN 3之间不能二层通信</li></ul> 
+<p>拓扑如下：<img src="https://images2.imgbox.com/fc/f1/WmGSoVqq_o.jpg" alt="、实验拓扑](https://img-blog.csdnimg.cn/dab38992d2724b06b0d084a30a1c592a.png" width="460" height="460"><br> 关于hybrid接口的配置命令有3条：</p> 
+<table><thead><tr><th>项目</th><th>Value</th></tr></thead><tbody><tr><td>port link-type hybrid</td><td>将接口的链路类型更改为 Hybrid，</td></tr><tr><td>port hybrid pvid vlan id</td><td>指明该接口的缺省VLAN，但是设置后不允许这个vlan的数据通过的话，这个接口下的主机相当被隔离；充当交换机之间的接口时，不推荐进行配置（使马路私有化），省略这条命令后，表示该接口不属于任何vlan，会在access模式、trunk模式之间根据数据帧类型自动切换，如果数据帧带vlan tag，则按照trunk格式运行，如果不带vlan tag，则该数据帧将被识别为access格式，默认pvid为vlan 1。（思科交换机pvid为native）</td></tr><tr><td>port hybrid tagged vlan{<!-- -->{vlan-id1[to vlan-id2]} /all}</td><td>允许这个Hybrid口转发哪些VLAN的数据，且在转发时，需要贴上VLAN标签，转发无标签的数据帧，需要在贴标签前，根据这个接口所在交换机中的接收到这个数据帧的接口pvid来决定这个数据帧贴什么tag。如果接收到帧的接口没有特别配置过，则数据帧不贴标签进行转发。也就是说，交换机的内部有一个接口/vlan的对应表，在贴标转发前，进行查询。该命令一般用在交换机与交换机之间，来对传输的数据帧进行隔离</td></tr><tr><td>port hybrid untagged vlan{<!-- -->{vlan-id1[to vlan-id2]} / all}：</td><td>允许这个Hybrid口转发哪些VLAN的数据，且在转发时，摘除VLAN标签，一般用在连接终端设备的接口上，因为终端不识别带标签的数据帧。</td></tr></tbody></table> 
+<blockquote> 
+ <p>华为交换机接口的默认类型就是Hybrid，因此只有当管理员曾经更改过接口链路类型，将其更改为 Access 或Trunk后，才需要使用该命令将接口链路类型更改为缺省值Hybrid，而在运行port link-type hybrid之前，需要undo掉之前的模式下配置的参数</p> 
+</blockquote> 
+<p>分别在SW1与SW2上<strong>创建好3个vlan之后</strong>，对SW1的配置接口，命令如下：</p> 
+<pre><code>[SW1]inter e0/0/1
+[SW1-Ethernet0/0/1]port link-type hybrid
+[SW1-Ethernet0/0/1]port hybrid pvid vlan 2   ///如果该接口接收到了不携带VLAN标签的数据，那么交换机就会默认认为这些数据帧属于该接口的缺省VLAN，从而为这种流量打上这个pvid的VLAN标签
+[SW1-Ethernet0/0/1]port hybrid untagged vlan 2 10   
+///由于接口连接的终端设备无法识别VLAN标签信息，因此从该接口上发送出去的流量是不携带VLAN标签的数据
+[SW1-Ethernet0/0/1]q
+
+[SW1]interface e0/0/2
+[SW1-Ethernet0/0/2]port link-type hybrid
+[SW1-Ethernet0/0/2]port hybrid pvid vlan 3
+[SW1-Ethernet0/0/2]port hybrid untagged vlan 3 10 
+[SW1-Ethernet0/0/2]q
+///在两个接口上分别放行VLAN 2和VLAN 10，以及VLAN 3和VLAN 10的流量。
+
+[SW1]inter g0/0/1
+[SW1-Ethernet0/0/2]port link-type hybrid
+[SW1-GigabitEthernet0/0/1]port hybrid tagged vlan 2 3 10
+[SW1-GigabitEthernet0/0/1]q
+///G0/0/1接口上需要同时放行VLAN 2、VLAN 3和VLAN 10的流量，并且由于G0/0/1所连接的对端设备是交换机，所以该接口需要能够识别 vlan tag、通过vlan tag决定该将数据帧从哪个接口转发出去
+</code></pre> 
+<p>对SW2的配置命令如下：</p> 
+<pre><code>[SW2]inter e0/0/10
+[SW2-Ethernet0/0/10]port link-type hybrid
+[SW2-Ethernet0/0/10]port  hybrid pvid vlan 10
+[SW2-Ethernet0/0/10]port hybrid untagged vlan 2 3 10 ///接口连接的终端无法识别VLAN标签信息，需要摘除
+[SW2-Ethernet0/0/10]q
+
+
+[SW2]inter g0/0/1
+[SW2-GigabitEthernet0/0/1]port link-type hybrid
+[SW2-GigabitEthernet0/0/1]port hybrid tagged vlan 2 3 10 ///G0/0/1接口上需要同时放行VLAN 2、VLAN 3和VLAN 10的流量，并且由于G0/0/1所连接的对端设备是交换机，所以该接口需要能够识别 vlan tag、通过vlan tag决定该将数据帧从哪个接口转发出去
+[SW2-GigabitEthernet0/0/1]q
+</code></pre> 
+<p>此时配置全部完成，在pc1与pc2上可以ping通服务器。</p> 
+<h4><a id="_195"></a>故障分析：</h4> 
+<ol><li> <p>如果在SW2的e0/0/10接口配置成port hybrid untagged vlan 10会怎么样？</p> <p>PC1和PC2在ping服务器时显示目标主机不可达、服务器ping PC1也失败。<br> <img src="https://images2.imgbox.com/2c/39/q26Zy2Hs_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/d4/9a/CMq67Iw8_o.png" alt="在这里插入图片描述" width="560" height="360"></p> </li></ol> 
+<p>原因：e0/0/10仅仅允许vlan10数据帧通过且拆标签。所以在PC1和PC2上ping服务器时，它们发出的数据帧达到SW1后，通过g0/0/1口转发前，打上vlan2和vlan3标签，这样携带着标签的数据帧经过SW2的g0/0/1口，SW2会按照该帧的vlan 标签在对应的vlan内接口进行广播，发现没有支持通过这两种流量的接口后，将数据帧丢弃，e0/0/10接收不到帧。<br> 在PC2上ping服务器的结果：</p> 
+<pre><code>PC&gt;ping 192.168.1.10
+
+Ping 192.168.1.10: 32 data bytes, Press Ctrl_C to break
+From 192.168.1.3: Destination host unreachable
+From 192.168.1.3: Destination host unreachable
+From 192.168.1.3: Destination host unreachable
+From 192.168.1.3: Destination host unreachable
+From 192.168.1.3: Destination host unreachable
+
+--- 192.168.1.10 ping statistics ---
+  5 packet(s) transmitted
+  0 packet(s) received
+  100.00% packet loss
+
+PC&gt;arp -a
+
+Internet Address    Physical Address    Type
+///这里没有ping通，所以在PC2上查看mac地址缓存表时，没有信息
+
+</code></pre> 
+<p>恢复e0/0/10的状态后再测试：</p> 
+<pre><code>PC&gt;ping 192.168.1.10
+
+Ping 192.168.1.10: 32 data bytes, Press Ctrl_C to break
+From 192.168.1.10: bytes=32 seq=1 ttl=255 time=78 ms
+From 192.168.1.10: bytes=32 seq=2 ttl=255 time=31 ms
+From 192.168.1.10: bytes=32 seq=3 ttl=255 time=94 ms
+From 192.168.1.10: bytes=32 seq=4 ttl=255 time=47 ms
+From 192.168.1.10: bytes=32 seq=5 ttl=255 time=32 ms
+
+--- 192.168.1.10 ping statistics ---
+  5 packet(s) transmitted
+  5 packet(s) received
+  0.00% packet loss
+  round-trip min/avg/max = 31/56/94 ms
+
+PC&gt;arp -a
+
+Internet Address    Physical Address    Type
+192.168.1.10        54-89-98-1C-46-94   dynamic
+///ping通后，PC2会将服务器的mac/ip映射缓存，并说明时动态学习得来的，下次ping不用广播。
+</code></pre> 
+<ol start="2"><li> <p>如果在SW2的e0/0/10接口配置成port hybrid untagged vlan 2 3，g0/0/1接口设置为port hybrid untagged vlan 2 3 10 会怎么样？<br> 情况一：<br> 结果：PC1和PC2在ping服务器时正常<br> 原因：此时没有对e0/0/10进行pvid配置绑定，e0/0/10不属于vlan 10下的主机。<br> 情况二：<br> 结果：PC1和PC2都ping不通服务器<br> 原因：如果之前对e0/0/10的pvid配成 vlan 10，那么服务器就属于vlan10下面的主机，在配置port hybrid untagged vlan 2 3后，相当于隔离了服务器与外界通信，所以PC1和PC2都ping不通服务器。</p> </li><li> <p>undo掉SW2上g0/0/1接口的这条配置：port hybrid tagged vlan 2 3 10会怎样？<br> PC1和PC2在ping服务器时显示：目标主机不可达<br> 原因：g0/0/1不接受来自vlan 2 3 10下主机的数据帧</p> </li><li> <p>将SW2/SW1的g0/0/1口单独或同时配置为port hybrid untagged vlan 2 3 10，会怎样？<br> 情况一：<br> 结果：PC1\PC2可以ping通服务器<br> 原因：当g0/0/1接口不进行pvid绑定，且按untagged转发时，原本能辨别数据帧所属vlan的标签被揭下，如果sw2有一个属于vlan 3的接口，且只允许vlan 3的数据帧通过，但是PC1发出的数据帧却可以通过这个接口到达vlan3终端，这样就失去了设置vlan的意义，所以连接交换机与交换机的接口，不该设置untagged模式，目的是对帧进行打标签，进行vlan的隔离。</p> <p>情况二：<br> vlan3下的 PC2 ping不通；vlan 2下的PC1可以发出去ping request但是收不到ping replay。<br> 若是将sw1的g0/0/1口设置pvid ==vlan 3，此时，这个接口就属于vlan 3，由于在连接PC1的接口e0/0/1上，设置了pvid=vlan 2，且只允许通过vlan 2、10的流量，当ping服务器时，对连接服务器的sw2-e0/0/10接口抓包，结果如下<br> <img src="https://images2.imgbox.com/56/53/szKh3Dbp_o.png" alt="在这里插入图片描述"><br> 可以看见有流量访问产生，说明这条从pc1到服务器是通的，但是ping命令回显给pc1的时目标主机不可达，是因为在sw1的交换机内部，当g0/0/1接口将携带ping回应信息的帧准备交付本交换机的e0/0/1 时，由于e0/0/1只允许vlan 2和10的流量通过，g0/0/1是属于vlan 3的接口，丢弃了携带ping replay的帧。<br> <img src="https://images2.imgbox.com/91/53/hWtEMbWl_o.png" alt="在这里插入图片描述"></p> </li><li> <p>将SW1的e0/0/2接口参数设成port hybrid pvid vlan 10、port hybrid untagged vlan 10，有什么用？<br> 此时，PC2将成为vlan 10 下的主机，但只允许和服务器通信，因为接口禁止了vlan 2的流量通道。<br> <img src="https://images2.imgbox.com/68/da/fxoBWrLy_o.png" alt="在这里插入图片描述" width="560" height="360"><br> PC1在ping PC2时，显示主机不可达。<br> <img src="https://images2.imgbox.com/d5/9e/a0ok1jYK_o.png" alt="在这里插入图片描述"></p> </li></ol> 
+<p>注释：</p> 
+<blockquote> 
+ <p>VLAN：虚拟局域网，它能够在逻辑层面把一个局域网划分为多个“虚拟”局域网，以此限制局域网的规模，从而既能够解决随网络用户数量增长而来的数据帧冲突和广播流量激增问题，也能够提高网络的安全性。<br> VLAN标签（VLAN Tag）：用来区分数据帧所属VLAN的4字节长度字段，插在以太网数据帧头。<br> 标记帧（Tagged frame）：携带VLAN标签的数据帧。通常交换机之间会传输标记帧。<br> 无标记帧（Untagged）：不携带VLAN标签的数据帧。通常终端设备发出的就是无标记帧。<br> PVID（PORT VLAN ID）：交换机接口上的配置参数，它表示交换机接口默认使用的VLAN ID，也称为缺省VLAN。</p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/0a4c0a98ec2253f9fbbb66c549cee6a4/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【操作系统】【进程管理】孤儿进程与僵尸进程</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/7e045bf26389770c307cea086eac7291/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">VueUse文档个人翻译——核心方法一览</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

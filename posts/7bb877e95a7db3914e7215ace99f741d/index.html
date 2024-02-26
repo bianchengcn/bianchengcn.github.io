@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>WOL唤醒配置（以太网、PHY、MAC） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="WOL唤醒配置（以太网、PHY、MAC）" />
+<meta property="og:description" content="目录
+wol 以太网
+MAC
+PHY
+RMII
+通信配置
+总结
+wol Wake-on-LAN简称WOL，WOL（网络唤醒） 是一种标准网络协议，它的功效在于让已经进入休眠状态或关机状态的计算机，透过局域网（多半为以太网）的另一端对其发令，使其从休眠状态唤醒、恢复成运作状态，或从关机状态转成引导状态。WoL 技术通过将魔术数据包从服务器传输到特定计算机来运行。幻数据包是一个特殊的数据包，其中包含目标计算机的媒体访问控制 （MAC） 地址和网络广播地址以及 WoL 配置。WoL 通常从具有 IP 地址管理软件的服务器广播。
+WoL 的目的是远程在设备上执行唤醒操作。它可以帮助网络管理员自动执行不需要任何手动干预的定期唤醒计划。
+消息通常由在连接到同一局域网的设备上执行的程序发送到目标计算机。
+以太网连接（包括家庭和工作网络、无线数据网络和 Internet 本身）都基于计算机之间发送的帧。 WoL 是使用一种特殊设计的称为魔术包的帧来实现的，魔术包被发送到网络中的所有计算机，其中包括要被唤醒的计算机。 魔术分组包含目的地计算机的 MAC 地址、内置在计算机中的每个网络接口卡（“NIC”）或其它以太网设备中的标识号，其使得它能够在网络上被唯一地识别和寻址。 具有 LAN 唤醒功能的已关机或关闭的计算机将包含能够在系统关机时以低功耗模式“侦听”传入数据包的网络设备。 如果接收到指向设备 MAC 地址的魔术包，网卡会向计算机的电源或主板发出信号，以启动系统唤醒，其方式与按下电源按钮的方式相同。
+魔术分组在数据链路层（OSI 模型中的第 2 层）上被发送，并且当被发送时，使用网络广播地址被广播到给定网络上的所有附接的设备；不使用 IP 地址（OSI 模型中的第 3 层）。
+由于 LAN 唤醒是基于广播技术构建的，因此通常只能在当前网络子网内使用。 不过，也有一些例外情况，LAN 唤醒实际上可以在任何网络上运维，只要配置和硬件适当，包括通过互联网进行远程唤醒。为了使 LAN 唤醒工作，网络接口的某些部分需要保持打开状态。
+功耗控制（MCU ARM-cortex M3内核）：
+待机模式特点：
+以太网 以太网 不是一种具体的网络，而是一种网络技术标准，既包含了数据链路层的内容，也包含了一些物理层的内容。例如：规定了网络拓扑结构、访问控制方式、传输速率等。
+以太网中的所有主机，共享一个通信信道，当一台主机给目标主机发送数据后，处于同一个局域网的所有主机都能够收到，它们都会对比自己的 MAC 地址和数据中的目的 MAC 地址，除了目标主机的对比是相等的之外，其余主机的对比都是不相等的，所以其余主机都会丢弃，只有目标主机会将其解包并向上交付。
+以太网电路的基本构成
+对于上面框图三个部分，并不是每个部分都是独立的芯片，一般有几种情况：
+CPU内部集成了MAC和PHY，难度较高CPU内部集成MAC,PHY采用独立芯片(主流方案目前用的最多)CPU不集成MAC和PHY，MAC和PHY采用独立芯片或者集成芯片(高端采用) PHY整合了大量模拟硬件，而MAC是典型的全数字硬件，芯片面积及模拟/数字混合架构是为什么先将MAC集成进微控制器而将PHY留在片外的原因。更灵活，密度更高的芯片技术已经可以实现MAC和PHY的单芯片整合。
+常用的CPU内部集成MAC，PHY采用独立的芯片方案，CPU和MAC集成在一起，PHY芯片通过MII接口与CPU上的MAC互联。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/7bb877e95a7db3914e7215ace99f741d/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-10-03T22:49:10+08:00" />
+<meta property="article:modified_time" content="2023-10-03T22:49:10+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">WOL唤醒配置（以太网、PHY、MAC）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="wol%C2%A0-toc" style="margin-left:0px;"><a href="#wol%C2%A0" rel="nofollow">wol </a></p> 
+<p id="%E4%BB%A5%E5%A4%AA%E7%BD%91-toc" style="margin-left:0px;"><a href="#%E4%BB%A5%E5%A4%AA%E7%BD%91" rel="nofollow">以太网</a></p> 
+<p id="MAC-toc" style="margin-left:0px;"><a href="#MAC" rel="nofollow">MAC</a></p> 
+<p id="PHY-toc" style="margin-left:0px;"><a href="#PHY" rel="nofollow">PHY</a></p> 
+<p id="RMII-toc" style="margin-left:0px;"><a href="#RMII" rel="nofollow">RMII</a></p> 
+<p id="%E9%80%9A%E4%BF%A1%E9%85%8D%E7%BD%AE-toc" style="margin-left:0px;"><a href="#%E9%80%9A%E4%BF%A1%E9%85%8D%E7%BD%AE" rel="nofollow">通信配置</a></p> 
+<p id="%E6%80%BB%E7%BB%93-toc" style="margin-left:0px;"><a href="#%E6%80%BB%E7%BB%93" rel="nofollow">总结</a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h2 id="wol%C2%A0">wol </h2> 
+<p>Wake-on-LAN简称WOL，WOL（网络唤醒） 是一种标准<a href="https://so.csdn.net/so/search?q=%E7%BD%91%E7%BB%9C%E5%8D%8F%E8%AE%AE&amp;spm=1001.2101.3001.7020" title="网络协议">网络协议</a>，它的<a href="https://baike.baidu.com/item/%E5%8A%9F%E6%95%88/11046231?fromModule=lemma_inlink" rel="nofollow" title="功效">功效</a>在于让已经进入<a href="https://baike.baidu.com/item/%E4%BC%91%E7%9C%A0%E7%8A%B6%E6%80%81?fromModule=lemma_inlink" rel="nofollow" title="休眠状态">休眠状态</a>或关机状态的计算机，透过<a href="https://baike.baidu.com/item/%E5%B1%80%E5%9F%9F%E7%BD%91?fromModule=lemma_inlink" rel="nofollow" title="局域网">局域网</a>（多半为<a href="https://baike.baidu.com/item/%E4%BB%A5%E5%A4%AA%E7%BD%91?fromModule=lemma_inlink" rel="nofollow" title="以太网">以太网</a>）的另一端对其发令，使其从休眠状态唤醒、恢复成运作状态，或从关机状态转成<a href="https://baike.baidu.com/item/%E5%BC%95%E5%AF%BC/9408876?fromModule=lemma_inlink" rel="nofollow" title="引导">引导</a>状态。WoL 技术通过将魔术数据包从服务器传输到特定计算机来运行。幻数据包是一个特殊的数据包，其中包含目标计算机的媒体访问控制 （MAC） 地址和网络广播地址以及 WoL 配置。WoL 通常从具有 IP 地址管理软件的服务器广播。</p> 
+<p>WoL 的目的是远程在设备上执行唤醒操作。它可以帮助网络管理员自动执行不需要任何手动干预的定期唤醒计划。</p> 
+<p>消息通常由在连接到同一局域网的设备上执行的程序发送到目标计算机。</p> 
+<p>以太网连接（包括家庭和工作网络、无线数据网络和 Internet 本身）都基于计算机之间发送的帧。 WoL 是使用一种特殊设计的称为魔术包的帧来实现的，魔术包被发送到网络中的所有计算机，其中包括要被唤醒的计算机。 魔术分组包含目的地计算机的 MAC 地址、内置在计算机中的每个网络接口卡（“NIC”）或其它以太网设备中的标识号，其使得它能够在网络上被唯一地识别和寻址。 具有 LAN 唤醒功能的已关机或关闭的计算机将包含能够在系统关机时以低功耗模式“侦听”传入数据包的网络设备。 如果接收到指向设备 MAC 地址的魔术包，网卡会向计算机的电源或主板发出信号，以启动系统唤醒，其方式与按下电源按钮的方式相同。</p> 
+<p>魔术分组在数据链路层（OSI 模型中的第 2 层）上被发送，并且当被发送时，使用网络广播地址被广播到给定网络上的所有附接的设备；不使用 IP 地址（OSI 模型中的第 3 层）。</p> 
+<p>由于 LAN 唤醒是基于广播技术构建的，因此通常只能在当前网络子网内使用。 不过，也有一些例外情况，LAN 唤醒实际上可以在任何网络上运维，只要配置和硬件适当，包括通过互联网进行远程唤醒。为了使 LAN 唤醒工作，网络接口的某些部分需要保持打开状态。</p> 
+<p>功耗控制（MCU ARM-cortex M3内核）：</p> 
+<p><img alt="" height="589" src="https://images2.imgbox.com/b2/4f/k4uPmbAJ_o.png" width="1200"></p> 
+<p>待机模式特点：</p> 
+<p><img alt="" height="135" src="https://images2.imgbox.com/45/44/U3JICarJ_o.png" width="1054"></p> 
+<p><img alt="" height="228" src="https://images2.imgbox.com/90/f2/XoEUcbJR_o.png" width="1047"></p> 
+<h2 id="%E4%BB%A5%E5%A4%AA%E7%BD%91">以太网</h2> 
+<p>以太网 不是一种具体的网络，而是一种网络技术标准，既包含了数据链路层的内容，也包含了一些物理层的内容。例如：规定了网络拓扑结构、访问控制方式、传输速率等。</p> 
+<p>以太网中的所有主机，共享一个通信信道，当一台主机给目标主机发送数据后，处于同一个局域网的所有主机都能够收到，它们都会对比自己的 MAC 地址和数据中的目的 MAC 地址，除了目标主机的对比是相等的之外，其余主机的对比都是不相等的，所以其余主机都会丢弃，只有目标主机会将其解包并向上交付。</p> 
+<p>以太网电路的基本构成</p> 
+<p><img alt="" height="640" src="https://images2.imgbox.com/f7/36/8MD0VEEe_o.png" width="1200"></p> 
+<p>对于上面框图三个部分，并不是每个部分都是独立的芯片，一般有几种情况：</p> 
+<ul><li>CPU内部集成了MAC和PHY，难度较高</li><li>CPU内部集成MAC,PHY采用独立芯片(主流方案目前用的最多)</li><li>CPU不集成MAC和PHY，MAC和PHY采用独立芯片或者集成芯片(高端采用)</li></ul> 
+<p>PHY整合了大量模拟硬件，而MAC是典型的全数字硬件，芯片面积及模拟/数字混合架构是为什么先将MAC集成进微控制器而将PHY留在片外的原因。更灵活，密度更高的芯片技术已经可以实现MAC和PHY的单芯片整合。</p> 
+<p>常用的CPU内部集成MAC，PHY采用独立的芯片方案，CPU和MAC集成在一起，PHY芯片通过MII接口与CPU上的MAC互联。</p> 
+<p><img alt="" height="622" src="https://images2.imgbox.com/e2/df/u9Honyrr_o.png" width="1200"></p> 
+<p>对于这种方案，其硬件方案比独立的相对于更简单，PHY与MAC之间有以下两个重要的硬件接口</p> 
+<p>MDIO总线接口，主要是完成CPU对于PHY芯片的寄存器配置</p> 
+<p>MII总线接口，主要是完成数据收发相关的业务</p> 
+<p>当我们的PHY芯片发送数据，接受到MAC层发送过来的数字信号，然后转换成模拟信号，通过MDI接口传输出去。但是我们的网线传输的距离又很长，有时候需要送到100米甚至更远的地址，那么就会导致信号的流失。而且外网线与芯片直接相连的话，电磁感应和静电，也很容易导致芯片的损坏，所以就要使用网络变压器，其主要作用是</p> 
+<p>传输数据,它把PHY送出来的差分信号用差模耦合的线圈耦合滤波以增强信号,并且通过电磁场的转换耦合到不同电平的连接网线的另外一端</p> 
+<p>隔离网线连接的不同网络设备间的不同电平,以防止不同电压通过网线传输损坏设备</p> 
+<p>还能使芯片端与外部隔离，抗干扰能力大大增强，而且对芯片增加了很大的保护作用，保护PHY免遭由于电气失误而引起的损坏（如雷击）</p> 
+<h2 id="MAC">MAC</h2> 
+<p>MAC(Media Access Control)，即媒体访问控制子层协议，该部分有两个概念：MAC可以是一个硬件控制器以及MAC通讯协议。该协议位于OSI七层协议中数据链路层的下半部分，主要是负责控制与连接物理层的物理介质。</p> 
+<p>MAC硬件框图</p> 
+<p><img alt="" height="502" src="https://images2.imgbox.com/03/4c/jOuPUEVz_o.png" width="727"></p> 
+<p>MAC 地址用来标识数据链路层中相连的节点。长度为 6 个字节 48 位，一般用十六进制数字加上冒号的形式来表示。例如：52:54:00:56:6a:47 。</p> 
+<h2 id="PHY">PHY</h2> 
+<p>什么是phy</p> 
+<p>PHY（英语：Physical），中文可称之为端口物理层，是一个对OSI模型物理层的共同简称。而以太网是一个操作OSI模型物理层的设备。一个以太网PHY是一个芯片，可以发送和接收以太网的数据帧（frame）。不同于NIC（网卡），PHY没有自己的<a href="https://baike.baidu.com/item/MAC%E5%9C%B0%E5%9D%80?fromModule=lemma_inlink" rel="nofollow" title="MAC地址">MAC地址</a>。 ​</p> 
+<p>也就是说，PHY是网络结构中的最底层，物理层。PHY芯片是实现物理层这一层功能的芯片。网络设备之间就是通过PHY芯片相互连接的（介质是网线或者光纤）。</p> 
+<p>PHY的主要功能就是将数字信号转成模拟信号，然后在网线或者光纤传输。因为模拟信号和数字信号的不同，加上不同设备之间的传输环境复杂，因此，大部分的PHY都是单独做到一个芯片内的。</p> 
+<p>因此，在一般的网络设备电路设计中，需要为PHY芯片设计电路。PHY的芯片厂家为了满足大部分的应用场景，会在PHY上面提供很多接口协议，以供设计人员使用。比如，一颗PHY可能会支持网线传输，又或者支持光纤传输，然后在连接数据链路层这边，会提供很多的MII接口以供选择。</p> 
+<p>发送数据：对于PHY来说，并没有帧的概念，对它来说，不管是地址、数据还是CRC，都会将并行数据转换为串行数据流，在按照物理层的编码规则把数据编码，最终转换成模拟信号发送出去</p> 
+<p>接收数据：从外部接收数据时，模拟信号先转成数字信号，再经过解码得到数据， 经过MII送到MAC</p> 
+<p>CSMA/CD：可以检测到网络上是否有数据在传送，如果有数据在传送中就等待，一旦检测到网络空闲，再等待一个随机时间后将送数据出去。如果两个碰巧同时送出了数据，那样必将造成冲突。这时候，冲突检测机构可以检测到冲突，然后各等待一个随机的时间重新发送数据。</p> 
+<p>MDI</p> 
+<p>MDI口是快速以太网100BASE-T定义的与介质有关接口（Media Dependent Interface）。MDI是指通过收发器发送的100BASE-T信号，即100BASE-TX、FX、T4或T2信号。将集线器连接网络接口卡时，其发送和接收对通常是相互连接的。集线器之间连接时，通常需要一条跨接电缆，其中的发送和接收对是反接的。MDI是正常的UTP或STP连接，而MDI-X连接器的发送和接收对是在内部反接的，这就使得不同的设备（如集线器-集线器或集电器-交换机），可以利用常规的UTP或STP电缆实现背靠背的级联。</p> 
+<p>PHY是IEEE 802.3规定的一个标准模块，SOC可以通过MDIO对PHY进行配置或者读取phy相关状态，PHY内部寄存器必须满足</p> 
+<p>PHY芯片的寄存器地址空间是5位，一般由外部硬件连接决定。</p> 
+<p>地址空间031共32个寄存器，IEEE定义了015这16个寄存器的功能，16-31这16个寄存器由厂商自行实现。也就是说不管哪个厂商的PHY芯片，其中0~15这16个寄存器是一模一样的。</p> 
+<p>仅靠这 16个寄存器完全可以驱动起PHY芯片，至少能保证基本的网络数据通信。因此 Linux 内核有通用 PHY 驱动，按道理来讲，不管你使用的哪个厂家的 PHY 芯片，都可以使用 Linux 的这个通用 PHY 驱动来验证网络工作是否正常。事实上在实际开发中可能会遇到一些其他的问题导致 Linux 内核的通用 PHY 驱动工作不正常，这个时候就需要驱动开发人员去调试了。而且除了Linux平台，单片机平台也会和phy通信，所使用的功能和芯片也是根据需求所定，所以在实际开发中需要做不同的适配，下面会讲到极海32和裕泰8512的配置通信。</p> 
+<p>phy芯片的接口介绍</p> 
+<p>MAC与PHY之间通过两个接口连接，分别为SMI接口和MII接口。</p> 
+<p>MII叫做介质独立接口，以太网MAC通过该接口发出数据帧经过PHY后传输到其他网络节点上，同时其他网络节点的数据先经过PHY后再由MAC接收；</p> 
+<p>SMI叫做是串行管理接口，以太网MAC通过该接口可以访问PHY的寄存器，通过对这些寄存器操作可对PHY进行控制和管理。</p> 
+<p>MII（Media Independent Interface）即媒体独立接口，MII接口是MAC与PHY连接的标准接口。它是IEEE-802.3定义的以太网行业标准。MII接口提供了MAC与PHY之间、PHY与STA(Station Management)之间的互联技术。媒体独立表明在不对MAC硬件重新设计或替换的情况下,任何类型的PHY设备都可以正常工作.它包括一个数据接口,以及一个MAC和PHY之间的管理接口。MII接口有MII、RMII、SMII、SSMII、SSSMII、GMII、SGMII、RGMII等。这里简要介绍其中的MII和RGMII。</p> 
+<p>MII接口主要包括以下三个部分：</p> 
+<ul><li>从MAC层到PHY层的发送数据接口</li><li>从PHY层到MAC层的接收数据接口</li><li>从MAC层和PHY层之间寄存器控制和信息获取的MDIO接口</li></ul> 
+<p>MII的MAC层定义接口</p> 
+<p><img alt="" height="691" src="https://images2.imgbox.com/fd/33/1TTQmKzg_o.png" width="1200"></p> 
+<p>MII的时钟为25MHz，传输速率为10/100Mbps。其特性如下：</p> 
+<ul><li>支持10Mb/s和100Mb/s的数据速率</li><li>100M工作模式下，参考时钟是25MHz；10M工作模式下，信号参考时钟是2.5MHz</li><li>支持全双工、半双工两种工作模式</li><li>发送和接收数据时采用,4bit方式</li></ul> 
+<p>SMI是MAC内核访问PHY寄存器接口，它由两根线组成，双工，MDC为时钟，MDIO为双向数据通信，原理上跟I2C总线很类似，也可以通过总线访问多个不同的phy。</p> 
+<p>MDC/MDIO基本特性：</p> 
+<p>两线制：MDC（时钟线）和MDIO（数据线）。</p> 
+<p>时钟频率：2.5MHz</p> 
+<p>通信方式：总线制，可同时接入的PHY数量为32个</p> 
+<p>通过SMI接口，MAC芯片主动的轮询PHY层芯片，获得状态信息，并发出命令信息。</p> 
+<p>SMI帧格式</p> 
+<p><img alt="" height="751" src="https://images2.imgbox.com/22/31/Rz4igxcz_o.png" width="1200"></p> 
+<h2 id="RMII">RMII</h2> 
+<p>RMII 精简介质独立接口。RMII降低了以太网外设与外部 PHY在 10/100Mbit/s下微控制器的引脚数。根据IEEE 802.3U标准，MII有16个数据和控制信号的引脚。RMII将引脚减少为7个。</p> 
+<p>RMII 在MAC 和 PHY之间实例化。有助于将MAC 的 MII 转换为RMII。RMII具有一特性：</p> 
+<p>1、单独的2位宽的发送和接收数据路径</p> 
+<p>2、10-Mbit/s 和100-Mbit/s 的运行速率</p> 
+<p>3、参考时钟为50MHz</p> 
+<p>4、从外部提供相同的参考时钟给MAC和外部以太网PHY</p> 
+<p>RMII接口框图</p> 
+<p><img alt="" height="343" src="https://images2.imgbox.com/34/f1/ZnU9zQbR_o.png" width="601"></p> 
+<h2 id="%E9%80%9A%E4%BF%A1%E9%85%8D%E7%BD%AE">通信配置</h2> 
+<p>以下的配置说的是极海32与裕泰8512通信的简单流程，附部分代码，</p> 
+<p>首先需要初始化配置RMII模式相关的gpio，并选择以太网外部接口为RMII</p> 
+<pre><code class="hljs">//MCU引脚 
+/* * ETH_RESET# PB6
+     * ETH_INT PB15
+     * ETH_MDIO PA2
+     * ETH_MDC PC1
+     * ETH_RMII_REF_CLK PA1
+     * ETH_RMII_CRS_DV PA7
+     * ETH_RMII_RXD0 PC4
+     * ETH_RMII_RXD1 PC5
+     * ETH_RMII_TX_EN PB11
+     * ETH_RMII_TXD0 PB12
+     * ETH_RMII_TXD1 PB13
+*/ 
+//接口gpio初始化函数 
+etherent_gpio_config() 
+{ 
+    /* Configure ETH_MDIO */ 
+    configStruct.pin = ETH_MDIO_PIN; 
+    configStruct.mode = GPIO_MODE_AF_PP; 
+    GPIO_Config(ETH_MDIO_PORT, &amp;configStruct); 
+
+    ... ... ... ... 
+} 
+/Select an Ethernet external interface/ 
+GPIO_ConfigPinRemap(GPIO_REMAP_MACEISEL_RMII);</code></pre> 
+<p>YT8512 产品使用说明书</p> 
+<p><img alt="" height="283" src="https://images2.imgbox.com/2e/4f/LJkZWT8n_o.png" width="1200"></p> 
+<p>查看PHY芯片产品说明书及MCU产品手册和硬件原理图配置外部中断</p> 
+<pre><code class="hljs">EINT_ClearStatusFlag(EINT_LINE_15); 
+EINT_InitStructure1.line = EINT_LINE_15; 
+EINT_InitStructure1.mode = EINT_MODE_INTERRUPT; 
+EINT_InitStructure1.trigger = EINT_TRIGGER_FALLING; 
+EINT_InitStructure1.lineCmd = ENABLE; 
+EINT_Config(&amp;EINT_InitStructure1); 
+NVIC_EnableIRQRequest(EINT15_10_IRQn, 1, 1);</code></pre> 
+<p>根据MCU手册，配置以太网外设</p> 
+<pre><code class="hljs">etherent_mac_dma_config() 
+{ 
+    /* Enable ETHERNET clock */ 
+    RCM_EnableAHBPeriphClock(RCM_AHB_PERIPH_ETH_MAC | RCM_AHB_PERIPH_ETH_MAC_TX |                 
+                                                      RCM_AHB_PERIPH_ETH_MAC_RX); 
+
+    /* Reset ETH on AHB Bus */ 
+    ETH_Reset(); 
+    /* Software reset */ 
+    ETH_SoftwareReset(); 
+    /* Wait for software reset */ 
+    while (ETH_ReadSoftwareReset() == SET); 
+    /* ETH Config Struct *///使用默认值配置ETH_Config_T成员。            
+    ETH_ConfigStructInit(Ð_InitStructure); 
+    /* ETH Config MAC */     
+    ETH_InitStructure.autoNegotiation = ETH_AUTONEGOTIATION_ENABLE; //选择外部PHY的自协商模式 
+    ETH_InitStructure.xxxxx .
+    ................ 
+    ................. 
+
+    /* ETH Config DMA */ 
+    ETH_InitStructure.receiveStoreForward = ETH_RECEIVESTOREFORWARD_ENABLE;  // /*！&lt;启用接收存储和转发模式*
+    
+    ETH_InitStructure.xxxxx 
+    ................. 
+    ................. 
+}
+
+    //配置以太网外设参数
+
+    ETH_Config(Ð_InitStructure, YT8512_PHY_ADDRESS) //这个函数调用厂商的eth外设库函数，主要是配置以太网参数以及PHY的初始化配置</code></pre> 
+<p>上述配置成功后就能与PHY进行通信了，然后就可以去配置PHY的寄存器。要实现wol功能，就需要去配置PHY的MAC地址，地址自定义，写进PHY的MAC地址寄存器。</p> 
+<p><img alt="" height="405" src="https://images2.imgbox.com/01/11/nNxHiRN9_o.png" width="799"></p> 
+<p>根据手册得到3个MAC寄存器，这里要注意，地址前面标注为“EXT”，表示这3个寄存器为外部扩展寄存器，而对于扩展寄存器的操作在手册中另有说明，如下</p> 
+<p><img alt="" height="1111" src="https://images2.imgbox.com/4c/5a/1PFtzuDR_o.png" width="1200"></p> 
+<p>MII_reg0x1e 和MII_reg0x1f 寄存器描述</p> 
+<p><img alt="" height="441" src="https://images2.imgbox.com/9f/4b/5pYaLxUx_o.png" width="811"></p> 
+<p>所以根据访问方式去配置 PHY 的MAC寄存器，如下</p> 
+<pre><code class="hljs">//写PHY扩展寄存器的方式 
+static void apm_phy_wr_ext(uint16_t reg,uint16_t val) 
+{ 
+    //配置PHY MAC地址
+    ETH_WritePHYRegister(YT8512_PHY_ADDRESS,REG_DEBUG_ADDR_OFFSET,reg);         
+    ETH_WritePHYRegister(YT8512_PHY_ADDRESS,REG_DEBUG_DATA,val);   
+    apm_phy_wr_ext(PHY_MAC_ADDRESS_ADDR1,0x2db2);//04 
+    ETH_WriteDelay(ETH_REG_WRITE_DELAY); 
+    apm_phy_wr_ext(PHY_MAC_ADDRESS_ADDR2,0xe87c);//05 
+    ETH_WriteDelay(ETH_REG_WRITE_DELAY); 
+    apm_phy_wr_ext(PHY_MAC_ADDRESS_ADDR3,0xd769);//06、
+}</code></pre> 
+<p>然后需要配置PHY WOL相关寄存器，如下：</p> 
+<p>开启wol机制：</p> 
+<p><img alt="" height="127" src="https://images2.imgbox.com/0f/ea/LIwUy2qn_o.png" width="1200"></p> 
+<p><img alt="" height="148" src="https://images2.imgbox.com/07/95/Vg24KQtA_o.png" width="1200"></p> 
+<p>触发方式：</p> 
+<p><img alt="" height="106" src="https://images2.imgbox.com/de/bb/IrJDf5cv_o.png" width="1200"></p> 
+<p><img alt="" height="516" src="https://images2.imgbox.com/7d/3b/6Dp1eVhO_o.png" width="1200"></p> 
+<p>配置phy中断：</p> 
+<p><img alt="" height="127" src="https://images2.imgbox.com/6e/0f/NdQdmffV_o.png" width="1200"></p> 
+<p><img alt="" height="141" src="https://images2.imgbox.com/bd/f4/bVZmoVbs_o.png" width="1200"></p> 
+<pre><code class="hljs">//开启WOL机制 
+//0x4000 
+//0x4004 
+apm_phy_wr_ext(PHY_MACHINING_ADDRESS_ADDR1,0x06); 
+ETH_WriteDelay(ETH_REG_WRITE_DELAY); 
+//选择中断触发方式为1ms的脉冲，通过读取两次0x13寄存器清除中断（0x13寄存器清零，中断信号变高） 
+apm_phy_wr_ext(PHY_MACHINING_ADDRESS_ADDR2,0x02ef);//03 
+//配置中断为WOL中断                         //0x12 ETH_WritePHYRegister(YT8512_PHY_ADDRESS,PHY_INTERRUPT_ADDRESS,0x40);</code></pre> 
+<p>清除中断：</p> 
+<p><img alt="" height="91" src="https://images2.imgbox.com/ee/4e/Hl9aDKnp_o.png" width="1200"></p> 
+<p><img alt="" height="124" src="https://images2.imgbox.com/a8/5b/OKc1AbKL_o.png" width="1200"></p> 
+<p><img alt="" height="225" src="https://images2.imgbox.com/6b/19/ufI32HHu_o.png" width="1200"></p> 
+<pre><code class="hljs">//读取两次PHY_MII_REG 0X13 寄存器 清除中断 ETH_ReadPHYRegister(YT8512_PHY_ADDRESS,PHY_INTERRUPT_EVENT_ADDRESS); 
+APM_EVAL_DelayMs(50); 
+ETH_ReadPHYRegister(YT8512_PHY_ADDRESS,PHY_INTERRUPT_EVENT_ADDRESS);</code></pre> 
+<p>配置流程到这里就基本结束了，验证就是通过远程网络工具发送配置的Mac地址，然后看有没有触发配置的MCU外部中断。</p> 
+<h2 id="%E6%80%BB%E7%BB%93">总结</h2> 
+<p>MAC 就是以太网控制器，属于OSI的数字链路层。 phy 属于OSI的物理层(Physical layer)，所以叫phy。</p> 
+<p>CPU Mac与phy通信通过MII接口，数据的传输通过MDIO数据线。通过配置phy的相关寄存器实现不同的功能。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/499d9e39d7bbd7f296476b35e23b84c8/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Java计算Date类相距天数、月数、年数、直接获取年月日</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/239d74913f7addf1611fc980825f7a21/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">关于GIS数据分类方式</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

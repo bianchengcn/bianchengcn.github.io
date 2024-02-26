@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>docker容器ping不通宿主机 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="docker容器ping不通宿主机" />
+<meta property="og:description" content="问题描述： Docker网络模式分为四种，一般我们不设置时默认为bridge单桥模式，容器使用独立的network Namespace，并连接到docker0虚拟网卡中。通过docker0网桥以及Iptables nat表配置与宿主机通信。
+1.在宿主机上，可以通过iptables -t nat -L -n，查到一条DNAT规则
+Chain PREROUTING (policy ACCEPT) target prot opt source destination DOCKER all -- 0.0.0.0/0 0.0.0.0/0 ADDRTYPE match dst-type LOCAL Chain INPUT (policy ACCEPT) target prot opt source destination Chain OUTPUT (policy ACCEPT) target prot opt source destination DOCKER all -- 0.0.0.0/0 !127.0.0.0/8 ADDRTYPE match dst-type LOCAL Chain POSTROUTING (policy ACCEPT) target prot opt source destination MASQUERADE all -- 192.168.0.0/24 0.0.0.0/0 MASQUERADE tcp -- 192." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/8df15e66d6eb49ca71d9b45442d97a42/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-07-30T15:32:19+08:00" />
+<meta property="article:modified_time" content="2021-07-30T15:32:19+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">docker容器ping不通宿主机</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="_0"></a>问题描述：</h2> 
+<p>Docker网络模式分为四种，一般我们不设置时默认为bridge单桥模式，容器使用独立的network Namespace，并连接到docker0虚拟网卡中。通过docker0网桥以及Iptables nat表配置与宿主机通信。</p> 
+<p>1.在宿主机上，可以通过iptables -t nat -L -n，查到一条DNAT规则</p> 
+<pre><code class="prism language-bash">Chain PREROUTING <span class="token punctuation">(</span>policy ACCEPT<span class="token punctuation">)</span>
+target     prot opt <span class="token builtin class-name">source</span>               destination         
+DOCKER     all  --  <span class="token number">0.0</span>.0.0/0            <span class="token number">0.0</span>.0.0/0            ADDRTYPE match dst-type LOCAL
+
+Chain INPUT <span class="token punctuation">(</span>policy ACCEPT<span class="token punctuation">)</span>
+target     prot opt <span class="token builtin class-name">source</span>               destination         
+
+Chain OUTPUT <span class="token punctuation">(</span>policy ACCEPT<span class="token punctuation">)</span>
+target     prot opt <span class="token builtin class-name">source</span>               destination         
+DOCKER     all  --  <span class="token number">0.0</span>.0.0/0           <span class="token operator">!</span><span class="token number">127.0</span>.0.0/8          ADDRTYPE match dst-type LOCAL
+
+Chain POSTROUTING <span class="token punctuation">(</span>policy ACCEPT<span class="token punctuation">)</span>
+target     prot opt <span class="token builtin class-name">source</span>               destination         
+MASQUERADE  all  --  <span class="token number">192.168</span>.0.0/24       <span class="token number">0.0</span>.0.0/0           
+MASQUERADE  tcp  --  <span class="token number">192.168</span>.0.3          <span class="token number">192.168</span>.0.3          tcp dpt:8080
+
+Chain DOCKER <span class="token punctuation">(</span><span class="token number">2</span> references<span class="token punctuation">)</span>
+target     prot opt <span class="token builtin class-name">source</span>               destination         
+RETURN     all  --  <span class="token number">0.0</span>.0.0/0            <span class="token number">0.0</span>.0.0/0           
+DNAT       tcp  --  <span class="token number">0.0</span>.0.0/0            <span class="token number">0.0</span>.0.0/0            tcp dpt:8000 to:192.168.0.3:8080
+</code></pre> 
+<p>2.列出当前主机网桥</p> 
+<pre><code class="prism language-bash">brctl show
+</code></pre> 
+<pre><code class="prism language-bash">bridge name	bridge <span class="token function">id</span>		STP enabled	interfaces
+br0		<span class="token number">8000</span>.5aa0eef737ca	no		veth8b22673
+							vethef570d9
+docker0		<span class="token number">8000.000000000000</span>	no		
+
+</code></pre> 
+<p>3.查看容器网络信息</p> 
+<pre><code class="prism language-bash">docker inspect c5217f7bd44c<span class="token operator">|</span><span class="token function">grep</span> IPAddress
+</code></pre> 
+<p>4.重建网桥</p> 
+<p>1.在使用指令yum install bridge-utils安装工具后，利用brctl show查看网桥<br> 2.利用docker network create [网桥名]指令新建网桥发现其生成的bridge id还是8000.0000000000，在新网桥上创建容器，再次查看并没有什么变化，说明很可能是网桥的问题。<br>   再次测试，此时网桥ip为172.17.0.1，容器ip为172.0.0.2，发现宿主机能ping通网桥，但是无法连接容器，而容器无法连接网桥，无法连接宿主机，更别谈外网了，所以这里可以肯定是网桥出了问题。<br> 3.添加网桥：brctl addbr br0<br> 4.添加ip字段：ip addr add 172.16.0.1/24 dev br0<br> 5.重启网桥br0：ip link set dev br0 up<br> 6.修改docker默认网桥：vim /etc/docker/daemon.json；在后面添加：</p> 
+<pre><code class="prism language-bash"><span class="token string">"bridge"</span><span class="token builtin class-name">:</span><span class="token string">"br0"</span>
+</code></pre> 
+<p>7.重启docker</p> 
+<pre><code class="prism language-bash">systemctl start docker
+</code></pre> 
+<p>8.查看网桥：brctl show<br> 9.启动容器后再查看网桥，就会发现网桥变化了。这个时候容器就可以ping通宿主机了。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9ae62f4138314b637cffeed64d604a9d/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">服务器 用一个独立的硬盘存储文件夹,在独立服务器上部署存储空间</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/6ba07066dc5dda7e52b9f133ee4c4de1/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">计算机接口实验0832,现代计算机接口实验 （四）0832实验</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

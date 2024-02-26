@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Qt编写自定义控件：QWidget版Tumbler - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Qt编写自定义控件：QWidget版Tumbler" />
+<meta property="og:description" content="#ifndef TUMBLERWIDGET_H #define TUMBLERWIDGET_H #include &lt;QWidget&gt; class TumblerWidget : public QWidget { Q_OBJECT public: TumblerWidget(QWidget *parent = nullptr); ~TumblerWidget(); protected: void paintEvent(QPaintEvent *event) override; void resizeEvent(QResizeEvent*event) override; void mousePressEvent(QMouseEvent *event) override; void mouseReleaseEvent(QMouseEvent *event) override; void mouseMoveEvent(QMouseEvent *event) override; private: struct TumblerWidgetPrivate * d_ptr; }; #endif // TUMBLERWIDGET_H #include &#34;tumblerwidget.h&#34; #include &lt;QPainter&gt; #include &lt;QPaintEvent&gt; #include &lt;QDebug&gt; struct TumblerWidgetPrivate { QStringList list; QVector&lt;QRect&gt; rectVector; QRect centerRect; int currentIndex{0}; TumblerWidget * q_ptr; int itemHeight{60}; bool needResetSize{false}; int isPressed : 1; QPoint pressPos; void findCurrentIndex(); void alignRectangle(); void changeInMoveing(int change_Y); void resetRects(); }; TumblerWidget::TumblerWidget(QWidget *parent) : QWidget(parent) { auto font = this-&gt;font(); font." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/0035404cd3b539a0c8588c5c1cf7b6d7/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-04T15:08:21+08:00" />
+<meta property="article:modified_time" content="2024-01-04T15:08:21+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Qt编写自定义控件：QWidget版Tumbler</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <pre><code class="language-cpp">#ifndef TUMBLERWIDGET_H
+#define TUMBLERWIDGET_H
+
+#include &lt;QWidget&gt;
+
+class TumblerWidget : public QWidget
+{
+    Q_OBJECT
+
+public:
+    TumblerWidget(QWidget *parent = nullptr);
+    ~TumblerWidget();
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent*event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+
+private:
+    struct TumblerWidgetPrivate * d_ptr;
+};
+
+#endif // TUMBLERWIDGET_H</code></pre> 
+<pre><code class="language-cpp">#include "tumblerwidget.h"
+#include &lt;QPainter&gt;
+#include &lt;QPaintEvent&gt;
+#include &lt;QDebug&gt;
+
+struct TumblerWidgetPrivate
+{
+    QStringList list;
+    QVector&lt;QRect&gt; rectVector;
+    QRect centerRect;
+    int currentIndex{0};
+    TumblerWidget * q_ptr;
+    int itemHeight{60};
+    bool needResetSize{false};
+    int isPressed : 1;
+    QPoint pressPos;
+
+    void findCurrentIndex();
+    void alignRectangle();
+    void changeInMoveing(int change_Y);
+    void resetRects();
+};
+
+TumblerWidget::TumblerWidget(QWidget *parent)
+    : QWidget(parent)
+{
+    auto font = this-&gt;font();
+    font.setPixelSize(24);
+    setFont(font);
+
+    setMouseTracking(true);
+
+    d_ptr = new TumblerWidgetPrivate;
+    d_ptr-&gt;q_ptr = this;
+    for(int i = 0;i &lt; 31;++i)
+    {
+        d_ptr-&gt;list &lt;&lt; QString("item%1").arg(i);
+    }
+
+    d_ptr-&gt;rectVector.resize(d_ptr-&gt;list.size());
+}
+
+TumblerWidget::~TumblerWidget()
+{
+    delete d_ptr;
+}
+
+void TumblerWidgetPrivate::findCurrentIndex()
+{
+    int maxIntersectArea = -1;
+    int maxIntersectIndex = -1;
+    int closestDistance = std::numeric_limits&lt;int&gt;::max();
+    int closestIndex = -1;
+
+    for (int i = 0; i &lt; rectVector.size(); ++i)
+    {
+        const QRect&amp; currentRect = rectVector.at(i);
+        if (currentRect.intersects(centerRect))
+        {
+            int area = currentRect.intersected(centerRect).width() * currentRect.intersected(centerRect).height();
+            if (area &gt; maxIntersectArea)
+            {
+                maxIntersectArea = area;
+                maxIntersectIndex = i;
+            }
+        }
+        // 计算与中心矩形最近的矩形
+        int distance = qAbs(centerRect.center().y() - currentRect.center().y());
+        if (distance &lt; closestDistance)
+        {
+            closestDistance = distance;
+            closestIndex = i;
+        }
+    }
+
+    if (maxIntersectIndex != -1)
+    {
+        currentIndex = maxIntersectIndex;
+    }
+    else
+    {
+        currentIndex = closestIndex;
+    }
+}
+
+//对齐
+void TumblerWidgetPrivate::alignRectangle()
+{
+    auto rectWidth = q_ptr-&gt;rect().width();
+
+    for(int i = 0;i &lt; rectVector.size();++i)
+    {
+        if(i &lt; currentIndex)
+        {
+            rectVector[i] = QRect(0,centerRect.y() - (currentIndex - i) * itemHeight,rectWidth,itemHeight);
+        }
+        else if(i == currentIndex)
+        {
+            rectVector[i] = centerRect;
+        }
+        else
+        {
+            rectVector[i] = QRect(0,centerRect.y() + (i - currentIndex) * itemHeight,rectWidth,itemHeight);
+        }
+    }
+}
+
+void TumblerWidgetPrivate::changeInMoveing(int change_Y)
+{
+    auto rectWidth = q_ptr-&gt;rect().width();
+    for(int i = 0;i &lt; rectVector.size();++i)
+    {
+        if(i &lt; currentIndex)
+        {
+            rectVector[i] = QRect(0,centerRect.y() - (currentIndex - i) * itemHeight - change_Y,rectWidth,itemHeight);
+        }
+        else if(i == currentIndex)
+        {
+            rectVector[i] = QRect(0,centerRect.y() - change_Y,rectWidth,itemHeight);
+        }
+        else
+        {
+            rectVector[i] = QRect(0,centerRect.y() + (i - currentIndex) * itemHeight - change_Y,rectWidth,itemHeight);
+        }
+    }
+}
+
+void TumblerWidgetPrivate::resetRects()
+{
+    auto rect = q_ptr-&gt;rect();
+    auto centerRect_Y = (rect.height() - itemHeight) / 2;
+    centerRect = QRect(0,centerRect_Y,rect.width(),itemHeight);
+    changeInMoveing(0);
+    needResetSize = false;
+}
+
+void TumblerWidget::paintEvent(QPaintEvent *event)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::black);
+
+    if(Q_UNLIKELY(d_ptr-&gt;needResetSize))
+    {
+        d_ptr-&gt;resetRects();
+    }
+    for(int i = 0;i &lt; d_ptr-&gt;rectVector.size();++i)
+    {
+        painter.drawText(d_ptr-&gt;rectVector[i],Qt::AlignCenter,d_ptr-&gt;list[i]);
+    }
+    painter.fillRect(d_ptr-&gt;centerRect,QColor("#6611aa11"));
+}
+
+void TumblerWidget::resizeEvent(QResizeEvent *event)
+{
+    d_ptr-&gt;needResetSize = true;;
+    auto newWidth = event-&gt;size().width();
+    for(int i = 0;i &lt; d_ptr-&gt;rectVector.size();++i)
+    {
+        auto &amp; rect = d_ptr-&gt;rectVector[i];
+        rect.setWidth(newWidth);
+    }
+    QWidget::resizeEvent(event);
+}
+
+void TumblerWidget::mousePressEvent(QMouseEvent *event)
+{
+    if(event-&gt;button() == Qt::LeftButton)
+    {
+        d_ptr-&gt;pressPos = event-&gt;pos();
+        d_ptr-&gt;isPressed = true;
+        update();
+    }
+}
+
+void TumblerWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if(d_ptr-&gt;isPressed)
+    {
+        d_ptr-&gt;isPressed = false;
+        d_ptr-&gt;findCurrentIndex();
+        d_ptr-&gt;alignRectangle();
+        update();
+    }
+}
+
+void TumblerWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    if(d_ptr-&gt;isPressed)
+    {
+        auto cha = d_ptr-&gt;pressPos - event-&gt;pos();
+        d_ptr-&gt;changeInMoveing(cha.y());
+        update();
+    }
+}</code></pre> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/38/9d/zWz48Svf_o.gif"></p> 
+<p>相关： <a class="link-info" href="https://blog.csdn.net/kenfan1647/article/details/125070430" title="QML控件类型：Tumbler">QML控件类型：Tumbler</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/62782e383acc32265e75550d1b836f70/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">阿赵UE学习笔记——7、导入资源</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/4d1ebaf0349a6327747fc04123e55845/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Godot4.2——爬虫小游戏简单制作</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

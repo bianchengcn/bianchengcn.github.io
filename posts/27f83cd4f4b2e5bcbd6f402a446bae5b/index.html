@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>详解僵尸进程与孤儿进程 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="详解僵尸进程与孤儿进程" />
+<meta property="og:description" content="文章目录 孤儿进程僵尸进程如何避免僵尸进程的出现避免出现僵尸进程的优化处理 在本篇博客中进行孤儿进程和僵尸进程的代码示例中都涉及到了pause()函数和signal函数，signal函数主要功能是将信号与函数指针绑定在一起，当进程执行到pause时，如果接受到该信号就会执行相对应的signal函数中绑定的相关代码，如果没有接受到该信号，就不会执行。如果想要了解更多关于pause的知识，可以查看这篇博文：linux系统编程：暂停函数pause
+接下来让我们学习孤儿进程和僵尸进程的相关知识。
+孤儿进程 当父进程退出后，子进程还没有结束时，这时的子进程我们称之为孤儿进程。系统会将孤儿进程挂在最早的进程或它的祖父进程上，这种进程没有危害，不会造成资源泄漏。
+下文中我们给出的代码就生成了一个孤儿进程，其中涉及到关于fork函数的知识，我们可以直接简单理解为该函数可以创建一个子进程，该函数在父进程中的返回值为1，在子进程中的返回值为0。所以父进程在获取pid之后执行最后一个cout语句就会退出，但子进程会进入if执行pause暂停运行。所以该子进程就会成为一个孤儿进程。
+关于fork的具体知识，可以看这篇博文：linux系统编程：分叉函数fork
+具体代码如下：
+#include &lt;iostream&gt; #include &lt;signal.h&gt; // 关于信号的头文件 #include &lt;unistd.h&gt; #include &lt;wait.h&gt; using namespace std; int main(){ signal(SIGINT,[](int sig){cout &lt;&lt; &#34;over pause&#34; &lt;&lt; endl;}); pid_t id = fork(); if(id == 0){ cout &lt;&lt; getpid() &lt;&lt; &#34;:before pause&#34; &lt;&lt; endl; pause(); cout &lt;&lt; getpid() &lt;&lt; &#34;:after pause&#34; &lt;&lt; endl; } cout &lt;&lt; getpid() &lt;&lt; &#34;:exit&#34; &lt;&lt; endl; } 执行结果如下：
+使用ps -ef查询进程具体信息，找到子进程16532的相关信息如下：
+该子进程的父进程已经不是16531，而是2308。我们可以使用kill 16532杀死该进程。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/27f83cd4f4b2e5bcbd6f402a446bae5b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-03-27T11:07:41+08:00" />
+<meta property="article:modified_time" content="2022-03-27T11:07:41+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">详解僵尸进程与孤儿进程</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_13" rel="nofollow">孤儿进程</a></li><li><a href="#_50" rel="nofollow">僵尸进程</a></li><li><a href="#_86" rel="nofollow">如何避免僵尸进程的出现</a></li><li><a href="#_118" rel="nofollow">避免出现僵尸进程的优化处理</a></li></ul> 
+</div> 
+<p></p> 
+<hr color="#000000" size='1"'> 
+<p>在本篇博客中进行孤儿进程和僵尸进程的代码示例中都涉及到了<code>pause()</code>函数和<code>signal</code>函数，<code>signal</code>函数主要功能是将信号与函数指针绑定在一起，当进程执行到<code>pause</code>时，如果接受到该信号就会执行相对应的<code>signal</code>函数中绑定的相关代码，如果没有接受到该信号，就不会执行。如果想要了解更多关于<code>pause</code>的知识，可以查看这篇博文：<a href="https://blog.csdn.net/weixin_50941083/article/details/122550804?spm=1001.2014.3001.5501">linux系统编程：暂停函数pause<br> </a></p> 
+<p>接下来让我们学习孤儿进程和僵尸进程的相关知识。</p> 
+<h2><a id="_13"></a>孤儿进程</h2> 
+<blockquote> 
+ <p>当父进程退出后，子进程还没有结束时，这时的子进程我们称之为孤儿进程。系统会将孤儿进程挂在最早的进程或它的祖父进程上，这种进程没有危害，不会造成资源泄漏。</p> 
+</blockquote> 
+<p>下文中我们给出的代码就生成了一个孤儿进程，其中涉及到关于<code>fork</code>函数的知识，我们可以直接简单理解为该函数可以创建一个子进程，该函数在父进程中的返回值为1，在子进程中的返回值为0。所以父进程在获取<code>pid</code>之后执行最后一个<code>cout</code>语句就会退出，但子进程会进入<code>if</code>执行<code>pause</code>暂停运行。所以该子进程就会成为一个孤儿进程。</p> 
+<p>关于<code>fork</code>的具体知识，可以看这篇博文：<a href="https://blog.csdn.net/weixin_50941083/article/details/122509864?spm=1001.2014.3001.5501">linux系统编程：分叉函数fork</a></p> 
+<p>具体代码如下：</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;iostream&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;signal.h&gt;</span>  <span class="token comment">// 关于信号的头文件</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;wait.h&gt;</span></span>
+<span class="token keyword">using</span> <span class="token keyword">namespace</span> std<span class="token punctuation">;</span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    <span class="token function">signal</span><span class="token punctuation">(</span>SIGINT<span class="token punctuation">,</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">int</span> sig<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"over pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span><span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    pid_t id <span class="token operator">=</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>id <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":before pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+        <span class="token function">pause</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":after pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":exit"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>执行结果如下：<br> <img src="https://images2.imgbox.com/9d/6a/clucqM6m_o.png" alt="在这里插入图片描述"><br> 使用<code>ps -ef</code>查询进程具体信息，找到子进程16532的相关信息如下：</p> 
+<p><img src="https://images2.imgbox.com/74/63/OmtXBtZE_o.png" alt="在这里插入图片描述"><br> 该子进程的父进程已经不是16531，而是2308。我们可以使用<code>kill 16532</code>杀死该进程。</p> 
+<h2><a id="_50"></a>僵尸进程</h2> 
+<blockquote> 
+ <p>在子进程运行结束退出侯，由于父进程无法获取子进程状态信息，从而难以回收子进程资源，这种子进程成为僵尸进程。这种僵尸进程占用系统资源，会造成资源泄漏，而且没有办法杀死，只能在杀死父进程时才能杀死僵尸进程。</p> 
+</blockquote> 
+<p>所以子进程在获取<code>pid</code>之后会直接执行最后一个<code>cout</code>语句就会退出，但父进程会进入<code>if</code>执行<code>pause</code>暂停运行。所以该子进程就会成为一个僵尸进程。</p> 
+<p>具体代码如下：</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;iostream&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;signal.h&gt;</span>  <span class="token comment">// 关于信号的头文件</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;wait.h&gt;</span></span>
+<span class="token keyword">using</span> <span class="token keyword">namespace</span> std<span class="token punctuation">;</span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    <span class="token function">signal</span><span class="token punctuation">(</span>SIGINT<span class="token punctuation">,</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">int</span> sig<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"over pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span><span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    pid_t id <span class="token operator">=</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>id <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":before pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+        <span class="token function">pause</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":after pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":exit"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>执行结果如下：</p> 
+<p><img src="https://images2.imgbox.com/27/6c/TaADDSOM_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="_86"></a>如何避免僵尸进程的出现</h2> 
+<blockquote> 
+ <p><code>wait()</code>函数作用：</p> 
+ <ul><li>子进程没有退出，父进程等待</li><li>父进程回收子进程资源</li></ul> 
+</blockquote> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;iostream&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;signal.h&gt;</span>  <span class="token comment">// 关于信号的头文件</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;wait.h&gt;</span></span>
+<span class="token keyword">using</span> <span class="token keyword">namespace</span> std<span class="token punctuation">;</span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    <span class="token function">signal</span><span class="token punctuation">(</span>SIGINT<span class="token punctuation">,</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">int</span> sig<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"over pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span><span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    pid_t id <span class="token operator">=</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>id <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":before pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+        <span class="token function">wait</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 等待子进程退出</span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":after pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+        <span class="token function">pause</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":exit"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>执行结果如下：</p> 
+<p><img src="https://images2.imgbox.com/90/4d/MBIejwtz_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="_118"></a>避免出现僵尸进程的优化处理</h2> 
+<p>但是上述这种用法使得父进程必须要等待子进程退出才能继续进行处理，父进程在等待的时间内无法进行任何操作。我们可以让子进程注册信号，让子进程退出的时候通知父进程，父进程获取子进程状态直接进行销毁回收资源。</p> 
+<p>我们在子进程处理的过程中给出一个中断，让父进程处理事务，父进程处理结束后，子进程如果还没有收到绑定的信号，就会变成孤儿进程。如果子进程等待到绑定的信号，父进程将也会受到该信号，将会回收子进程资源。</p> 
+<p>相关代码如下：</p> 
+<pre><code class="prism language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;iostream&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;signal.h&gt;</span>  <span class="token comment">// 关于信号的头文件</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;wait.h&gt;</span></span>
+<span class="token keyword">using</span> <span class="token keyword">namespace</span> std<span class="token punctuation">;</span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+    <span class="token function">signal</span><span class="token punctuation">(</span>SIGINT<span class="token punctuation">,</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">int</span> sig<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">"over pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span><span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">signal</span><span class="token punctuation">(</span>SIGCHLD<span class="token punctuation">,</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">int</span> sig<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+                        pid_t id <span class="token operator">=</span> <span class="token function">wait</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                        cout <span class="token operator">&lt;&lt;</span> <span class="token string">"wait"</span> <span class="token operator">&lt;&lt;</span> id <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+                    <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    pid_t id <span class="token operator">=</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>id <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":before sleep"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+        <span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// 在这个时间里面父进程可以处理一些其他的事情</span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":after sleep"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+    <span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+        cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":pause"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+        <span class="token function">pause</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    cout <span class="token operator">&lt;&lt;</span> <span class="token function">getpid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">":exit"</span> <span class="token operator">&lt;&lt;</span> endl<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>运行结果有三种：</p> 
+<ol><li> <p>Ctrl+Z信号如下：<br> <img src="https://images2.imgbox.com/4d/f0/RQ07CaLp_o.png" alt="在这里插入图片描述"><br> 父进程子进程都收到该信号后，都会运行至<code>wait</code>函数处，这时使用<code>fg</code>命令将打入后台的程序调回到前台继续运行，由于两者都还在<code>wait</code>函数处等待，我们<code>Ctrl+C</code>，使得父子进程都收到该信号，执行该信号绑定的函数指针中的代码，子进程将会继续执行后续代码指导退出。父进程收到子进程退出的信号之后，完成wait函数，继续执行后续操作。</p> </li><li> <p>直接收到<code>Ctrl+C</code>信号：<br> <img src="https://images2.imgbox.com/ac/e4/5k1ZNPMj_o.png" alt="在这里插入图片描述"><br> 父子进程接受到该信号后，执行绑定操作，子进程继续执行，父进程执行<code>sleep</code>操作，直至父进程退出，子进程</p> </li><li> <p>父进程将自己的操作全部执行结束<br> <img src="https://images2.imgbox.com/d1/b4/DESm0BE8_o.png" alt="在这里插入图片描述"><br> 父进程已经退出，子进程还会处于<code>pause</code>，这时的子进程成为了孤儿进程，不会造成资源泄漏。</p> </li></ol>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7322af10b881920027787838afd480e0/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">latex中Winedt和Sumatra PDF互联设置及失效解决</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/4b0373c0a260b34117f3b6bd361d7ceb/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">python后台——asyncio，多进程&#43;asyncio</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Spring 5 AbstractBeanFactory -- resolveBeanClass源码解析 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Spring 5 AbstractBeanFactory -- resolveBeanClass源码解析" />
+<meta property="og:description" content="相关源码注释 ApplicationContext Spring 5 DefaultResourceLoader 源码注释
+Spring 5 AbstractApplicationContext 源码注释
+BeanFactory Spring 5 SimpleAliasRegistry 源码注释
+Spring 5 DefaultSingletonBeanRegistry 源码注释
+Spring 5 FactoryBeanRegistrySupport 源码注释
+Spring 5 AbstractBeanFactory 源码注释
+Spring 5 AbstractAutowireCapableBeanFactory 源码注释
+Spring 5 DefaultLisbaleBeanFactory 源码注释
+AbstractBeanFactory#resolveBeanClass 为mdb解析出对应的bean class:
+如果mbd指定了bean class,就直接返回该bean class调用doResolveBeanClass(mbd, typesToMatch)来解析获取对应的bean Class对象然后返回出去。如果成功获取到 系统的安全管理器,使用特权的方式调用。捕捉PrivilegedActionException,ClassNotFoundException异常和LinkageError错误，保证其异常或错误信息， 抛出CannotLoadBeanClassException /** * Resolve the bean class for the specified bean definition, * resolving a bean class name into a Class reference (if necessary) * and storing the resolved Class in the bean definition for further use." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/e270b282978cbedd846a0066219cf74c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-09-07T17:47:25+08:00" />
+<meta property="article:modified_time" content="2020-09-07T17:47:25+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Spring 5 AbstractBeanFactory -- resolveBeanClass源码解析</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="_0"></a>相关源码注释</h2> 
+<h3><a id="ApplicationContext_1"></a>ApplicationContext</h3> 
+<blockquote> 
+ <p><a href="https://blog.csdn.net/qq_30321211/article/details/108377606">Spring 5 DefaultResourceLoader 源码注释</a><br> <a href="https://blog.csdn.net/qq_30321211/article/details/108377551">Spring 5 AbstractApplicationContext 源码注释</a></p> 
+</blockquote> 
+<h3><a id="BeanFactory_4"></a>BeanFactory</h3> 
+<blockquote> 
+ <p><a href="https://blog.csdn.net/qq_30321211/article/details/108377035">Spring 5 SimpleAliasRegistry 源码注释</a><br> <a href="https://blog.csdn.net/qq_30321211/article/details/108376942">Spring 5 DefaultSingletonBeanRegistry 源码注释</a><br> <a href="https://blog.csdn.net/qq_30321211/article/details/108376502">Spring 5 FactoryBeanRegistrySupport 源码注释</a><br> <a href="https://blog.csdn.net/qq_30321211/article/details/108376363">Spring 5 AbstractBeanFactory 源码注释</a><br> <a href="https://blog.csdn.net/qq_30321211/article/details/108376204">Spring 5 AbstractAutowireCapableBeanFactory 源码注释</a><br> <a href="https://blog.csdn.net/qq_30321211/article/details/108367733">Spring 5 DefaultLisbaleBeanFactory 源码注释</a></p> 
+</blockquote> 
+<h3><a id="AbstractBeanFactoryresolveBeanClass_11"></a>AbstractBeanFactory#resolveBeanClass</h3> 
+<p>为mdb解析出对应的bean class:</p> 
+<ol><li>如果mbd指定了bean class,就直接返回该bean class</li><li>调用doResolveBeanClass(mbd, typesToMatch)来解析获取对应的bean Class对象然后返回出去。如果成功获取到 系统的安全管理器,使用特权的方式调用。</li><li>捕捉PrivilegedActionException,ClassNotFoundException异常和LinkageError错误，保证其异常或错误信息， 抛出CannotLoadBeanClassException</li></ol> 
+<pre><code class="prism language-java"><span class="token comment">/**
+	 * Resolve the bean class for the specified bean definition,
+	 * resolving a bean class name into a Class reference (if necessary)
+	 * and storing the resolved Class in the bean definition for further use.
+	 * &lt;p&gt;为指定的bean定义解析bean类，将bean类名解析为Class引用（如果需要）,并
+	 * 将解析后的Class存储在bean定义中以备将来使用。&lt;/p&gt;
+	 * @param mbd the merged bean definition to determine the class for
+	 *            -- 合并的bean定义来确定其类
+	 * @param beanName the name of the bean (for error handling purposes)
+	 *                 -- bean名称（用于错误处理）,用于发生异常时，描述异常信息
+	 * @param typesToMatch
+	 * -- 要匹配的类型，用于当该工厂有临时类加载器且该类加载器属于DecoratingClassLoader实例时，
+	 * 对这些要匹配的类型进行在临时类加载器中的排除，以交由父ClassLoader以常规方式处理
+	 * 默认情况下父classLoader是线程上下文类加载器】。&lt;br/&gt;
+	 * the types to match in case of internal type matching purposes
+	 * (also signals that the returned {@code Class} will never be exposed to application code)
+	 *  -- 内部类型匹配时要匹配的类型（也表示返回的Class永远不会暴露给应用程序代码）
+	 * @return the resolved bean class (or {@code null} if none)
+	 * -- 解析的Bean类(如果没有，则为null)
+	 * @throws CannotLoadBeanClassException if we failed to load the class
+	 * -- 如果我们无法加载类
+	 * @see #doResolveBeanClass(RootBeanDefinition, Class[])
+	 */</span>
+	<span class="token annotation punctuation">@Nullable</span>
+	<span class="token keyword">protected</span> Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span> <span class="token function">resolveBeanClass</span><span class="token punctuation">(</span><span class="token keyword">final</span> RootBeanDefinition mbd<span class="token punctuation">,</span> String beanName<span class="token punctuation">,</span> <span class="token keyword">final</span> Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span> typesToMatch<span class="token punctuation">)</span>
+			<span class="token keyword">throws</span> CannotLoadBeanClassException <span class="token punctuation">{<!-- --></span>
+
+		<span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">//如果mbd指定了bean类</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>mbd<span class="token punctuation">.</span><span class="token function">hasBeanClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token comment">//获取mbd的指定bean类</span>
+				<span class="token keyword">return</span> mbd<span class="token punctuation">.</span><span class="token function">getBeanClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token comment">//如果成功获取到系统的安全管理器</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>System<span class="token punctuation">.</span><span class="token function">getSecurityManager</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">!=</span> null<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token comment">//AccessController.doPrivileged:允许在一个类实例中的代码通知这个AccessController：</span>
+				<span class="token comment">// 	它的代码主体是享受"privileged(特权的)"，它单独负责对它的可得的资源的访问请求，</span>
+				<span class="token comment">// 	而不管这个请求是由什么代码所引发的。</span>
+				<span class="token comment">// 一个调用者在调用doPrivileged方法时，可被标识为 "特权"。在做访问控制决策时，</span>
+				<span class="token comment">// 如果checkPermission方法遇到一个通过doPrivileged调用而被表示为 "特权"的调用者，</span>
+				<span class="token comment">// 并且没有上下文自变量，checkPermission方法则将终止检查。如果那个调用者的域具有特定的许可，</span>
+				<span class="token comment">// 则不做进一步检查，checkPermission安静地返回，表示那个访问请求是被允许的；</span>
+				<span class="token comment">// 如果那个域没有特定的许可，则象通常一样，一个异常被抛出。</span>
+				<span class="token comment">//参考博客：https://www.jianshu.com/p/3fe79e24f8a1</span>
+				<span class="token comment">//参考博客：https://www.iteye.com/blog/huangyunbin-1942509</span>
+				<span class="token keyword">return</span> AccessController<span class="token punctuation">.</span><span class="token function">doPrivileged</span><span class="token punctuation">(</span><span class="token punctuation">(</span>PrivilegedExceptionAction<span class="token operator">&lt;</span>Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;&gt;</span><span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-</span><span class="token operator">&gt;</span>
+					<span class="token function">doResolveBeanClass</span><span class="token punctuation">(</span>mbd<span class="token punctuation">,</span> typesToMatch<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">getAccessControlContext</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token keyword">return</span> <span class="token function">doResolveBeanClass</span><span class="token punctuation">(</span>mbd<span class="token punctuation">,</span> typesToMatch<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token comment">//捕捉 无法使用特权异常的</span>
+		<span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">PrivilegedActionException</span> pae<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">//这里没有理解，pae获取的异常一定是ClassNotFoundException?</span>
+			ClassNotFoundException ex <span class="token operator">=</span> <span class="token punctuation">(</span>ClassNotFoundException<span class="token punctuation">)</span> pae<span class="token punctuation">.</span><span class="token function">getException</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token comment">//包装异常信息，抛出CannotLoadBeanClassException</span>
+			<span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">CannotLoadBeanClassException</span><span class="token punctuation">(</span>mbd<span class="token punctuation">.</span><span class="token function">getResourceDescription</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> beanName<span class="token punctuation">,</span> mbd<span class="token punctuation">.</span><span class="token function">getBeanClassName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> ex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token comment">//捕捉 未找到类异常</span>
+		<span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">ClassNotFoundException</span> ex<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">//包装异常信息，抛出CannotLoadBeanClassException</span>
+			<span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">CannotLoadBeanClassException</span><span class="token punctuation">(</span>mbd<span class="token punctuation">.</span><span class="token function">getResourceDescription</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> beanName<span class="token punctuation">,</span> mbd<span class="token punctuation">.</span><span class="token function">getBeanClassName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> ex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token comment">//LinkageError:LinkageError的子类表明一个类对另一个类具有一定的依赖性。但是，后一类在前一类编译之后发生了</span>
+		<span class="token comment">//不兼容的变化</span>
+		<span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">LinkageError</span> err<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">//包装错误信息，抛出CannotLoadBeanClassException</span>
+			<span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">CannotLoadBeanClassException</span><span class="token punctuation">(</span>mbd<span class="token punctuation">.</span><span class="token function">getResourceDescription</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> beanName<span class="token punctuation">,</span> mbd<span class="token punctuation">.</span><span class="token function">getBeanClassName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> err<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="doResolveBeanClassmbd_typesToMatch_89"></a>doResolveBeanClass(mbd, typesToMatch)</h2> 
+<p>获取mbd配置的bean类名，将bean类名解析为Class对象,并将解析后的Class对象缓存在mdb中以备将来使用:</p> 
+<ol><li>获取该工厂的加载bean用的类加载器【变量 beanClassLoader】</li><li>声明一个动态类加载器【变量 dynamicLoader】，默认引用beanClassLoader</li><li>声明一个表示mdb的配置的bean类名需要重新被dynameicLoader加载的标记，默认不需要。【变量 freshResolve】</li><li>如果传入了typesToMatch，且该工厂有临时类加载器【变量 tempClassLoader】： 
+  <ol><li>改变dynamicLoader引用为tempClassLoader</li><li>标记mdb的配置的bean类名需要重新被dynameicLoader加载</li><li>如果tempClassLoader属于DecoratingClassLoader实例,会对tempClassLoader进行强转为DecoratingClassLoader 【变量 dcl】，然后对typeToMatch在dcl中的排除，使其交由其父classLoader【默认情况下父classLoader是线程上下文类加载器】 进行常规方式处理</li></ol> </li><li>从mbd中获取配置的bean类名【变量名 className】</li><li>如果获取到className: 
+  <ol><li>评估benaDefinition中包含的className,如果className是可解析表达式，会对其进行解析，否则直接返回className.【变量 evaluated】</li><li>如果className与evaluated不一样: 
+    <ol><li>如果evaluated属于Class实例,强转evaluatedw为Class对象并返回出去</li><li>如果evaluated属于String实例,将evaluated作为className的值,然后标记mdb配置的bean类名需要重新 被dynameicLoader加载</li><li>否则：抛出非法状态异常：无效的类名表达式结果：evaluated</li></ol> </li><li>如果mdb的配置的bean类名需要重新被dynameicLoader加载: 
+    <ol><li>如果dynameicLoader不为null,使用dynamicLoader加载className对应的类型，并返回加载成功的Class对象. 同时捕捉未找到类异常【变量ex】</li><li>如果抛出了ex.打印追踪日志：无法从dynamicLoader中加载类[className]:ex</li><li>调用ClassUtils.forName(className, dynamicLoader)来获取Class对象并返回出去</li></ol> </li></ol> </li><li>否则，使用beanClassLoader加载mbd所配置的Bean类名的Class对象并返回出去</li></ol> 
+<pre><code class="prism language-java"><span class="token comment">/**
+	 * &lt;p&gt;获取mbd配置的bean类名，将bean类名解析为Class对象,并将解析后的Class对象缓存在mdb中以备将来使用&lt;/p&gt;
+	 * @param mbd -- 合并的bean定义来确定其类
+	 * @param typesToMatch -- 要匹配的类型，用于当该工厂有临时类加载器且该类加载器属于DecoratingClassLoader实例时，
+	 *                        对这些要匹配的类型进行在临时类加载器中的排除，以交由父ClassLoader以常规方式处理
+	 *                        【默认情况下父classLoader是线程上下文类加载器】。
+	 * @return -- 解析的Bean类(如果没有，则为null)
+	 * @throws ClassNotFoundException -- 如果我们无法加载类
+	 */</span>
+	<span class="token annotation punctuation">@Nullable</span>
+	<span class="token keyword">private</span> Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span> <span class="token function">doResolveBeanClass</span><span class="token punctuation">(</span>RootBeanDefinition mbd<span class="token punctuation">,</span> Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span> typesToMatch<span class="token punctuation">)</span>
+			<span class="token keyword">throws</span> ClassNotFoundException <span class="token punctuation">{<!-- --></span>
+		<span class="token comment">//获取该工厂的加载bean用的类加载器</span>
+		ClassLoader beanClassLoader <span class="token operator">=</span> <span class="token function">getBeanClassLoader</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token comment">//初始化动态类加载器为该工厂的加载bean用的类加载器,如果该工厂有</span>
+		<span class="token comment">// 临时类加载器器时，该动态类加载器就是该工厂的临时类加载器</span>
+		ClassLoader dynamicLoader <span class="token operator">=</span> beanClassLoader<span class="token punctuation">;</span>
+		<span class="token comment">//表示mdb的配置的bean类名需要重新被dynameicLoader加载的标记，默认不需要</span>
+		<span class="token keyword">boolean</span> freshResolve <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+
+		<span class="token comment">//如果有传入要匹配的类型</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>ObjectUtils<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span>typesToMatch<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">// When just doing type checks (i.e. not creating an actual instance yet),</span>
+			<span class="token comment">// use the specified temporary class loader (e.g. in a weaving scenario).</span>
+			<span class="token comment">// 仅进行类型检查时（即尚未创建实际实例），请使用指定的临时类加载器</span>
+			<span class="token comment">//获取该工厂的临时类加载器，该临时类加载器专门用于类型匹配</span>
+			ClassLoader tempClassLoader <span class="token operator">=</span> <span class="token function">getTempClassLoader</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token comment">//如果成功获取到临时类加载器</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>tempClassLoader <span class="token operator">!=</span> null<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token comment">//以该工厂的临时类加载器作为动态类加载器</span>
+				dynamicLoader <span class="token operator">=</span> tempClassLoader<span class="token punctuation">;</span>
+				<span class="token comment">//标记mdb的配置的bean类名需要重新被dynameicLoader加载</span>
+				freshResolve <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+				<span class="token comment">//DecoratingClassLoader:装饰ClassLoader的基类,提供对排除的包和类的通用处理</span>
+				<span class="token comment">//如果临时类加载器是DecoratingClassLoader的基类</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>tempClassLoader <span class="token keyword">instanceof</span> <span class="token class-name">DecoratingClassLoader</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+					<span class="token comment">//将临时类加载器强转为DecoratingClassLoader实例</span>
+					DecoratingClassLoader dcl <span class="token operator">=</span> <span class="token punctuation">(</span>DecoratingClassLoader<span class="token punctuation">)</span> tempClassLoader<span class="token punctuation">;</span>
+					<span class="token comment">//对要匹配的类型进行在装饰类加载器中的排除，以交由父ClassLoader以常规方式处理</span>
+					<span class="token keyword">for</span> <span class="token punctuation">(</span>Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span> typeToMatch <span class="token operator">:</span> typesToMatch<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+						dcl<span class="token punctuation">.</span><span class="token function">excludeClass</span><span class="token punctuation">(</span>typeToMatch<span class="token punctuation">.</span><span class="token function">getName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+					<span class="token punctuation">}</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token comment">//从mbd中获取配置的bean类名</span>
+		String className <span class="token operator">=</span> mbd<span class="token punctuation">.</span><span class="token function">getBeanClassName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token comment">//如果能成功获得配置的bean类名</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>className <span class="token operator">!=</span> null<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">//评估benaDefinition中包含的className,如果className是可解析表达式，会对其进行解析，否则直接返回className:</span>
+			Object evaluated <span class="token operator">=</span> <span class="token function">evaluateBeanDefinitionString</span><span class="token punctuation">(</span>className<span class="token punctuation">,</span> mbd<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token comment">//如果className与解析后的值不一样</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>className<span class="token punctuation">.</span><span class="token function">equals</span><span class="token punctuation">(</span>evaluated<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token comment">// A dynamically resolved expression, supported as of 4.2...</span>
+				<span class="token comment">// 从4.2开始支持动态解析的表达式</span>
+				<span class="token comment">// 如果evaluated属于Class实例</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>evaluated <span class="token keyword">instanceof</span> <span class="token class-name">Class</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+					<span class="token comment">//强转evaluatedw为Class对象并返回出去</span>
+					<span class="token keyword">return</span> <span class="token punctuation">(</span>Class<span class="token operator">&lt;</span><span class="token operator">?</span><span class="token operator">&gt;</span><span class="token punctuation">)</span> evaluated<span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token comment">// 如果evaluated属于String实例</span>
+				<span class="token keyword">else</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>evaluated <span class="token keyword">instanceof</span> <span class="token class-name">String</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+					<span class="token comment">//将evaluated作为className的值</span>
+					className <span class="token operator">=</span> <span class="token punctuation">(</span>String<span class="token punctuation">)</span> evaluated<span class="token punctuation">;</span>
+					<span class="token comment">//标记mdb的配置的bean类名需要重新被dynameicLoader加载</span>
+					freshResolve <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+				<span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+					<span class="token comment">//抛出非法状态异常：无效的类名表达式结果：evaluated</span>
+					<span class="token keyword">throw</span> <span class="token keyword">new</span> <span class="token class-name">IllegalStateException</span><span class="token punctuation">(</span><span class="token string">"Invalid class name expression result: "</span> <span class="token operator">+</span> evaluated<span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+			<span class="token comment">//如果mdb的配置的bean类名需要重新被dynameicLoader加载</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>freshResolve<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token comment">// When resolving against a temporary class loader, exit early in order</span>
+				<span class="token comment">// to avoid storing the resolved Class in the bean definition.</span>
+				<span class="token comment">// 当使用临时类加载器进行解析时，请尽早退出以避免将已解析的类存储在BeanDefinition中</span>
+				<span class="token comment">// 如果动态类加载器不为null</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span>dynamicLoader <span class="token operator">!=</span> null<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+					<span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+						<span class="token comment">//使用dynamicLoader加载className对应的类型，并返回加载成功的Class对象</span>
+						<span class="token keyword">return</span> dynamicLoader<span class="token punctuation">.</span><span class="token function">loadClass</span><span class="token punctuation">(</span>className<span class="token punctuation">)</span><span class="token punctuation">;</span>
+					<span class="token punctuation">}</span>
+					<span class="token comment">//捕捉 未找到类异常，</span>
+					<span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">ClassNotFoundException</span> ex<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+						<span class="token keyword">if</span> <span class="token punctuation">(</span>logger<span class="token punctuation">.</span><span class="token function">isTraceEnabled</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+							<span class="token comment">//打印追踪日志：无法从dynamicLoader中加载类[className]:ex</span>
+							logger<span class="token punctuation">.</span><span class="token function">trace</span><span class="token punctuation">(</span><span class="token string">"Could not load class ["</span> <span class="token operator">+</span> className <span class="token operator">+</span> <span class="token string">"] from "</span> <span class="token operator">+</span> dynamicLoader <span class="token operator">+</span> <span class="token string">": "</span> <span class="token operator">+</span> ex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+						<span class="token punctuation">}</span>
+					<span class="token punctuation">}</span>
+				<span class="token punctuation">}</span>
+				<span class="token comment">//使用classLoader加载name对应的Class对象,该方式是Spring用于代替Class.forName()的方法，支持返回原始的类实例(如'int')</span>
+				<span class="token comment">// 和数组类名 (如'String[]')。此外，它还能够以Java source样式解析内部类名(如:'java.lang.Thread.State'</span>
+				<span class="token comment">// 而不是'java.lang.Thread$State')</span>
+				<span class="token keyword">return</span> ClassUtils<span class="token punctuation">.</span><span class="token function">forName</span><span class="token punctuation">(</span>className<span class="token punctuation">,</span> dynamicLoader<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+
+		<span class="token comment">// Resolve regularly, caching the result in the BeanDefinition...</span>
+		<span class="token comment">// 定期解析，将结果缓存在BeanDefinition中...</span>
+		<span class="token comment">// 使用classLoader加载当前BeanDefinitiond对象所配置的Bean类名的Class对象（每次调用都会重新加载,可通过</span>
+		<span class="token comment">// AbstractBeanDefinition#getBeanClass 获取缓存）：</span>
+		<span class="token keyword">return</span> mbd<span class="token punctuation">.</span><span class="token function">resolveBeanClass</span><span class="token punctuation">(</span>beanClassLoader<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="DecoratingClassLoader_216"></a>DecoratingClassLoader</h2> 
+<blockquote> 
+ <p><a href="https://blog.csdn.net/qq_30321211/article/details/108324434">Spring 5 ContextTypeMatchClassLoader 源码分析</a></p> 
+</blockquote> 
+<h2><a id="evaluateBeanDefinitionStringclassName_mbd_220"></a>evaluateBeanDefinitionString(className, mbd);</h2> 
+<p>评估benaDefinition中包含的value,如果value是可解析表达式，会对其进行解析，否则直接返回value:</p> 
+<ol><li>如果该工厂没有设置bean定义值中表达式的解析策略【beanExpressionResolver】，就职返回value【默认情况下， 工厂是配置StandardBeanExpressionResolver作为beanExpressionResolver】</li><li>如果beanDefinition不为null,获取beanDefinition的当前目标作用域名,然后将其作用域名装换为Scope对象，赋值给 【scope】</li><li>使用beanExpressionResolver解析value，并返回其解析结果。在解析过程中，会判断value是否为表达式，如果不是 就会直接返回value作为其解析结果</li></ol> 
+<pre><code class="prism language-java"><span class="token comment">/**
+	 * Resolution strategy for expressions in bean definition values.
+	 * &lt;p&gt;bean定义值中表达式的解析策略&lt;/p&gt;
+	 * &lt;p&gt;SpingBoot默认使用的是StandardBeanExpressionResolver&lt;/p&gt;
+	 * */</span>
+	<span class="token annotation punctuation">@Nullable</span>
+	<span class="token keyword">private</span> BeanExpressionResolver beanExpressionResolver<span class="token punctuation">;</span>
+	
+<span class="token comment">/**
+	 * Evaluate the given String as contained in a bean definition,
+	 * potentially resolving it as an expression.
+	 * &lt;p&gt;评估bean定义中包含的给定String，可能将其解析为表达式&lt;/p&gt;
+	 * @param value the value to check -- 要检查的值
+	 * @param beanDefinition the bean definition that the value comes from -- 值所来自的bean定义
+	 * @return the resolved value -- 解析后的值
+	 * @see #setBeanExpressionResolver
+	 */</span>
+	<span class="token annotation punctuation">@Nullable</span>
+	<span class="token keyword">protected</span> Object <span class="token function">evaluateBeanDefinitionString</span><span class="token punctuation">(</span><span class="token annotation punctuation">@Nullable</span> String value<span class="token punctuation">,</span> <span class="token annotation punctuation">@Nullable</span> BeanDefinition beanDefinition<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token comment">//如果该工厂没有设置bean定义值中表达式的解析策略</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>beanExpressionResolver <span class="token operator">==</span> null<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">//直接返回要检查的值</span>
+			<span class="token keyword">return</span> value<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token comment">//值所来自的bean定义的当前目标作用域</span>
+		Scope scope <span class="token operator">=</span> null<span class="token punctuation">;</span>
+		<span class="token comment">//如果有传入值所来自的bean定义</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>beanDefinition <span class="token operator">!=</span> null<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+			<span class="token comment">//获取值所来自的bean定义的当前目标作用域名</span>
+			String scopeName <span class="token operator">=</span> beanDefinition<span class="token punctuation">.</span><span class="token function">getScope</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token comment">//如果成功获得值所来自的bean定义的当前目标作用域名</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>scopeName <span class="token operator">!=</span> null<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+				<span class="token comment">//获取scopeName对应的Scope对象</span>
+				scope <span class="token operator">=</span> <span class="token function">getRegisteredScope</span><span class="token punctuation">(</span>scopeName<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token comment">//评估value作为表达式（如果适用）；否则按原样返回值</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>beanExpressionResolver<span class="token punctuation">.</span><span class="token function">evaluate</span><span class="token punctuation">(</span>value<span class="token punctuation">,</span> <span class="token keyword">new</span> <span class="token class-name">BeanExpressionContext</span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">,</span> scope<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="getRegisteredScopescopeName_266"></a>getRegisteredScope(scopeName);</h3> 
+<p>获取给定作用域名称对应的作用域对象（如果有）:</p> 
+<ol><li>如果scopeName为null，抛出异常</li><li>从映射的linkedHashMap【scopes】中获取scopeName对应的作用域对象并返回</li></ol> 
+<pre><code class="prism language-java"><span class="token comment">/**
+	 * Map from scope identifier String to corresponding Scope.
+	 * &lt;p&gt;从作用域表示符String映射到相应的作用域&lt;/p&gt;
+	 * */</span>
+	<span class="token keyword">private</span> <span class="token keyword">final</span> Map<span class="token generics function"><span class="token punctuation">&lt;</span>String<span class="token punctuation">,</span> Scope<span class="token punctuation">&gt;</span></span> scopes <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashMap</span><span class="token operator">&lt;</span><span class="token operator">&gt;</span><span class="token punctuation">(</span><span class="token number">8</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+<span class="token comment">/**
+	 * 获取给定作用域名称对应的作用域对象（如果有）
+	 * @param scopeName the name of the scope -- 作用域名
+	 * @return scopeName对应的作用域对象
+	 */</span>
+	<span class="token annotation punctuation">@Override</span>
+	<span class="token annotation punctuation">@Nullable</span>
+	<span class="token keyword">public</span> Scope <span class="token function">getRegisteredScope</span><span class="token punctuation">(</span>String scopeName<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token comment">//如果传入的作用域名为null，抛出异常</span>
+		Assert<span class="token punctuation">.</span><span class="token function">notNull</span><span class="token punctuation">(</span>scopeName<span class="token punctuation">,</span> <span class="token string">"Scope identifier must not be null"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token comment">//从映射的linkedHashMap中获取传入的作用域名对应的作用域对象并返回</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>scopes<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>scopeName<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/ad56e98f637c8bd6fdab116f9d20ca6c/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Cocos2dx客户端崩溃的几种情况</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/5b1cf10b7c93c52b8257f2ab4024ada1/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">martin fowler_Martin Kleppmann的大型访谈：“弄清楚分布式数据系统的未来”</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

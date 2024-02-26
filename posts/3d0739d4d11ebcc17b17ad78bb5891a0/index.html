@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>SpringCloudGateway 入门 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="SpringCloudGateway 入门" />
+<meta property="og:description" content="目录 POM 依赖一、内容网关的作用Spring-Cloud-Gateway的核心概念 二、基于Ribbon的负载均衡三、核心概念详细3.1 断言 Predicate3.2 过滤器3.2.1 内置过滤器3.2.2 自定义过滤器构造器（原理）资源结构Route / Predicate 的构造器构造器的增强器整体协同关系 / 部分源代码分析 扩展自己的过滤器（实战） POM 依赖 我的Java版本是17
+父模块
+&lt;properties&gt; &lt;project.build.sourceEncoding&gt;UTF-8&lt;/project.build.sourceEncoding&gt; &lt;alibaba-cloud.version&gt;2022.0.0.0&lt;/alibaba-cloud.version&gt; &lt;spring-cloud.version&gt;2022.0.4&lt;/spring-cloud.version&gt; &lt;spring-boot.version&gt;3.0.9&lt;/spring-boot.version&gt; &lt;circuit-breaker.version&gt;3.0.3&lt;/circuit-breaker.version&gt; &lt;/properties&gt; &lt;dependencyManagement&gt; &lt;dependencies&gt; &lt;dependency&gt; &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt; &lt;artifactId&gt;spring-cloud-alibaba-dependencies&lt;/artifactId&gt; &lt;version&gt;${alibaba-cloud.version}&lt;/version&gt; &lt;type&gt;pom&lt;/type&gt; &lt;scope&gt;import&lt;/scope&gt; &lt;/dependency&gt; &lt;dependency&gt; &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt; &lt;artifactId&gt;spring-boot-dependencies&lt;/artifactId&gt; &lt;version&gt;${spring-boot.version}&lt;/version&gt; &lt;type&gt;pom&lt;/type&gt; &lt;scope&gt;import&lt;/scope&gt; &lt;/dependency&gt; &lt;dependency&gt; &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt; &lt;artifactId&gt;spring-cloud-dependencies&lt;/artifactId&gt; &lt;version&gt;${spring-cloud.version}&lt;/version&gt; &lt;type&gt;pom&lt;/type&gt; &lt;scope&gt;import&lt;/scope&gt; &lt;/dependency&gt; &lt;/dependencies&gt; &lt;/dependencyManagement&gt; 子模块
+&lt;dependencies&gt; &lt;!-- 网关 --&gt; &lt;dependency&gt; &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt; &lt;artifactId&gt;spring-cloud-starter-gateway&lt;/artifactId&gt; &lt;/dependency&gt; &lt;!-- 注册中心配置 --&gt; &lt;dependency&gt; &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt; &lt;artifactId&gt;spring-cloud-starter-alibaba-nacos-config&lt;/artifactId&gt; &lt;/dependency&gt; &lt;!-- 注册中心客户端 --&gt; &lt;dependency&gt; &lt;groupId&gt;com." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/3d0739d4d11ebcc17b17ad78bb5891a0/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-10-27T17:48:49+08:00" />
+<meta property="article:modified_time" content="2023-10-27T17:48:49+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">SpringCloudGateway 入门</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>目录</h4> 
+ <ul><li><a href="#POM__1" rel="nofollow">POM 依赖</a></li><li><a href="#_65" rel="nofollow">一、内容</a></li><li><ul><li><a href="#_66" rel="nofollow">网关的作用</a></li><li><a href="#SpringCloudGateway_77" rel="nofollow">Spring-Cloud-Gateway的核心概念</a></li></ul> 
+  </li><li><a href="#Ribbon_82" rel="nofollow">二、基于Ribbon的负载均衡</a></li><li><a href="#_104" rel="nofollow">三、核心概念详细</a></li><li><ul><li><a href="#31__Predicate_105" rel="nofollow">3.1 断言 Predicate</a></li><li><a href="#32__196" rel="nofollow">3.2 过滤器</a></li><li><ul><li><a href="#321__197" rel="nofollow">3.2.1 内置过滤器</a></li><li><a href="#322__223" rel="nofollow">3.2.2 自定义过滤器</a></li><li><ul><li><a href="#_224" rel="nofollow">构造器（原理）</a></li><li><a href="#_225" rel="nofollow">资源结构</a></li><li><ul><li><a href="#Route__Predicate__230" rel="nofollow">Route / Predicate 的构造器</a></li><li><a href="#_245" rel="nofollow">构造器的增强器</a></li><li><a href="#___250" rel="nofollow">整体协同关系 / 部分源代码分析</a></li></ul> 
+    </li></ul> 
+    </li><li><a href="#_345" rel="nofollow">扩展自己的过滤器（实战）</a></li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h2><a id="POM__1"></a>POM 依赖</h2> 
+<p><strong>我的Java版本是17</strong><br> 父模块</p> 
+<pre><code class="prism language-xml"><span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>properties</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>project.build.sourceEncoding</span><span class="token punctuation">&gt;</span></span>UTF-8<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>project.build.sourceEncoding</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>alibaba-cloud.version</span><span class="token punctuation">&gt;</span></span>2022.0.0.0<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>alibaba-cloud.version</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>spring-cloud.version</span><span class="token punctuation">&gt;</span></span>2022.0.4<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>spring-cloud.version</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>spring-boot.version</span><span class="token punctuation">&gt;</span></span>3.0.9<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>spring-boot.version</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>circuit-breaker.version</span><span class="token punctuation">&gt;</span></span>3.0.3<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>circuit-breaker.version</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>properties</span><span class="token punctuation">&gt;</span></span>
+
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependencyManagement</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependencies</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>com.alibaba.cloud<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>spring-cloud-alibaba-dependencies<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>${alibaba-cloud.version}<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>type</span><span class="token punctuation">&gt;</span></span>pom<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>type</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>scope</span><span class="token punctuation">&gt;</span></span>import<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>scope</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.springframework.boot<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>spring-boot-dependencies<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>${spring-boot.version}<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>type</span><span class="token punctuation">&gt;</span></span>pom<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>type</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>scope</span><span class="token punctuation">&gt;</span></span>import<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>scope</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.springframework.cloud<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>spring-cloud-dependencies<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>version</span><span class="token punctuation">&gt;</span></span>${spring-cloud.version}<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>version</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>type</span><span class="token punctuation">&gt;</span></span>pom<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>type</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>scope</span><span class="token punctuation">&gt;</span></span>import<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>scope</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependencies</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependencyManagement</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<p>子模块</p> 
+<pre><code class="prism language-xml"> <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependencies</span><span class="token punctuation">&gt;</span></span>
+    <span class="token comment">&lt;!-- 网关 --&gt;</span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.springframework.cloud<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>spring-cloud-starter-gateway<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+
+    <span class="token comment">&lt;!-- 注册中心配置 --&gt;</span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>com.alibaba.cloud<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>spring-cloud-starter-alibaba-nacos-config<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+
+    <span class="token comment">&lt;!-- 注册中心客户端 --&gt;</span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>com.alibaba.cloud<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+        <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>spring-cloud-starter-alibaba-nacos-discovery<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependencies</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<h2><a id="_65"></a>一、内容</h2> 
+<h3><a id="_66"></a>网关的作用</h3> 
+<ul><li>假设：如果没有网关，客户端如何调用微服务，数十个微服务。<br> 如果真有数十个微服务，那客户端要记录数十个微服务的地址，然后分别去使用，这样会存在很多问题，比如： 
+  <ol><li>重复造轮子<br> 每个微服务单独为战，各自实现自己的鉴权、限流、跨域等，把轮子重造。</li><li>调用低效<br> 如果业务量比较简单的话，暂时还不会有什么问题，随着业务越来越复杂，一个复杂的页面可能会涉及到数百个微服务协同工作，如果每个微服务都分配一个域名的话，一方面客户端代码会很难维护，涉及到数百个域名，另一方面是连接数的瓶颈，想象一下你打开一个APP，通过抓包发现涉及到了数百个远程调用，这在移动端下会显得非常低效。</li><li>重构复杂<br> 后期如果需要对微服务进行重构的话，也会变的非常麻烦，需要客户端配合你一起进行改造，比如商品服务，随着业务变的越来越复杂，后期需要进行拆分成多个微服务，这个时候对外提供的服务也需要拆分成多个，同时需要客户端配合你进行改造，非常蛋疼。</li></ol> </li></ul> 
+<p>上面的问题，如果引入了网关，由网关统一管理，客户端只需要和网关对接，网关就负责授权、限流、路由转发等。</p> 
+<h3><a id="SpringCloudGateway_77"></a>Spring-Cloud-Gateway的核心概念</h3> 
+<ul><li>Route：网关的基本构建块，它由一个ID、一个目标URI、一组断言和一组过滤器定义。如果聚合断言为真，则匹配路由。</li><li>Predicate：支持对请求头、请求方法、请求参数、Host、时间（设置过期时间/生效时间）等等进行匹配，匹配成功之后会执行Filter。</li><li>Filter：有修改url，修改body，添加请求头/请求参数，限流，断路器，权限认证等功能。</li></ul> 
+<h2><a id="Ribbon_82"></a>二、基于Ribbon的负载均衡</h2> 
+<p>在网关模块添加这个依赖就行了，注意我这个是子模块，我的父模块管理了SpringCloud的依赖，所以不需要添加版本</p> 
+<pre><code class="prism language-xml"><span class="token comment">&lt;!-- 负载均衡器，用作服务发现，支持路由的 lb://servername --&gt;</span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>dependency</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>groupId</span><span class="token punctuation">&gt;</span></span>org.springframework.cloud<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>groupId</span><span class="token punctuation">&gt;</span></span>
+    <span class="token tag"><span class="token tag"><span class="token punctuation">&lt;</span>artifactId</span><span class="token punctuation">&gt;</span></span>spring-cloud-starter-loadbalancer<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>artifactId</span><span class="token punctuation">&gt;</span></span>
+<span class="token tag"><span class="token tag"><span class="token punctuation">&lt;/</span>dependency</span><span class="token punctuation">&gt;</span></span>
+</code></pre> 
+<p>然后写路由就可以使用<code>lb://servername</code>了。</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Bean</span>
+<span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">usrRout</span><span class="token punctuation">(</span><span class="token class-name">RouteLocatorBuilder</span> builder<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">ZonedDateTime</span> zonedDateTime <span class="token operator">=</span> <span class="token class-name">LocalDateTime</span><span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">plusSeconds</span><span class="token punctuation">(</span><span class="token number">20</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">atZone</span><span class="token punctuation">(</span><span class="token class-name">ZoneId</span><span class="token punctuation">.</span><span class="token function">systemDefault</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">return</span> builder<span class="token punctuation">.</span><span class="token function">routes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"user"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">path</span><span class="token punctuation">(</span><span class="token string">"/xxxx"</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://oraone"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="_104"></a>三、核心概念详细</h2> 
+<h3><a id="31__Predicate_105"></a>3.1 断言 Predicate</h3> 
+<ol><li>关于时间的<br> before：在指定时间之后路由永远失效。<br> after：在指定时间之后路由才生效。<br> between：在指定时间之间生效，其余时间失效。</li></ol> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Configure</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">Config</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">config</span><span class="token punctuation">(</span><span class="token class-name">RouteLocatorBuilder</span> build<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token class-name">ZoneDateTime</span> before <span class="token operator">=</span> <span class="token class-name">ZoneDateTime</span><span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">plusSeconds</span><span class="token punctuation">(</span><span class="token number">36</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">atZone</span><span class="token punctuation">(</span><span class="token class-name">ZoneId</span><span class="token punctuation">.</span><span class="token function">systemDefault</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token class-name">ZoneDateTime</span> after <span class="token operator">=</span> <span class="token class-name">ZoneDateTime</span><span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">plusSeconds</span><span class="token punctuation">(</span><span class="token number">900</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">atZone</span><span class="token punctuation">(</span><span class="token class-name">ZoneId</span><span class="token punctuation">.</span><span class="token function">systemDefault</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> build<span class="token punctuation">.</span><span class="token function">routes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+		<span class="token comment">// 在before之后永久路由失效</span>
+		<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"before"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">before</span><span class="token punctuation">(</span>before<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+		<span class="token comment">// 在after之后路由生效。</span>
+		<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"after"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">after</span><span class="token punctuation">(</span>after<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+		<span class="token comment">// 在[before, after]之内路由生效。</span>
+		<span class="token punctuation">.</span><span class="token function">between</span><span class="token punctuation">(</span><span class="token string">"between"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">between</span><span class="token punctuation">(</span>before<span class="token punctuation">,</span> after<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+		<span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol start="2"><li>关于HTTP的<br> Header：限制请求头和请求头的值<br> Host：限制主机<br> Method：限制请求方法<br> Query：限制请求参数</li></ol> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Configure</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">RouteConfig</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token annotation punctuation">@Bean</span>
+	<span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">route</span><span class="token punctuation">(</span><span class="token class-name">RouteLocatorBuilder</span> build<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> build<span class="token punctuation">.</span><span class="token function">routes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+			<span class="token comment">// 请求必须有name，和token这两个请求头，token必须是32位指定字符。</span>
+			<span class="token comment">// 请求方法必须是get，只能本地请求。</span>
+			<span class="token comment">// 参数必须携带id</span>
+			<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"route"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> e<span class="token punctuation">.</span><span class="token function">header</span><span class="token punctuation">(</span><span class="token string">"name"</span><span class="token punctuation">)</span>
+				<span class="token function">and</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">header</span><span class="token punctuation">(</span><span class="token string">"token"</span><span class="token punctuation">,</span> <span class="token string">"[a-zA-Z0-9]{32, 32}"</span><span class="token punctuation">)</span>
+				<span class="token function">and</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">method</span><span class="token punctuation">(</span><span class="token class-name">HttpMethod</span><span class="token punctuation">.</span><span class="token constant">GET</span><span class="token punctuation">)</span>
+				<span class="token function">and</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">Host</span><span class="token punctuation">(</span><span class="token string">"localhost"</span><span class="token punctuation">)</span>
+				<span class="token function">and</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">query</span><span class="token punctuation">(</span><span class="token string">"id"</span><span class="token punctuation">)</span>
+				<span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol start="3"><li>关于路径的<br> Path：限制访问的路径及协议 域名 端口之后的url</li></ol> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Configure</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">RouteConfig</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token annotation punctuation">@Bean</span>
+	<span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">route</span><span class="token punctuation">(</span><span class="token class-name">RouteLocatorBuilder</span> build<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> build<span class="token punctuation">.</span><span class="token function">routes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"path"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">path</span><span class="token punctuation">(</span><span class="token string">"/gateway/user/**"</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<ol start="4"><li> <p>IP地址和网段<br> RemoteAdd：两个参数，第一个是IP地址，第二个是网段。</p> </li><li> <p>权重<br> Weight：设置接口的权重，权重越高，那么转发到该接口的请求数就越多。有两个参数，第一个个是GroupName，第二个是一个Weight数值。</p> </li></ol> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Configure</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">RouteConfig</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token annotation punctuation">@Bean</span>
+	<span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">route</span><span class="token punctuation">(</span><span class="token class-name">RouteLocatorBuilder</span> build<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token class-name">String</span> path <span class="token operator">=</span> <span class="token string">"/gateway/user/**"</span><span class="token punctuation">;</span>
+		<span class="token class-name">String</span> groupName <span class="token operator">=</span> <span class="token string">"user"</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> build<span class="token punctuation">.</span><span class="token function">routes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"weight1"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">path</span><span class="token punctuation">(</span>path<span class="token punctuation">)</span>
+				<span class="token function">and</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">weight</span><span class="token punctuation">(</span>groupName<span class="token punctuation">,</span> <span class="token number">80</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername1"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"weight2"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">path</span><span class="token punctuation">(</span>path<span class="token punctuation">)</span>
+				<span class="token punctuation">.</span><span class="token function">and</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">weight</span><span class="token punctuation">(</span>groupName<span class="token punctuation">,</span> <span class="token number">20</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername2"</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="32__196"></a>3.2 过滤器</h3> 
+<h4><a id="321__197"></a>3.2.1 内置过滤器</h4> 
+<p>内置的过滤器大体分为请求头、响应头、跳转、参数处理、响应状态、熔断、限速器。</p> 
+<ul><li>关于HTTP的过滤器<br> AddRequestHeader：<br> AddRequestParams：<br> AddResponseHeader：</li><li>关于路径的过滤器<br> RewritePath：支持正则匹配替换<br> StripPrefix：可以把前缀路径干掉</li></ul> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Configure</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">RouteConfig</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token annotation punctuation">@Bean</span>
+	<span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">route</span><span class="token punctuation">(</span><span class="token class-name">RouteLocatorBuilder</span> build<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> build<span class="token punctuation">.</span><span class="token function">routes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"route"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">path</span><span class="token punctuation">(</span><span class="token string">"/gateway/usr/local/**"</span><span class="token punctuation">)</span>
+				<span class="token punctuation">.</span><span class="token function">filters</span><span class="token punctuation">(</span>f <span class="token operator">-&gt;</span> f<span class="token punctuation">.</span><span class="token function">rewritePath</span><span class="token punctuation">(</span><span class="token string">"/gateway/usr/($&lt;segment&gt;.*)"</span><span class="token punctuation">,</span> <span class="token string">"/user/$\\{segment}"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+				<span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token comment">// 最后访问路径是 lb://servername/order/**</span>
+			<span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"route1"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">path</span><span class="token punctuation">(</span><span class="token string">"/gateway/order/**"</span><span class="token punctuation">)</span>
+				<span class="token punctuation">.</span><span class="token function">filters</span><span class="token punctuation">(</span>f <span class="token operator">-&gt;</span> f<span class="token punctuation">.</span><span class="token function">stripPrefix</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://servername"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h4><a id="322__223"></a>3.2.2 自定义过滤器</h4> 
+<h5><a id="_224"></a>构造器（原理）</h5> 
+<h5><a id="_225"></a>资源结构</h5> 
+<p>gateway最终需要的资源是RouteLocator，RouteLocator里面包含了路由、断言、过滤器三个种资源，它们的依赖关系如下：</p> 
+<p><img src="https://images2.imgbox.com/38/0e/DGfQnjgD_o.png" alt="请添加图片描述"></p> 
+<h6><a id="Route__Predicate__230"></a>Route / Predicate 的构造器</h6> 
+<p>Buildalbe就一个方法build，AbstractBuilder负责构建Route，源码如下：<br> 五个属性，都是路由的基本组成，还看到了GatewayFilter 局部过滤器。</p> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">abstract</span> <span class="token keyword">static</span> <span class="token keyword">class</span> <span class="token class-name">AbstractBuilder</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">B</span> <span class="token keyword">extends</span> <span class="token class-name">AbstractBuilder</span><span class="token punctuation">&lt;</span><span class="token class-name">B</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> <span class="token keyword">implements</span> <span class="token class-name">Buildable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span></span> <span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">protected</span> <span class="token class-name">String</span> id<span class="token punctuation">;</span>
+	<span class="token keyword">protected</span> <span class="token class-name">URI</span> uri<span class="token punctuation">;</span>
+	<span class="token keyword">protected</span> <span class="token keyword">int</span> order <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token keyword">protected</span> <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">GatewayFilter</span><span class="token punctuation">&gt;</span></span> gatewayFilters <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">protected</span> <span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> metadata <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">HashMap</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    省略<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>最后是Buidler和AsyncBuidler，它两负责构建断言，只是构建的类型不同，至于作用是什么目前还不清楚，它们两分别构建Predicate和AsyncPredicate。<br> <img src="https://images2.imgbox.com/1b/49/MqIbRVfa_o.png" alt="请添加图片描述"></p> 
+<h6><a id="_245"></a>构造器的增强器</h6> 
+<p>SpringCloudGateway提供了很多GatewayFilter过滤器，UriSpec就是这些过滤器的配置，UriSpec里面包含了Route.Builder / RouteLocatorBuilder.Builder，配置的断言和过滤器最终都会流入Route.Builder。<br> <img src="https://images2.imgbox.com/46/6e/efwFIgfE_o.png" alt="请添加图片描述">增强器和构造器的协作关系，Route.AsyncBuilder和RouteLocatorBuidler.Builder都组合在UriSpec中。<br> <img src="https://images2.imgbox.com/e7/0b/qmaMpgj9_o.png" alt="请添加图片描述"></p> 
+<h6><a id="___250"></a>整体协同关系 / 部分源代码分析</h6> 
+<p><img src="https://images2.imgbox.com/f1/ac/K9PYViQh_o.png" alt="请添加图片描述"></p> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">static</span> <span class="token keyword">class</span> <span class="token class-name">Builder</span> <span class="token punctuation">{<!-- --></span>
+
+	<span class="token keyword">private</span> <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Buildable</span><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> routes <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">private</span> <span class="token class-name">ConfigurableApplicationContext</span> context<span class="token punctuation">;</span>
+	<span class="token keyword">public</span> <span class="token class-name">Builder</span><span class="token punctuation">(</span><span class="token class-name">ConfigurableApplicationContext</span> context<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">this</span><span class="token punctuation">.</span>context <span class="token operator">=</span> context<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+   
+   <span class="token comment">// 创建一个Buildable，放到routes中，ID是自命名。</span>
+   <span class="token comment">// apply会生成一个PredicateSpec，提供给用户选择过滤器，最后通过UriSpec的uri方法，返回一个Buildable对象。</span>
+	<span class="token keyword">public</span> <span class="token class-name">Builder</span> <span class="token function">route</span><span class="token punctuation">(</span><span class="token class-name">String</span> id<span class="token punctuation">,</span> <span class="token class-name">Function</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">PredicateSpec</span><span class="token punctuation">,</span> <span class="token class-name">Buildable</span><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> fn<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token class-name">Buildable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span></span> routeBuilder <span class="token operator">=</span> fn<span class="token punctuation">.</span><span class="token function">apply</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">RouteSpec</span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">id</span><span class="token punctuation">(</span>id<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">add</span><span class="token punctuation">(</span>routeBuilder<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+    
+   <span class="token comment">// 创建一个Buildable，放到routes中，ID随机生成。</span>
+   <span class="token comment">// apply会生成一个PredicateSpec，提供给用户选择过滤器，最后通过UriSpec的uri方法，返回一个Buildable对象。</span>
+	<span class="token keyword">public</span> <span class="token class-name">Builder</span> <span class="token function">route</span><span class="token punctuation">(</span><span class="token class-name">Function</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">PredicateSpec</span><span class="token punctuation">,</span> <span class="token class-name">Buildable</span><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> fn<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token class-name">Buildable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span></span> routeBuilder <span class="token operator">=</span> fn<span class="token punctuation">.</span><span class="token function">apply</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">RouteSpec</span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">randomId</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">add</span><span class="token punctuation">(</span>routeBuilder<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+   
+   <span class="token comment">// 执行所有的Buildable，构造RouteLocator。</span>
+	<span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> <span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-&gt;</span> <span class="token class-name">Flux</span><span class="token punctuation">.</span><span class="token function">fromIterable</span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>routes<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">map</span><span class="token punctuation">(</span>routeBuilder <span class="token operator">-&gt;</span> routeBuilder<span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token class-name">ConfigurableApplicationContext</span> <span class="token function">getContext</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> context<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">void</span> <span class="token function">add</span><span class="token punctuation">(</span><span class="token class-name">Buildable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span></span> route<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		routes<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>route<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">UriSpec</span> <span class="token punctuation">{<!-- --></span>
+
+	<span class="token keyword">final</span> <span class="token class-name">Route<span class="token punctuation">.</span>AsyncBuilder</span> routeBuilder<span class="token punctuation">;</span>
+
+	<span class="token keyword">final</span> <span class="token class-name">RouteLocatorBuilder<span class="token punctuation">.</span>Builder</span> builder<span class="token punctuation">;</span>
+
+	<span class="token class-name">UriSpec</span><span class="token punctuation">(</span><span class="token class-name">Route<span class="token punctuation">.</span>AsyncBuilder</span> routeBuilder<span class="token punctuation">,</span> <span class="token class-name">RouteLocatorBuilder<span class="token punctuation">.</span>Builder</span> builder<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">this</span><span class="token punctuation">.</span>routeBuilder <span class="token operator">=</span> routeBuilder<span class="token punctuation">;</span>
+		<span class="token keyword">this</span><span class="token punctuation">.</span>builder <span class="token operator">=</span> builder<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">public</span> <span class="token class-name">UriSpec</span> <span class="token function">customize</span><span class="token punctuation">(</span><span class="token class-name">Consumer</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Route<span class="token punctuation">.</span>AsyncBuilder</span><span class="token punctuation">&gt;</span></span> routeConsumer<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		routeConsumer<span class="token punctuation">.</span><span class="token function">accept</span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>routeBuilder<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">public</span> <span class="token class-name">UriSpec</span> <span class="token function">replaceMetadata</span><span class="token punctuation">(</span><span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> metadata<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">this</span><span class="token punctuation">.</span>routeBuilder<span class="token punctuation">.</span><span class="token function">replaceMetadata</span><span class="token punctuation">(</span>metadata<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">public</span> <span class="token class-name">UriSpec</span> <span class="token function">metadata</span><span class="token punctuation">(</span><span class="token class-name">Map</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">Object</span><span class="token punctuation">&gt;</span></span> metadata<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">this</span><span class="token punctuation">.</span>routeBuilder<span class="token punctuation">.</span><span class="token function">metadata</span><span class="token punctuation">(</span>metadata<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token keyword">public</span> <span class="token class-name">UriSpec</span> <span class="token function">metadata</span><span class="token punctuation">(</span><span class="token class-name">String</span> key<span class="token punctuation">,</span> <span class="token class-name">Object</span> value<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">this</span><span class="token punctuation">.</span>routeBuilder<span class="token punctuation">.</span><span class="token function">metadata</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> value<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token comment">// 设置uri，这里会抛出一个Buildalbe，对应构造器的写法：build.routes().route(r -&gt; r.uri()).build();</span>
+	<span class="token keyword">public</span> <span class="token class-name">Buildable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span></span> <span class="token function">uri</span><span class="token punctuation">(</span><span class="token class-name">String</span> uri<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>routeBuilder<span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span>uri<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token comment">/**
+	 * Set the URI for the route.
+	 * @param uri the URI for the route.
+	 * @return a {@link Route.AsyncBuilder}S
+	 */</span>
+	<span class="token keyword">public</span> <span class="token class-name">Buildable</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Route</span><span class="token punctuation">&gt;</span></span> <span class="token function">uri</span><span class="token punctuation">(</span><span class="token class-name">URI</span> uri<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>routeBuilder<span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span>uri<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+
+	<span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">T</span><span class="token punctuation">&gt;</span></span> <span class="token class-name">T</span> <span class="token function">getBean</span><span class="token punctuation">(</span><span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">T</span><span class="token punctuation">&gt;</span></span> type<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token keyword">return</span> <span class="token keyword">this</span><span class="token punctuation">.</span>builder<span class="token punctuation">.</span><span class="token function">getContext</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span>type<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h4><a id="_345"></a>扩展自己的过滤器（实战）</h4> 
+<p>GatewayFilterSpec有filter方法，可以直接添加自己的过滤器。</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Configure</span>
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">Config</span><span class="token punctuation">{<!-- --></span>
+    <span class="token annotation punctuation">@Bean</span>
+    <span class="token keyword">public</span> <span class="token class-name">RouteLocator</span> <span class="token function">usrRout</span><span class="token punctuation">(</span><span class="token class-name">RouteLocatorBuilder</span> builder<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">ZonedDateTime</span> zonedDateTime <span class="token operator">=</span> <span class="token class-name">LocalDateTime</span><span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">plusSeconds</span><span class="token punctuation">(</span><span class="token number">20</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">atZone</span><span class="token punctuation">(</span><span class="token class-name">ZoneId</span><span class="token punctuation">.</span><span class="token function">systemDefault</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">return</span> builder<span class="token punctuation">.</span><span class="token function">routes</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"user"</span><span class="token punctuation">,</span> r <span class="token operator">-&gt;</span> r<span class="token punctuation">.</span><span class="token function">before</span><span class="token punctuation">(</span>zonedDateTime<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://oraone"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">route</span><span class="token punctuation">(</span><span class="token string">"user1"</span><span class="token punctuation">,</span> predicate <span class="token operator">-&gt;</span> predicate
+                    <span class="token punctuation">.</span><span class="token function">path</span><span class="token punctuation">(</span><span class="token string">"/strip/prefix/**"</span><span class="token punctuation">)</span>
+                    <span class="token punctuation">.</span><span class="token function">filters</span><span class="token punctuation">(</span>filter <span class="token operator">-&gt;</span> filter<span class="token punctuation">.</span><span class="token function">stripPrefix</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span>
+                            <span class="token comment">// 自定义GatewayFilter</span>
+                            <span class="token punctuation">.</span><span class="token function">filter</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">MyGatewayFilter</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+                    <span class="token punctuation">.</span><span class="token function">uri</span><span class="token punctuation">(</span><span class="token string">"lb://oraone"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token function">build</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token keyword">class</span> <span class="token class-name">MyGatewayFilter</span> <span class="token keyword">implements</span> <span class="token class-name">GatewayFilter</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token annotation punctuation">@Override</span>
+        <span class="token keyword">public</span> <span class="token class-name">Mono</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">Void</span><span class="token punctuation">&gt;</span></span> <span class="token function">filter</span><span class="token punctuation">(</span><span class="token class-name">ServerWebExchange</span> exchange<span class="token punctuation">,</span> <span class="token class-name">GatewayFilterChain</span> chain<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token comment">// 什么都不做。</span>
+            <span class="token keyword">return</span> chain<span class="token punctuation">.</span><span class="token function">filter</span><span class="token punctuation">(</span>exchange<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><strong>还可以继承GatewayFilterFactory，实现它的apply方法。或者继承AbstractGatewayFilterFactory，实现apply方法。</strong></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/ee0dadae0fe9c5efab53447774a25421/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">小白教程： 谷歌安装 vue-devtools 拓展，无需编译</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/4324e53b9f613af93f364339875dfe50/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">STM32-HAL-UART-笔记</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

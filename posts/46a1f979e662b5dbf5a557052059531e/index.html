@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>VGGNet的结构和复现 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="VGGNet的结构和复现" />
+<meta property="og:description" content="1 结构以及模型退化问题 上述为VGGNet的结构图，左边是VGG16D的步骤 16代表16层，有参数的层，其他结构也是如此
+对于这6个机构来说，D中的VGG16是最优的，而VGG19相比较而言，没有VGG16优，VGG16有16层（包括13个卷积层和3个全连接层），而VGG19有19层（包括16个卷积层和3个全连接层），对于出现了的模型退化问题，有几个原因：
+1 网络层次越深，提取的特征越是高度抽象，这可以帮助模型理解复杂的、高级的模式。然而，如果网络过深，最后几层可能会从数据中提取过于抽象的特征，与具体的输入图像的关联性减弱，导致模型性能降低
+2 在非常深的网络中，梯度在反向传播过程中可能会因为多层传递而变得非常小（梯度消失）或非常大（梯度爆炸），这会使得网络难以训练
+3 更深的网络通常有更多的参数，这可能会使模型更容易发生过拟合，特别是当训练数据有限时
+等等一些原因
+2 代码复现（6种结构的复现） 只是简单的复现
+import torch.nn as nn import torch class VggBlock(nn.Module): def __init__(self, in_channel, out_channel, n, use_11 = False, LRN = False) -&gt; None: super().__init__() layers = [] for i in range(n): if use_11 and (i == n-1): kernel_size = (1, 1) padding = 0 else: kernel_size = (3, 3) padding = 1 conv = nn.Sequential( nn.Conv2d(in_channel, out_channel, kernel_size=kernel_size, stride=1, padding=padding), nn." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/46a1f979e662b5dbf5a557052059531e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-28T15:13:20+08:00" />
+<meta property="article:modified_time" content="2024-01-28T15:13:20+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">VGGNet的结构和复现</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2>1 结构以及模型退化问题</h2> 
+<p><img alt="" height="629" src="https://images2.imgbox.com/6b/86/6KjMrlWT_o.png" width="1200"></p> 
+<p>上述为VGGNet的结构图，左边是VGG16D的步骤 16代表16层，有参数的层，其他结构也是如此</p> 
+<p>对于这6个机构来说，D中的VGG16是最优的，而VGG19相比较而言，没有VGG16优，VGG16有16层（包括13个卷积层和3个全连接层），而VGG19有19层（包括16个卷积层和3个全连接层），对于出现了的模型退化问题，有几个原因：</p> 
+<p>1 网络层次越深，提取的特征越是高度抽象，这可以帮助模型理解复杂的、高级的模式。然而，如果网络过深，最后几层可能会从数据中提取过于抽象的特征，与具体的输入图像的关联性减弱，导致模型性能降低</p> 
+<p></p> 
+<p>2 在非常深的网络中，梯度在反向传播过程中可能会因为多层传递而变得非常小（梯度消失）或非常大（梯度爆炸），这会使得网络难以训练</p> 
+<p>3 更深的网络通常有更多的参数，这可能会使模型更容易发生过拟合，特别是当训练数据有限时</p> 
+<p>等等一些原因</p> 
+<h2>2 代码复现（6种结构的复现）</h2> 
+<p>只是简单的复现</p> 
+<pre><code class="language-python">import torch.nn as nn
+import torch
+
+class VggBlock(nn.Module):
+    
+    def __init__(self, in_channel, out_channel, n, use_11 = False, LRN = False) -&gt; None:
+        super().__init__()
+        layers = []
+        for i in range(n):
+            if use_11 and (i == n-1):
+                kernel_size = (1, 1)
+                padding = 0    
+            else:
+                kernel_size = (3, 3)
+                padding = 1
+
+            conv = nn.Sequential(
+                nn.Conv2d(in_channel, out_channel, kernel_size=kernel_size, stride=1, padding=padding),
+                nn.ReLU()
+            )
+            layers.append(conv)
+            in_channel = out_channel
+        if LRN == True:
+            layers.append(nn.LocalResponseNorm(size=5))
+        layers.append(nn.MaxPool2d(2))
+        self.block = nn.Sequential(*layers)
+    
+    def forward(self, x):
+        return self.block(x)
+
+
+
+class VGGNet(nn.Module):
+    
+    def __init__(self, num_classes, features, classify_input_channel) -&gt; None:
+        super().__init__()
+        self.num_classes = num_classes
+        self.features = features
+        self.pooling = nn.AdaptiveMaxPool2d(7)
+        self.classify = nn.Sequential(
+            nn.Linear(in_features=7 * 7 * classify_input_channel, out_features=4096),
+            nn.ReLU(),
+            nn.Linear(in_features=4096, out_features=4096),
+            nn.ReLU(),
+            nn.Linear(in_features=4096, out_features=self.num_classes),
+        )
+
+    def forward(self, images):
+        z = self.features(images)
+        z = self.pooling(z)
+        z = z.flatten(1)
+        return self.classify(z) 
+    
+
+class VGGNet11A(nn.Module):
+
+    def __init__(self, num_classes) -&gt; None:
+        super().__init__()
+        features = nn.Sequential(
+            VggBlock(3, 64, 1),
+            VggBlock(64, 128, 1),
+            VggBlock(128, 256, 2),
+            VggBlock(256, 512, 2),
+            VggBlock(512, 512, 2)
+        )
+        self.vggnet = VGGNet(num_classes, features, classify_input_channel=512)
+
+    def forward(self, images):
+        return self.vggnet(images)
+    
+
+class VGGNet11ALRN(nn.Module):
+
+    def __init__(self, num_classes) -&gt; None:
+        super().__init__()
+        features = nn.Sequential(
+            VggBlock(3, 64, 1, LRN=True),
+            VggBlock(64, 128, 1),
+            VggBlock(128, 256, 2),
+            VggBlock(256, 512, 2),
+            VggBlock(512, 512, 2)
+        )
+        self.vggnet = VGGNet(num_classes, features, classify_input_channel=512)
+
+    def forward(self, images):
+        return self.vggnet(images)
+
+
+class VGGNet13B(nn.Module):
+
+    def __init__(self, num_classes) -&gt; None:
+        super().__init__()
+        features = nn.Sequential(
+            VggBlock(3, 64, 2),
+            VggBlock(64, 128, 2),
+            VggBlock(128, 256, 2),
+            VggBlock(256, 512, 2),
+            VggBlock(512, 512, 2)
+        )
+        self.vggnet = VGGNet(num_classes, features, classify_input_channel=512)
+
+    def forward(self, images):
+        return self.vggnet(images)
+    
+
+class VGGNet16C(nn.Module):
+
+    def __init__(self, num_classes) -&gt; None:
+        super().__init__()
+        features = nn.Sequential(
+            VggBlock(3, 64, 2),
+            VggBlock(64, 128, 2),
+            VggBlock(128, 256, 3, use_11=True),
+            VggBlock(256, 512, 3, use_11=True),
+            VggBlock(512, 512, 3, use_11=True)
+        )
+        self.vggnet = VGGNet(num_classes, features, classify_input_channel=512)
+
+    def forward(self, images):
+        return self.vggnet(images)
+    
+
+class VGGNet16C(nn.Module):
+
+    def __init__(self, num_classes) -&gt; None:
+        super().__init__()
+        features = nn.Sequential(
+            VggBlock(3, 64, 2),
+            VggBlock(64, 128, 2),
+            VggBlock(128, 256, 3),
+            VggBlock(256, 512, 3),
+            VggBlock(512, 512, 3)
+        )
+        self.vggnet = VGGNet(num_classes, features, classify_input_channel=512)
+
+    def forward(self, images):
+        return self.vggnet(images)
+    
+
+class VGGNet16C(nn.Module):
+
+    def __init__(self, num_classes) -&gt; None:
+        super().__init__()
+        features = nn.Sequential(
+            VggBlock(3, 64, 2),
+            VggBlock(64, 128, 2),
+            VggBlock(128, 256, 4),
+            VggBlock(256, 512, 4),
+            VggBlock(512, 512, 4)
+        )
+        self.vggnet = VGGNet(num_classes, features, classify_input_channel=512)
+
+    def forward(self, images):
+        return self.vggnet(images)
+    
+
+</code></pre> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/5728d24d93b9791b62824883d1399e48/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">跟着cherno手搓游戏引擎【13】着色器（shader）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/bfd659540c0eb94591be3712c25aa3ca/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">UE5在VisualStudio升级后产生C&#43;&#43;无法编译的问题</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

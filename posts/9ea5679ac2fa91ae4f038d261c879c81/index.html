@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>opencv3.4.16编译报错记录(VS2022&#43;gpu) - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="opencv3.4.16编译报错记录(VS2022&#43;gpu)" />
+<meta property="og:description" content="一、protobuf版本问题 opencv3.4.16 包括contrib 扩展的编译方式网上有很多，根据教程来基本没啥问题，我这里遇到的问题是因为VS2022 默认的C&#43;&#43; 语言标准为C&#43;&#43; 14，在我不修改语言标准的情况下，编译protobuf 模块会报错&#34;hash_compare 不是 std 的成员&#34;。虽然看起来报错很多，但是根本原因都是hash_map 在C&#43;&#43; 高版本语言标准所做的修改导致的 ：
+这个问题我在编译opencv4.7.0 的时候已经没有了，应该是更新的protobuf 的版本从3.5.2 升级到3.19.2 之后，不再使用hash_map 所以就没有这个问题了。但是opencv3.4.16 不能直接升级protobuf 的版本，因为涉及到跟很多其它组件的兼容性问题，但是又不想修改C&#43;&#43; 的语言标准的话，可以通过下面两步修改来解决：
+1. 在opencv-3.4.16/3rdparty/protobuf/src/google/protobuf/stubs/hash.h 头文件中加入&lt;hash_map&gt;的引用：加入这个引用之后，opencv编译的时候就会到对应的文件下去寻找hash_compare 相关的类了。但是这时会引入另一个报错，大意就是&lt;hash_map&gt;在后续的版本会被移除，建议你使用&lt;unordered_map&gt;，这里我们就不听它的了，因为它后面还有一句是可以通过宏定义来屏蔽这个报错：
+2. 在&lt;hash.h&gt;头文件的开头，加_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS 的宏定义：这样就可以屏蔽上述的报错，正常使用&lt;hash_map&gt;进行编译了：
+二、CMake-Configure 的时候遇到的问题 1. Could not find OpenBLAS lib
+我环境里确实没安装OpenBLAS，没有检测到直接配置项置为OFF没有问题，编译出来的opencv 库就不会使用OpenBLAS相关的功能。
+如果想要使用OpenBLAS的话，需要去https://github.com/xianyi/OpenBLAS.git 下载对应的压缩包，然后进行解压，解压完成后修改opencv-3.4.16/cmake/OpenCVFindOpenBLAS.cmake 文件中的FIND_PATH 和FIND_LIBRARY 对应的目录。因为我下载的版本对应的库名称为libopenblas.lib，所以FIND_LIBRARY 中库名称也要做相应修改：
+修改完成后重新在CMake 上执行Configure 即可。
+2. CMake Warning at cmake/OpenCVGenSetupVars.cmake:54 (message):CONFIGURATION IS NOT SUPPORTED 这个网上基本都提供了解决办法，就是在CMake 的配置项里把OPENCV_GENERATE_SETUPVARS 选项关闭就可以了：
+具体原因可以查看opencv-3.4.16/cmake/OpenCVGenSetupVars.cmake 文件，直接搜索这个报错就可以看到是由于opencv-python 的路径配置有问题导致的。一般情况下，编译opencv 库都是为了C&#43;&#43; 下使用，所以把python 相关的这个选项关闭掉是没啥问题的。
+我不太确定是不是因为我没有安装python2(我只安装了python3) 导致的，如果想不通过关闭选项解决这个报错的话，可以安装或者配置一下试试。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9ea5679ac2fa91ae4f038d261c879c81/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-17T11:01:04+08:00" />
+<meta property="article:modified_time" content="2023-08-17T11:01:04+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">opencv3.4.16编译报错记录(VS2022&#43;gpu)</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h5 style="text-align:justify;">一、protobuf版本问题 </h5> 
+<p style="text-align:justify;">        opencv3.4.16 包括contrib 扩展的编译方式网上有很多，根据教程来基本没啥问题，我这里遇到的问题是因为VS2022 默认的C++ 语言标准为C++ 14，在我不修改语言标准的情况下，编译protobuf 模块会报错"<strong>hash_compare 不是 std 的成员</strong>"。虽然看起来报错很多，但是根本原因都是hash_map 在C++ 高版本语言标准所做的修改导致的 ：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/8e/c0/Dx87tQgR_o.png"></p> 
+<p style="text-align:justify;">        这个问题我在编译opencv4.7.0 的时候已经没有了，应该是更新的protobuf 的版本从3.5.2 升级到3.19.2 之后，不再使用hash_map 所以就没有这个问题了。但是opencv3.4.16 不能直接升级protobuf 的版本，因为涉及到跟很多其它组件的兼容性问题，但是又不想修改C++ 的语言标准的话，可以通过下面两步修改来解决：</p> 
+<p style="text-align:justify;">1. 在opencv-3.4.16/3rdparty/protobuf/src/google/protobuf/stubs/hash.h 头文件中加入&lt;hash_map&gt;的引用：加入这个引用之后，opencv编译的时候就会到对应的文件下去寻找hash_compare 相关的类了。但是这时会引入另一个报错，大意就是&lt;hash_map&gt;在后续的版本会被移除，建议你使用&lt;unordered_map&gt;，这里我们就不听它的了，因为它后面还有一句是可以通过宏定义来屏蔽这个报错：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/e6/b5/1GYmldCo_o.png"></p> 
+<p>2. 在&lt;hash.h&gt;头文件的开头，加_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS 的宏定义：这样就可以屏蔽上述的报错，正常使用&lt;hash_map&gt;进行编译了：</p> 
+<p style="text-align:center;"><img alt="" height="205" src="https://images2.imgbox.com/bd/d4/wbePNqsc_o.png" width="478"></p> 
+<p></p> 
+<h5 style="text-align:justify;">二、CMake-Configure 的时候遇到的问题</h5> 
+<p style="text-align:justify;">1. <strong>Could not find OpenBLAS lib</strong></p> 
+<p style="text-align:justify;">        我环境里确实没安装OpenBLAS，没有检测到直接配置项置为OFF没有问题，编译出来的opencv 库就不会使用OpenBLAS相关的功能。</p> 
+<p style="text-align:justify;">        如果想要使用OpenBLAS的话，需要去<a href="https://github.com/xianyi/OpenBLAS.git" title="https://github.com/xianyi/OpenBLAS.git">https://github.com/xianyi/OpenBLAS.git</a> 下载对应的压缩包，然后进行解压，解压完成后修改opencv-3.4.16/cmake/OpenCVFindOpenBLAS.cmake 文件中的FIND_PATH 和FIND_LIBRARY 对应的目录。因为我下载的版本对应的库名称为libopenblas.lib，所以FIND_LIBRARY 中库名称也要做相应修改：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/41/cc/LRDijEE0_o.png"></p> 
+<p>        修改完成后重新在CMake 上执行Configure 即可。</p> 
+<p>2. <strong>CMake Warning at cmake/OpenCVGenSetupVars.cmake:54 (message):CONFIGURATION IS NOT SUPPORTED </strong></p> 
+<p style="text-align:justify;">         这个网上基本都提供了解决办法，就是在CMake 的配置项里把OPENCV_GENERATE_SETUPVARS 选项关闭就可以了：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/ca/46/U1SK763R_o.png"></p> 
+<p>         具体原因可以查看opencv-3.4.16/cmake/OpenCVGenSetupVars.cmake 文件，直接搜索这个报错就可以看到是由于opencv-python 的路径配置有问题导致的。一般情况下，编译opencv 库都是为了C++ 下使用，所以把python 相关的这个选项关闭掉是没啥问题的。</p> 
+<p>        我不太确定是不是因为我没有安装python2(我只安装了python3) 导致的，如果想不通过关闭选项解决这个报错的话，可以安装或者配置一下试试。</p> 
+<p></p> 
+<h5 style="text-align:justify;">三、编译CUDA版本遇到的问题</h5> 
+<p style="text-align:justify;">1. <strong>进行CMake-Configure的时候报错：CUDA: Autodetection arch list is empty</strong></p> 
+<p style="text-align:justify;">        这个是Windows下无法检测到CUDA架构的问题，需要修改CUDA_ARCH_BIN 配置项的值，可以到官网查询自己显卡对应的算力，然后填写在配置项中。</p> 
+<p style="text-align:justify;">2. <strong>编译的时候报错：Unexpected compiler version, expected CUDA 11.6 or newer</strong></p> 
+<p style="text-align:justify;">        这个是由于VS2022 对应的SDK 编译CUDA 的时候默认会校验版本，而我电脑安装的是11.3 比要求的11.6 版本要低，所以编译失败。如果不想调整VS 或者CUDA 版本的话，在opencv-3.4.16 目录下的CMakeLists.txt 文件中增加_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH 的宏定义即可：</p> 
+<p style="text-align:center;"><img alt="" src="https://images2.imgbox.com/47/2f/dMwB9FgX_o.png"></p> 
+<p> </p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/11bf005209cbda9785bddff66ea90cc2/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">金猪脚本Autojs之仿真曲线滑动</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3b731464dda63f04120a296de01f59da/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">折磨人的Centos7防火墙开放端口，SSH却无法访问的问题</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

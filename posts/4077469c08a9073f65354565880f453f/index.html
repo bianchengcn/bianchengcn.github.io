@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>分片技术（Sharding）：化整为零，分而治之 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="分片技术（Sharding）：化整为零，分而治之" />
+<meta property="og:description" content="目前的区块练技术面临着一个巨大的瓶颈，那就是：如何有效地提升区块的吞吐量（TPS）。
+区块链的扩展性一直是大多数公链发展过程中难以避开的一块拦路石，比特币因之有一段长达三年的扩容之争，以太坊一度因为一个小小的密码猫游戏而长时间拥堵不堪。
+目前提出的问题解决思路主要有以下几种：治标不治本的扩容（扩大区块容量）、牺牲部分去中心化的DPoS和pBFT共识机制、不同于区块链的DAG、链下扩容（子链和侧链），以及分片。
+分片（Sharding）技术，被认为是一种有效的、能够解决区块链吞吐量问题的解决方案。
+起源 分片原本是一种数据库分区技术，能够将一个大型的数据库分割成小的数据碎片，并将这些碎片储存在不同的服务器上，使其能够更快更有效地管理数据。
+而区块链中的分片技术，是在2015年初次提出的。当时新加坡国立大学的一对师生，在国际顶尖安全会议CCS上发表了一篇论文《A Secure Sharding Protocol For Open Blockchains》，首次提出了区块链领域中的分片概念。
+后来，这对师生发展出了第一个分片技术的落地项目Zilliqa，它结合pBFT和PoW共识机制，有6个分片，3600个节点的测试网络，已经能够达到每秒处理2800次交易的速度，是目前公链中处理速度最快的。
+珠玉在前，很多为扩展性烦恼不已的项目开始考虑将分片技术应用在自家的区块链上，比如以太坊，V神已经打算在以太坊的区块链上应用分片技术来扩大吞吐量了。此外，还有很多以此为核心技术的新项目正在出现，当然其中也不乏打着分片旗号挂羊头卖狗肉的项目。
+不过，分片技术并不是那么容易掌握的。
+分类和原理 分片技术，有这么几大类：网络分片、交易分片、状态分片。它们的基本原理，都是“化整为零，分而治之”，用多个分片同时处理不同的交易，最后汇总到主链上。
+首先，网络分片。网络分片较为简单，但也最为重要，因为其他分片机制都必须建立在网络分片之上。网络分片首先要保证安全，预防网络攻击和恶意节点的干扰，随机抽取出特定数量的节点，创建成一个分片。当形成多个分片后，分片中自行建立共识，对交易进行确认。这些分片可以同时、平行地处理相互未建立连接的交易，提高网络并发量。
+Zilliqa便是运用网络分片，然后配合网络分片的共识机制，即pBFT共识机制和PoW共识机制，来提升交易速度的。在其中，共识机制之所以重要，在于确认一笔交易，使用pBFT共识机制，可以提高确认速度；而在建立分片之前，要先对网络攻击进行防范，Zilliqa加入PoW机制，就可以有效地阻止女巫攻击（Sybil Attacks）和恶意节点的进入。
+其次是交易分片。网络上创建好的分片处理不同的交易，划分为不同的交易分片，交易划分的依据可以是交易发起者的地址。
+假设有人用一个地址向两个人发起相同的交易，即所谓的“双花”，一般情况下，这两笔交易将被划分到同一个分片进行处理，之后分片能够迅速识别出相同的发起地址，从而阻止双重花费。
+而如果这两笔交易被分到了不同的分片，分片中的节点同样能够检测出来，将这笔交易拒绝。不过，要防止双花，在验证中就需要分片之间相互通信，这样就会出现跨片交易的情况，影响整个网络的运行和效益。所以，这里的分片最好采用UTXO交易模型，更加容易监测出双花，以保证效率。
+但UTXO会对大宗交易额进行拆分，一定程度上会影响效率。不过，目前的交易分片技术已经较为成熟，能够允许多种共识机制运行。
+最后是状态分片，这是最为复杂、最具有挑战性的一种分片机制。状态分片的核心在于，不同的分片能够储存不同的数据，也就是说，整个储存库被分开，分别放在了不同的分片上。每个分片储存自己分片中的所有数据，而不是整个区块链的状态。
+这一分片机制的挑战在于：
+首先，由于每个分片储存的状态不同，如果一笔交易的发起人和接收者处在两个不同的分片，那么这两个分片对于这笔交易的信息就应该进行共享，这样一来，跨片交易的现象又出现了，两个分片之间又得进行频繁的通信和状态互换，将会大大影响分片的效益和性能。
+然后，当分片遭到攻击不得不进行脱机工作，其中的交易是无法被验证的。要解决这个问题，就必须在每个节点进行信息的存档和备份，以帮助系统修复数据，但这样的话，节点就必须要备份整个存储系统的状态，失去状态分片的意义，甚至还可能具有中心化的风险。
+优势与阻碍 分片技术作为能解决区块链拓展性问题的新技术之一，具有非常强的技术优势和广阔的发展前景。通过分片处理交易和数据的方式来消除区块的拥堵，扩大吞吐量，结合其他技术加强安全性和效率，进行互补，是目前分片技术的主要运用趋势。
+分片中安全性和性能的平衡是一个值得重视的问题，Zilliqa经过多次实验，决定用600个节点构建一个分片，这是因为600个节点能够到达性能和安全的最佳平衡。而如果为了提高TPS一味减少节点，对于分片的去中心化和安全性都是很不利的。
+分片技术依然存在着很多难题需要解决，尤其是状态分片，计算机技术人员尚未研究出好的解决方案。同时，分片的原理不仅仅在于如何分片，更在于如何对每个分片进行安全有效的治理，很多项目一味追求其中的一个方面，忽视了区块链的基本治理问题，这也是需要注意的。
+文章来源：BB财经
+原文链接：http://www.bbcaijing.cn/article/news/20736.html
+关注区块链技术，区块链资讯，数字货币行情" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/4077469c08a9073f65354565880f453f/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2018-10-29T15:26:57+08:00" />
+<meta property="article:modified_time" content="2018-10-29T15:26:57+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">分片技术（Sharding）：化整为零，分而治之</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p style="margin-left:0cm;">目前的区块练技术面临着一个巨大的瓶颈，那就是：如何有效地提升区块的吞吐量（TPS）。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">区块链的扩展性一直是大多数公链发展过程中难以避开的一块拦路石，比特币因之有一段长达三年的扩容之争，以太坊一度因为一个小小的密码猫游戏而长时间拥堵不堪。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">目前提出的问题解决思路主要有以下几种：治标不治本的扩容（扩大区块容量）、牺牲部分去中心化的DPoS和pBFT共识机制、不同于区块链的DAG、链下扩容（子链和侧链），以及分片。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">分片（Sharding）技术，被认为是一种有效的、能够解决区块链吞吐量问题的解决方案。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;"><img alt="分片技术" class="has" src="https://images2.imgbox.com/72/a4/GbJ4e4PN_o.jpg"></p> 
+<p style="margin-left:0cm;"> </p> 
+<ul><li><strong>起源</strong></li></ul> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">分片原本是一种数据库分区技术，能够将一个大型的数据库分割成小的数据碎片，并将这些碎片储存在不同的服务器上，使其能够更快更有效地管理数据。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">而区块链中的分片技术，是在2015年初次提出的。当时新加坡国立大学的一对师生，在国际顶尖安全会议CCS上发表了一篇论文《A Secure Sharding Protocol For Open Blockchains》，首次提出了区块链领域中的分片概念。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">后来，这对师生发展出了第一个分片技术的落地项目Zilliqa，它结合pBFT和PoW共识机制，有6个分片，3600个节点的测试网络，已经能够达到每秒处理2800次交易的速度，是目前公链中处理速度最快的。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">珠玉在前，很多为扩展性烦恼不已的项目开始考虑将分片技术应用在自家的区块链上，比如以太坊，V神已经打算在以太坊的区块链上应用分片技术来扩大吞吐量了。此外，还有很多以此为核心技术的新项目正在出现，当然其中也不乏打着分片旗号挂羊头卖狗肉的项目。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">不过，分片技术并不是那么容易掌握的。</p> 
+<p style="margin-left:0cm;"> </p> 
+<ul><li><strong>分类和原理</strong></li></ul> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">分片技术，有这么几大类：网络分片、交易分片、状态分片。它们的基本原理，都是“化整为零，分而治之”，用多个分片同时处理不同的交易，最后汇总到主链上。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">首先，网络分片。网络分片较为简单，但也最为重要，因为其他分片机制都必须建立在网络分片之上。网络分片首先要保证安全，预防网络攻击和恶意节点的干扰，随机抽取出特定数量的节点，创建成一个分片。当形成多个分片后，分片中自行建立共识，对交易进行确认。这些分片可以同时、平行地处理相互未建立连接的交易，提高网络并发量。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">Zilliqa便是运用网络分片，然后配合网络分片的共识机制，即pBFT共识机制和PoW共识机制，来提升交易速度的。在其中，共识机制之所以重要，在于确认一笔交易，使用pBFT共识机制，可以提高确认速度；而在建立分片之前，要先对网络攻击进行防范，Zilliqa加入PoW机制，就可以有效地阻止女巫攻击（Sybil Attacks）和恶意节点的进入。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">其次是交易分片。网络上创建好的分片处理不同的交易，划分为不同的交易分片，交易划分的依据可以是交易发起者的地址。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">假设有人用一个地址向两个人发起相同的交易，即所谓的“双花”，一般情况下，这两笔交易将被划分到同一个分片进行处理，之后分片能够迅速识别出相同的发起地址，从而阻止双重花费。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">而如果这两笔交易被分到了不同的分片，分片中的节点同样能够检测出来，将这笔交易拒绝。不过，要防止双花，在验证中就需要分片之间相互通信，这样就会出现跨片交易的情况，影响整个网络的运行和效益。所以，这里的分片最好采用UTXO交易模型，更加容易监测出双花，以保证效率。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">但UTXO会对大宗交易额进行拆分，一定程度上会影响效率。不过，目前的交易分片技术已经较为成熟，能够允许多种共识机制运行。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">最后是状态分片，这是最为复杂、最具有挑战性的一种分片机制。状态分片的核心在于，不同的分片能够储存不同的数据，也就是说，整个储存库被分开，分别放在了不同的分片上。每个分片储存自己分片中的所有数据，而不是整个区块链的状态。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">这一分片机制的挑战在于：</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">首先，由于每个分片储存的状态不同，如果一笔交易的发起人和接收者处在两个不同的分片，那么这两个分片对于这笔交易的信息就应该进行共享，这样一来，跨片交易的现象又出现了，两个分片之间又得进行频繁的通信和状态互换，将会大大影响分片的效益和性能。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">然后，当分片遭到攻击不得不进行脱机工作，其中的交易是无法被验证的。要解决这个问题，就必须在每个节点进行信息的存档和备份，以帮助系统修复数据，但这样的话，节点就必须要备份整个存储系统的状态，失去状态分片的意义，甚至还可能具有中心化的风险。</p> 
+<p style="margin-left:0cm;"> </p> 
+<ul><li><strong>优势与阻碍</strong></li></ul> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">分片技术作为能解决区块链拓展性问题的新技术之一，具有非常强的技术优势和广阔的发展前景。通过分片处理交易和数据的方式来消除区块的拥堵，扩大吞吐量，结合其他技术加强安全性和效率，进行互补，是目前分片技术的主要运用趋势。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">分片中安全性和性能的平衡是一个值得重视的问题，Zilliqa经过多次实验，决定用600个节点构建一个分片，这是因为600个节点能够到达性能和安全的最佳平衡。而如果为了提高TPS一味减少节点，对于分片的去中心化和安全性都是很不利的。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">分片技术依然存在着很多难题需要解决，尤其是状态分片，计算机技术人员尚未研究出好的解决方案。同时，分片的原理不仅仅在于如何分片，更在于如何对每个分片进行安全有效的治理，很多项目一味追求其中的一个方面，忽视了区块链的基本治理问题，这也是需要注意的。</p> 
+<p style="margin-left:0cm;"> </p> 
+<p style="margin-left:0cm;">文章来源：BB财经</p> 
+<p style="margin-left:0cm;">原文链接：http://www.bbcaijing.cn/article/news/20736.html</p> 
+<p style="margin-left:0cm;">关注区块链技术，区块链资讯，数字货币行情</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/19776b47fb631d6086fdf3a22b85ba88/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">页面占位图</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/70cd31a9da0a6a4c1fe7c93e13e7813f/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">中间件漏洞及修复汇总</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

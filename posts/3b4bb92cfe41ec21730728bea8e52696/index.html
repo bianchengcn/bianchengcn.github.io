@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Unity3D实现页面的滑动切换功能 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Unity3D实现页面的滑动切换功能" />
+<meta property="og:description" content="// 根据需要 使用 //初始化ScrollRect 位置（回到初始位置） for (int i = 1; i &lt; NeiRongList.childCount-1; i&#43;&#43;) { NeiRongList.GetChild(i).GetChild(0).GetComponent&lt;ScrollRect&gt;().normalizedPosition = new Vector2(0, 1); } //刷新（有时候需要收到刷新）注意：需要Content的显影为true 才有效 LayoutRebuilder.ForceRebuildLayoutImmediate(Content.GetComponent&lt;RectTransform&gt;()); // Content.GetComponent&lt;GridLayoutGroup&gt;().spacing = new Vector2(0, n); 初始位置 GetComponent&lt;ScrollRect&gt;().normalizedPosition = new Vector2(0, 1); 滑动到最后一页 GetComponent&lt;ScrollRect&gt;().normalizedPosition = new Vector2(0, 0); //挂在 在有ScrollRect 组件 的UI 上
+using System.Collections; using System.Collections.Generic; using UnityEngine; using UnityEngine.UI; using UnityEngine.EventSystems; using System; using UnityEngine.Events; [System.Serializable] public class MyIntEvent : UnityEvent&lt;int&gt; { } /// &lt;summary&gt; /// 滑动页面效果 /// &lt;/summary&gt; public class PageView : MonoBehaviour, IBeginDragHandler, IEndDragHandler { public static PageView pageViewIn; private ScrollRect rect; private float targethorizontal = 0; private List&lt;float&gt; posList = new List&lt;float&gt;();//存四张图片的位置(0, 0." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/3b4bb92cfe41ec21730728bea8e52696/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-25T17:54:57+08:00" />
+<meta property="article:modified_time" content="2023-07-25T17:54:57+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Unity3D实现页面的滑动切换功能</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <pre><code>// 根据需要 使用
+
+//初始化ScrollRect 位置（回到初始位置）
+        for (int i = 1; i &lt; NeiRongList.childCount-1; i++)
+        {
+            NeiRongList.GetChild(i).GetChild(0).GetComponent&lt;ScrollRect&gt;().normalizedPosition = new Vector2(0, 1);
+        }
+
+//刷新（有时候需要收到刷新）注意：需要Content的显影为true 才有效
+ LayoutRebuilder.ForceRebuildLayoutImmediate(Content.GetComponent&lt;RectTransform&gt;());
+// Content.GetComponent&lt;GridLayoutGroup&gt;().spacing = new Vector2(0, n);
+
+初始位置
+
+GetComponent&lt;ScrollRect&gt;().normalizedPosition = new Vector2(0, 1);
+
+滑动到最后一页
+
+GetComponent&lt;ScrollRect&gt;().normalizedPosition = new Vector2(0, 0);
+</code></pre> 
+<p>//挂在 在有ScrollRect 组件 的UI 上</p> 
+<pre><code>using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using System;
+using UnityEngine.Events;
+
+[System.Serializable]
+public class MyIntEvent : UnityEvent&lt;int&gt;
+{
+}
+
+/// &lt;summary&gt;
+/// 滑动页面效果
+/// &lt;/summary&gt;
+public class PageView : MonoBehaviour, IBeginDragHandler, IEndDragHandler
+{
+    public static PageView pageViewIn; 
+    private ScrollRect rect;
+    private float targethorizontal = 0;
+    private List&lt;float&gt; posList = new List&lt;float&gt;();//存四张图片的位置(0, 0.333, 0.666, 1) 
+    private bool isDrag = true;
+    private float startTime = 0;
+    private float startDragHorizontal;
+    private int curIndex = 0;
+
+    public float speed = 2;      //滑动速度  
+    public float sensitivity = 0;
+    public Text curPage;
+
+    public MyIntEvent FanYe;//翻页
+    public Transform PageList;//页面List
+    public Button LeftButton;
+    public Button RightButton;
+    void Awake()
+    {
+        pageViewIn = this;
+        FanYe = new MyIntEvent();
+    
+        LeftButton.onClick.AddListener(OnLeftButton);
+        RightButton.onClick.AddListener(OnRightButton);
+    }
+    void Start()
+    {
+        rect = GetComponent&lt;ScrollRect&gt;();
+        float horizontalLength = rect.content.rect.width - GetComponent&lt;RectTransform&gt;().rect.width;
+        var _rectWidth = GetComponent&lt;RectTransform&gt;().rect.width;
+        for (int i = 0; i &lt; rect.content.transform.childCount; i++)
+        {
+            posList.Add(_rectWidth * i / horizontalLength);   //存四张图片的位置(0, 0.333, 0.666, 1) 
+        }
+        curIndex = 0;
+        curPage.text = String.Format("当前页码：0");
+        FanYe.AddListener((index) =&gt; { pageTo(index); });
+    }
+
+    void Update()
+    {
+        if (!isDrag)
+        {
+            startTime += Time.deltaTime;
+            float t = startTime * speed;
+            //加速滑动效果
+            rect.horizontalNormalizedPosition = Mathf.Lerp(rect.horizontalNormalizedPosition, targethorizontal, t);
+            //缓慢匀速滑动效果
+           // rect.horizontalNormalizedPosition = Mathf.Lerp(rect.horizontalNormalizedPosition, targethorizontal, Time.deltaTime * speed);
+
+        }
+    }
+    /// &lt;summary&gt;
+    /// 开始拖拽
+    /// &lt;/summary&gt;
+    /// &lt;param name="eventData"&gt;&lt;/param&gt;
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        Debug.Log("----开始拖动");
+        isDrag = true;
+        //开始拖动
+        startDragHorizontal = rect.horizontalNormalizedPosition;  //horizontalNormalizedPosition这个参数是scrollRect滑动期间变化的x坐标值，在（0， 1）之间
+    }
+
+    /// &lt;summary&gt;
+    /// 拖拽结束
+    /// &lt;/summary&gt;
+    /// &lt;param name="eventData"&gt;&lt;/param&gt;
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        Debug.Log("拖动结束");
+        float posX = rect.horizontalNormalizedPosition;
+        int index = 0;
+        float offset = Mathf.Abs(posList[index] - posX);  //计算当前位置与第一页的偏移量，初始化offect
+        for (int i = 1; i &lt; posList.Count; i++)
+        {    //遍历页签，选取当前x位置和每页偏移量最小的那个页面
+            float temp = Mathf.Abs(posList[i] - posX);
+            if (temp &lt; offset)
+            {
+                index = i;
+                offset = temp;
+            }
+        }
+        curIndex = index;
+        targethorizontal = posList[curIndex]; //设置当前坐标，更新函数进行插值  
+        isDrag = false;
+        startTime = 0;
+        curPage.text = String.Format("当前页码：{0}", curIndex.ToString());
+        PageList.GetChild(curIndex + 1).transform.GetComponent&lt;Toggle&gt;().isOn = true;
+    }
+    /// &lt;summary&gt;
+    /// 翻页
+    /// &lt;/summary&gt;
+    /// &lt;param name="index"&gt;&lt;/param&gt;
+    public void pageTo(int index)
+    {
+        if (index &lt; 0) { return; }
+       // Debug.Log("pageTo......index="+ index);
+        curIndex = index;
+        targethorizontal = posList[curIndex]; //设置当前坐标，更新函数进行插值  
+        isDrag = false;
+        startTime = 0;
+        curPage.text = String.Format("当前页码：{0}", curIndex.ToString());
+    }
+    /// &lt;summary&gt;
+    /// 左边下一页 按钮
+    /// &lt;/summary&gt;
+    public void OnLeftButton()
+    {
+       // Debug.Log("curIndex" + curIndex + "   posList.Count=" + PageList.childCount);
+        if (curIndex &lt;= 0)
+        {
+           // Debug.Log("左边不能点击了");
+            return;
+        }
+        curIndex -= 1;
+        PageList.GetChild(curIndex + 1).transform.GetComponent&lt;Toggle&gt;().isOn = true;
+        pageTo(curIndex);
+
+       
+    }
+    /// &lt;summary&gt;
+    /// 右边下一页 按钮
+    /// &lt;/summary&gt;
+    public void OnRightButton()
+    {
+       // Debug.Log("curIndex" + curIndex + "  PageList=" + PageList.childCount);
+        if (curIndex &gt;= PageList.childCount - 2)
+        {
+           // Debug.Log("右边不能点击了");
+            return;
+        }
+        curIndex += 1;
+        PageList.GetChild(curIndex + 1).transform.GetComponent&lt;Toggle&gt;().isOn = true;
+        pageTo(curIndex);
+    }
+}</code></pre> 
+<p> 测试创建  页码数量 脚本</p> 
+<pre><code>using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using System;
+using UnityEngine.Events;
+
+[System.Serializable]
+public class MyIntEvent : UnityEvent&lt;int&gt;
+{
+}
+
+/// &lt;summary&gt;
+/// 滑动页面效果
+/// &lt;/summary&gt;
+public class PageView : MonoBehaviour, IBeginDragHandler, IEndDragHandler
+{
+    public static PageView pageViewIn; 
+    private ScrollRect rect;
+    private float targethorizontal = 0;
+    private List&lt;float&gt; posList = new List&lt;float&gt;();//存四张图片的位置(0, 0.333, 0.666, 1) 
+    private bool isDrag = true;
+    private float startTime = 0;
+    private float startDragHorizontal;
+    private int curIndex = 0;
+
+    public float speed = 2;      //滑动速度  
+    public float sensitivity = 0;
+    public Text curPage;
+
+    public MyIntEvent FanYe;//翻页
+    public Transform PageList;//页面List
+    public Button LeftButton;
+    public Button RightButton;
+    void Awake()
+    {
+        pageViewIn = this;
+        FanYe = new MyIntEvent();
+    
+        LeftButton.onClick.AddListener(OnLeftButton);
+        RightButton.onClick.AddListener(OnRightButton);
+    }
+    void Start()
+    {
+        rect = GetComponent&lt;ScrollRect&gt;();
+        float horizontalLength = rect.content.rect.width - GetComponent&lt;RectTransform&gt;().rect.width;
+        var _rectWidth = GetComponent&lt;RectTransform&gt;().rect.width;
+        for (int i = 0; i &lt; rect.content.transform.childCount; i++)
+        {
+            posList.Add(_rectWidth * i / horizontalLength);   //存四张图片的位置(0, 0.333, 0.666, 1) 
+        }
+        curIndex = 0;
+        curPage.text = String.Format("当前页码：0");
+        FanYe.AddListener((index) =&gt; { pageTo(index); });
+    }
+
+    void Update()
+    {
+        if (!isDrag)
+        {
+            startTime += Time.deltaTime;
+            float t = startTime * speed;
+            //加速滑动效果
+            rect.horizontalNormalizedPosition = Mathf.Lerp(rect.horizontalNormalizedPosition, targethorizontal, t);
+            //缓慢匀速滑动效果
+           // rect.horizontalNormalizedPosition = Mathf.Lerp(rect.horizontalNormalizedPosition, targethorizontal, Time.deltaTime * speed);
+
+        }
+    }
+    /// &lt;summary&gt;
+    /// 开始拖拽
+    /// &lt;/summary&gt;
+    /// &lt;param name="eventData"&gt;&lt;/param&gt;
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        Debug.Log("----开始拖动");
+        isDrag = true;
+        //开始拖动
+        startDragHorizontal = rect.horizontalNormalizedPosition;  //horizontalNormalizedPosition这个参数是scrollRect滑动期间变化的x坐标值，在（0， 1）之间
+    }
+
+    /// &lt;summary&gt;
+    /// 拖拽结束
+    /// &lt;/summary&gt;
+    /// &lt;param name="eventData"&gt;&lt;/param&gt;
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        Debug.Log("拖动结束");
+        float posX = rect.horizontalNormalizedPosition;
+        int index = 0;
+        float offset = Mathf.Abs(posList[index] - posX);  //计算当前位置与第一页的偏移量，初始化offect
+        for (int i = 1; i &lt; posList.Count; i++)
+        {    //遍历页签，选取当前x位置和每页偏移量最小的那个页面
+            float temp = Mathf.Abs(posList[i] - posX);
+            if (temp &lt; offset)
+            {
+                index = i;
+                offset = temp;
+            }
+        }
+        curIndex = index;
+        targethorizontal = posList[curIndex]; //设置当前坐标，更新函数进行插值  
+        isDrag = false;
+        startTime = 0;
+        curPage.text = String.Format("当前页码：{0}", curIndex.ToString());
+        PageList.GetChild(curIndex + 1).transform.GetComponent&lt;Toggle&gt;().isOn = true;
+    }
+    /// &lt;summary&gt;
+    /// 翻页
+    /// &lt;/summary&gt;
+    /// &lt;param name="index"&gt;&lt;/param&gt;
+    public void pageTo(int index)
+    {
+        if (index &lt; 0) { return; }
+       // Debug.Log("pageTo......index="+ index);
+        curIndex = index;
+        targethorizontal = posList[curIndex]; //设置当前坐标，更新函数进行插值  
+        isDrag = false;
+        startTime = 0;
+        curPage.text = String.Format("当前页码：{0}", curIndex.ToString());
+    }
+    /// &lt;summary&gt;
+    /// 左边下一页 按钮
+    /// &lt;/summary&gt;
+    public void OnLeftButton()
+    {
+       // Debug.Log("curIndex" + curIndex + "   posList.Count=" + PageList.childCount);
+        if (curIndex &lt;= 0)
+        {
+           // Debug.Log("左边不能点击了");
+            return;
+        }
+        curIndex -= 1;
+        PageList.GetChild(curIndex + 1).transform.GetComponent&lt;Toggle&gt;().isOn = true;
+        pageTo(curIndex);
+
+       
+    }
+    /// &lt;summary&gt;
+    /// 右边下一页 按钮
+    /// &lt;/summary&gt;
+    public void OnRightButton()
+    {
+       // Debug.Log("curIndex" + curIndex + "  PageList=" + PageList.childCount);
+        if (curIndex &gt;= PageList.childCount - 2)
+        {
+           // Debug.Log("右边不能点击了");
+            return;
+        }
+        curIndex += 1;
+        PageList.GetChild(curIndex + 1).transform.GetComponent&lt;Toggle&gt;().isOn = true;
+        pageTo(curIndex);
+    }
+}</code></pre> 
+<p>效果图：</p> 
+<p><img alt="" height="606" src="https://images2.imgbox.com/9b/db/9ltmCB4S_o.png" width="778"></p> 
+<p> 参考地址：<a href="https://blog.csdn.net/qq_43505432/article/details/120422113" title="Unity3D实现页面的滑动切换功能_小程小程，永不消沉的博客-CSDN博客_unity3d 滑动">Unity3D实现页面的滑动切换功能_小程小程，永不消沉的博客-CSDN博客_unity3d 滑动</a></p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/19283bc996ac68d0864d0926b4a6b775/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">使用cglib中Enhancer在运行时根据某个给定的类创建子类</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/05d017988c5e691d2dae108511278a07/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Java基础 - Java环境及编译运行原理</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

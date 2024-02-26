@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Netty注解实现服务调用 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Netty注解实现服务调用" />
+<meta property="og:description" content="在之前完成了原生服务间的简单通信，现在我们将它整合到Spring环境中，这里就以实现服务的远程调用，简单模拟即可，具体代码需要自己动手改造。
+既然是服务调用，那我们就使用代理模式来实现。
+新建代理类，这里简单上送个参数和方法名即可，服务端响应不做处理，你理解我的目的就行
+public class JdkProxy implements InvocationHandler { private Object target; public JdkProxy(Object target){ this.target = target; } @Override public Object invoke(Object proxy, Method method, Object[] args) throws Throwable { Protocol&lt;RequestMsg&gt; protocol = new Protocol&lt;&gt;(); protocol.setMsgType((short)1); RequestMsg requestMsg = new RequestMsg(); requestMsg.setMsg(&#34;方法:&#34;&#43;method.getName()); requestMsg.setOther(&#34;参数：&#34;&#43;args[0]); protocol.setBody(requestMsg); //Protocol&lt;ResponseMsg&gt; responseMsgProtocol = NettyClient.getInstance().sendMsg(protocol); MyFuture myFuture = NettyClient.getInstance().sendMsg(protocol); return myFuture.get().toString(); } } 代理类创建模板
+public class MyNettyClient { public &lt;T&gt; T create(Class&lt;T&gt; clz){ return (T)Proxy.newProxyInstance(clz.getClassLoader(),new Class[]{clz},new JdkProxy(clz)); } } 将模板注入到spring中" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/0218b9ad4eddb8e2118fe4a6652e6dd2/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-15T17:13:38+08:00" />
+<meta property="article:modified_time" content="2023-08-15T17:13:38+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Netty注解实现服务调用</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>在之前完成了原生服务间的简单通信，现在我们将它整合到Spring环境中，这里就以实现服务的远程调用，简单模拟即可，具体代码需要自己动手改造。<br> 既然是服务调用，那我们就使用代理模式来实现。<br> 新建代理类，这里简单上送个参数和方法名即可，服务端响应不做处理，你理解我的目的就行</p> 
+<pre><code>public class JdkProxy  implements InvocationHandler {
+
+    private Object target;
+
+    public JdkProxy(Object target){
+        this.target = target;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        Protocol&lt;RequestMsg&gt; protocol = new Protocol&lt;&gt;();
+        protocol.setMsgType((short)1);
+        RequestMsg requestMsg = new RequestMsg();
+        requestMsg.setMsg("方法:"+method.getName());
+        requestMsg.setOther("参数："+args[0]);
+        protocol.setBody(requestMsg);
+        //Protocol&lt;ResponseMsg&gt; responseMsgProtocol = NettyClient.getInstance().sendMsg(protocol);
+        MyFuture myFuture = NettyClient.getInstance().sendMsg(protocol);
+        return myFuture.get().toString();
+    }
+}
+</code></pre> 
+<p>代理类创建模板</p> 
+<pre><code>public class MyNettyClient {
+
+    public &lt;T&gt; T create(Class&lt;T&gt; clz){
+        return (T)Proxy.newProxyInstance(clz.getClassLoader(),new Class[]{clz},new JdkProxy(clz));
+    }
+}
+</code></pre> 
+<p>将模板注入到spring中</p> 
+<pre><code>@Configuration
+public class ClientConfig {
+
+    @Bean
+    MyNettyClient myNettyClient(){
+        MyNettyClient instance = new MyNettyClient();
+        return instance;
+    }
+}
+</code></pre> 
+<p>查看实现效果<br> <img src="https://images2.imgbox.com/a3/83/YxIP1Ybg_o.png" alt="在这里插入图片描述"><br> 每次使用都还要先获取代理对象，很麻烦，代码升级，实现注解直接调用</p> 
+<pre><code>@Target({ElementType.FIELD})
+@Retention(RetentionPolicy.RUNTIME)
+@Autowired
+public @interface MyAn {
+}
+</code></pre> 
+<pre><code>@Component
+public class MyAnBean implements FactoryBean&lt;Object&gt; {
+
+    private Class&lt;?&gt; interfaceClass;
+
+    public Class&lt;?&gt; getInterfaceClass() {
+        return interfaceClass;
+    }
+
+    public void setInterfaceClass(Class&lt;?&gt; interfaceClass) {
+        this.interfaceClass = interfaceClass;
+    }
+
+    private Object object;
+
+    @Override
+    public Object getObject() throws Exception {
+        return object;
+    }
+
+    @Override
+    public Class&lt;?&gt; getObjectType() {
+        return interfaceClass;
+    }
+
+    public void init () throws Exception{
+        MyNettyClient myNettyClient = new MyNettyClient();
+        this.object = myNettyClient.create(interfaceClass);
+    }
+}
+</code></pre> 
+<pre><code>@Component
+public class MyAnConfig implements ApplicationContextAware,BeanClassLoaderAware,BeanFactoryPostProcessor {
+
+    private static final Logger logger = LoggerFactory.getLogger(MyAnConfig.class);
+    private ApplicationContext context;
+    private ClassLoader classLoader;
+    private final Map&lt;String,BeanDefinition&gt; myAnDefinitions = new ConcurrentHashMap&lt;&gt;();
+
+    @Override
+    public void setBeanClassLoader(ClassLoader classLoader) {
+        this.classLoader = classLoader;
+    }
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.context = applicationContext;
+    }
+
+    @Override
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+        for(String beanDefinitionName:beanFactory.getBeanDefinitionNames()){
+            BeanDefinition beanDefinition = beanFactory.getBeanDefinition(beanDefinitionName);
+            String beanClassName = beanDefinition.getBeanClassName();
+            if(beanClassName!=null){
+                Class&lt;?&gt; clazz = ClassUtils.resolveClassName(beanClassName, this.classLoader);
+                ReflectionUtils.doWithFields(clazz,this::parseMyAn);
+            }
+        }
+        BeanDefinitionRegistry registry = (BeanDefinitionRegistry)beanFactory;
+        this.myAnDefinitions.forEach((beanName,beanDefinition)-&gt;{
+            if (context.containsBean(beanName)){
+                throw new IllegalArgumentException("spring context already has a bean named "+ beanName);
+            }
+            registry.registerBeanDefinition(beanName,myAnDefinitions.get(beanName));
+            logger.info("registered ReferenceBean {} success",beanName);
+        });
+    }
+
+    private void parseMyAn(Field field) {
+        MyAn annotation = AnnotationUtils.getAnnotation(field, MyAn.class);
+        if(annotation!=null){
+            BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(MyAnBean.class);
+            builder.setInitMethodName("init");
+            builder.addPropertyValue("interfaceClass",field.getType());
+            BeanDefinition beanDefinition = builder.getBeanDefinition();
+            myAnDefinitions.put(field.getName(),beanDefinition);
+        }
+    }
+}
+</code></pre> 
+<p><img src="https://images2.imgbox.com/e2/02/JDMrxYSq_o.png" alt="在这里插入图片描述"><br> 这样是不是很高级的感觉了呢</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9fc91b136c2ec7d255f5c835a0370339/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Netty客户端同步获取结果</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/11bf005209cbda9785bddff66ea90cc2/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">金猪脚本Autojs之仿真曲线滑动</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

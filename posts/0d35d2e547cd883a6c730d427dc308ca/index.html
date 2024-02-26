@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MatConvnet工具箱文档翻译理解三 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MatConvnet工具箱文档翻译理解三" />
+<meta property="og:description" content="第2章 神经网络计算 本章简要介绍了神经网络的计算方面，尤其是卷积神经网络，强调了理解和使用MatConvNet所需的概念。
+2.1概述 神经网络（NN）是将数据x（例如图像）映射到输出向量y（例如图像标签）的函数。函数g = fL … f 1是较简单函数序列fl的组合，称为计算块或层。令x1; x2; ：：：; xL是网络中每个层的输出，并且令x0 = x表示网络输入。通过应用具有参数wl的函数fl，从先前输出xl-1计算每个中间输出xl = fl（xl-1; wl）。
+在卷积神经网络（CNN）中，数据具有空间结构，是3D阵列或张量，其中第一两维H1（高度）和W1（宽度）被解释为空间维度。第三维度C1被解释为特征通道的数量。因此，张量x1表示C1维特征向量的H1 * W1字段，每个空间位置一个。张量中的第四维N1跨越多个数据样本，这些数据样本被打包在单个批次中用于效率并行处理。一个批次中的数据样本N1的数量被称为批量基数。网络被称为卷积，因为函数f1是本地和转换不变操作符（即非线性滤波器），如线性卷积。
+还可以设想具有多于两个空间维度的CNN，其中附加尺寸可以表示体积或时间。 事实上，几乎没有先验对神经网络中数据格式的限制。 许多有用的NN包含卷积层与处理其他数据类型（例如文本字符串）的层的混合，或者执行不严格符合CNN假设的其他操作。
+MatConvNet包括各种图层，包含在matlab /目录中，例如vl_nnconv（卷积），vl_nnconvt（卷积转置或去卷积）vl_nnpool（最大和平均池），vl_nnrelu（ReLU激活），vl_nnsigmoid（Sigmoid激活），vl_nnsoftmax（softmax运算符），vl_nnloss（分类正常丢失），vl_nnbnorm（分批正规化），vl_nnspnorm（空间规范化），vl_nnnormalize（局部响应规范化LRN）或vl_nnpdist（p距离）。 有足够多的层来实现许多有趣的最先进的网络开箱即用，甚至从其他工具箱，如caffe导入。 NNs通常用作分类器或回归。在fig. 1.1的示例中，输出^ y = f（x）是概率的向量，一个用于1000个可能的图像标签（狗，猫，三叶虫，…）中的每一个。如果y是图像x的真实标签，我们可以通过损失函数来测量CNN性能，该损失函数对分类错误赋予惩罚。然后可以调整或学习CNN参数以最小化在标记的示例图像的大数据集上的平均损失。
+学习通常使用随机梯度下降（SGD）的变体。 虽然这是一个有效的方法（对于这种类型的问题），但网络可能包含几百万个参数，需要在数百万的图像上进行训练; 因此，效率是MATLAB设计中的一个重要部分，如第1.4节中进一步讨论的。 SGD还需要计算CNN导数，如下一节所述。
+2.2网络结构 在最简单的情况下，NN中的层按顺序排列; 然而，更复杂的互连也是可能的，并且事实上在许多情况下非常有用。 本节讨论这种配置，并引入一个图形符号来可视化它们。
+2.2.1序列 首先考虑网络中的计算块f。 这可以表示示意性地作为接收数据x和参数w作为输入并且产生数据y作为输出的框： 如上所述，在最简单的情况下，块被链接在序列f1-&gt; f2-&gt; … fL中，产生以下结构： 给定输入x0，评估网络是评估所有块的简单问题。从左到右，其定义复合函数xL = f（x0; w1;：：：; wL）。
+2.2 网络结构 2.2.2定向非循环图 一个不限于一个接一个地链接层。 事实上，评估NN唯一的要求是，当必须评估层时，在其之前已经评估了其所有输入。 当层之间的互连形成有向无环图或简称DAG时，这是可能的。 为了可视化DAG，引入用于网络变量的附加节点是有用的，fig.2.1的示例中那样。这里框表示函数，圆圈表示变量（参数被视为特殊类型的变量）。 在该示例中，x0和x4是CNN的输入，x6和x7是输出。 函数可以采取任何数量的输入（例如f3和f5取两个）并且具有任何数量的输出（例如f4具有两个）。 这个图的几个值得注意的属性： 1图表是二分的，在某种意义上，箭头总是从框到圆和 从圆圈到框。 2函数可以有任意数量的输入或输出; 变量和参数可以具有任意数量的输出（具有更多一个输出的参数被共享在不同层之间）; 变量最多只有一个输入和参数无。 3没有输入箭头和参数的变量不由网络计算，但必须在评估之前设置，即它们是输入。 任何变量（或甚至参数）可以用作输出，但是这些变量通常是没有输出的变量。 4由于图是非循环的，因此可以通过对函数和函数进行排序来评估CNN一个接一个地计算它们（在该示例中，评估函数阶f1; f2; f3; f4; f5将工作）。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/0d35d2e547cd883a6c730d427dc308ca/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2016-12-15T23:09:39+08:00" />
+<meta property="article:modified_time" content="2016-12-15T23:09:39+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MatConvnet工具箱文档翻译理解三</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3 id="第2章-神经网络计算">第2章 神经网络计算</h3> 
+<p>本章简要介绍了神经网络的计算方面，尤其是卷积神经网络，强调了理解和使用MatConvNet所需的概念。</p> 
+<h3 id="21概述">2.1概述</h3> 
+<p>神经网络（NN）是将数据x（例如图像）映射到输出向量y（例如图像标签）的函数。函数g = fL … f 1是较简单函数序列fl的组合，称为计算块或层。令x1; x2; ：：：; xL是网络中每个层的输出，并且令x0 = x表示网络输入。通过应用具有参数wl的函数fl，从先前输出xl-1计算每个中间输出xl = fl（xl-1; wl）。</p> 
+<p>在卷积神经网络（CNN）中，数据具有空间结构，是3D阵列或张量，其中第一两维H1（高度）和W1（宽度）被解释为空间维度。第三维度C1被解释为特征通道的数量。因此，张量x1表示C1维特征向量的H1 * W1字段，每个空间位置一个。张量中的第四维N1跨越多个数据样本，这些数据样本被打包在单个批次中用于效率并行处理。一个批次中的数据样本N1的数量被称为批量基数。网络被称为卷积，因为函数f1是本地和转换不变操作符（即非线性滤波器），如线性卷积。</p> 
+<p>还可以设想具有多于两个空间维度的CNN，其中附加尺寸可以表示体积或时间。 事实上，几乎没有先验对神经网络中数据格式的限制。 许多有用的NN包含卷积层与处理其他数据类型（例如文本字符串）的层的混合，或者执行不严格符合CNN假设的其他操作。</p> 
+<p>MatConvNet包括各种图层，包含在matlab /目录中，例如vl_nnconv（卷积），vl_nnconvt（卷积转置或去卷积）vl_nnpool（最大和平均池），vl_nnrelu（ReLU激活），vl_nnsigmoid（Sigmoid激活），vl_nnsoftmax（softmax运算符），vl_nnloss（分类正常丢失），vl_nnbnorm（分批正规化），vl_nnspnorm（空间规范化），vl_nnnormalize（局部响应规范化LRN）或vl_nnpdist（p距离）。 <br> 有足够多的层来实现许多有趣的最先进的网络开箱即用，甚至从其他工具箱，如caffe导入。 <br> NNs通常用作分类器或回归。在fig. 1.1的示例中，输出^ y = f（x）是概率的向量，一个用于1000个可能的图像标签（狗，猫，三叶虫，…）中的每一个。如果y是图像x的真实标签，我们可以通过损失函数来测量CNN性能，该损失函数对分类错误赋予惩罚。然后可以调整或学习CNN参数以最小化在标记的示例图像的大数据集上的平均损失。</p> 
+<p>学习通常使用随机梯度下降（SGD）的变体。 虽然这是一个有效的方法（对于这种类型的问题），但网络可能包含几百万个参数，需要在数百万的图像上进行训练; 因此，效率是MATLAB设计中的一个重要部分，如第1.4节中进一步讨论的。 SGD还需要计算CNN导数，如下一节所述。</p> 
+<h3 id="22网络结构">2.2网络结构</h3> 
+<p>在最简单的情况下，NN中的层按顺序排列; 然而，更复杂的互连也是可能的，并且事实上在许多情况下非常有用。 本节讨论这种配置，并引入一个图形符号来可视化它们。</p> 
+<h3 id="221序列">2.2.1序列</h3> 
+<p>首先考虑网络中的计算块f。 这可以表示示意性地作为接收数据x和参数w作为输入并且产生数据y作为输出的框： <br> <img src="https://images2.imgbox.com/99/18/DNPNHRtI_o.png" alt="这里写图片描述" title=""> <br> 如上所述，在最简单的情况下，块被链接在序列f1-&gt; f2-&gt; … fL中，产生以下结构： <br> <img src="https://images2.imgbox.com/8a/2b/7HAJ2I2l_o.png" alt="这里写图片描述" title=""> <br> 给定输入x0，评估网络是评估所有块的简单问题。从左到右，其定义复合函数xL = f（x0; w1;：：：; wL）。</p> 
+<h3 id="22-网络结构">2.2 网络结构</h3> 
+<p><img src="https://images2.imgbox.com/9d/51/qGeTosvi_o.png" alt="这里写图片描述" title=""></p> 
+<h3 id="222定向非循环图">2.2.2定向非循环图</h3> 
+<p>一个不限于一个接一个地链接层。 事实上，评估NN唯一的要求是，当必须评估层时，在其之前已经评估了其所有输入。 当层之间的互连形成有向无环图或简称DAG时，这是可能的。 <br> 为了可视化DAG，引入用于网络变量的附加节点是有用的，fig.2.1的示例中那样。这里框表示函数，圆圈表示变量（参数被视为特殊类型的变量）。 在该示例中，x0和x4是CNN的输入，x6和x7是输出。 <br> 函数可以采取任何数量的输入（例如f3和f5取两个）并且具有任何数量的输出（例如f4具有两个）。 这个图的几个值得注意的属性： <br> <strong>1</strong>图表是二分的，在某种意义上，箭头总是从框到圆和 <br> 从圆圈到框。 <br> <strong>2</strong>函数可以有任意数量的输入或输出; 变量和参数可以具有任意数量的输出（具有更多一个输出的参数被共享在不同层之间）; 变量最多只有一个输入和参数无。 <br> <strong>3</strong>没有输入箭头和参数的变量不由网络计算，但必须在评估之前设置，即它们是输入。 任何变量（或甚至参数）可以用作输出，但是这些变量通常是没有输出的变量。 <br> <strong>4</strong>由于图是非循环的，因此可以通过对函数和函数进行排序来评估CNN一个接一个地计算它们（在该示例中，评估函数阶f1; f2; f3; f4; f5将工作）。</p> 
+<h3 id="23计算具有反向传播的导数">2.3计算具有反向传播的导数</h3> 
+<p>学习NN需要计算相对于网络的损失的导数参数。使用称为反向传播的算法计算导数，其是用于导数的链规则的存储器有效实现。首先，我们讨论单层的导数，然后讨论整个网络的导数。</p> 
+<h3 id="231张量函数的导数">2.3.1张量函数的导数</h3> 
+<p>···这一章公式太多，不知道怎么在这个编辑器页面上打公式，暂时放一下，以后有时间再补上···主要是原理，在前面CNN基本模型里已经有分析，做这个主要还是为了用工具包···</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7db5216116b3f9a138cfd155b8143db0/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">VS中关于预编译头文件的介绍</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1b2904e356bd058c9677b4ba0f0b5521/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">多叉树遍历</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

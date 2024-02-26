@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>实现基于Netty的“请求-响应”同步通信机制 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="实现基于Netty的“请求-响应”同步通信机制" />
+<meta property="og:description" content="实现基于Netty的“请求-响应”同步通信机制
+设计思路
+Netty提供了异步IO和同步IO的统一实现，但是我们的需求其实和IO的同步异步并无关系。我们的关键是要实现请求-响应这种典型的一问一答交互方式。要实现这个需求，需要解决两个问题：
+请求和响应的正确匹配
+客户端发送数据后，服务端返回响应结果的时候，怎么和客户端的请求正确匹配起来呢，（即一个请求对应一个自己的响应）？
+解决思路：通过客户端唯一的RequestId，服务端返回的响应中需要包含该RequestId，这样客户端就可以通过RequestId来正确匹配请求响应。
+请求线程和响应线程的通信。
+请求线程会在发出请求后，同步等待服务端的返回。因此，就需要解决，Netty客户端在接受到响应之后，怎么通知请求线程结果。
+解决思路：客户端线程在发送请求后，进入等待，服务器返回响应后，根据RequestId来唤醒客户端的请求线程，并把结果返回给请求线程
+解决方案
+利用Java中的CountDownLatch类来实现同步Future。
+具体过程是：客户端发送请求后将&lt;请求ID，Future&gt;的键值对保存到一个缓存中，这时候用Future等待结果，挂住请求线程；当Netty客户端收到服务端的响应后，响应线程根据请求ID从缓存中取出Future，然后设置响应结果到Future中。这个时候利用CountDownLatch的通知机制，通知请求线程。请求线程从Future中拿到响应结果，然后做业务处理。
+缓存使用google的guava
+&lt;!-- guava --&gt;
+&lt;dependency&gt;
+&lt;groupId&gt;com.google.guava&lt;/groupId&gt;
+&lt;artifactId&gt;guava&lt;/artifactId&gt;
+&lt;version&gt;28.0-jre&lt;/version&gt;
+&lt;/dependency&gt;
+&lt;!-- Netty --&gt;
+&lt;dependency&gt;
+&lt;groupId&gt;io.netty&lt;/groupId&gt;
+&lt;artifactId&gt;netty-all&lt;/artifactId&gt;
+&lt;version&gt;4.1.39.Final&lt;/version&gt;
+&lt;/dependency&gt;
+package com.topinfo.ci.netty.client;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+public class SyncFuture&lt;T&gt; implements Future&lt;T&gt; {
+// 因为请求和响应是一一对应的，因此初始化CountDownLatch值为1。
+private CountDownLatch latch = new CountDownLatch(1);
+// 需要响应线程设置的响应结果
+private T response;
+// Futrue的请求时间，用于计算Future是否超时
+private long beginTime = System.currentTimeMillis();
+public SyncFuture() {
+}
+@Override
+public boolean cancel(boolean mayInterruptIfRunning) {" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b978661d83b9e51bc0c6e14ad0e445cd/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-02-10T08:48:00+08:00" />
+<meta property="article:modified_time" content="2022-02-10T08:48:00+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">实现基于Netty的“请求-响应”同步通信机制</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>实现基于Netty的“请求-响应”同步通信机制<br> 设计思路<br> Netty提供了异步IO和同步IO的统一实现，但是我们的需求其实和IO的同步异步并无关系。我们的关键是要实现请求-响应这种典型的一问一答交互方式。要实现这个需求，需要解决两个问题：<br> 请求和响应的正确匹配<br> 客户端发送数据后，服务端返回响应结果的时候，怎么和客户端的请求正确匹配起来呢，（即一个请求对应一个自己的响应）？<br> 解决思路：通过客户端唯一的RequestId，服务端返回的响应中需要包含该RequestId，这样客户端就可以通过RequestId来正确匹配请求响应。<br> 请求线程和响应线程的通信。<br> 请求线程会在发出请求后，同步等待服务端的返回。因此，就需要解决，Netty客户端在接受到响应之后，怎么通知请求线程结果。<br> 解决思路：客户端线程在发送请求后，进入等待，服务器返回响应后，根据RequestId来唤醒客户端的请求线程，并把结果返回给请求线程<br> 解决方案<br> 利用Java中的CountDownLatch类来实现同步Future。<br> 具体过程是：客户端发送请求后将&lt;请求ID，Future&gt;的键值对保存到一个缓存中，这时候用Future等待结果，挂住请求线程；当Netty客户端收到服务端的响应后，响应线程根据请求ID从缓存中取出Future，然后设置响应结果到Future中。这个时候利用CountDownLatch的通知机制，通知请求线程。请求线程从Future中拿到响应结果，然后做业务处理。<br> 缓存使用google的guava<br>         &lt;!-- guava --&gt;<br>         &lt;dependency&gt;<br>             &lt;groupId&gt;com.google.guava&lt;/groupId&gt;<br>             &lt;artifactId&gt;guava&lt;/artifactId&gt;<br>             &lt;version&gt;28.0-jre&lt;/version&gt;<br>         &lt;/dependency&gt;</p> 
+<p>        &lt;!-- Netty --&gt;<br>         &lt;dependency&gt;<br>             &lt;groupId&gt;io.netty&lt;/groupId&gt;<br>             &lt;artifactId&gt;netty-all&lt;/artifactId&gt;<br>             &lt;version&gt;4.1.39.Final&lt;/version&gt;<br>         &lt;/dependency&gt;</p> 
+<p>package com.topinfo.ci.netty.client;</p> 
+<p>import java.util.concurrent.CountDownLatch;<br> import java.util.concurrent.Future;<br> import java.util.concurrent.TimeUnit;</p> 
+<p>public class SyncFuture&lt;T&gt; implements Future&lt;T&gt; {<!-- --></p> 
+<p>    // 因为请求和响应是一一对应的，因此初始化CountDownLatch值为1。<br>     private CountDownLatch latch = new CountDownLatch(1);<br>     <br>     // 需要响应线程设置的响应结果<br>     private T response;<br>     <br>     // Futrue的请求时间，用于计算Future是否超时<br>     private long beginTime = System.currentTimeMillis();</p> 
+<p>    public SyncFuture() {<!-- --><br>     }</p> 
+<p>    @Override<br>     public boolean cancel(boolean mayInterruptIfRunning) {<!-- --><br>         return false;<br>     }</p> 
+<p>    @Override<br>     public boolean isCancelled() {<!-- --><br>         return false;<br>     }</p> 
+<p>    @Override<br>     public boolean isDone() {<!-- --><br>         if (response != null) {<!-- --><br>             return true;<br>         }<br>         return false;<br>     }</p> 
+<p>    // 获取响应结果，直到有结果才返回。<br>     @Override<br>     public T get() throws InterruptedException {<!-- --><br>         latch.await();<br>         return this.response;<br>     }</p> 
+<p>    // 获取响应结果，直到有结果或者超过指定时间就返回。<br>     @Override<br>     public T get(long timeout, TimeUnit unit) throws InterruptedException {<!-- --><br>         if (latch.await(timeout, unit)) {<!-- --><br>             return this.response;<br>         }<br>         return null;<br>     }</p> 
+<p>    // 用于设置响应结果，并且做countDown操作，通知请求线程<br>     public void setResponse(T response) {<!-- --><br>         this.response = response;<br>         latch.countDown();<br>     }</p> 
+<p>    public long getBeginTime() {<!-- --><br>         return beginTime;<br>     }<br> }</p> 
+<p><br> 客户端<br> package com.topinfo.ci.netty.client;</p> 
+<p>import java.util.concurrent.TimeUnit;</p> 
+<p>import javax.annotation.PostConstruct;</p> 
+<p>import org.slf4j.Logger;<br> import org.slf4j.LoggerFactory;<br> import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.stereotype.Component;</p> 
+<p>import io.netty.bootstrap.Bootstrap;<br> import io.netty.buffer.ByteBuf;<br> import io.netty.buffer.Unpooled;<br> import io.netty.channel.ChannelFuture;<br> import io.netty.channel.ChannelFutureListener;<br> import io.netty.channel.ChannelOption;<br> import io.netty.channel.EventLoop;<br> import io.netty.channel.EventLoopGroup;<br> import io.netty.channel.nio.NioEventLoopGroup;<br> import io.netty.channel.socket.SocketChannel;<br> import io.netty.channel.socket.nio.NioSocketChannel;<br> import io.netty.util.CharsetUtil;</p> 
+<p><br> /**<br>  *@Description: Netty客户端<br>  *@Author:杨攀<br>  *@Since:2019年9月26日下午8:54:59  <br>  */<br> @Component<br> public class NettyClient {<!-- --></p> 
+<p>    private static final Logger LOGGER = LoggerFactory.getLogger(NettyClient.class);<br>     <br>     private EventLoopGroup group = new NioEventLoopGroup();</p> 
+<p>    /**<br>      *@Fields DELIMITER : 自定义分隔符，服务端和客户端要保持一致<br>      */<br>     public static final String DELIMITER = "@@";<br>     <br>     /**<br>      * @Fields hostIp : 服务端ip<br>      */<br>     private String hostIp = "192.168.90.96";</p> 
+<p>    /**<br>      * @Fields port : 服务端端口<br>      */<br>     private int port= 8888;</p> 
+<p>    /**<br>      * @Fields socketChannel : 通道<br>      */<br>     private SocketChannel socketChannel;</p> 
+<p>    <br>     /**<br>      *@Fields clientHandlerInitilizer : 初始化<br>      */<br>     @Autowired<br>     private NettyClientHandlerInitilizer clientHandlerInitilizer;<br>     <br>     /**<br>      * @Description: 启动客户端<br>      * @Author:杨攀<br>      * @Since: 2019年9月12日下午4:43:21<br>      */<br>     @SuppressWarnings("unchecked")<br>     @PostConstruct<br>     public void start() {<!-- --></p> 
+<p>        Bootstrap bootstrap = new Bootstrap();<br>         bootstrap.group(group)<br>             // 指定Channel<br>             .channel(NioSocketChannel.class)<br>             // 服务端地址<br>             .remoteAddress(hostIp, port)<br>             <br>             // 将小的数据包包装成更大的帧进行传送，提高网络的负载,即TCP延迟传输<br>             .option(ChannelOption.SO_KEEPALIVE, true)<br>             // 将小的数据包包装成更大的帧进行传送，提高网络的负载,即TCP延迟传输<br>             .option(ChannelOption.TCP_NODELAY, true)<br>             .handler(clientHandlerInitilizer);<br>         <br>         // 连接<br>         ChannelFuture channelFuture = bootstrap.connect();<br>          //客户端断线重连逻辑<br>         channelFuture.addListener(new ChannelFutureListener() {<!-- --></p> 
+<p>            @Override<br>             public void operationComplete(ChannelFuture future) throws Exception {<!-- --><br>                 if(future.isSuccess()) {<!-- --><br>                     LOGGER.info("连接Netty服务端成功...");<br>                 }else {<!-- --><br>                     <br>                     LOGGER.info("连接Netty服务端失败，进行断线重连...");<br>                     final EventLoop loop =future.channel().eventLoop();<br>                     loop.schedule(new Runnable() {<!-- --><br>                         @Override<br>                         public void run() {<!-- --><br>                             LOGGER.info("连接正在重试...");<br>                             start();<br>                         }<br>                     }, 20, TimeUnit.SECONDS);<br>                 }<br>             }</p> 
+<p>             <br>         });<br>         <br>         socketChannel = (SocketChannel) channelFuture.channel();<br>     }</p> 
+<p>    <br>     /**<br>      *@Description: 消息发送<br>      *@Author:杨攀<br>      *@Since: 2019年9月12日下午5:08:47<br>      *@param message<br>      */<br>     public void sendMsg(String  message) {<!-- --><br>         <br>         String msg = message.concat(NettyClient.DELIMITER);</p> 
+<p>        ByteBuf byteBuf = Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8);<br>         ChannelFuture future = socketChannel.writeAndFlush(byteBuf);</p> 
+<p>        future.addListener(new ChannelFutureListener() {<!-- --></p> 
+<p>            @Override<br>             public void operationComplete(ChannelFuture future) throws Exception {<!-- --><br>                 <br>                 if(future.isSuccess()) {<!-- --><br>                     System.out.println("===========发送成功");<br>                 }else {<!-- --><br>                     System.out.println("------------------发送失败");<br>                 }<br>             }<br>         });<br>     }</p> 
+<p>    </p> 
+<p>    /**<br>      *@Description: 发送同步消息<br>      *@Author:杨攀<br>      *@Since: 2019年9月12日下午5:08:47<br>      *@param message<br>      */<br>     public String sendSyncMsg(String  message, SyncFuture&lt;String&gt; syncFuture) {<!-- --><br>         <br>         String result = "";<br>         <br>         String msg = message.concat(NettyClient.DELIMITER);</p> 
+<p>        ByteBuf byteBuf = Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8);<br>         <br>         try {<!-- --><br>             <br>             ChannelFuture future = socketChannel.writeAndFlush(byteBuf);<br>             future.addListener(new ChannelFutureListener() {<!-- --></p> 
+<p>                @Override<br>                 public void operationComplete(ChannelFuture future) throws Exception {<!-- --><br>                     <br>                     if(future.isSuccess()) {<!-- --><br>                         System.out.println("===========发送成功");<br>                     }else {<!-- --><br>                         System.out.println("------------------发送失败");<br>                     }<br>                 }<br>             });<br>             <br>             // 等待 8 秒<br>             result = syncFuture.get(8, TimeUnit.SECONDS);<br>             <br>         } catch (InterruptedException e) {<!-- --><br>             e.printStackTrace();<br>         }<br>         <br>         return result;<br>     }</p> 
+<p>    public String getHostIp() {<!-- --><br>         return hostIp;<br>     }</p> 
+<p><br>     public void setHostIp(String hostIp) {<!-- --><br>         this.hostIp = hostIp;<br>     }</p> 
+<p><br>     public int getPort() {<!-- --><br>         return port;<br>     }</p> 
+<p><br>     public void setPort(int port) {<!-- --><br>         this.port = port;<br>     }<br>     <br>     <br> }</p> 
+<p><br> NettyClientHandlerInitilizer<br> package com.topinfo.ci.netty.client;</p> 
+<p>import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.stereotype.Component;</p> 
+<p>import io.netty.buffer.ByteBuf;<br> import io.netty.buffer.Unpooled;<br> import io.netty.channel.Channel;<br> import io.netty.channel.ChannelInitializer;<br> import io.netty.channel.ChannelPipeline;<br> import io.netty.handler.codec.DelimiterBasedFrameDecoder;<br> import io.netty.handler.codec.Delimiters;<br> import io.netty.handler.codec.string.StringDecoder;<br> import io.netty.handler.codec.string.StringEncoder;<br> import io.netty.util.CharsetUtil;</p> 
+<p>@Component<br> public class NettyClientHandlerInitilizer extends ChannelInitializer&lt;Channel&gt; {<!-- --></p> 
+<p>    /**<br>      *@Fields clientHandler : 客户端处理<br>      */<br>     @Autowired<br>     private NettyClientHandler clientHandler;<br>     <br>     @Override<br>     protected void initChannel(Channel ch) throws Exception {<!-- --><br>         <br>         // 通过socketChannel去获得对应的管道<br>                 ChannelPipeline channelPipeline = ch.pipeline();<br>                 <br>                 /*<br>                  * channelPipeline中会有很多handler类（也称之拦截器类）<br>                  * 获得pipeline之后，可以直接.addLast添加handler<br>                  */<br>                 ByteBuf buf = Unpooled.copiedBuffer(NettyClient.DELIMITER.getBytes());<br>                 channelPipeline.addLast("framer", new DelimiterBasedFrameDecoder(1024*1024*2, buf));<br>                 //channelPipeline.addLast("decoder",new StringDecoder(CharsetUtil.UTF_8));<br>                 //channelPipeline.addLast("encoder",new StringEncoder(CharsetUtil.UTF_8));<br>                 channelPipeline.addLast(clientHandler);<br>         <br>     }</p> 
+<p>}</p> 
+<p><br> NettyClientHandler<br> NettyClientHandler： 客户端处理类，实现了接收<br> package com.topinfo.ci.netty.client;</p> 
+<p>import java.util.concurrent.TimeUnit;</p> 
+<p>import io.netty.buffer.ByteBuf;<br> import io.netty.util.CharsetUtil;<br> import org.slf4j.Logger;<br> import org.slf4j.LoggerFactory;<br> import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.stereotype.Component;</p> 
+<p>import com.topinfo.ci.netty.service.NettyClientService;<br> import com.topinfo.ci.netty.utils.ExceptionUtil;</p> 
+<p>import io.netty.channel.Channel;<br> import io.netty.channel.ChannelHandler;<br> import io.netty.channel.ChannelHandlerContext;<br> import io.netty.channel.EventLoop;<br> import io.netty.channel.SimpleChannelInboundHandler;</p> 
+<p>@Component<br> @ChannelHandler.Sharable // 标注一个channel handler可以被多个channel安全地共享<br> public class NettyClientHandler extends SimpleChannelInboundHandler&lt;ByteBuf&gt; {<!-- --></p> 
+<p>    private static final Logger LOGGER = LoggerFactory.getLogger(NettyClientHandler.class);</p> 
+<p>    @Autowired<br>     private NettyClientService service;</p> 
+<p>    @Autowired<br>     private NettyClient nettyClient;</p> 
+<p>    /**<br>      * @Description: 服务端发生消息给客户端，会触发该方法进行接收消息<br>      * @Author:杨攀<br>      * @Since: 2019年9月12日下午5:03:31<br>      * @param ctx<br>      * @param byteBuf<br>      * @throws Exception<br>      */<br>     @Override<br>     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {<!-- --></p> 
+<p>        String msg = byteBuf.toString(CharsetUtil.UTF_8);</p> 
+<p>        LOGGER.info("客户端收到消息：{}", msg);</p> 
+<p>        //service.ackMsg(msg);<br>         service.ackSyncMsg(msg); // 同步消息返回<br>     }</p> 
+<p>    @Override<br>     public void channelActive(ChannelHandlerContext ctx) throws Exception {<!-- --><br>         LOGGER.info("请求连接成功...");<br>     }</p> 
+<p>    @Override<br>     public void channelInactive(ChannelHandlerContext ctx) throws Exception {<!-- --></p> 
+<p>        LOGGER.info("连接被断开...");</p> 
+<p>        // 使用过程中断线重连<br>         final EventLoop eventLoop = ctx.channel().eventLoop();<br>         eventLoop.schedule(new Runnable() {<!-- --></p> 
+<p>            @Override<br>             public void run() {<!-- --><br>                 // 重连<br>                 nettyClient.start();<br>             }<br>         }, 20, TimeUnit.SECONDS);<br>         super.channelInactive(ctx);<br>     }</p> 
+<p>    /**<br>      * 处理异常, 一般将实现异常处理逻辑的Handler放在ChannelPipeline的最后<br>      * 这样确保所有入站消息都总是被处理，无论它们发生在什么位置，下面只是简单的关闭Channel并打印异常信息<br>      *<br>      * @param ctx<br>      * @param cause<br>      * @throws Exception<br>      */<br>     @Override<br>     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {<!-- --><br>         cause.printStackTrace();</p> 
+<p>        // 输出到日志中<br>         ExceptionUtil.getStackTrace(cause);</p> 
+<p>        Channel channel = ctx.channel();<br>         if (channel.isActive()) {<!-- --><br>             ctx.close();<br>         }<br>     }</p> 
+<p>}</p> 
+<p><br> NettyClientServiceImpl<br> NettyClientServiceImpl： 客户端封装实现类， 它接口就不贴出来了。<br> package com.topinfo.ci.netty.service.impl;</p> 
+<p>import com.topinfo.ci.netty.bean.RealDataInfo;</p> 
+<p>import java.util.concurrent.TimeUnit;</p> 
+<p>import org.slf4j.Logger;<br> import org.slf4j.LoggerFactory;<br> import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.cache.Cache;<br> import org.springframework.cache.CacheManager;<br> import org.springframework.stereotype.Service;</p> 
+<p>import com.alibaba.fastjson.JSON;<br> import com.alibaba.fastjson.JSONObject;<br> import com.google.common.cache.CacheBuilder;<br> import com.google.common.cache.CacheLoader;<br> import com.google.common.cache.LoadingCache;<br> import com.google.common.cache.RemovalListener;<br> import com.google.common.cache.RemovalNotification;<br> import com.topinfo.ci.netty.bean.Message;<br> import com.topinfo.ci.netty.client.NettyClient;<br> import com.topinfo.ci.netty.client.SyncFuture;<br> import com.topinfo.ci.netty.service.NettyClientService;<br> import com.topinfo.ci.netty.utils.AESUtil;</p> 
+<p>@Service<br> public class NettyClientServiceImpl implements NettyClientService {<!-- --></p> 
+<p>    private static final Logger LOGGER = LoggerFactory.getLogger(NettyClientServiceImpl.class);<br>     </p> 
+<p>    //缓存接口这里是LoadingCache，LoadingCache在缓存项不存在时可以自动加载缓存<br>     private static LoadingCache&lt;String, SyncFuture&gt; futureCache = CacheBuilder.newBuilder()<br>             //设置缓存容器的初始容量为10<br>             .initialCapacity(100)<br>             // maximumSize 设置缓存大小<br>             .maximumSize(10000)<br>             //设置并发级别为20，并发级别是指可以同时写缓存的线程数<br>             .concurrencyLevel(20)<br>             // expireAfterWrite设置写缓存后8秒钟过期<br>             .expireAfterWrite(8, TimeUnit.SECONDS)<br>             //设置缓存的移除通知<br>             .removalListener(new RemovalListener&lt;Object, Object&gt;() {<!-- --><br>                 @Override<br>                 public void onRemoval(RemovalNotification&lt;Object, Object&gt; notification) {<!-- --><br>                     LOGGER.debug("LoadingCache: {} was removed, cause is {}",notification.getKey(), notification.getCause());<br>                 }<br>             })<br>             //build方法中可以指定CacheLoader，在缓存不存在时通过CacheLoader的实现自动加载缓存<br>             .build(new CacheLoader&lt;String, SyncFuture&gt;() {<!-- --><br>                 @Override<br>                 public SyncFuture load(String key) throws Exception {<!-- --><br>                     // 当获取key的缓存不存在时，不需要自动添加<br>                     return null;<br>                 }<br>             });<br>     <br>     <br>     @Autowired<br>     private NettyClient nettyClient;<br>     <br>     @Autowired<br>     private CacheManager cacheManager;<br>  <br>     @Override<br>     public boolean sendMsg(String text, String dataId, String serviceId) {<!-- --><br>         <br>         LOGGER.info("发送的内容：{}", text);</p> 
+<p>        //TODO        <br>         //nettyClient.sendMsg(json);<br>         return true;<br>     }<br>  </p> 
+<p>    @Override<br>     public String sendSyncMsg(String text, String dataId, String serviceId) {<!-- --><br>         <br>         SyncFuture&lt;String&gt; syncFuture = new SyncFuture&lt;String&gt;();<br>         // 放入缓存中<br>         futureCache.put(dataId, syncFuture);<br>         <br>         // 封装数据<br>         JSONObject object = new JSONObject();<br>         object.put("dataId", dataId);<br>         object.put("text", text);<br>         <br>         // 发送同步消息<br>         String result = nettyClient.sendSyncMsg(object.toJSONString(), syncFuture);<br>         <br>         return result;<br>     }</p> 
+<p>    @Override<br>     public void ackSyncMsg(String msg) {<!-- --><br>         <br>         LOGGER.info("ACK确认信息: {}",msg);<br>         <br>         JSONObject object =JSON.parseObject(msg);<br>         String dataId = object.getString("dataId");<br>         <br>         // 从缓存中获取数据<br>         SyncFuture&lt;String&gt; syncFuture = futureCache.getIfPresent(dataId);<br>         <br>         // 如果不为null, 则通知返回<br>         if(syncFuture != null) {<!-- --><br>             syncFuture.setResponse(msg);<br>             //主动释放<br>             futureCache.invalidate(dataId);<br>         }<br>     }</p> 
+<p>}</p> 
+<p>TestController<br> TestController： 测试TestController。<br> package com.topinfo.ci.netty.controller;</p> 
+<p>import com.alibaba.fastjson.JSON;<br> import com.topinfo.ci.netty.bean.CmwSensoralert;<br> import com.topinfo.ci.netty.bean.Equip;<br> import com.topinfo.ci.netty.bean.JsonResult;<br> import com.topinfo.ci.netty.bean.RealDataInfo;<br> import com.topinfo.ci.netty.mapper.SensorAlertMapper;<br> import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.web.bind.annotation.RequestMapping;<br> import org.springframework.web.bind.annotation.RestController;</p> 
+<p>import com.topinfo.ci.netty.service.NettyClientService;</p> 
+<p>import java.util.ArrayList;<br> import java.util.HashMap;<br> import java.util.List;<br> import java.util.Map;</p> 
+<p>@RestController<br> @RequestMapping("/test")<br> public class TestController {<!-- --><br>     <br>     @Autowired<br>     private NettyClientService clientService;<br>     @Autowired<br>     private SensorAlertMapper sensorAlertMapper;</p> 
+<p>    @RequestMapping("/sendSyncMsg")<br>     public String sendSyncMsg(String dataId, String text) {<!-- --><br>         <br>         String serviceId = "mmmm";<br>         <br>         String result = clientService.sendSyncMsg(text, dataId, serviceId);<br>         <br>         return "result:"+result ;<br>     }<br>      <br> }</p> 
+<p>服务端代码<br> package com.topinfo.ju.ccon.netty.server;</p> 
+<p>import java.net.InetSocketAddress;</p> 
+<p>import javax.annotation.PostConstruct;<br> import javax.annotation.PreDestroy;</p> 
+<p>import org.slf4j.Logger;<br> import org.slf4j.LoggerFactory;<br> import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.stereotype.Component;</p> 
+<p>import io.netty.bootstrap.ServerBootstrap;<br> import io.netty.channel.ChannelFuture;<br> import io.netty.channel.ChannelOption;<br> import io.netty.channel.EventLoopGroup;<br> import io.netty.channel.nio.NioEventLoopGroup;<br> import io.netty.channel.socket.nio.NioServerSocketChannel;</p> 
+<p>@Component<br> public class NettyServer {<!-- --></p> 
+<p>    private static final Logger LOGGER = LoggerFactory.getLogger(NettyServer.class);<br>     <br>     /**<br>      *@Fields DELIMITER : 自定义分隔符，服务端和客户端要保持一致<br>      */<br>     public static final String DELIMITER = "@@";<br>     <br>     /**<br>      * @Fields boss : boss 线程组用于处理连接工作, 默认是系统CPU个数的两倍，也可以根据实际情况指定<br>      */<br>     private EventLoopGroup boss = new NioEventLoopGroup();</p> 
+<p>    /**<br>      * @Fields work : work 线程组用于数据处理, 默认是系统CPU个数的两倍，也可以根据实际情况指定<br>      */<br>     private EventLoopGroup work = new NioEventLoopGroup();</p> 
+<p>    /**<br>      * @Fields port : 监听端口<br>      */<br>     private Integer port = 8888;<br>     <br>     @Autowired<br>     private NettyServerHandlerInitializer handlerInitializer;</p> 
+<p>    /**<br>      * @throws InterruptedException<br>      * @Description: 启动Netty Server<br>      * @Author:杨攀<br>      * @Since: 2019年9月12日下午4:21:35<br>      */<br>     @PostConstruct<br>     public void start() throws InterruptedException {<!-- --></p> 
+<p>        ServerBootstrap bootstrap = new ServerBootstrap();</p> 
+<p>        bootstrap.group(boss, work)<br>                 // 指定Channel<br>                 .channel(NioServerSocketChannel.class)<br>                 // 使用指定的端口设置套接字地址<br>                 .localAddress(new InetSocketAddress(port))</p> 
+<p>                // 服务端可连接队列数,对应TCP/IP协议listen函数中backlog参数<br>                 .option(ChannelOption.SO_BACKLOG, 1024)</p> 
+<p>                // 设置TCP长连接,一般如果两个小时内没有数据的通信时,TCP会自动发送一个活动探测数据报文<br>                 .childOption(ChannelOption.SO_KEEPALIVE, true)</p> 
+<p>                // 将小的数据包包装成更大的帧进行传送，提高网络的负载,即TCP延迟传输<br>                 .childOption(ChannelOption.TCP_NODELAY, true)<br>                 .childHandler(handlerInitializer);</p> 
+<p>        ChannelFuture future = bootstrap.bind().sync();<br>         <br>         if (future.isSuccess()) {<!-- --><br>             LOGGER.info("启动 Netty Server...");<br>         }<br>     }<br>     <br>     @PreDestroy<br>     public void destory() throws InterruptedException {<!-- --><br>         boss.shutdownGracefully().sync();<br>         work.shutdownGracefully().sync();<br>         LOGGER.info("关闭Netty...");<br>     }<br> }</p> 
+<p>NettyServerHandlerInitializer<br> package com.topinfo.ju.ccon.netty.server;</p> 
+<p>import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.stereotype.Component;</p> 
+<p>import io.netty.buffer.ByteBuf;<br> import io.netty.buffer.Unpooled;<br> import io.netty.channel.Channel;<br> import io.netty.channel.ChannelInitializer;<br> import io.netty.channel.ChannelPipeline;<br> import io.netty.handler.codec.DelimiterBasedFrameDecoder;<br> import io.netty.handler.codec.string.StringDecoder;<br> import io.netty.handler.codec.string.StringEncoder;<br> import io.netty.util.CharsetUtil;</p> 
+<p>@Component<br> public class NettyServerHandlerInitializer extends ChannelInitializer&lt;Channel&gt; {<!-- --></p> 
+<p>    /**<br>      *@Fields serverHandler : 服务处理<br>      */<br>     @Autowired<br>     private NettyServerHandler serverHandler;<br>     <br>     <br>     @Override<br>     protected void initChannel(Channel ch) throws Exception {<!-- --></p> 
+<p>        // 通过socketChannel去获得对应的管道<br>         ChannelPipeline channelPipeline = ch.pipeline();<br>         <br>         /*<br>          * channelPipeline中会有很多handler类（也称之拦截器类）<br>          * 获得pipeline之后，可以直接.addLast添加handler<br>          */<br>         ByteBuf buf = Unpooled.copiedBuffer(NettyServer.DELIMITER.getBytes());<br>         channelPipeline.addLast("framer", new DelimiterBasedFrameDecoder(1024*1024*2, buf));<br>         //channelPipeline.addLast("decoder",new StringDecoder(CharsetUtil.UTF_8));<br>         //channelPipeline.addLast("encoder",new StringEncoder(CharsetUtil.UTF_8));<br>         <br>         // 自定义解码器，粘包/拆包/断包<br>         <br>         channelPipeline.addLast(serverHandler);<br>     }</p> 
+<p>}<br> NettyServerHandler<br> package com.topinfo.ju.ccon.netty.server;</p> 
+<p><br> import java.util.concurrent.atomic.AtomicInteger;</p> 
+<p>import org.apache.commons.lang3.StringUtils;<br> import org.slf4j.Logger;<br> import org.slf4j.LoggerFactory;<br> import org.springframework.beans.factory.annotation.Autowired;<br> import org.springframework.stereotype.Component;</p> 
+<p>import com.alibaba.fastjson.JSONObject;<br> import com.topinfo.ju.ccon.netty.bean.Message;</p> 
+<p>import io.netty.buffer.ByteBuf;<br> import io.netty.buffer.Unpooled;<br> import io.netty.channel.Channel;<br> import io.netty.channel.ChannelHandler;<br> import io.netty.channel.ChannelHandlerContext;<br> import io.netty.channel.SimpleChannelInboundHandler;<br> import io.netty.util.CharsetUtil;</p> 
+<p>@Component<br> @ChannelHandler.Sharable //标注一个channel handler可以被多个channel安全地共享<br> public class NettyServerHandler extends SimpleChannelInboundHandler&lt;ByteBuf&gt; {<!-- --></p> 
+<p>    private static final Logger LOGGER = LoggerFactory.getLogger(NettyServerHandler.class);<br>     <br>     public static AtomicInteger nConnection = new AtomicInteger(0);<br>     <br>     @Override<br>     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {<!-- --><br>         <br>         String txt = msg.toString(CharsetUtil.UTF_8);<br>         <br>         LOGGER.info("收到客户端的消息：{}", txt);<br>     <br>         <br>         <br>         ackMessage(ctx, txt);<br>     }</p> 
+<p>    /**<br>      *@Description: 确认消息<br>      *@Author:杨攀<br>      *@Since: 2019年9月17日上午11:22:27<br>      *@param ctx<br>      *@param message<br>      */<br>     public void ackMessage(ChannelHandlerContext ctx, String message) {<!-- --><br>         <br>         //自定义分隔符<br>         String msg = message+NettyServer.DELIMITER;<br>         <br>         ByteBuf byteBuf = Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8);<br>         <br>         //回应客户端<br>         ctx.writeAndFlush(byteBuf);<br>     }<br>     <br>     </p> 
+<p>    /**<br>      *@Description: 每次来一个新连接就对连接数加一<br>      *@Author:杨攀<br>      *@Since: 2019年9月16日下午3:04:42<br>      *@param ctx<br>      *@throws Exception<br>      */<br>     @Override<br>     public void channelActive(ChannelHandlerContext ctx) throws Exception {<!-- --><br>         nConnection.incrementAndGet();<br>         <br>         LOGGER.info("请求连接...{}，当前连接数: ：{}",  ctx.channel().id(),nConnection.get());<br>     }<br>     <br>     /**<br>      *@Description: 每次与服务器断开的时候，连接数减一<br>      *@Author:杨攀<br>      *@Since: 2019年9月16日下午3:06:10<br>      *@param ctx<br>      *@throws Exception<br>      */<br>     @Override<br>     public void channelInactive(ChannelHandlerContext ctx) throws Exception {<!-- --><br>         nConnection.decrementAndGet();<br>         LOGGER.info("断开连接...当前连接数: ：{}",  nConnection.get());<br>     }<br>     <br>     <br>     /**<br>      *@Description: 连接异常的时候回调<br>      *@Author:杨攀<br>      *@Since: 2019年9月16日下午3:06:55<br>      *@param ctx<br>      *@param cause<br>      *@throws Exception<br>      */<br>     @Override<br>     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {<!-- --><br>         super.exceptionCaught(ctx, cause);<br>         <br>         // 打印错误日志<br>         cause.printStackTrace();<br>         <br>         Channel channel = ctx.channel();<br>         <br>         if(channel.isActive()){<!-- --><br>             ctx.close();<br>         }<br>         <br>     }<br>     <br> }</p> 
+<p></p> 
+<p>原文链接：<a href="https://segmentfault.com/a/1190000020507086" rel="nofollow" title="https://segmentfault.com/a/1190000020507086">https://segmentfault.com/a/1190000020507086</a></p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/404ff101dcdc837601e26b59a9be161c/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【windows软件】terminal软件添加git bash 命令行功能</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/079c90a36d5602f13fc5c35422fde08d/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Markdown常用样式</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

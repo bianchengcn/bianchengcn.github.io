@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>一文读懂分片基础原理, 数据分片, 跨分片交易, 区块链分片和缩放究竟是什么鬼？... - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="一文读懂分片基础原理, 数据分片, 跨分片交易, 区块链分片和缩放究竟是什么鬼？..." />
+<meta property="og:description" content="来源 | Hackernoon 译者 | 火火酱 责编 | Carol 出品 | 区块链大本营（blockchain_camp） 以太坊是所有区块链中一直与分片概念同步的底层平台，想要理解为什么以太坊开发者社区想要实现分片，重点是要理解分片是什么，以及这个解决方案为何如此有吸引力。
+根据ETH Gas Station的统计，向以太坊区块链中添加一项交易大约需要1.78分钟，每32秒生成一个新的区块，平均每秒处理15-20个交易。这个生态系统创造了一个有利于矿工而非用户的环境，如果用户想要优先处理他们的交易，就必须要提高他们的gas价格。
+由于低吞吐量、高延迟和高价格限制了以太坊网络性能，因此，目前以太坊上不太适合部署需要强可扩展性的服务和应用程序。
+什么是分片？
+简单来讲，分片是一种分区方式，可以在P2P网络中分散计算任务和存储工作负载，经过这种处理方式，每个节点不用负责处理整个网络的交易负载，只需要维护与其分区（或分片）相关的信息就可以了。
+为了进一步解释分片，我们可以看一下最简单的分片示例。以太坊的创始人Vitalik Buterin称其为“通过1000山寨币增加扩展性”。
+在本例中，不是运行单条区块链，而是运行多条区块链，我们将每条区块链称为一个shard（分片），而不是称之为区块链。反过来说，每个分片都有自己的验证器网络或者节点网络，可以使用PoW算法挖掘区块，也可以通过质押（staking）或投票（voting）来挖掘区块。
+分片所面临的挑战
+在尝试去使用分片时，我们面临的第一个问题是，由于每个分片都有自己的节点集，所以每个分片的安全性都低于像以太坊这样的单链。
+所以如果具有x数量节点的以太坊决定硬分叉并分裂为一条分片链，且将整个网络分布在超过10个分片上，那么每个分片将具有原链1%的安全性。这意味着通过控制原链5.1%（而不是51%）的节点，每个分片都可能会被破坏。
+我们遇到的第二个问题是：“我们如何选择哪个节点验证哪个分片？”对于一个不怎么好的参与者来说，只有当这5.1%的网络节点都在同一个分片中进行验证时，要控制这些节点才会是个问题。
+允许节点选择其在哪个分片中验证可能会导致频繁的网络攻击，因此将攻击风险减到最低的最佳方法，就是不允许节点选择验证哪个分片。
+实际上，所有的分片架构都是随机为分片分配节点的。将节点分配给分片需要非特定于分片的计算，并且几乎所有这些设计都使用单独的链来处理维护整个分片和节点网络。该链在以太坊中被称为信标链，负责生成随机数，将节点分配给分片，捕捉单个分片的快照，处理握手权益和其他各种功能。
+信标链有一些缺点。因为它们负责前面提到过的记录保存计算，所以网络使用的分片越多，信标链需要做的工作就越多，那么没有分片的网络可能会遇到低吞吐量加高延迟的问题，因此分片网络的可扩展性有其天然的局限性。
+然而，分片网络具有可乘性，因此如果网络效率得到改善，导致网络中节点处理交易的速度提高四倍，那么信标链就能够处理四倍的分片数量，将网络速度提高16倍。
+如何将数据分割为分片？
+让我们先看看节点通常在区块链上执行的功能：
+处理/验证交易
+将这些交易以及它们挖掘的区块中继给网络上的其他节点
+储存所有交易的历史
+随着网络的发展，节点需要能够跟上网络的需求及其发展需要。
+要增加处理中的交易数量需要每个节点都增加更多计算力。
+中继的交易越多，需要节点提供的宽带就越大。
+要在区块链上储存所有的数据也就需要节点逐渐增加更多的存储空间。
+观察这三个参数，你会发现，无论每秒的交易数或中继的交易数是否增加，数据存储量都会增加。
+在编写这篇文章之前，就已经提出过对存储进行分片但不对交易进行分片的方法，而且有些项目已经实现了交易处理（而非存储）的分片。
+然而，最常见的分片类型被称为“状态分片（State Sharding）”，包括每个分片中构建其自己区块链的节点，该区块链包含整个全球网络中仅仅影响它们自己那部分的交易，这意味着节点只需要存储它们分片的交易历史，处理影响它们分片的交易，并在它们的分片中中继这些交易。
+接下来，我们将介绍跨分片交易、无效交易和恶意行为。
+区块链的分片和缩放
+上文中，我们讨论了分片是什么，分片要解决的问题以及要有效实现分片需要克服的一些障碍。那么接下来我们将讨论跨分片交易、无效交易和恶意行为。
+正如上文描述的分片的基本类型并不是非常有效或者实用的分片方法，因为它们不能彼此通信，所以它们就像单一区块链一样。以简单的付款为例，如果用户A和用户B在同一个分片上，那么分片中的验证器能够毫无障碍地处理交易，但是当他们的账户在不同的分片上时，会出现什么状况呢？
+用户A在1#分片上，用户B在2#分片上。各个分片上的验证器将无法借记或贷记用户的账户，因为它们没有彼此分片的权限。
+然而，这个问题也是有解决方案的，下面就让我们来更详细地看一看其中一些解决方案：
+同步（同时）跨分片交易
+在这种情况下，当在1#分片的用户A要向在2#分片的用户B发送资金时，将同时在每个分片生成包含与此交易相关的状态转换（state transition）的区块，并且每个分片上的验证器会协同工作以确认这笔交易。
+早在2018年初，Vitalik Buterin就已提议将区块与此解决方案合并。
+（参见来源：https://ethresear.ch/t/merge-blocks-and-synchronous-cross-shard-state-execution/1240）
+异步跨分片交易
+这是一个较为容易完成的操作，并且协调起来也要简单的多，因此它比同步交易要更受欢迎。
+同样，我们将使用1#分片上的用户A想要给2#分片上的用户B汇款的例子。在此场景下，负责贷记用户B的账户的分片只有在有足够证据证明负责借记用户A账户的分片已经完成后，才会验证这次交易中B自己负责的部分。
+但是，这种方法并不是完美的，其中一个分片的一个区块被舍弃的可能性并不为零。当概率非零时，无论概率有多小，也仍是一个不容忽视的弱点。
+我们可以通过下图来详解一下原因：
+这个区块链有两个分片，巧合的是，它们都刚好在交易被合并到1#分片中的A区块和2#分片中的X’区块时分叉。
+当这样的分叉发生时，分片必须舍弃一条链并接受另一条链。此时，如果链A、B等成为1#分片中接受的链，W’、X’等成为2#分片中接受的链，那么交易将顺利完成，皆大欢喜。
+如果1#分片接受A’、B’等，2#分片接受W、X等，那么整个交易将失败，但这也是一种可以令人接受的结果，因为可以重新发送交易。
+但是如果1#分片接受链A、B等，2#分片接受链W、X等的话会发生什么呢？交易中的一部分（A、B等）被完成，但另一部分（W、X等）会被舍弃。
+分片中的恶意节点
+现在，你已经对分片及其工作原理有了更深入的理解，你可能会觉得满足了，也可能会有更多的问题，但至少还要考虑一件事：恶意节点。
+1、恶意节点 这种情况非常常见，当有可能出现大交易日时，无论是什么系统，都会有人想攻击该系统。
+2、批准无效区块" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/6269d639dc020f78563e34e0e31082bf/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2019-09-23T18:00:00+08:00" />
+<meta property="article:modified_time" content="2019-09-23T18:00:00+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">一文读懂分片基础原理, 数据分片, 跨分片交易, 区块链分片和缩放究竟是什么鬼？...</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <div class="rich_media_content" id="js_content"> 
+ <div> 
+  <img class="gallery-image" width="1124" src="https://images2.imgbox.com/f7/8c/iEjuRaK5_o.png" alt="640?wx_fmt=jpeg"> 
+ </div> 
+ <div> 
+  <em>来源 | Hackernoon</em> 
+  <br> 
+ </div> 
+ <div> 
+  <em>译者 | 火火酱</em> 
+ </div> 
+ <div> 
+  <em>责编 | Carol</em> 
+  <br> 
+ </div> 
+ <div> 
+  <em>出品 | 区块链大本营（blockchain_camp）</em> 
+ </div> 
+ <div> 
+  <strong></strong> 
+ </div> 
+ <p></p> 
+ <p> </p> 
+ <p>以太坊是所有区块链中一直与分片概念同步的底层平台，<strong>想要理解为什么以太坊开发者社区想要实现分片，重点是要理解分片是什么，以及这个解决方案为何如此有吸引力。</strong></p> 
+ <p></p> 
+ <p>根据ETH Gas Station的统计，向以太坊区块链中添加一项交易大约需要1.78分钟，每32秒生成一个新的区块，平均每秒处理15-20个交易。<strong>这个生态系统创造了一个有利于矿工而非用户的环境，如果用户想要优先处理他们的交易，就必须要提高他们的gas价格。</strong></p> 
+ <p></p> 
+ <p>由于低吞吐量、高延迟和高价格限制了以太坊网络性能，因此，目前以太坊上不太适合部署需要强可扩展性的服务和应用程序。</p> 
+ <p></p> 
+ <p></p> 
+ <p class="ql-align-center"><strong>什么是分片？</strong></p> 
+ <p class="ql-align-center"><strong></strong></p> 
+ <p> </p> 
+ <p>简单来讲，分片是一种分区方式，可以在P2P网络中分散计算任务和存储工作负载，经过这种处理方式，每个节点不用负责处理整个网络的交易负载，只需要维护与其分区（或分片）相关的信息就可以了。</p> 
+ <p></p> 
+ <p> 为了进一步解释分片，我们可以看一下最简单的分片示例。以太坊的创始人Vitalik Buterin称其为“<strong>通过1000山寨币增加扩展性</strong>”。</p> 
+ <p></p> 
+ <p> 在本例中，<strong>不是运行单条区块链，而是运行多条区块链</strong>，我们将每条区块链称为一个shard（分片），而不是称之为区块链。反过来说，每个分片都有自己的验证器网络或者节点网络，可以使用PoW算法挖掘区块，也可以通过质押（staking）或投票（voting）来挖掘区块。</p> 
+ <p></p> 
+ <p></p> 
+ <p class="ql-align-center"><strong>分片所面临的挑战</strong></p> 
+ <p class="ql-align-center"></p> 
+ <p> </p> 
+ <p>在尝试去使用分片时，我们面临的第一个问题是，<strong>由于每个分片都有自己的节点集，所以每个分片的安全性都低于像以太坊这样的单链。</strong></p> 
+ <p></p> 
+ <p>所以如果具有x数量节点的以太坊决定硬分叉并分裂为一条分片链，且将整个网络分布在超过10个分片上，那么每个分片将具有原链1%的安全性。<strong>这</strong><strong>意味着通过控制原链5.1%（而不是51%）的节点，每个分片都可能会被破坏。</strong></p> 
+ <div> 
+  <br> 
+ </div> 
+ <p><img class="gallery-image" width="1000" src="https://images2.imgbox.com/8a/2b/X13G5Rea_o.png" alt="640?wx_fmt=jpeg"></p> 
+ <p> </p> 
+ <p></p> 
+ <p>我们遇到的第二个问题是：“<strong>我们如何选择哪个节点验证哪个分片？</strong>”对于一个不怎么好的参与者来说，只有当这5.1%的网络节点都在同一个分片中进行验证时，要控制这些节点才会是个问题。</p> 
+ <p></p> 
+ <p>允许节点选择其在哪个分片中验证可能会导致频繁的网络攻击，<strong>因此将攻击风险减到最低的最佳方法，</strong><strong>就是不允许节点选择验证哪个分片</strong>。</p> 
+ <p></p> 
+ <p><img class="gallery-image" width="1000" src="https://images2.imgbox.com/e3/6c/myLtC05v_o.png" alt="640?wx_fmt=jpeg"></p> 
+ <div> 
+  <br> 
+ </div> 
+ <p> </p> 
+ <p><strong>实际上，所有的分片架构都是随机为分片分配节点的。</strong>将节点分配给分片需要非特定于分片的计算，并且几乎所有这些设计都使用单独的链来处理维护整个分片和节点网络。该链在以太坊中被称为信标链，负责生成随机数，将节点分配给分片，捕捉单个分片的快照，处理握手权益和其他各种功能。</p> 
+ <p></p> 
+ <p> 信标链有一些缺点。因为它们负责前面提到过的记录保存计算，所以网络使用的分片越多，信标链需要做的工作就越多，那么没有分片的网络可能会遇到低吞吐量加高延迟的问题，因此分片网络的可扩展性有其天然的局限性。</p> 
+ <p></p> 
+ <p> 然而，分片网络具有可乘性，因此如果网络效率得到改善，导致网络中节点处理交易的速度提高四倍，那么信标链就能够处理四倍的分片数量，将网络速度提高16倍。</p> 
+ <p></p> 
+ <p></p> 
+ <p class="ql-align-center"><strong>如何将数据分割为分片？</strong></p> 
+ <p class="ql-align-center"></p> 
+ <p> </p> 
+ <p><strong>让我们先看看节点通常在区块链上执行的功能：</strong><strong></strong></p> 
+ <ol class="list-paddingleft-2"><li><p>处理/验证交易</p></li><li><p>将这些交易以及它们挖掘的区块中继给网络上的其他节点</p></li><li><p>储存所有交易的历史</p></li></ol> 
+ <p></p> 
+ <p><strong>随着网络的发展，节点需要能够跟上网络的需求及其发展需要。</strong></p> 
+ <ol class="list-paddingleft-2"><li><p>要增加处理中的交易数量需要每个节点都增加更多计算力。</p></li><li><p>中继的交易越多，需要节点提供的宽带就越大。</p></li><li><p>要在区块链上储存所有的数据也就需要节点逐渐增加更多的存储空间。</p></li></ol> 
+ <p></p> 
+ <p><strong>观察这三个参数，你会发现，无论每秒的交易数或中继的交易数是否增加，数据存储量都会增加。</strong></p> 
+ <p></p> 
+ <p> 在编写这篇文章之前，就已经提出过对存储进行分片但不对交易进行分片的方法，而且有些项目已经实现了交易处理（而非存储）的分片。</p> 
+ <p><strong></strong></p> 
+ <p><strong>然而，最常见的分片类型被称为“状态分片（State Sharding）”</strong>，包括每个分片中构建其自己区块链的节点，该区块链包含整个全球网络中仅仅影响它们自己那部分的交易，这意味着节点只需要存储它们分片的交易历史，处理影响它们分片的交易，并在它们的分片中中继这些交易。</p> 
+ <p></p> 
+ <p> 接下来，我们将介绍跨分片交易、无效交易和恶意行为。</p> 
+ <p></p> 
+ <p></p> 
+ <p class="ql-align-center"><strong>区块链的分片和缩放</strong></p> 
+ <p class="ql-align-center"></p> 
+ <p><img class="gallery-image" width="1000" src="https://images2.imgbox.com/0f/a2/pzPpywJl_o.png" alt="640?wx_fmt=png"></p> 
+ <p> </p> 
+ <p>上文中，我们讨论了分片是什么，分片要解决的问题以及要有效实现分片需要克服的一些障碍。那么接下来我们将讨论<strong>跨分片交易</strong>、<strong>无效交易</strong>和<strong>恶意行为</strong>。</p> 
+ <p></p> 
+ <p> 正如上文描述的分片的基本类型并不是非常有效或者实用的分片方法，因为它们不能彼此通信，所以它们就像单一区块链一样。<strong>以简单的付款为例，如果用户A和用户B在同一个分片上，那么分片中的验证器能够毫无障碍地处理交易，但是当他们的账户在不同的分片上时，会出现什么状况呢？</strong></p> 
+ <p></p> 
+ <p> 用户A在1#分片上，用户B在2#分片上。各个分片上的验证器将无法借记或贷记用户的账户，因为它们没有彼此分片的权限。</p> 
+ <p></p> 
+ <p> 然而，这个问题也是有解决方案的，<strong>下面就让我们来更详细地看一看其中一些解决方案：</strong></p> 
+ <p></p> 
+ <p class="ql-align-center"><strong>同步（同时）跨分片交易</strong></p> 
+ <p class="ql-align-center"></p> 
+ <p>在这种情况下，当在1#分片的用户A要向在2#分片的用户B发送资金时，将同时在每个分片生成包含与此交易相关的状态转换（state transition）的区块，并且每个分片上的验证器会协同工作以确认这笔交易。</p> 
+ <p></p> 
+ <p>早在2018年初，Vitalik Buterin就已提议将区块与此解决方案合并。</p> 
+ <p>（参见来源：https://ethresear.ch/t/merge-blocks-and-synchronous-cross-shard-state-execution/1240）</p> 
+ <p class="ql-align-center"></p> 
+ <div> 
+  <br> 
+ </div> 
+ <p class="ql-align-center"><strong>异步跨分片交易</strong></p> 
+ <p class="ql-align-center"></p> 
+ <p>这是一个较为容易完成的操作，并且协调起来也要简单的多，因此它比同步交易要更受欢迎。</p> 
+ <p></p> 
+ <p> 同样，我们将使用1#分片上的用户A想要给2#分片上的用户B汇款的例子。在此场景下，负责贷记用户B的账户的分片只有在有足够证据证明负责借记用户A账户的分片已经完成后，才会验证这次交易中B自己负责的部分。</p> 
+ <p></p> 
+ <p> 但是，这种方法并不是完美的，其中一个分片的一个区块被舍弃的可能性并不为零。当概率非零时，无论概率有多小，也仍是一个不容忽视的弱点。</p> 
+ <p></p> 
+ <p><strong>我们可以通过下图来详解一下原因：</strong></p> 
+ <p></p> 
+ <p><img class="gallery-image" width="1000" src="https://images2.imgbox.com/2f/18/6m70zq5k_o.png" alt="640?wx_fmt=png"></p> 
+ <p> </p> 
+ <p>这个区块链有两个分片，巧合的是，它们都刚好在交易被合并到1#分片中的A区块和2#分片中的X’区块时分叉。</p> 
+ <p></p> 
+ <p><strong>当这样的分叉发生时，分片必须舍弃一条链并接受另一条链。</strong>此时，如果链A、B等成为1#分片中接受的链，W’、X’等成为2#分片中接受的链，那么交易将顺利完成，皆大欢喜。</p> 
+ <p></p> 
+ <p> 如果1#分片接受A’、B’等，2#分片接受W、X等，那么整个交易将失败，但这也是一种可以令人接受的结果，因为可以重新发送交易。</p> 
+ <p></p> 
+ <p> 但是如果1#分片接受链A、B等，2#分片接受链W、X等的话会发生什么呢？交易中的一部分（A、B等）被完成，但另一部分（W、X等）会被舍弃。</p> 
+ <p></p> 
+ <p></p> 
+ <p class="ql-align-center"><strong>分片中的恶意节点</strong></p> 
+ <p class="ql-align-center"><strong></strong></p> 
+ <p> </p> 
+ <p>现在，你已经对分片及其工作原理有了更深入的理解，你可能会觉得满足了，也可能会有更多的问题，但至少还要考虑一件事：<strong>恶意节点。</strong><strong></strong></p> 
+ <p></p> 
+ <div> 
+  <strong>1、恶意节点</strong> 
+ </div> 
+ <div> 
+  <br> 
+ </div> 
+ <p>这种情况非常常见，当有可能出现大交易日时，无论是什么系统，都会有人想攻击该系统。</p> 
+ <p></p> 
+ <p><strong>2、批准无效区块</strong></p> 
+ <div> 
+  <br> 
+ </div> 
+ <p> 恶意节点可能会通过创建企图更改网络的区块来攻击网络。假设用户1有10枚硬币，用户2有0枚硬币。当用户1想将这10枚硬币发送给用户2时，网络上的恶意节点可能会试图创建一个区块，最终用户1将失去所有的硬币，而用户2将拥有1000枚硬币。</p> 
+ <p></p> 
+ <p><img class="gallery-image" width="1000" src="https://images2.imgbox.com/99/96/ZuGApD6j_o.png" alt="640?wx_fmt=jpeg"></p> 
+ <p></p> 
+ <p> </p> 
+ <p><strong>在未分片的常规区块链中，这种类型的攻击是不可能发生的，</strong>因为每一个节点都会验证每一个区块，如果发现一个无效区块，所有的节点（无论是否是矿工）都会拒绝该区块。</p> 
+ <p></p> 
+ <p>对于经典的区块链来说，无论恶意节点创建了多少区块，或者创建速度有多快，网络的诚实节点们都将始终忽略这些区块并继续构建诚实的区块链。</p> 
+ <p></p> 
+ <p> 如果因为恶意节点想通过构建无效区块来向自己的账户充值大量代币，导致一条链分裂成两条。在这种情况下，恶意节点的数量甚至可能会超过诚实节点的数量。<strong>较短的链是诚实链，较长的链则是无效的链。</strong></p> 
+ <p></p> 
+ <p>在常规的非分片区块链中，每个参与者都有责任验证他们收到的所有区块并确认其状态，因此任何在区块链中拥有既得利益的人都会立即识别出无效链，并忽略（在本例中）较短的链。</p> 
+ <p></p> 
+ <p><img class="gallery-image" width="1000" src="https://images2.imgbox.com/c8/08/iPTuSnob_o.png" alt="640?wx_fmt=png"></p> 
+ <p> </p> 
+ <p>因为参与者无法验证每个分片上的每笔交易，所以分片链会稍微复杂一些。因此我们必须弄清楚如何确认分片的整个历史中都没有无效区块。</p> 
+ <p></p> 
+ <p><strong>由于信标链通常不具备验证每个分片中的每个区块的能力，所以我们需要其他的解决方案来确保每条链的完整性。</strong></p> 
+ <p></p> 
+ <p> 假设网络通过联合操作，每个分片都具有拜占庭容错机制（Byzantine Fault Tolerance mechanism），并且分片控制中的恶意节点小于66.667%，那么就能构建一个机制，如果出现任何试图生成无效区块的行为，其中一个或多个诚实节点可以证实系统存在无效区块，系统就会收到警报。</p> 
+ <p></p> 
+ <p>如果超过66.667%的分片由恶意节点控制，那么理论上是可以对区块进行最终确认的，<strong>然而只要分片中有一个节点是诚实的，就可以构建一种允许诚实节点质疑恶意节点的机制。</strong></p> 
+ <p><strong></strong></p> 
+ <p>好了，看完这篇相信你已经对分片有所理解了。公链的性能提升是个长期的过程，无论是分片还是其他方法都有利有弊。关于性能提升，你有哪些思考？一起与营长分享吧！</p> 
+ <p></p> 
+ <p></p> 
+ <div> 
+  <img class="__bg_gif" src="https://images2.imgbox.com/c6/74/H6bFoIYe_o.gif" alt="640?wx_fmt=gif"> 
+ </div> 
+ <div> 
+  <br> 
+ </div> 
+ <p><strong>推荐阅读：</strong></p> 
+ <ul class="list-paddingleft-2"><li><p><a href="https://mp.weixin.qq.com/s?__biz=MzU2MTE1NDk2Mg==&amp;mid=2247497834&amp;idx=1&amp;sn=5779eef5dfc28d197f6879e58173ee58&amp;chksm=fc7fa697cb082f81d5914161b1abd5ee08f552fe81748582eb07e1fda28c4eb56de172671b0e&amp;token=131418687&amp;lang=zh_CN&amp;scene=21#wechat_redirect" rel="nofollow">图解零知识证明(ZKP), 区块链中最常见的密码学技术究竟是神马? 看完这篇就明白了…</a></p></li><li><p><a href="https://mp.weixin.qq.com/s?__biz=MzU2MTE1NDk2Mg==&amp;mid=2247497826&amp;idx=2&amp;sn=e60fc9e68ab1ffee2204336ece34aa54&amp;chksm=fc7fa69fcb082f894ecb0479215ca39c20f1cb039e82236e1777a33299d0f1e9c8f8ab56c23c&amp;token=131418687&amp;lang=zh_CN&amp;scene=21#wechat_redirect" rel="nofollow">分布式存储春天已来Storj首登top10; Cardano排名上升; 以太坊比特币活跃地址双下降 | 数据周榜</a></p></li><li><p><a href="https://blog.csdn.net/Blockchain_lemon/article/details/101087959">6张拓扑图揭秘中心化交易所的5种行为, 原来中心化比你想象的重要！</a></p></li><li> 
+   <div> 
+    <a href="https://mp.weixin.qq.com/s?__biz=MzA5MzY4NTQwMA==&amp;mid=2651013295&amp;idx=1&amp;sn=d1c39c4438a734e3b9b003f7e6f42033&amp;scene=21#wechat_redirect" rel="nofollow">千万不要和女程序员做同事</a> 
+    <br> 
+   </div></li><li> 
+   <div> 
+    <a href="https://mp.weixin.qq.com/s?__biz=MzA3MjY1MTQwNQ==&amp;mid=2649830464&amp;idx=1&amp;sn=ceeb069ab2a2c63c0ac916734eeeb317&amp;scene=21#wechat_redirect" rel="nofollow">架构师必备技能：</a> 
+    <a href="https://mp.weixin.qq.com/s?__biz=MzA3MjY1MTQwNQ==&amp;mid=2649830464&amp;idx=1&amp;sn=ceeb069ab2a2c63c0ac916734eeeb317&amp;scene=21#wechat_redirect" rel="nofollow">教你画出一张合格的技术架构</a>图 
+   </div></li><li> 
+   <div> 
+    <a href="https://blog.csdn.net/csdnnews/article/details/101168953">阿里云智能 AIoT 首席科学家丁险峰：阿里全面进军 IoT 这一年 | 问底中国 IT 技术演进</a> 
+   </div></li><li> 
+   <div> 
+    <a href="https://blog.csdn.net/dQCFKyQDXYm3F8rB0/article/details/101179568">干货 | OpenCV看这篇就够了，9段代码详解图像变换基本操作</a> 
+   </div></li><li> 
+   <div> 
+    <a href="https://mp.weixin.qq.com/s?__biz=MzU5MjEwMTE2OQ==&amp;mid=2247488673&amp;idx=1&amp;sn=feb46432af3c988029abe49d4bb08dfe&amp;scene=21#wechat_redirect" rel="nofollow">周杰伦的《说好不哭》，20万点评Python来分析</a> 
+   </div></li></ul> 
+ <div> 
+  <p></p> 
+ </div> 
+ <p></p> 
+ <p><strong>猛戳</strong><strong>"阅读原文"有惊喜哟</strong><strong><img src="https://images2.imgbox.com/4a/ce/zCrhSGnU_o.png" alt="smiley_12.png"></strong></p> 
+ <p><strong><strong>老铁在看了吗？</strong></strong><strong><strong>?</strong></strong></p> 
+</div>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7e54237089d4cc8868e5944825f8d13a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Java后台调用百度地图接口实现通过经纬度查询地址</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/e5849d2272e033c8b9e3ce8638a8232f/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Unity_触摸屏_使用EasyTouch手势缩放大小限制</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

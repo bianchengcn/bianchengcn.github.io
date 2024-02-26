@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Pytorch的BN层使用详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Pytorch的BN层使用详解" />
+<meta property="og:description" content="前提知识 BN层包括mean var gamma beta四个参数，。对于图像来说（4，3，2，2），一组特征图，一个通道的特征图对应一组参数，即四个参数均为维度为通道数的一维向量，图中gamma、beta参数维度均为[1,3]
+其中gamma、beta为可学习参数（在pytorch中分别改叫weight和bias），训练时通过反向传播更新；
+而running_mean、running_var则是在前向时先由X计算出mean和var，再由mean和var以动量momentum来更新running_mean和running_var。所以在训练阶段，running_mean和running_var在每次前向时更新一次；在测试阶段，不用再计算均值方差，则通过net.eval()固定该BN层的running_mean和running_var，此时这两个值即为训练阶段最后一次前向时确定的值，并在整个测试阶段保持不变。
+class torch.nn.BatchNorm1d(num_features, eps=1e-05, momentum=0.1, affine=True) nn.BatchNorm2d(self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True) 1d 参数：
+num_features： 来自期望输入的特征数，C from an expected input of size (N,C,L) or L from input of size (N,L)
+eps： 为保证数值稳定性（分母不能趋近或取0）,给分母加上的值。默认为1e-5。
+momentum：滑动平均的参数，用来计算running_mean和running_var。默认为0.1。
+track_running_stats，是否记录训练阶段的均值和方差，即running_mean和running_var
+affine： 一个布尔值，当设为true，给该层添加可学习的仿射变换参数。
+输入：（N, C）或者(N, C, L)
+输出：（N, C）或者（N，C，L）（输入输出相同）
+在每一个小批量（mini-batch）数据中，计算输入各个维度的均值和标准差。gamma与beta是可学习的大小为C的参数向量（C为输入大小）
+2d num_features： 来自期望输入的特征数，C from an expected input of size (N,C,H,W)
+eps： 为保证数值稳定性（分母不能趋近或取0）,给分母加上的值。默认为1e-5。
+momentum： 动态均值和动态方差所使用的动量。默认为0.1。
+affine： 一个布尔值，当设为true，给该层添加可学习的仿射变换参数，表示weight和bias将被使用
+输入：（N, C，H, W) 输出：（N, C, H, W）（输入输出相同）" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9c5a15bf16aaceda427f4fe5facb1bac/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-12T14:11:27+08:00" />
+<meta property="article:modified_time" content="2024-01-12T14:11:27+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Pytorch的BN层使用详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="_0"></a>前提知识</h3> 
+<p><img src="https://images2.imgbox.com/ac/44/Do0XO0tC_o.png" alt="在这里插入图片描述"><br> BN层包括mean var gamma beta四个参数，。对于图像来说（4，3，2，2），一组特征图，一个通道的特征图对应一组参数，即四个参数均为维度为通道数的一维向量，图中gamma、beta参数维度均为[1,3]</p> 
+<p><img src="https://images2.imgbox.com/1d/3c/3sw9x0E1_o.png" alt="在这里插入图片描述"></p> 
+<p>其中gamma、beta为可学习参数（在pytorch中分别改叫weight和bias），训练时通过反向传播更新；</p> 
+<p>而running_mean、running_var则是在前向时先由X计算出mean和var，再由mean和var以动量momentum来更新running_mean和running_var。所以在训练阶段，running_mean和running_var在每次前向时更新一次；在测试阶段，不用再计算均值方差，则通过net.eval()固定该BN层的running_mean和running_var，此时这两个值即为训练阶段最后一次前向时确定的值，并在整个测试阶段保持不变。</p> 
+<pre class="set-code-show prettyprint"><code class="prism language-c has-numbering">class torch<span class="token punctuation">.</span>nn<span class="token punctuation">.</span><span class="token function">BatchNorm1d</span><span class="token punctuation">(</span>num_features<span class="token punctuation">,</span> eps<span class="token operator">=</span><span class="token number">1e-05</span><span class="token punctuation">,</span> momentum<span class="token operator">=</span><span class="token number">0.1</span><span class="token punctuation">,</span> affine<span class="token operator">=</span>True<span class="token punctuation">)</span> 
+nn<span class="token punctuation">.</span><span class="token function">BatchNorm2d</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> num_features<span class="token punctuation">,</span> eps<span class="token operator">=</span><span class="token number">1e-5</span><span class="token punctuation">,</span> momentum<span class="token operator">=</span><span class="token number">0.1</span><span class="token punctuation">,</span> affine<span class="token operator">=</span>True<span class="token punctuation">,</span> track_running_stats<span class="token operator">=</span>True<span class="token punctuation">)</span>
+</code></pre> 
+<h5><a id="1d_26"></a>1d</h5> 
+<p>参数：<br> num_features： 来自期望输入的特征数，C from an expected input of size (N,C,L) or L from input of size (N,L)<br> eps： 为保证数值稳定性（分母不能趋近或取0）,给分母加上的值。默认为1e-5。<br> momentum：滑动平均的参数，用来计算running_mean和running_var。默认为0.1。<br> track_running_stats，是否记录训练阶段的均值和方差，即running_mean和running_var<br> affine： 一个布尔值，当设为true，给该层添加可学习的仿射变换参数。</p> 
+<p>输入：（N, C）或者(N, C, L)<br> 输出：（N, C）或者（N，C，L）（输入输出相同）</p> 
+<p>在每一个小批量（mini-batch）数据中，计算输入各个维度的均值和标准差。gamma与beta是可学习的大小为C的参数向量（C为输入大小）</p> 
+<h5><a id="2d_39"></a>2d</h5> 
+<p>num_features： 来自期望输入的特征数，C from an expected input of size <strong>(N,C,H,W)</strong><br> eps： 为保证数值稳定性（分母不能趋近或取0）,给分母加上的值。默认为1e-5。<br> momentum： 动态均值和动态方差所使用的动量。默认为0.1。<br> affine： 一个布尔值，当设为true，给该层添加可学习的仿射变换参数，表示weight和bias将被使用<br> 输入：（N, C，H, W) 输出：（N, C, H, W）（输入输出相同）</p> 
+<p>BN层的状态包含五个参数:</p> 
+<p>weight，缩放操作的γ gamma。<br> bias，缩放操作的β beta。<br> running_mean，训练阶段统计的均值，测试阶段会用到。<br> running_var，训练阶段统计的方差，测试阶段会用到。<br> num_batches_tracked，训练阶段的batch的数目，如果没有指定momentum，则用它来计算running_mean和running_var。一般momentum默认值为0.1，所以这个属性暂时没用。<br> weight和bias这两个参数需要训练，而running_mean、running_val和num_batches_tracked不需要训练，它们只是训练阶段的统计值。</p> 
+<h4><a id="running_mean__running_var_65"></a>running_mean running_var的计算</h4> 
+<p>在训练时，BN层计算每次输入的均值与方差，并进行移动平均。移动平均默认的动量值为0.1。初始值running_mean=0.running_var=1</p> 
+<p><img src="https://images2.imgbox.com/af/43/WzRoKVX2_o.png" alt="在这里插入图片描述"><br> 参数更新是以差分的形式进行的，xt代表新一轮batch产生的数据，x^代表历史数据，这个参数越大，代表当前batch产生的统计数据的重要性越强。0.1表示当前batch统计数据占0.1.</p> 
+<p>对于此处，可表示为：<br> <img src="https://images2.imgbox.com/a7/74/7RzECHeG_o.png" alt="在这里插入图片描述"></p> 
+<p>在推理时，训练求得的均值/方差将用于标准化验证数据。</p> 
+<h3><a id="code__81"></a>code 验证</h3> 
+<p>gamma beta 分别针对 2个【5 5】的矩阵进行计算。</p> 
+<pre class="set-code-hide prettyprint"><code class="prism language-c has-numbering">
+import torch
+import torch<span class="token punctuation">.</span>nn as nn
+m <span class="token operator">=</span> nn<span class="token punctuation">.</span><span class="token function">BatchNorm2d</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span> affine<span class="token operator">=</span>False<span class="token punctuation">)</span>
+m1 <span class="token operator">=</span> nn<span class="token punctuation">.</span><span class="token function">BatchNorm2d</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span> affine<span class="token operator">=</span>True<span class="token punctuation">)</span>
+input <span class="token operator">=</span> torch<span class="token punctuation">.</span><span class="token function">randn</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span><span class="token number">5</span><span class="token punctuation">,</span> <span class="token number">5</span><span class="token punctuation">)</span>
+input <span class="token operator">=</span> torch<span class="token punctuation">.</span><span class="token function">tensor</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">[</span><span class="token punctuation">[</span><span class="token punctuation">[</span> <span class="token number">0.92767</span><span class="token punctuation">,</span>  <span class="token number">0.56841</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1.68725</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.01806</span><span class="token punctuation">,</span>  <span class="token number">1.31190</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">0.95227</span><span class="token punctuation">,</span>  <span class="token number">1.52581</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1.21351</span><span class="token punctuation">,</span>  <span class="token number">0.06448</span><span class="token punctuation">,</span>  <span class="token number">2.72040</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">0.67488</span><span class="token punctuation">,</span>  <span class="token number">0.83880</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">2.02831</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.28432</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.43458</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">1.96451</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.15065</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1.87039</span><span class="token punctuation">,</span>  <span class="token number">0.13661</span><span class="token punctuation">,</span>  <span class="token number">0.25373</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">0.59261</span><span class="token punctuation">,</span>  <span class="token number">1.09675</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.00749</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.63954</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1.72408</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+         <span class="token punctuation">[</span><span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">1.04556</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.07648</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.42020</span><span class="token punctuation">,</span>  <span class="token number">0.06401</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1.15629</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span> <span class="token number">0.77445</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.23579</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1.26846</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.09803</span><span class="token punctuation">,</span>  <span class="token number">1.07262</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span><span class="token operator">-</span><span class="token number">2.15755</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.77489</span><span class="token punctuation">,</span>  <span class="token number">0.50311</span><span class="token punctuation">,</span>  <span class="token number">0.22077</span><span class="token punctuation">,</span>  <span class="token number">0.93678</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span> <span class="token number">0.82926</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.04959</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.42568</span><span class="token punctuation">,</span>  <span class="token number">0.58730</span><span class="token punctuation">,</span>  <span class="token number">1.63708</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+          <span class="token punctuation">[</span> <span class="token number">0.92501</span><span class="token punctuation">,</span>  <span class="token number">1.85740</span><span class="token punctuation">,</span>  <span class="token number">0.96766</span><span class="token punctuation">,</span>  <span class="token number">0.71574</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.62078</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+output <span class="token operator">=</span> <span class="token function">m</span><span class="token punctuation">(</span>input<span class="token punctuation">)</span>
+<span class="token function">print</span><span class="token punctuation">(</span>input<span class="token punctuation">,</span> <span class="token char">'\n'</span><span class="token punctuation">,</span>output<span class="token punctuation">,</span><span class="token char">'\n'</span><span class="token punctuation">,</span>output1<span class="token punctuation">)</span>
+<span class="token function">print</span><span class="token punctuation">(</span>m<span class="token punctuation">.</span>weight<span class="token punctuation">)</span>#None
+<span class="token function">print</span><span class="token punctuation">(</span>m<span class="token punctuation">.</span>bias<span class="token punctuation">)</span> #None
+<span class="token function">print</span><span class="token punctuation">(</span>m1<span class="token punctuation">.</span>weight<span class="token punctuation">)</span>   #<span class="token number">1</span>
+<span class="token function">print</span><span class="token punctuation">(</span>m1<span class="token punctuation">.</span>bias<span class="token punctuation">)</span>     #<span class="token number">0</span>
+<span class="token function">print</span><span class="token punctuation">(</span>m1<span class="token punctuation">.</span>running_mean<span class="token punctuation">)</span> # init_mean<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">,</span>init_var<span class="token operator">=</span><span class="token number">1</span>     
+<span class="token function">print</span><span class="token punctuation">(</span>m1<span class="token punctuation">.</span>running_var<span class="token punctuation">)</span>#<span class="token number">0.1</span> 更新
+running_mean_init<span class="token operator">=</span>m1<span class="token punctuation">.</span>running_mean
+running_var_init<span class="token operator">=</span>m1<span class="token punctuation">.</span>running_var
+<span class="token function">print</span><span class="token punctuation">(</span><span class="token string">"输入的第一个维度:"</span><span class="token punctuation">)</span>
+<span class="token function">print</span><span class="token punctuation">(</span>input<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span> #这个数据是第一个<span class="token number">3</span><span class="token operator">*</span><span class="token number">4</span>的二维数据
+#求第一个维度的均值和方差
+firstDimenMean<span class="token operator">=</span>torch<span class="token punctuation">.</span>Tensor<span class="token punctuation">.</span><span class="token function">mean</span><span class="token punctuation">(</span>input<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+firstDimenMean   # <span class="token operator">-</span><span class="token number">0.19192</span>
+firstDimenVar<span class="token operator">=</span>torch<span class="token punctuation">.</span>Tensor<span class="token punctuation">.</span><span class="token function">var</span><span class="token punctuation">(</span>input<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span>True<span class="token punctuation">)</span>   #false表示贝塞尔校正不会被使用#True BN层默认的是用的贝塞尔验证 <span class="token function">tensor</span><span class="token punctuation">(</span><span class="token number">1.45355</span><span class="token punctuation">)</span>  False<span class="token operator">:</span><span class="token function">tensor</span><span class="token punctuation">(</span><span class="token number">1.39540</span><span class="token punctuation">)</span>
+firstDimenVar    # <span class="token number">1.3954</span>
+output1 <span class="token operator">=</span> <span class="token function">m1</span><span class="token punctuation">(</span>input<span class="token punctuation">)</span>
+<span class="token function">print</span><span class="token punctuation">(</span>firstDimenMean<span class="token punctuation">)</span>
+<span class="token function">print</span><span class="token punctuation">(</span>firstDimenVar<span class="token punctuation">)</span>
+<span class="token function">print</span><span class="token punctuation">(</span>m1<span class="token punctuation">.</span>running_mean<span class="token punctuation">)</span> # init_mean<span class="token operator">=</span><span class="token number">0</span><span class="token punctuation">,</span>init_var<span class="token operator">=</span><span class="token number">1</span>     
+<span class="token function">print</span><span class="token punctuation">(</span>m1<span class="token punctuation">.</span>running_var<span class="token punctuation">)</span>#<span class="token number">0.1</span> 更新# 验证更新runing<span class="token operator">-</span>mean var的计算，每计算一次BN，就会更新一次
+running_mean_update<span class="token operator">=</span>running_mean_init<span class="token punctuation">.</span><span class="token function">numpy</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">*</span><span class="token number">0.9</span><span class="token operator">+</span><span class="token number">0.1</span><span class="token operator">*</span>firstDimenMean<span class="token punctuation">.</span><span class="token function">numpy</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+running_var_update <span class="token operator">=</span>running_var_init<span class="token punctuation">.</span><span class="token function">numpy</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">0.9</span>  <span class="token operator">+</span> <span class="token number">0.1</span><span class="token operator">*</span>firstDimenVar<span class="token punctuation">.</span><span class="token function">numpy</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+batchnormone<span class="token operator">=</span><span class="token punctuation">(</span><span class="token punctuation">(</span>input<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">-</span>firstDimenMean<span class="token punctuation">)</span><span class="token operator">/</span><span class="token punctuation">(</span>torch<span class="token punctuation">.</span><span class="token function">pow</span><span class="token punctuation">(</span>firstDimenVar<span class="token punctuation">,</span><span class="token number">0.5</span><span class="token punctuation">)</span><span class="token operator">+</span>m1<span class="token punctuation">.</span>eps<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token operator">*</span>m1<span class="token punctuation">.</span>weight<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">+</span>m1<span class="token punctuation">.</span>bias<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+<span class="token function">print</span><span class="token punctuation">(</span>batchnormone<span class="token punctuation">)</span>
+<span class="token function">print</span><span class="token punctuation">(</span>output1<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span> 
+</code></pre> 
+<p>上面计算方差时有一个贝塞尔校正系数，具体可以通过如下链接参考：https://www.jianshu.com/p/8dbb2535407e</p> 
+<p>从公式上理解即在计算方差时一般的计算方式如下：</p> 
+<p><img src="https://images2.imgbox.com/19/1d/ZiX0ZYjU_o.png" alt="在这里插入图片描述"><br> 通过贝塞尔校正的样本方差如下：<br> <img src="https://images2.imgbox.com/d5/f2/q0IcmPKN_o.png" alt="在这里插入图片描述"><br> 目的是在总体中选取样本时能够防止边缘数据不被选到。详细的理解可以参考上面的链接。</p> 
+<div> 
+ <div></div> 
+</div>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/660bfc3d9a2e2898d19e423101b7c09a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">解决vs2019下进行跨平台开发，出现引用的头文件显示无法打开，但是可以通过编译的问题</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/b78045b4a3df6d4c13bd65d05dfc547e/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">macOS 配置Python指令：</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

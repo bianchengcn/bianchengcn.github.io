@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【RL】强化学习小例子 Q table 表单 Q learning 算法 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【RL】强化学习小例子 Q table 表单 Q learning 算法" />
+<meta property="og:description" content="文章目录 0. 任务描述1. 伪代码2. Python 代码实现2.1 初始化一些参数2.2 新建一个空的 Q 表2.3 行为选择2.4 环境反馈2.5 更新环境2.6 主循环 Ref: 看了两天书本《深入浅出强化学习》，感觉对概念理解的还是太笼统。鉴于做中学的思想，准备找个小例子跑一跑程序，加深下理解。
+找了很多，要么太难，要么太笼统。只找到了莫烦Python老师的这个小例子，不仅有代码，还有视频讲解，感觉很多，跟着大佬学一学。
+0. 任务描述 使用的任务是一个1维世界，在世界的右边有宝藏，智能体只要得到宝藏尝到了甜头，以后就记住了得到宝藏的方法，这就是智能体用强化学习所学习到的行为。
+-o---T	# T is the position of treasure, o is the position of agent Q - learning 是一种记录行为值（Q value）的方法，每种在一定状态的行为都会有一个值 Q ( s , a ) Q(s,a) Q(s,a)，就是说行为 a a a 在状态 s s s 状态的值是 Q ( s , a ) Q(s,a) Q(s,a)。
+而在探索宝藏的任务中，状态 s s s 就是 agent 的位置。而在每一个位置都能做出两个行为 a = left/right a = \text{left/right} a=left/right。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/477270553b3d75a6ddb1f0452fe35172/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-04-26T20:59:49+08:00" />
+<meta property="article:modified_time" content="2022-04-26T20:59:49+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【RL】强化学习小例子 Q table 表单 Q learning 算法</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#0__6" rel="nofollow">0. 任务描述</a></li><li><a href="#1__19" rel="nofollow">1. 伪代码</a></li><li><a href="#2_Python__38" rel="nofollow">2. Python 代码实现</a></li><li><ul><li><a href="#21__39" rel="nofollow">2.1 初始化一些参数</a></li><li><a href="#22__Q__56" rel="nofollow">2.2 新建一个空的 Q 表</a></li><li><a href="#23__79" rel="nofollow">2.3 行为选择</a></li><li><a href="#24__93" rel="nofollow">2.4 环境反馈</a></li><li><a href="#25__113" rel="nofollow">2.5 更新环境</a></li><li><a href="#26__131" rel="nofollow">2.6 主循环</a></li></ul> 
+  </li><li><a href="#Ref_169" rel="nofollow">Ref:</a></li></ul> 
+</div> 
+<p></p> 
+<p>看了两天书本《深入浅出强化学习》，感觉对概念理解的还是太笼统。鉴于做中学的思想，准备找个小例子跑一跑程序，加深下理解。</p> 
+<p>找了很多，要么太难，要么太笼统。只找到了<a href="https://mofanpy.com/tutorials/machine-learning/reinforcement-learning/general-rl/" rel="nofollow">莫烦Python老师的这个小例子</a>，不仅有代码，还有视频讲解，感觉很多，跟着大佬学一学。</p> 
+<h2><a id="0__6"></a>0. 任务描述</h2> 
+<p>使用的任务是一个1维世界，在世界的右边有宝藏，智能体只要得到宝藏尝到了甜头，以后就记住了得到宝藏的方法，这就是智能体用强化学习所学习到的行为。</p> 
+<pre><code class="prism language-py"><span class="token operator">-</span>o<span class="token operator">-</span><span class="token operator">-</span><span class="token operator">-</span>T		<span class="token comment"># T is the position of treasure, o is the position of agent</span>
+</code></pre> 
+<p>Q - learning 是一种记录行为值（Q value）的方法，每种在一定状态的行为都会有一个值 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         Q 
+        
+       
+         ( 
+        
+       
+         s 
+        
+       
+         , 
+        
+       
+         a 
+        
+       
+         ) 
+        
+       
+      
+        Q(s,a) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathdefault">Q</span><span class="mopen">(</span><span class="mord mathdefault">s</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault">a</span><span class="mclose">)</span></span></span></span></span>，就是说行为 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         a 
+        
+       
+      
+        a 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">a</span></span></span></span></span> 在状态 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         s 
+        
+       
+      
+        s 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">s</span></span></span></span></span> 状态的值是 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         Q 
+        
+       
+         ( 
+        
+       
+         s 
+        
+       
+         , 
+        
+       
+         a 
+        
+       
+         ) 
+        
+       
+      
+        Q(s,a) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathdefault">Q</span><span class="mopen">(</span><span class="mord mathdefault">s</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault">a</span><span class="mclose">)</span></span></span></span></span>。</p> 
+<p>而在探索宝藏的任务中，状态 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         s 
+        
+       
+      
+        s 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">s</span></span></span></span></span> 就是 agent 的位置。而在每一个位置都能做出两个行为 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         a 
+        
+       
+         = 
+        
+       
+         left/right 
+        
+       
+      
+        a = \text{left/right} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">a</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord text"><span class="mord">left/right</span></span></span></span></span></span>。</p> 
+<p>关于行为选择的判定标准：如果在某个地点 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          s 
+         
+        
+          1 
+         
+        
+       
+      
+        s_1 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.58056em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathdefault">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span></span></span></span></span>，智能体在计算了他能有的两个行为 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         a 
+        
+       
+         = 
+        
+       
+         left/right 
+        
+       
+      
+        a = \text{left/right} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">a</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord text"><span class="mord">left/right</span></span></span></span></span></span> 后，结果是 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         Q 
+        
+       
+         ( 
+        
+        
+        
+          s 
+         
+        
+          1 
+         
+        
+       
+         , 
+        
+        
+        
+          a 
+         
+        
+          1 
+         
+        
+       
+         ) 
+        
+       
+         &gt; 
+        
+       
+         Q 
+        
+       
+         ( 
+        
+        
+        
+          s 
+         
+        
+          1 
+         
+        
+       
+         , 
+        
+        
+        
+          a 
+         
+        
+          2 
+         
+        
+       
+         ) 
+        
+       
+      
+        Q(s_1,a_1) &gt; Q(s_1, a_2) 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathdefault">Q</span><span class="mopen">(</span><span class="mord"><span class="mord mathdefault">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathdefault">a</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathdefault">Q</span><span class="mopen">(</span><span class="mord"><span class="mord mathdefault">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathdefault">a</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>，那么智能体就会选择 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          a 
+         
+        
+          1 
+         
+        
+       
+         = 
+        
+       
+         left 
+        
+       
+      
+        a_1 = \text{left} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.58056em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathdefault">a</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mspace" style="margin-right: 0.277778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.277778em;"></span></span><span class="base"><span class="strut" style="height: 0.69444em; vertical-align: 0em;"></span><span class="mord text"><span class="mord">left</span></span></span></span></span></span> 这个行为。</p> 
+<h2><a id="1__19"></a>1. 伪代码</h2> 
+<p>先把要实现的伪代码放出来：<br> <img src="https://images2.imgbox.com/8d/c0/EXPKPQXa_o.png" alt="在这里插入图片描述"></p> 
+<p>简单翻译过来就是：</p> 
+<ol><li>首先初始化 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          Q 
+         
+        
+          ( 
+         
+        
+          s 
+         
+        
+          , 
+         
+        
+          a 
+         
+        
+          ) 
+         
+        
+       
+         Q(s,a) 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathdefault">Q</span><span class="mopen">(</span><span class="mord mathdefault">s</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault">a</span><span class="mclose">)</span></span></span></span></span> 表</li><li>重复<br> 2.1 初始化状态 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          s 
+         
+        
+       
+         s 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">s</span></span></span></span></span><br> 2.2 重复<br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+         
+        
+       
+         \quad 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0em; vertical-align: 0em;"></span><span class="mspace" style="margin-right: 1em;"></span></span></span></span></span> 2.2.1 从 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          Q 
+         
+        
+       
+         Q 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.87777em; vertical-align: -0.19444em;"></span><span class="mord mathdefault">Q</span></span></span></span></span> 表中根据状态 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          s 
+         
+        
+       
+         s 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">s</span></span></span></span></span> 选择行为动作 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          a 
+         
+        
+       
+         a 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">a</span></span></span></span></span><br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+         
+        
+       
+         \quad 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0em; vertical-align: 0em;"></span><span class="mspace" style="margin-right: 1em;"></span></span></span></span></span> 2.2.2 根据行为动作 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          a 
+         
+        
+       
+         a 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">a</span></span></span></span></span>，产生奖励 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          r 
+         
+        
+       
+         r 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault" style="margin-right: 0.02778em;">r</span></span></span></span></span> 和下一步状态 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+         
+         
+           s 
+          
+         
+           ′ 
+          
+         
+        
+       
+         s' 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.751892em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathdefault">s</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.751892em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">′</span></span></span></span></span></span></span></span></span></span></span></span></span><br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+         
+        
+       
+         \quad 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0em; vertical-align: 0em;"></span><span class="mspace" style="margin-right: 1em;"></span></span></span></span></span> 2.2.3 更新 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          Q 
+         
+        
+       
+         Q 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.87777em; vertical-align: -0.19444em;"></span><span class="mord mathdefault">Q</span></span></span></span></span> 表 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          Q 
+         
+        
+          ( 
+         
+        
+          s 
+         
+        
+          , 
+         
+        
+          a 
+         
+        
+          ) 
+         
+        
+       
+         Q(s,a) 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord mathdefault">Q</span><span class="mopen">(</span><span class="mord mathdefault">s</span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord mathdefault">a</span><span class="mclose">)</span></span></span></span></span><br> <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+         
+        
+       
+         \quad 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0em; vertical-align: 0em;"></span><span class="mspace" style="margin-right: 1em;"></span></span></span></span></span> 2.2.4 更新状态 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+         
+         
+           s 
+          
+         
+           ′ 
+          
+         
+        
+       
+         s' 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.751892em; vertical-align: 0em;"></span><span class="mord"><span class="mord mathdefault">s</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.751892em;"><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">′</span></span></span></span></span></span></span></span></span></span></span></span></span><br> 2.3 直到状态 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+      
+       
+        
+        
+          s 
+         
+        
+       
+         s 
+        
+       
+     </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.43056em; vertical-align: 0em;"></span><span class="mord mathdefault">s</span></span></span></span></span> 达到结束状态</li></ol> 
+<hr> 
+<h2><a id="2_Python__38"></a>2. Python 代码实现</h2> 
+<h3><a id="21__39"></a>2.1 初始化一些参数</h3> 
+<pre><code class="prism language-python"><span class="token keyword">import</span> numpy <span class="token keyword">as</span> np
+<span class="token keyword">import</span> pandas <span class="token keyword">as</span> pd
+<span class="token keyword">import</span> time
+
+np<span class="token punctuation">.</span>random<span class="token punctuation">.</span>seed<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span>       <span class="token comment"># reproducible</span>
+
+N_STATES <span class="token operator">=</span> <span class="token number">6</span>        <span class="token comment"># the length of the 1 dimensional world </span>
+ACTIONS <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'left'</span><span class="token punctuation">,</span> <span class="token string">'right'</span><span class="token punctuation">]</span>     <span class="token comment"># actions of agent</span>
+EPSILON <span class="token operator">=</span> <span class="token number">0.9</span>       <span class="token comment"># greedy policy</span>
+ALPHA <span class="token operator">=</span> <span class="token number">0.1</span>         <span class="token comment"># learning rate</span>
+GAMMA <span class="token operator">=</span> <span class="token number">0.9</span>         <span class="token comment"># discount factor</span>
+MAX_EPISODES <span class="token operator">=</span> <span class="token number">13</span>   <span class="token comment"># maximum episodes</span>
+FRESH_TIME <span class="token operator">=</span> <span class="token number">0.3</span>    <span class="token comment"># fresh time for one move</span>
+</code></pre> 
+<h3><a id="22__Q__56"></a>2.2 新建一个空的 Q 表</h3> 
+<pre><code class="prism language-py"><span class="token keyword">def</span> <span class="token function">build_q_table</span><span class="token punctuation">(</span>n_states<span class="token punctuation">,</span> actions<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    table <span class="token operator">=</span> pd<span class="token punctuation">.</span>DataFrame<span class="token punctuation">(</span>
+        np<span class="token punctuation">.</span>zeros<span class="token punctuation">(</span><span class="token punctuation">(</span>n_states<span class="token punctuation">,</span> <span class="token builtin">len</span><span class="token punctuation">(</span>actions<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>     <span class="token comment"># q_table </span>
+        columns<span class="token operator">=</span>actions<span class="token punctuation">,</span>                        <span class="token comment"># columns 对应的是行为名称</span>
+    <span class="token punctuation">)</span>
+    <span class="token keyword">return</span> table
+</code></pre> 
+<p>上述代码的结果为</p> 
+<pre><code class="prism language-py"><span class="token comment"># print(build_q_table(N_STATES, ACTIONS))</span>
+<span class="token comment">#    left  right</span>
+<span class="token comment"># 0   0.0    0.0</span>
+<span class="token comment"># 1   0.0    0.0</span>
+<span class="token comment"># 2   0.0    0.0</span>
+<span class="token comment"># 3   0.0    0.0</span>
+<span class="token comment"># 4   0.0    0.0</span>
+<span class="token comment"># 5   0.0    0.0</span>
+</code></pre> 
+<h3><a id="23__79"></a>2.3 行为选择</h3> 
+<p>传入状态，<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         Q 
+        
+       
+      
+        Q 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.87777em; vertical-align: -0.19444em;"></span><span class="mord mathdefault">Q</span></span></span></span></span> 表</p> 
+<pre><code class="prism language-python"><span class="token keyword">def</span> <span class="token function">choose_action</span><span class="token punctuation">(</span>state<span class="token punctuation">,</span> q_table<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># This is how to choose an action</span>
+    state_actions <span class="token operator">=</span> q_table<span class="token punctuation">.</span>iloc<span class="token punctuation">[</span>state<span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">]</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>np<span class="token punctuation">.</span>random<span class="token punctuation">.</span>uniform<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&gt;</span> EPSILON<span class="token punctuation">)</span> <span class="token keyword">or</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>state_actions <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token builtin">all</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">:</span>  <span class="token comment"># act non-greedy or state-action have no value</span>
+        action_name <span class="token operator">=</span> np<span class="token punctuation">.</span>random<span class="token punctuation">.</span>choice<span class="token punctuation">(</span>ACTIONS<span class="token punctuation">)</span>
+    <span class="token keyword">else</span><span class="token punctuation">:</span>   <span class="token comment"># act greedy</span>
+        action_name <span class="token operator">=</span> state_actions<span class="token punctuation">.</span>idxmax<span class="token punctuation">(</span><span class="token punctuation">)</span>    <span class="token comment"># replace argmax to idxmax as argmax means a different function in newer version of pandas</span>
+    <span class="token keyword">return</span> action_name
+</code></pre> 
+<h3><a id="24__93"></a>2.4 环境反馈</h3> 
+<pre><code class="prism language-py"><span class="token keyword">def</span> <span class="token function">get_env_feedback</span><span class="token punctuation">(</span>S<span class="token punctuation">,</span> A<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># This is how agent will interact with the environment</span>
+    <span class="token keyword">if</span> A <span class="token operator">==</span> <span class="token string">'right'</span><span class="token punctuation">:</span>    <span class="token comment"># move right</span>
+        <span class="token keyword">if</span> S <span class="token operator">==</span> N_STATES <span class="token operator">-</span> <span class="token number">2</span><span class="token punctuation">:</span>   <span class="token comment"># terminate</span>
+            S_ <span class="token operator">=</span> <span class="token string">'terminal'</span>
+            R <span class="token operator">=</span> <span class="token number">1</span>
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            S_ <span class="token operator">=</span> S <span class="token operator">+</span> <span class="token number">1</span>
+            R <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token keyword">else</span><span class="token punctuation">:</span>   <span class="token comment"># move left</span>
+        R <span class="token operator">=</span> <span class="token number">0</span>
+        <span class="token keyword">if</span> S <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">:</span>
+            S_ <span class="token operator">=</span> S  <span class="token comment"># reach the wall</span>
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            S_ <span class="token operator">=</span> S <span class="token operator">-</span> <span class="token number">1</span>
+    <span class="token keyword">return</span> S_<span class="token punctuation">,</span> R
+</code></pre> 
+<h3><a id="25__113"></a>2.5 更新环境</h3> 
+<pre><code class="prism language-python"><span class="token keyword">def</span> <span class="token function">update_env</span><span class="token punctuation">(</span>S<span class="token punctuation">,</span> episode<span class="token punctuation">,</span> step_counter<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># This is how environment be updated</span>
+    env_list <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'-'</span><span class="token punctuation">]</span><span class="token operator">*</span><span class="token punctuation">(</span>N_STATES<span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">[</span><span class="token string">'T'</span><span class="token punctuation">]</span>   <span class="token comment"># '---------T' our environment</span>
+    <span class="token keyword">if</span> S <span class="token operator">==</span> <span class="token string">'terminal'</span><span class="token punctuation">:</span>
+        interaction <span class="token operator">=</span> <span class="token string">'Episode %s: total_steps = %s'</span> <span class="token operator">%</span> <span class="token punctuation">(</span>episode<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">,</span> step_counter<span class="token punctuation">)</span>
+        <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">'\r{}'</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>interaction<span class="token punctuation">)</span><span class="token punctuation">,</span> end<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+        time<span class="token punctuation">.</span>sleep<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span>
+        <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">'\r                                '</span><span class="token punctuation">,</span> end<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+    <span class="token keyword">else</span><span class="token punctuation">:</span>
+        env_list<span class="token punctuation">[</span>S<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token string">'o'</span>
+        interaction <span class="token operator">=</span> <span class="token string">''</span><span class="token punctuation">.</span>join<span class="token punctuation">(</span>env_list<span class="token punctuation">)</span>
+        <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">'\r{}'</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>interaction<span class="token punctuation">)</span><span class="token punctuation">,</span> end<span class="token operator">=</span><span class="token string">''</span><span class="token punctuation">)</span>
+        time<span class="token punctuation">.</span>sleep<span class="token punctuation">(</span>FRESH_TIME<span class="token punctuation">)</span>
+</code></pre> 
+<h3><a id="26__131"></a>2.6 主循环</h3> 
+<pre><code class="prism language-py"><span class="token keyword">def</span> <span class="token function">rl</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># main part of RL loop</span>
+    q_table <span class="token operator">=</span> build_q_table<span class="token punctuation">(</span>N_STATES<span class="token punctuation">,</span> ACTIONS<span class="token punctuation">)</span>
+    <span class="token keyword">for</span> episode <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span>MAX_EPISODES<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        step_counter <span class="token operator">=</span> <span class="token number">0</span>
+        S <span class="token operator">=</span> <span class="token number">0</span>
+        is_terminated <span class="token operator">=</span> <span class="token boolean">False</span>
+        update_env<span class="token punctuation">(</span>S<span class="token punctuation">,</span> episode<span class="token punctuation">,</span> step_counter<span class="token punctuation">)</span>
+        <span class="token keyword">while</span> <span class="token keyword">not</span> is_terminated<span class="token punctuation">:</span>
+
+            A <span class="token operator">=</span> choose_action<span class="token punctuation">(</span>S<span class="token punctuation">,</span> q_table<span class="token punctuation">)</span>
+            S_<span class="token punctuation">,</span> R <span class="token operator">=</span> get_env_feedback<span class="token punctuation">(</span>S<span class="token punctuation">,</span> A<span class="token punctuation">)</span>  <span class="token comment"># take action &amp; get next state and reward</span>
+            q_predict <span class="token operator">=</span> q_table<span class="token punctuation">.</span>loc<span class="token punctuation">[</span>S<span class="token punctuation">,</span> A<span class="token punctuation">]</span>
+            <span class="token keyword">if</span> S_ <span class="token operator">!=</span> <span class="token string">'terminal'</span><span class="token punctuation">:</span>
+                q_target <span class="token operator">=</span> R <span class="token operator">+</span> GAMMA <span class="token operator">*</span> q_table<span class="token punctuation">.</span>iloc<span class="token punctuation">[</span>S_<span class="token punctuation">,</span> <span class="token punctuation">:</span><span class="token punctuation">]</span><span class="token punctuation">.</span><span class="token builtin">max</span><span class="token punctuation">(</span><span class="token punctuation">)</span>   <span class="token comment"># next state is not terminal</span>
+            <span class="token keyword">else</span><span class="token punctuation">:</span>
+                q_target <span class="token operator">=</span> R     <span class="token comment"># next state is terminal</span>
+                is_terminated <span class="token operator">=</span> <span class="token boolean">True</span>    <span class="token comment"># terminate this episode</span>
+
+            q_table<span class="token punctuation">.</span>loc<span class="token punctuation">[</span>S<span class="token punctuation">,</span> A<span class="token punctuation">]</span> <span class="token operator">+=</span> ALPHA <span class="token operator">*</span> <span class="token punctuation">(</span>q_target <span class="token operator">-</span> q_predict<span class="token punctuation">)</span>  <span class="token comment"># update</span>
+            S <span class="token operator">=</span> S_  <span class="token comment"># move to next state</span>
+
+            update_env<span class="token punctuation">(</span>S<span class="token punctuation">,</span> episode<span class="token punctuation">,</span> step_counter<span class="token operator">+</span><span class="token number">1</span><span class="token punctuation">)</span>
+            step_counter <span class="token operator">+=</span> <span class="token number">1</span>
+    <span class="token keyword">return</span> q_table
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    q_table <span class="token operator">=</span> rl<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">'\r\nQ-table:\n'</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span>q_table<span class="token punctuation">)</span>
+</code></pre> 
+<h2><a id="Ref_169"></a>Ref:</h2> 
+<ol><li><a href="https://mofanpy.com/tutorials/machine-learning/reinforcement-learning/general-rl/" rel="nofollow">小例子-强化学习-莫烦Python</a></li></ol>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/6e84dbecc1f282193615940ecc2f8256/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Vue学习总结——Vue2生命周期</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3be4172700b0ca0fa44c6ef43bcdb8e5/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">xray了解</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

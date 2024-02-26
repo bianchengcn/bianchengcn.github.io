@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>折磨人的Centos7防火墙开放端口，SSH却无法访问的问题 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="折磨人的Centos7防火墙开放端口，SSH却无法访问的问题" />
+<meta property="og:description" content="折磨人的Centos7防火墙开放端口，SSH却无法访问的问题 问题起因折腾之路柳暗花明 问题起因 客户的软件是部署在云上的，操作系统是Centos7，平时要更新软件、调整系统设置都得通过VPN登录堡垒机连接SSH才能操作，近日被漏洞扫描扫到了SSH的高危漏洞，有高危漏洞那必须要处理，但这也是最不愿意修的漏洞，因为堡垒机就开一个SSH端口，想新增端口申请流程长不说，还大概率不能通过，在网上找了个比较容易部署的RPM包，心中默念老天保佑三次，然后执行安装，安装过程沒出现错误，还顺手升级了OPENSSL，最后开开心心的reboot，等5分钟重新登录堡垒机连接服务器，（╯‵□′）╯︵┴─┴ 你**，真崩了，(ಥ _ ಥ)
+折腾之路 既然连不上了，那只能找云的运维让他开虚拟机界面，给个QQ远程协助，我登录进系统看看，发现SSH版本还是旧的，居然沒安装成功，但是SSH服务是启动的，端口还是堡垒机指定的那个端口，不是默认的22，有点诡异，再次进堡垒机访问服务器，还是Connection Error。
+远程运维的电脑操作不能占用太长时间，毕竟人家也要干活，frp又不能用，上次用了被查到，封了IP，还得舔着脸让客户写个报告申请解封，只好祭出Python，摸鱼摸了两天写了个通过反向连接外网服务器，TCP发命令执行的脚本。本地测试好并做成服务启动，然后下载到云服务器上安装，这样我就能在公司服务器用TCP工具给服务器发SHELL命令了，虽然需要交互的命令不能执行，但大部分工作已经够了，然后就开始了漫长的查资料、查日志、卸载、重装的日子。
+我把各种日志翻了个遍沒找到有用的信息，怀疑是升级了SSL导致与客户端的加密算法不支持，然后卸载新版恢复旧版，还不行。
+检查SSH为什么不能安装成新版，发现旧版的sshd.service是个目录不是文件，难道因为这个安装不成功？干脆一不做二不休，把整个SSH相关的文件都删除掉再装新版SSH，这回终于安装成功，ssh -V检查是openssh 9.3p2了，启动服务正常，端口为22，然后修改配置文件，改端口改允许root登录，满心欢喜地登录堡垒机连接服务器，(ಥ _ ಥ)还是连接错误，这都什么鬼啊。
+冷静冷静，莫生气，气坏身子无人替，想想还有什么沒做的，嗯，受制于python的限制，还沒测试过SSH连接，远程运维电脑在服务器上测试了一下ssh 127.0.0.1 -p 33022，哦豁，提示错误，百度错误发现是密钥不对，难道是这个原因？按照步骤把已存的密钥删除，再重新连接，成功登录！o(*≧▽≦)ツ 真开心，试试连别的服务器也能成功，证明SSH已经正常运行，赶紧登录堡垒机连接，(⊙﹏⊙)b 还是连接错误。
+柳暗花明 现在好消息是SSH工作正常，坏消息是堡垒机还是不能连接，那问题就在外部连接上，在运维电脑用命令行执行 ssh -vv x.x.x.x -p 33022用调试模式看看问题出在哪，结果发现在连接时就超时了，根本沒得验证用户名密码，难道是防火墙？在虚拟机界面把防火墙服务停了，然后再在电脑上连，狗日的，果然连上了，然后进堡垒机也能顺利连上了。
+这防火墙配置一直沒动过，怎么升级之后就不能连接了呢？
+firewall-cmd --list-ports 33022端口在列表里
+firewall-cmd –query-port=33022/tcp 是yes
+这看起来沒问题啊，怎么沒问题的东西放一起就有问题，还是查查资料吧。翻到篇文章 https://blog.csdn.net/benjam1n77/article/details/126345571 原来防火墙还有许多配置文件，研究研究，查看drop.xml文件没有被禁的IP或端口，然后在public.xml文件发现了端倪
+有个rule标签里把33022端口给drop了，大概率是这个了，把这个节点给删了，然后
+firewall-cmd –reload o(*≧▽≦)ツ 搞定，终于可以正常访问服务器了。
+真是一把辛酸泪，不过好在问题能解决，不用掉头发了。
+附一个SSH升级RPM包，安装简单多了
+https://blog.csdn.net/qq_34777982/article/details/131894921" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/3b731464dda63f04120a296de01f59da/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-08-17T17:45:48+08:00" />
+<meta property="article:modified_time" content="2023-08-17T17:45:48+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">折磨人的Centos7防火墙开放端口，SSH却无法访问的问题</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>折磨人的Centos7防火墙开放端口，SSH却无法访问的问题</h4> 
+ <ul><li><a href="#_2" rel="nofollow">问题起因</a></li><li><a href="#_5" rel="nofollow">折腾之路</a></li><li><a href="#_16" rel="nofollow">柳暗花明</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="_2"></a>问题起因</h2> 
+<p>客户的软件是部署在云上的，操作系统是Centos7，平时要更新软件、调整系统设置都得通过VPN登录堡垒机连接SSH才能操作，近日被漏洞扫描扫到了SSH的高危漏洞，有高危漏洞那必须要处理，但这也是最不愿意修的漏洞，因为堡垒机就开一个SSH端口，想新增端口申请流程长不说，还大概率不能通过，在网上找了个比较容易部署的RPM包，心中默念老天保佑三次，然后执行安装，安装过程沒出现错误，还顺手升级了OPENSSL，最后开开心心的reboot，等5分钟重新登录堡垒机连接服务器，（╯‵□′）╯︵┴─┴ 你**，真崩了，(ಥ _ ಥ)</p> 
+<h2><a id="_5"></a>折腾之路</h2> 
+<p>既然连不上了，那只能找云的运维让他开虚拟机界面，给个QQ远程协助，我登录进系统看看，发现SSH版本还是旧的，居然沒安装成功，但是SSH服务是启动的，端口还是堡垒机指定的那个端口，不是默认的22，有点诡异，再次进堡垒机访问服务器，还是Connection Error。<br> <img src="https://images2.imgbox.com/d7/08/CYj3s0ks_o.png" alt="请添加图片描述"></p> 
+<p>远程运维的电脑操作不能占用太长时间，毕竟人家也要干活，frp又不能用，上次用了被查到，封了IP，还得舔着脸让客户写个报告申请解封，只好祭出Python，摸鱼摸了两天写了个通过反向连接外网服务器，TCP发命令执行的脚本。本地测试好并做成服务启动，然后下载到云服务器上安装，这样我就能在公司服务器用TCP工具给服务器发SHELL命令了，虽然需要交互的命令不能执行，但大部分工作已经够了，然后就开始了漫长的查资料、查日志、卸载、重装的日子。<br> 我把各种日志翻了个遍沒找到有用的信息，怀疑是升级了SSL导致与客户端的加密算法不支持，然后卸载新版恢复旧版，还不行。</p> 
+<p>检查SSH为什么不能安装成新版，发现旧版的sshd.service是个目录不是文件，难道因为这个安装不成功？干脆一不做二不休，把整个SSH相关的文件都删除掉再装新版SSH，这回终于安装成功，ssh -V检查是openssh 9.3p2了，启动服务正常，端口为22，然后修改配置文件，改端口改允许root登录，满心欢喜地登录堡垒机连接服务器，(ಥ _ ಥ)还是连接错误，这都什么鬼啊。</p> 
+<p>冷静冷静，莫生气，气坏身子无人替，想想还有什么沒做的，嗯，受制于python的限制，还沒测试过SSH连接，远程运维电脑在服务器上测试了一下ssh 127.0.0.1 -p 33022，哦豁，提示错误，百度错误发现是密钥不对，难道是这个原因？按照步骤把已存的密钥删除，再重新连接，成功登录！o(*≧▽≦)ツ 真开心，试试连别的服务器也能成功，证明SSH已经正常运行，赶紧登录堡垒机连接，(⊙﹏⊙)b 还是连接错误。</p> 
+<h2><a id="_16"></a>柳暗花明</h2> 
+<p>现在好消息是SSH工作正常，坏消息是堡垒机还是不能连接，那问题就在外部连接上，在运维电脑用命令行执行 ssh -vv x.x.x.x -p 33022用调试模式看看问题出在哪，结果发现在连接时就超时了，根本沒得验证用户名密码，难道是防火墙？在虚拟机界面把防火墙服务停了，然后再在电脑上连，狗日的，果然连上了，然后进堡垒机也能顺利连上了。<br> 这防火墙配置一直沒动过，怎么升级之后就不能连接了呢？</p> 
+<pre><code class="prism language-bash">firewall-cmd --list-ports
+</code></pre> 
+<p>33022端口在列表里</p> 
+<pre><code class="prism language-bash">firewall-cmd –query-port<span class="token operator">=</span><span class="token number">33022</span>/tcp
+</code></pre> 
+<p>是yes<br> 这看起来沒问题啊，怎么沒问题的东西放一起就有问题，还是查查资料吧。翻到篇文章 <a href="https://blog.csdn.net/benjam1n77/article/details/126345571">https://blog.csdn.net/benjam1n77/article/details/126345571</a> 原来防火墙还有许多配置文件，研究研究，查看drop.xml文件没有被禁的IP或端口，然后在public.xml文件发现了端倪<br> <img src="https://images2.imgbox.com/7a/e9/m9H6xRTs_o.png" alt="请添加图片描述"><br> 有个rule标签里把33022端口给drop了，大概率是这个了，把这个节点给删了，然后</p> 
+<pre><code class="prism language-bash">firewall-cmd –reload 
+</code></pre> 
+<p>o(*≧▽≦)ツ 搞定，终于可以正常访问服务器了。</p> 
+<p>真是一把辛酸泪，不过好在问题能解决，不用掉头发了。</p> 
+<p>附一个SSH升级RPM包，安装简单多了<br> <a href="https://blog.csdn.net/qq_34777982/article/details/131894921">https://blog.csdn.net/qq_34777982/article/details/131894921</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9ea5679ac2fa91ae4f038d261c879c81/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">opencv3.4.16编译报错记录(VS2022&#43;gpu)</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/a48d3d40d6a56f38599a828c073cff44/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">金猪脚本Autojs之验证网络时间、本地时间以及是否超过设定日期</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

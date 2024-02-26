@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>LearnOpenGL学习笔记—入门05：Texture - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="LearnOpenGL学习笔记—入门05：Texture" />
+<meta property="og:description" content="LearnOpenGL学习笔记—入门05：Texture 0 前言1 纹理简介2 stb_image.h3 纹理坐标4 纹理环绕方式/纹理过滤5 代码实现/彩色木箱6 纹理单元/多材质代码7 完整代码 小学期终于结束了（并且摸鱼了一个星期后）,可以回来更新了Orz，总是拖拖拉拉的（瘫 0 前言 本节笔记对应的内容 纹理
+在入门01中我们配置好了环境
+在入门02中我们可以检测输入并出现一个有颜色的窗口
+在入门03中我们初步学习了图形渲染管线，尝试用不同方法画出了三角形和四边形
+在入门04（上）中我们学习了shader和GLSL的相关知识，并给图形加上了变换的颜色以及彩色。
+在入门04（下）中我们建立自己的shader类，并能够从外部读取shader的内容。
+在这一节，我们将会了解有关材质的内容
+1 纹理简介 在之前的学习中，我们可以为每个顶点添加颜色来增加图形的细节，从而创建出有趣的图像。
+但是，如果想让图形看起来更真实，我们就必须有足够多的顶点，从而指定足够多的颜色，这将会产生很多额外开销。
+程序员更喜欢使用纹理(Texture)。
+纹理是一个2D图片（甚至也有1D和3D的纹理），它可以用来添加物体的细节；可以想象纹理是一张墙纸，无缝折叠贴合到你的3D的房子上，这样你的房子看起来就像墙纸的外表了。因为我们可以在一张图片上插入非常多的细节，这样就可以让物体非常精细而不用指定额外的顶点。
+2 stb_image.h 使用纹理之前要做的第一件事是把它们加载到我们的应用中。
+所以我们如何才能把这些图像加载到应用中呢？
+使用一个支持多种流行格式的图像加载库来为我们解决这个问题。比如说要用的stb_image.h库。
+在这里下载，进去以后点选Raw，在新出现的页面中，右键另存为，存到自己的目录里，在VS中右键，添加现有项目，将这个库导进来。
+3 纹理坐标 如何将这么一份材质映射(Map)到一个三角形上呢？
+我们需要指定三角形的每个顶点，各自对应纹理的哪个部分。
+这样每个顶点就会关联着一个纹理坐标(Texture Coordinate)，用来标明该从纹理图像的哪个部分采样。
+之后在图形的其它片段上进行片段插值(Fragment Interpolation)。
+纹理坐标在x和y轴上，范围为0到1之间（2D纹理图像）。
+使用纹理坐标获取纹理颜色叫做采样(Sampling)。
+纹理坐标起始于(0, 0)，也就是纹理图片的左下角，终始于(1, 1)，即纹理图片的右上角。下面的图片展示了我们是如何把纹理坐标映射到三角形上的。
+4 纹理环绕方式/纹理过滤 关于纹理环绕方式，原教材感觉写的蛮精简了，不过需要注意的是，导入的材质图片最好是2的幂次方的边长
+关于纹理过滤
+纹理坐标不依赖于分辨率(Resolution)，它可以是任意浮点值，所以OpenGL需要知道怎样将纹理像素(Texture Pixel)映射到纹理坐标。
+当你有一个很大的物体但是纹理的分辨率很低的时候这就变得很重要了。
+OpenGL有对于纹理过滤(Texture Filtering)的选项。
+纹理过滤有很多个选项，但是现在我们只讨论最重要的两种：GL_NEAREST和GL_LINEAR。
+GL_NEAREST（也叫邻近过滤，Nearest Neighbor Filtering）是OpenGL默认的纹理过滤方式。
+当设置为GL_NEAREST的时候，OpenGL会选择中心点最接近纹理坐标的那个像素。
+下图中有四个像素，加号代表纹理坐标。左上角那个纹理像素的中心距离纹理坐标最近，所以它会被选择为样本颜色：
+GL_LINEAR（也叫线性过滤，(Bi)linear Filtering）是基于纹理坐标附近的纹理像素，计算出一个插值，近似出这些纹理像素之间的颜色。
+一个纹理像素的中心距离纹理坐标越近，那么这个纹理像素的颜色对最终的样本颜色的贡献越大。
+下图中可以看到返回的颜色是邻近像素的混合色：
+但是想象一下，假设我们有一个包含着上千物体的大房间，每个物体上都有纹理。
+有些物体会很远，但其纹理会拥有与近处物体同样高的分辨率。
+由于远处的物体所产生的片段很少，OpenGL从高分辨率纹理中为这些片段获取正确的颜色值就很困难，因为它只拾取一个纹理颜色却要跨过纹理很大的部分。
+在小物体上这会产生不真实的感觉，并且对它们使用高分辨率纹理很浪费内存。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/21cb8951d247792ea8e5be1335288b30/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-07-19T18:30:31+08:00" />
+<meta property="article:modified_time" content="2020-07-19T18:30:31+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">LearnOpenGL学习笔记—入门05：Texture</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>LearnOpenGL学习笔记—入门05：Texture</h4> 
+ <ul><li><a href="#0__2" rel="nofollow">0 前言</a></li><li><a href="#1__10" rel="nofollow">1 纹理简介</a></li><li><a href="#2_stb_imageh_15" rel="nofollow">2 stb_image.h</a></li><li><a href="#3__20" rel="nofollow">3 纹理坐标</a></li><li><a href="#4__31" rel="nofollow">4 纹理环绕方式/纹理过滤</a></li><li><a href="#5__63" rel="nofollow">5 代码实现/彩色木箱</a></li><li><a href="#6__209" rel="nofollow">6 纹理单元/多材质代码</a></li><li><a href="#7__301" rel="nofollow">7 完整代码</a></li></ul> 
+</div> 
+<br> 小学期终于结束了（并且摸鱼了一个星期后）,可以回来更新了Orz，总是拖拖拉拉的（瘫 
+<p></p> 
+<h2><a id="0__2"></a>0 前言</h2> 
+<p>本节笔记对应的内容 <a href="https://learnopengl-cn.github.io/01%20Getting%20started/06%20Textures/" rel="nofollow">纹理</a><br> 在<a href="https://editor.csdn.net/md/?articleId=106961379" rel="nofollow">入门01</a>中我们配置好了环境<br> 在<a href="https://blog.csdn.net/weixin_43803133/article/details/106970090">入门02</a>中我们可以检测输入并出现一个有颜色的窗口<br> 在<a href="https://blog.csdn.net/weixin_43803133/article/details/106982301">入门03</a>中我们初步学习了图形渲染管线，尝试用不同方法画出了三角形和四边形<br> 在<a href="https://blog.csdn.net/weixin_43803133/article/details/106997376">入门04（上）</a>中我们学习了shader和GLSL的相关知识，并给图形加上了变换的颜色以及彩色。<br> 在<a href="https://blog.csdn.net/weixin_43803133/article/details/107003753">入门04（下）</a>中我们建立自己的shader类，并能够从外部读取shader的内容。<br> 在这一节，我们将会了解有关材质的内容</p> 
+<h2><a id="1__10"></a>1 纹理简介</h2> 
+<p>在之前的学习中，我们可以为每个顶点添加颜色来增加图形的细节，从而创建出有趣的图像。<br> 但是，如果想让图形看起来更真实，我们就必须有足够多的顶点，从而指定足够多的颜色，这将会产生很多额外开销。<br> 程序员更喜欢使用<strong>纹理</strong>(<em>Texture)</em>。<br> 纹理是一个2D图片（甚至也有1D和3D的纹理），它可以用来添加物体的细节；可以想象纹理是一张墙纸，无缝折叠贴合到你的3D的房子上，这样你的房子看起来就像墙纸的外表了。因为我们可以在一张图片上插入非常多的细节，这样就可以让物体非常精细而不用指定额外的顶点。</p> 
+<h2><a id="2_stb_imageh_15"></a>2 stb_image.h</h2> 
+<p>使用纹理之前要做的第一件事是把它们加载到我们的应用中。<br> 所以我们如何才能把这些图像加载到应用中呢？<br> 使用一个支持多种流行格式的图像加载库来为我们解决这个问题。比如说要用的stb_image.h库。<br> 在<a href="https://github.com/nothings/stb/blob/master/stb_image.h">这里</a>下载，进去以后点选Raw，在新出现的页面中，右键另存为，存到自己的目录里，在VS中右键，添加现有项目，将这个库导进来。</p> 
+<h2><a id="3__20"></a>3 纹理坐标</h2> 
+<p>如何将这么一份材质映射(Map)到一个三角形上呢？<br> <img src="https://images2.imgbox.com/c9/ad/qvP4ofcE_o.jpg" alt="在这里插入图片描述"><br> 我们需要指定三角形的每个顶点，各自对应纹理的哪个部分。<br> 这样每个顶点就会关联着一个<strong>纹理坐标</strong>(<em>Texture Coordinate</em>)，用来标明该从纹理图像的哪个部分采样。<br> 之后在图形的其它片段上进行片段插值(Fragment Interpolation)。<br> 纹理坐标在x和y轴上，范围为0到1之间（2D纹理图像）。<br> 使用纹理坐标获取纹理颜色叫做采样(Sampling)。<br> 纹理坐标起始于(0, 0)，也就是纹理图片的左下角，终始于(1, 1)，即纹理图片的右上角。下面的图片展示了我们是如何把纹理坐标映射到三角形上的。<br> <img src="https://images2.imgbox.com/e4/21/ey3BfFq0_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="4__31"></a>4 纹理环绕方式/纹理过滤</h2> 
+<p>关于纹理环绕方式，原教材感觉写的蛮精简了，不过需要注意的是，导入的材质图片最好是2的幂次方的边长<br> <img src="https://images2.imgbox.com/1f/0e/aoeA7A5k_o.png" alt="在这里插入图片描述"><br> 关于纹理过滤<br> 纹理坐标不依赖于分辨率(Resolution)，它可以是任意浮点值，所以OpenGL需要知道怎样将纹理像素(Texture Pixel)映射到纹理坐标。<br> 当你有一个很大的物体但是纹理的分辨率很低的时候这就变得很重要了。<br> OpenGL有对于<strong>纹理过滤</strong>(<em>Texture Filtering</em>)的选项。<br> 纹理过滤有很多个选项，但是现在我们只讨论最重要的两种：<strong>GL_NEAREST</strong>和<strong>GL_LINEAR</strong>。</p> 
+<ul><li>GL_NEAREST（也叫邻近过滤，Nearest Neighbor Filtering）是OpenGL默认的纹理过滤方式。<br> 当设置为GL_NEAREST的时候，OpenGL会选择中心点最接近纹理坐标的那个像素。<br> 下图中有四个像素，加号代表纹理坐标。左上角那个纹理像素的中心距离纹理坐标最近，所以它会被选择为样本颜色：<br> <img src="https://images2.imgbox.com/13/03/2kJm90Sm_o.png" alt="在这里插入图片描述"></li><li>GL_LINEAR（也叫线性过滤，(Bi)linear Filtering）是基于纹理坐标附近的纹理像素，计算出一个插值，近似出这些纹理像素之间的颜色。<br> 一个纹理像素的中心距离纹理坐标越近，那么这个纹理像素的颜色对最终的样本颜色的贡献越大。<br> 下图中可以看到返回的颜色是邻近像素的混合色：<br> <img src="https://images2.imgbox.com/2b/a6/nraM8ulK_o.png" alt="在这里插入图片描述"></li></ul> 
+<p>但是想象一下，假设我们有一个包含着上千物体的大房间，每个物体上都有纹理。<br> 有些物体会很远，但其纹理会拥有与近处物体同样高的分辨率。<br> 由于远处的物体所产生的片段很少，OpenGL从高分辨率纹理中为这些片段获取正确的颜色值就很困难，因为它只拾取一个纹理颜色却要跨过纹理很大的部分。<br> 在小物体上这会产生不真实的感觉，并且对它们使用高分辨率纹理很浪费内存。<br> OpenGL使用一种叫做<strong>多级渐远纹理</strong>(<em>Mipmap</em>)的概念来解决这个问题，它简单来说就是一系列的纹理图像，后一个纹理图像是前一个的二分之一。</p> 
+<ul><li>多级渐远纹理背后的理念很简单：距观察者的距离超过一定的阈值，OpenGL会使用不同的多级渐远纹理，即最适合物体的距离的那个。由于距离远，解析度不高也不会被用户注意到。同时，多级渐远纹理另一加分之处是它的性能非常好。<br> 让我们看一下多级渐远纹理是什么样子的：<br> <img src="https://images2.imgbox.com/70/79/E9GaLbfO_o.png" alt="在这里插入图片描述"></li><li>手工为每个纹理图像创建一系列多级渐远纹理很麻烦，OpenGL有一个glGenerateMipmaps函数，在创建完一个纹理后调用它OpenGL就会承担接下来的所有工作了。后面的教程中会学会使用它。</li><li>在渲染中切换多级渐远纹理级别(Level)时，OpenGL在两个不同级别的多级渐远纹理层之间会产生不真实的生硬边界。<br> 就像普通的纹理过滤一样，切换多级渐远纹理级别时，也可以在两个不同多级渐远纹理级别之间使用NEAREST和LINEAR过滤。<br> 为了指定不同多级渐远纹理级别之间的过滤方式，你可以使用下面四个选项中的一个代替原有的过滤方式：<br> <img src="https://images2.imgbox.com/44/c7/k1e0SHGH_o.png" alt="在这里插入图片描述"></li></ul> 
+<h2><a id="5__63"></a>5 代码实现/彩色木箱</h2> 
+<p>在前次代码的基础上，我们做一些小修改<br> 我们把这两行放入main函数开头</p> 
+<pre><code class="prism language-cpp"><span class="token macro property">#<span class="token directive keyword">define</span> STB_IMAGE_IMPLEMENTATION</span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"stb_image.h"</span></span>
+</code></pre> 
+<p>使用网站自带的vertices数组</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">float</span> vertices<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+<span class="token comment">//     ---- 位置 ----       ---- 颜色 ----     - 纹理坐标 -</span>
+     <span class="token number">0.5f</span><span class="token punctuation">,</span>  <span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span>   <span class="token comment">// 右上</span>
+     <span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token comment">// 右下</span>
+    <span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token comment">// 左下</span>
+    <span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span>  <span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span>    <span class="token comment">// 左上</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>索引绘制</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">unsigned</span> <span class="token keyword">int</span> indices<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token number">0</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span>
+	<span class="token number">2</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">0</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>顶点属性</p> 
+<pre><code class="prism language-cpp"><span class="token comment">// 位置属性</span>
+<span class="token function">glVertexAttribPointer</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">,</span> GL_FLOAT<span class="token punctuation">,</span> GL_FALSE<span class="token punctuation">,</span> <span class="token number">8</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glEnableVertexAttribArray</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 颜色属性</span>
+<span class="token function">glVertexAttribPointer</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">,</span> GL_FLOAT<span class="token punctuation">,</span> GL_FALSE<span class="token punctuation">,</span> <span class="token number">8</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token number">3</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glEnableVertexAttribArray</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// uv属性</span>
+<span class="token function">glVertexAttribPointer</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">,</span> GL_FLOAT<span class="token punctuation">,</span> GL_FALSE<span class="token punctuation">,</span> <span class="token number">8</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token number">6</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glEnableVertexAttribArray</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>这时候运行我们会得到一个彩色长方形（当然这时候uv坐标没有起作用）<br> <img src="https://images2.imgbox.com/3b/92/Ev5jfu2r_o.png" alt="在这里插入图片描述"><br> 下面改一下shader的代码，在vertexSource中进行这样的修改</p> 
+<pre><code class="prism language-cpp"><span class="token macro property">#version 330 core									  </span>
+<span class="token function">layout</span><span class="token punctuation">(</span>location <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">)</span> in vec3 aPos<span class="token punctuation">;</span>   <span class="token comment">// 位置变量的属性位置值为 0</span>
+<span class="token function">layout</span><span class="token punctuation">(</span>location <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">)</span> in vec3 aColor<span class="token punctuation">;</span> <span class="token comment">// 颜色变量的属性位置值为 1</span>
+<span class="token function">layout</span><span class="token punctuation">(</span>location <span class="token operator">=</span> <span class="token number">2</span><span class="token punctuation">)</span> in vec2 aTexCoord<span class="token punctuation">;</span> <span class="token comment">// uv变量的属性位置值为 2</span>
+
+out vec4 vertexColor<span class="token punctuation">;</span>
+out vec2 TexCoord<span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>										   
+   gl_Position <span class="token operator">=</span> <span class="token function">vec4</span><span class="token punctuation">(</span>aPos<span class="token punctuation">.</span>x<span class="token punctuation">,</span> aPos<span class="token punctuation">.</span>y<span class="token punctuation">,</span> aPos<span class="token punctuation">.</span>z<span class="token punctuation">,</span> <span class="token number">1.0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>   
+   vertexColor <span class="token operator">=</span> <span class="token function">vec4</span><span class="token punctuation">(</span>aColor<span class="token punctuation">,</span><span class="token number">1.0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	
+   TexCoord <span class="token operator">=</span> aTexCoord<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>在fragmentSource中也做修改，预设的第一个sampler2D会给到我们的图片</p> 
+<pre><code class="prism language-cpp"><span class="token macro property">#version 330 core			</span>
+in vec4 vertexColor<span class="token punctuation">;</span>
+in vec2 TexCoord<span class="token punctuation">;</span>
+
+out vec4 FragColor<span class="token punctuation">;</span>			
+
+uniform sampler2D ourTexture<span class="token punctuation">;</span>
+
+<span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>				
+	FragColor <span class="token operator">=</span> <span class="token function">texture</span><span class="token punctuation">(</span>ourTexture<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>我们所用的一个木箱材质图片可以点<a href="https://learnopengl-cn.github.io/img/01/06/container.jpg" rel="nofollow">这里</a>下载，放到项目目录，同时在VS中项目添加现有项，把图片添加进来。<br> 在讲EBO时用过这个图，现在可以把材质的部分加上，我们在texbuffer中放入图片，绑定TEXTURE_2D的通道输入给context<br> <img src="https://images2.imgbox.com/78/f3/5JTxGrpo_o.png" alt="在这里插入图片描述"><br> 我们在写完EBO之后的代码部分，进行生成纹理</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">unsigned</span> <span class="token keyword">int</span> TexBuffer<span class="token punctuation">;</span>
+<span class="token function">glGenTextures</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>TexBuffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBuffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>glGenTextures函数首先需要输入生成纹理的数量，然后把它们储存在第二个参数的unsigned int数组中，然后绑定它<br> 接下来为当前绑定的纹理对象设置环绕方式</p> 
+<pre><code class="prism language-cpp"><span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_S<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_T<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li>第一个参数指定了纹理目标，我们使用的是2D纹理，因此纹理目标是GL_TEXTURE_2D。<br> 第二个参数需要我们指定设置的选项与应用的纹理轴。我们打算配置的是WRAP选项，并且指定S和T轴。<br> 最后一个参数需要我们传递一个环绕方式(Wrapping)，在这个例子中OpenGL会给当前激活的纹理设定纹理环绕方式为GL_REPEAT。</li><li>如果我们选择GL_CLAMP_TO_BORDER的环绕方式，我们还需要指定一个边缘的颜色。<br> 这需要使用glTexParameter函数的fv后缀形式，用GL_TEXTURE_BORDER_COLOR作为它的选项，并且传递一个float数组作为边缘的颜色值：<br> float borderColor[] = { 1.0f, 1.0f, 0.0f, 1.0f };<br> glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);</li></ul> 
+<p>接下来为当前绑定的纹理对象设置过滤方式</p> 
+<pre><code class="prism language-cpp"><span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MAG_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR_MIPMAP_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li>使用glTexParameter*函数为放大和缩小指定过滤方式，和纹理环绕方式的设置很相似：</li><li>因为多级渐远纹理主要是使用在纹理被缩小的情况下的：纹理放大不会使用多级渐远纹理，如果要为放大过滤设置多级渐远纹理的选项会产生一个GL_INVALID_ENUM错误代码。</li></ul> 
+<p>接下来加载并生成纹理</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">int</span> width<span class="token punctuation">,</span> height<span class="token punctuation">,</span> nrChannel<span class="token punctuation">;</span>
+<span class="token keyword">unsigned</span> <span class="token keyword">char</span> <span class="token operator">*</span>data <span class="token operator">=</span> <span class="token function">stbi_load</span><span class="token punctuation">(</span><span class="token string">"container.jpg"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>width<span class="token punctuation">,</span> <span class="token operator">&amp;</span>height<span class="token punctuation">,</span> <span class="token operator">&amp;</span>nrChannel<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span>data<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">glTexImage2D</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGB<span class="token punctuation">,</span> width<span class="token punctuation">,</span> height<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGB<span class="token punctuation">,</span> GL_UNSIGNED_BYTE<span class="token punctuation">,</span> data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glGenerateMipmap</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">else</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Failed to load texture"</span><span class="token punctuation">)</span><span class="token punctuation">;</span> 
+<span class="token punctuation">}</span>
+<span class="token function">stbi_image_free</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<ul><li>glTexImage2D<br> 第一个参数指定了纹理目标(Target)。设置为GL_TEXTURE_2D意味着会生成与当前绑定的纹理对象在同一个目标上的纹理（任何绑定到GL_TEXTURE_1D和GL_TEXTURE_3D的纹理不会受到影响）<br> 第二个参数为纹理指定多级渐远纹理的级别，这里填0，也就是基本级别。<br> 第三个参数告诉OpenGL我们希望把纹理储存为何种格式。我们的图像只有RGB值，因此我们也把纹理储存为RGB值。<br> 第四个和第五个参数设置最终的纹理的宽度和高度。我们之前加载图像的时候储存了它们，所以我们使用对应的变量。<br> 下个参数应该总是被设为0（历史遗留的问题）。<br> 第七第八个参数定义了源图的格式和数据类型。<br> 我们使用RGB值加载这个图像，并把它们储存为char(byte)数组，我们将会传入对应值。<br> 最后一个参数是真正的图像数据。</li><li>如果要使用多级渐远纹理，生成纹理之后调用glGenerateMipmap。这会为当前绑定的纹理自动生成所有需要的多级渐远纹理。</li><li>生成了纹理和相应的多级渐远纹理后，释放图像的内存。</li></ul> 
+<p>接下来在glDrawElements之前绑定纹理了，它会自动把纹理赋值给片段着色器的采样器，放在while循环中：</p> 
+<pre><code class="prism language-cpp"><span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBuffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>然后实现之后就会如图的效果</p> 
+<p><img src="https://images2.imgbox.com/65/8a/frEXIVc1_o.png" alt="在这里插入图片描述"><br> 或者可以改一改fragmentSource，来让箱子变七彩<br> 线性代数中不存在两个四维向量相乘，这里的乘号是openGL定义的4对4的乘法</p> 
+<pre><code class="prism language-cpp">FragColor <span class="token operator">=</span> <span class="token function">texture</span><span class="token punctuation">(</span>ourTexture<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token operator">*</span>vertexColor<span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/22/2d/Q1UOAr6H_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="6__209"></a>6 纹理单元/多材质代码</h2> 
+<p>接下来会用到一个笑脸图片，点<a href="https://learnopengl-cn.github.io/img/01/06/awesomeface.png" rel="nofollow">这里</a>可以下载到项目目录，然后在vs中加入现有项<br> 关于多个材质，其实是运用纹理单元。<br> 一个纹理的位置值通常称为一个<strong>纹理单元</strong>(<em>Texture Unit</em>)。一个纹理的默认纹理单元是0，它是默认的激活纹理单元。<br> 纹理单元的主要目的是让我们在着色器中可以使用多于一个的纹理。通过把纹理单元赋值给采样器，我们可以一次绑定多个纹理。<br> 如下图右边TEXTURE_2D就像一个在方框中滑动的槽位，在不同槽位可以绑上不同材质。<br> <img src="https://images2.imgbox.com/78/20/5eNkvKjU_o.png" alt="在这里插入图片描述"><br> 将之前代码中的TexBuffer都替换成TexBufferA，并且激活对应槽位，如下举例</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">unsigned</span> <span class="token keyword">int</span> TexBufferA<span class="token punctuation">;</span>
+<span class="token function">glGenTextures</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>TexBufferA<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE0<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferA<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>第二张材质同第一张的代码样式导入，名字改成B，然后激活到其他槽位再bind上去</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">unsigned</span> <span class="token keyword">int</span> TexBufferB<span class="token punctuation">;</span>
+<span class="token function">glGenTextures</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>TexBufferB<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferB<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 为当前绑定的纹理对象设置环绕、过滤方式</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_S<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_T<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MAG_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR_MIPMAP_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 加载并生成纹理</span>
+<span class="token keyword">unsigned</span> <span class="token keyword">char</span> <span class="token operator">*</span>data2 <span class="token operator">=</span> <span class="token function">stbi_load</span><span class="token punctuation">(</span><span class="token string">"awesomeface.png"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>width<span class="token punctuation">,</span> <span class="token operator">&amp;</span>height<span class="token punctuation">,</span> <span class="token operator">&amp;</span>nrChannel<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span>data2<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token function">glTexImage2D</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGBA<span class="token punctuation">,</span> width<span class="token punctuation">,</span> height<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGBA<span class="token punctuation">,</span> GL_UNSIGNED_BYTE<span class="token punctuation">,</span> data2<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glGenerateMipmap</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">else</span>
+<span class="token punctuation">{<!-- --></span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Failed to load texture"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token function">stbi_image_free</span><span class="token punctuation">(</span>data2<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>修改fragmentSource</p> 
+<pre><code class="prism language-cpp"><span class="token macro property">#version 330 core			</span>
+in vec4 vertexColor<span class="token punctuation">;</span>
+in vec2 TexCoord<span class="token punctuation">;</span>
+
+out vec4 FragColor<span class="token punctuation">;</span>			
+
+uniform sampler2D ourTexture<span class="token punctuation">;</span>
+uniform sampler2D ourFace<span class="token punctuation">;</span>
+
+<span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>				
+	FragColor <span class="token operator">=</span> <span class="token function">mix</span><span class="token punctuation">(</span><span class="token function">texture</span><span class="token punctuation">(</span>ourTexture<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token function">texture</span><span class="token punctuation">(</span>ourFace<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token function">texture</span><span class="token punctuation">(</span>ourFace<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token punctuation">.</span>a<span class="token operator">*</span><span class="token number">0.2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>渲染循环也做相应修改</p> 
+<pre><code class="prism language-cpp"><span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">glfwWindowShouldClose</span><span class="token punctuation">(</span>window<span class="token punctuation">)</span><span class="token punctuation">)</span> 
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">processInput</span><span class="token punctuation">(</span>window<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glClearColor</span><span class="token punctuation">(</span><span class="token number">0.2f</span><span class="token punctuation">,</span> <span class="token number">0.3f</span><span class="token punctuation">,</span> <span class="token number">0.3f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glClear</span><span class="token punctuation">(</span>GL_COLOR_BUFFER_BIT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE0<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferA<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferB<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glBindVertexArray</span><span class="token punctuation">(</span>VAO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glBindBuffer</span><span class="token punctuation">(</span>GL_ELEMENT_ARRAY_BUFFER<span class="token punctuation">,</span> EBO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+		myShader<span class="token operator">-</span><span class="token operator">&gt;</span><span class="token function">use</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glUniform1i</span><span class="token punctuation">(</span><span class="token function">glGetUniformLocation</span><span class="token punctuation">(</span>myShader<span class="token operator">-</span><span class="token operator">&gt;</span>ID<span class="token punctuation">,</span> <span class="token string">"ourTexture"</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glUniform1i</span><span class="token punctuation">(</span><span class="token function">glGetUniformLocation</span><span class="token punctuation">(</span>myShader<span class="token operator">-</span><span class="token operator">&gt;</span>ID<span class="token punctuation">,</span> <span class="token string">"ourFace"</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glDrawElements</span><span class="token punctuation">(</span>GL_TRIANGLES<span class="token punctuation">,</span> <span class="token number">6</span><span class="token punctuation">,</span> GL_UNSIGNED_INT<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glfwSwapBuffers</span><span class="token punctuation">(</span>window<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glfwPollEvents</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+</code></pre> 
+<p>此时出现的图像会上下颠倒，所以在材质的代码前加上一句</p> 
+<pre><code class="prism language-cpp"><span class="token function">stbi_set_flip_vertically_on_load</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>然后运行<br> <img src="https://images2.imgbox.com/9b/46/VLLlwNak_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="7__301"></a>7 完整代码</h2> 
+<p>以下给出main.cpp以及两个shader的完整代码，其他的可见前几节<br> mian.cpp</p> 
+<pre><code class="prism language-cpp"><span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">&lt;iostream&gt;</span></span>
+
+<span class="token macro property">#<span class="token directive keyword">define</span> GLEW_STATIC</span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">&lt;GL/glew.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">&lt;GLFW/glfw3.h&gt;</span></span>
+
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"Shader.h"</span></span>
+
+<span class="token macro property">#<span class="token directive keyword">define</span> STB_IMAGE_IMPLEMENTATION</span>
+<span class="token macro property">#<span class="token directive keyword">include</span> <span class="token string">"stb_image.h"</span></span>
+
+<span class="token keyword">float</span> vertices<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//     ---- 位置 ----       ---- 颜色 ----     - 纹理坐标 -</span>
+		 <span class="token number">0.5f</span><span class="token punctuation">,</span>  <span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span>   <span class="token comment">// 右上</span>
+		 <span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token comment">// 右下</span>
+		<span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token comment">// 左下</span>
+		<span class="token operator">-</span><span class="token number">0.5f</span><span class="token punctuation">,</span>  <span class="token number">0.5f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">,</span> <span class="token number">0.0f</span><span class="token punctuation">,</span>   <span class="token number">0.0f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span>    <span class="token comment">// 左上</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+<span class="token comment">//0 1 2   2 3 0</span>
+<span class="token keyword">unsigned</span> <span class="token keyword">int</span> indices<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token number">0</span><span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">,</span>
+	<span class="token number">2</span><span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">,</span><span class="token number">0</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+
+
+<span class="token keyword">void</span> <span class="token function">processInput</span><span class="token punctuation">(</span>GLFWwindow<span class="token operator">*</span> window<span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">glfwGetKey</span><span class="token punctuation">(</span>window<span class="token punctuation">,</span> GLFW_KEY_ESCAPE <span class="token punctuation">)</span><span class="token operator">==</span> GLFW_PRESS<span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">glfwSetWindowShouldClose</span><span class="token punctuation">(</span>window<span class="token punctuation">,</span> <span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	
+
+	<span class="token function">glfwInit</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glfwWindowHint</span><span class="token punctuation">(</span>GLFW_CONTEXT_VERSION_MAJOR<span class="token punctuation">,</span><span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glfwWindowHint</span><span class="token punctuation">(</span>GLFW_CONTEXT_VERSION_MINOR<span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glfwWindowHint</span><span class="token punctuation">(</span>GLFW_OPENGL_PROFILE<span class="token punctuation">,</span> GLFW_OPENGL_CORE_PROFILE<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//Open GLFW Window</span>
+	GLFWwindow<span class="token operator">*</span> window <span class="token operator">=</span> <span class="token function">glfwCreateWindow</span><span class="token punctuation">(</span><span class="token number">800</span><span class="token punctuation">,</span><span class="token number">600</span><span class="token punctuation">,</span><span class="token string">"My OpenGL Game"</span><span class="token punctuation">,</span><span class="token constant">NULL</span><span class="token punctuation">,</span><span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>window <span class="token operator">==</span> <span class="token constant">NULL</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Open window failed."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glfwTerminate</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token function">glfwMakeContextCurrent</span><span class="token punctuation">(</span>window<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token comment">//Init GLEW</span>
+	glewExperimental <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">glewInit</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">!=</span> GLEW_OK<span class="token punctuation">)</span> 
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Init GLEW failed."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glfwTerminate</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token function">glViewport</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">800</span><span class="token punctuation">,</span> <span class="token number">600</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//glEnable(GL_CULL_FACE);</span>
+	<span class="token comment">//glCullFace(GL_BACK);</span>
+	<span class="token comment">//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);</span>
+
+	Shader<span class="token operator">*</span> myShader <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token function">Shader</span><span class="token punctuation">(</span><span class="token string">"vertexSource.txt"</span><span class="token punctuation">,</span> <span class="token string">"fragmentSource.txt"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token keyword">unsigned</span> <span class="token keyword">int</span> VAO<span class="token punctuation">;</span>
+	<span class="token function">glGenVertexArrays</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>VAO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glBindVertexArray</span><span class="token punctuation">(</span>VAO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token keyword">unsigned</span> <span class="token keyword">int</span> VBO<span class="token punctuation">;</span>
+	<span class="token function">glGenBuffers</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>VBO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glBindBuffer</span><span class="token punctuation">(</span>GL_ARRAY_BUFFER<span class="token punctuation">,</span>VBO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glBufferData</span><span class="token punctuation">(</span>GL_ARRAY_BUFFER<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>vertices<span class="token punctuation">)</span><span class="token punctuation">,</span> vertices<span class="token punctuation">,</span> GL_STATIC_DRAW<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token keyword">unsigned</span> <span class="token keyword">int</span> EBO<span class="token punctuation">;</span>
+	<span class="token function">glGenBuffers</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>EBO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glBindBuffer</span><span class="token punctuation">(</span>GL_ELEMENT_ARRAY_BUFFER<span class="token punctuation">,</span> EBO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glBufferData</span><span class="token punctuation">(</span>GL_ELEMENT_ARRAY_BUFFER<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>indices<span class="token punctuation">)</span><span class="token punctuation">,</span> indices<span class="token punctuation">,</span> GL_STATIC_DRAW<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token comment">// 位置属性</span>
+	<span class="token function">glVertexAttribPointer</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">,</span> GL_FLOAT<span class="token punctuation">,</span> GL_FALSE<span class="token punctuation">,</span> <span class="token number">8</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glEnableVertexAttribArray</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">// 颜色属性</span>
+	<span class="token function">glVertexAttribPointer</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">,</span> GL_FLOAT<span class="token punctuation">,</span> GL_FALSE<span class="token punctuation">,</span> <span class="token number">8</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token number">3</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glEnableVertexAttribArray</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">// uv属性</span>
+	<span class="token function">glVertexAttribPointer</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">,</span> GL_FLOAT<span class="token punctuation">,</span> GL_FALSE<span class="token punctuation">,</span> <span class="token number">8</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token number">6</span> <span class="token operator">*</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">float</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glEnableVertexAttribArray</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token function">stbi_set_flip_vertically_on_load</span><span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">unsigned</span> <span class="token keyword">int</span> TexBufferA<span class="token punctuation">;</span>
+	<span class="token function">glGenTextures</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>TexBufferA<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE0<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferA<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token comment">// 为当前绑定的纹理对象设置环绕、过滤方式</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_S<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_T<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MAG_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR_MIPMAP_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">// 加载并生成纹理</span>
+	<span class="token keyword">int</span> width<span class="token punctuation">,</span> height<span class="token punctuation">,</span> nrChannel<span class="token punctuation">;</span>
+	<span class="token keyword">unsigned</span> <span class="token keyword">char</span> <span class="token operator">*</span>data <span class="token operator">=</span> <span class="token function">stbi_load</span><span class="token punctuation">(</span><span class="token string">"container.jpg"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>width<span class="token punctuation">,</span> <span class="token operator">&amp;</span>height<span class="token punctuation">,</span> <span class="token operator">&amp;</span>nrChannel<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>data<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">glTexImage2D</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGB<span class="token punctuation">,</span> width<span class="token punctuation">,</span> height<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGB<span class="token punctuation">,</span> GL_UNSIGNED_BYTE<span class="token punctuation">,</span> data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glGenerateMipmap</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Failed to load texture"</span><span class="token punctuation">)</span><span class="token punctuation">;</span> 
+	<span class="token punctuation">}</span>
+	<span class="token function">stbi_image_free</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+	<span class="token keyword">unsigned</span> <span class="token keyword">int</span> TexBufferB<span class="token punctuation">;</span>
+	<span class="token function">glGenTextures</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>TexBufferB<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferB<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+	<span class="token comment">// 为当前绑定的纹理对象设置环绕、过滤方式</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_S<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_WRAP_T<span class="token punctuation">,</span> GL_REPEAT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MAG_FILTER<span class="token punctuation">,</span> GL_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">glTexParameteri</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> GL_TEXTURE_MIN_FILTER<span class="token punctuation">,</span> GL_LINEAR_MIPMAP_LINEAR<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">// 加载并生成纹理</span>
+	<span class="token keyword">unsigned</span> <span class="token keyword">char</span> <span class="token operator">*</span>data2 <span class="token operator">=</span> <span class="token function">stbi_load</span><span class="token punctuation">(</span><span class="token string">"awesomeface.png"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>width<span class="token punctuation">,</span> <span class="token operator">&amp;</span>height<span class="token punctuation">,</span> <span class="token operator">&amp;</span>nrChannel<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>data2<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">glTexImage2D</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGBA<span class="token punctuation">,</span> width<span class="token punctuation">,</span> height<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> GL_RGBA<span class="token punctuation">,</span> GL_UNSIGNED_BYTE<span class="token punctuation">,</span> data2<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glGenerateMipmap</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Failed to load texture"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token function">stbi_image_free</span><span class="token punctuation">(</span>data2<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+
+	<span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">glfwWindowShouldClose</span><span class="token punctuation">(</span>window<span class="token punctuation">)</span><span class="token punctuation">)</span> 
+	<span class="token punctuation">{<!-- --></span>
+		<span class="token function">processInput</span><span class="token punctuation">(</span>window<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glClearColor</span><span class="token punctuation">(</span><span class="token number">0.2f</span><span class="token punctuation">,</span> <span class="token number">0.3f</span><span class="token punctuation">,</span> <span class="token number">0.3f</span><span class="token punctuation">,</span> <span class="token number">1.0f</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glClear</span><span class="token punctuation">(</span>GL_COLOR_BUFFER_BIT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE0<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferA<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glActiveTexture</span><span class="token punctuation">(</span>GL_TEXTURE1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glBindTexture</span><span class="token punctuation">(</span>GL_TEXTURE_2D<span class="token punctuation">,</span> TexBufferB<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glBindVertexArray</span><span class="token punctuation">(</span>VAO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glBindBuffer</span><span class="token punctuation">(</span>GL_ELEMENT_ARRAY_BUFFER<span class="token punctuation">,</span> EBO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+
+		myShader<span class="token operator">-</span><span class="token operator">&gt;</span><span class="token function">use</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glUniform1i</span><span class="token punctuation">(</span><span class="token function">glGetUniformLocation</span><span class="token punctuation">(</span>myShader<span class="token operator">-</span><span class="token operator">&gt;</span>ID<span class="token punctuation">,</span> <span class="token string">"ourTexture"</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glUniform1i</span><span class="token punctuation">(</span><span class="token function">glGetUniformLocation</span><span class="token punctuation">(</span>myShader<span class="token operator">-</span><span class="token operator">&gt;</span>ID<span class="token punctuation">,</span> <span class="token string">"ourFace"</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glDrawElements</span><span class="token punctuation">(</span>GL_TRIANGLES<span class="token punctuation">,</span> <span class="token number">6</span><span class="token punctuation">,</span> GL_UNSIGNED_INT<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token function">glfwSwapBuffers</span><span class="token punctuation">(</span>window<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">glfwPollEvents</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token function">glfwTerminate</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>vertexSource.txt</p> 
+<pre><code class="prism language-cpp"><span class="token macro property">#version 330 core									  </span>
+<span class="token function">layout</span><span class="token punctuation">(</span>location <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">)</span> in vec3 aPos<span class="token punctuation">;</span>   <span class="token comment">// 位置变量的属性位置值为 0</span>
+<span class="token function">layout</span><span class="token punctuation">(</span>location <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">)</span> in vec3 aColor<span class="token punctuation">;</span> <span class="token comment">// 颜色变量的属性位置值为 1</span>
+<span class="token function">layout</span><span class="token punctuation">(</span>location <span class="token operator">=</span> <span class="token number">2</span><span class="token punctuation">)</span> in vec2 aTexCoord<span class="token punctuation">;</span> <span class="token comment">// uv变量的属性位置值为 2</span>
+
+out vec4 vertexColor<span class="token punctuation">;</span>
+out vec2 TexCoord<span class="token punctuation">;</span>
+<span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>										   
+   gl_Position <span class="token operator">=</span> <span class="token function">vec4</span><span class="token punctuation">(</span>aPos<span class="token punctuation">.</span>x<span class="token punctuation">,</span> aPos<span class="token punctuation">.</span>y<span class="token punctuation">,</span> aPos<span class="token punctuation">.</span>z<span class="token punctuation">,</span> <span class="token number">1.0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>   
+   vertexColor <span class="token operator">=</span> <span class="token function">vec4</span><span class="token punctuation">(</span>aColor<span class="token punctuation">,</span><span class="token number">1.0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>	
+   TexCoord <span class="token operator">=</span> aTexCoord<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p>fragmentSource.txt</p> 
+<pre><code class="prism language-cpp"><span class="token macro property">#version 330 core			</span>
+in vec4 vertexColor<span class="token punctuation">;</span>
+in vec2 TexCoord<span class="token punctuation">;</span>
+
+out vec4 FragColor<span class="token punctuation">;</span>			
+
+uniform sampler2D ourTexture<span class="token punctuation">;</span>
+uniform sampler2D ourFace<span class="token punctuation">;</span>
+
+<span class="token keyword">void</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>				
+	FragColor <span class="token operator">=</span> <span class="token function">mix</span><span class="token punctuation">(</span><span class="token function">texture</span><span class="token punctuation">(</span>ourTexture<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token function">texture</span><span class="token punctuation">(</span>ourFace<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token function">texture</span><span class="token punctuation">(</span>ourFace<span class="token punctuation">,</span>TexCoord<span class="token punctuation">)</span><span class="token punctuation">.</span>a<span class="token operator">*</span><span class="token number">0.2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/5ea93dd8db3dfccaf50dc8955785b13a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Java GUI 实现登录界面</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/980939559cd6ea96b1fc2d9a3e9b0fde/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【剑指Offer系列13】机器人的运动范围</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

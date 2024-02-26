@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>使用FFmpeg读取视频流并保存 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="使用FFmpeg读取视频流并保存" />
+<meta property="og:description" content="最近接触到FFmpeg，需要实现一个将rtsp协议的码流读取并能显示的程序。在网上搬运代码的同时，也写一些对FFmpeg，Qt这些工具的理解。
+准备 首先定义宏，其作用是避免‘UINT64_C’ was not declared in this scope的错误。
+#ifndef INT64_C #define INT64_C(c) (c ## LL) #define UINT64_C(c) (c ## ULL) #endif 加入FFmpeg和C&#43;&#43;头文件
+extern &#34;C&#34; { /*Include ffmpeg header file*/ #include &lt;libavformat/avformat.h&gt; #include &lt;libavcodec/avcodec.h&gt; #include &lt;libswscale/swscale.h&gt; #include &lt;libavutil/imgutils.h&gt; #include &lt;libavutil/opt.h&gt; #include &lt;libavutil/mathematics.h&gt; #include &lt;libavutil/samplefmt.h&gt; } #include &lt;iostream&gt; using namespace std; 主函数
+首先，定义输入输出AVFormatContext结构体，这类结构体存储音视频数据,也就是音视频文件的一种抽象和封装，注意在FFmpeg开发者只能使用指针。随后定义输入输出文件名，输入就是rtsp协议的地址，这里我用的是我自己的海康摄像头地址。输出保存为一个flv文件。avformat_network_init函数顾名思义是初始化网络。
+int main(void) { AVFormatContext* ifmt_ctx = NULL, * ofmt_ctx = NULL; const char* in_filename, * out_filename; in_filename = &#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/82de6226597573b5b9b3b776501debe2/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-27T16:37:23+08:00" />
+<meta property="article:modified_time" content="2023-07-27T16:37:23+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">使用FFmpeg读取视频流并保存</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>最近接触到FFmpeg，需要实现一个将rtsp协议的码流读取并能显示的程序。在网上搬运代码的同时，也写一些对FFmpeg，Qt这些工具的理解。</p> 
+<h3>准备</h3> 
+<p>首先定义宏，其作用是避免‘UINT64_C’ was not declared in this <a href="https://link.zhihu.com/?target=https%3A//so.csdn.net/so/search%3Fq%3Dscope%26spm%3D1001.2101.3001.7020" rel="nofollow" title="scope">scope</a>的错误。</p> 
+<pre><code>#ifndef INT64_C 
+#define INT64_C(c) (c ## LL) 
+#define UINT64_C(c) (c ## ULL) 
+#endif
+</code></pre> 
+<p>加入FFmpeg和C++头文件</p> 
+<pre><code>extern "C" {
+	/*Include ffmpeg header file*/
+#include &lt;libavformat/avformat.h&gt; 
+#include &lt;libavcodec/avcodec.h&gt; 
+#include &lt;libswscale/swscale.h&gt; 
+
+#include &lt;libavutil/imgutils.h&gt;  
+#include &lt;libavutil/opt.h&gt;     
+#include &lt;libavutil/mathematics.h&gt;   
+#include &lt;libavutil/samplefmt.h&gt;
+}
+
+#include &lt;iostream&gt;
+using namespace std;
+</code></pre> 
+<p>主函数</p> 
+<p>首先，定义输入输出AVFormatContext结构体，这类结构体存储音视频数据,也就是音视频文件的一种抽象和封装，注意在FFmpeg开发者只能使用指针。随后定义输入输出文件名，输入就是rtsp协议的地址，这里我用的是我自己的海康摄像头地址。输出保存为一个flv文件。avformat_network_init函数顾名思义是初始化网络。</p> 
+<pre><code>int main(void)
+{
+	AVFormatContext* ifmt_ctx = NULL, * ofmt_ctx = NULL;
+	const char* in_filename, * out_filename;
+	in_filename = "rtsp://admin:WY@123456@192.168.0.64/h264/ch1/main/av_stream";
+	out_filename = "output.flv";
+	
+    avformat_network_init();
+</code></pre> 
+<p>设置一个配置字典，在FFmpeg中我们用AVDictionary结构体配置。</p> 
+<pre><code>	AVDictionary* avdic = NULL;
+	char option_key[] = "rtsp_transport";
+	char option_value[] = "tcp";
+	av_dict_set(&amp;avdic, option_key, option_value, 0);
+	char option_key2[] = "max_delay";
+	char option_value2[] = "5000000";
+	av_dict_set(&amp;avdic, option_key2, option_value2, 0);
+</code></pre> 
+<p>接下来就是打开输入流了，需要使用AV,我们先看一下它的声明：、</p> 
+<pre><code>int avformat_open_input(AVFormatContext **ps, const char *url, ff_const59 AVInputFormat *fmt, AVDictionary **options);
+</code></pre> 
+<p>该函数有四个参数，首先是一个指向AVFormatContext指针的指针，随后是url的指针。AVInputFormat 是 指定输入的封装格式。一般传NULL，由FFmpeg自行探测。AVDictionary **options其它参数设置，它是一个字典，用于参数传递。</p> 
+<p>打开输入视频流之前我们再定义几个参数：</p> 
+<pre><code>	AVPacket pkt;
+	AVOutputFormat* ofmt = NULL;
+	int video_index = -1;
+	int frame_index = 0;
+	
+    int i;
+</code></pre> 
+<p>AVPacket类保存解复用后，解码之前的数据。至于什么是解复用，我们都知道信号有时分复用，频分复用等，音视频信号中经常将视频音频等进行复用，在接收端就得把他们独立分离出来，即Source-&gt;Demux-&gt;Stream的变化。详见：<a href="https://link.zhihu.com/?target=https%3A//www.jianshu.com/p/bb6d3905907e" rel="nofollow" title="AVPacket分析">AVPacket分析</a></p> 
+<p>接下来我们打开输入流：</p> 
+<pre><code>	//打开输入流
+	int ret;
+	if ((ret = avformat_open_input(&amp;ifmt_ctx, in_filename, 0, &amp;avdic)) &lt; 0)
+	{
+		cout&lt;&lt;"Could not open input file."&lt;&lt;endl;
+		goto end;
+	}
+	if ((ret = avformat_find_stream_info(ifmt_ctx, 0)) &lt; 0)
+	{
+		cout&lt;&lt;"Failed to retrieve input stream information"&lt;&lt;endl;
+		goto end;
+	}
+</code></pre> 
+<p>这里的end代表程序末尾，在end中做一些关闭输入流等收尾工作。如果avformat_open_input返回负值，则输出错误并结束。avformat_open_input的作用是打开输入流并阅读文件头，但不打开解码器。而avformat_find_stream_info则阅读媒体文件中的包，获得流推送的信息。</p> 
+<p>继续看代码：</p> 
+<pre><code>	//nb_streams代表有几路流
+
+	for (i = 0; i &lt; ifmt_ctx-&gt;nb_streams; i++) 
+	{
+		if (ifmt_ctx-&gt;streams[i]-&gt;codecpar-&gt;codec_type == AVMEDIA_TYPE_VIDEO)
+		{
+			//视频流
+			video_index = i;
+			cout &lt;&lt; "get videostream." &lt;&lt; endl;
+			break;
+		}
+	}
+	av_dump_format(ifmt_ctx, 0, in_filename, 0);
+</code></pre> 
+<p>我们用一个for循环，如果第i个流的codecpar参数中的codec_type 为AVMEDIA_TYPE_VIDEO我们就知道获取了视频流了。随后我们将视频流这一支的i赋给video_index，并将"get videostream."信息打印在控制台上。av_dump_format函数打印其他一些流的信息。如下图所示：</p> 
+<p></p> 
+<p class="img-center"><img alt="" height="126" src="https://images2.imgbox.com/ba/6f/YihqtKm7_o.png" width="1018"></p> 
+<p></p> 
+<p>接下来，我们打开输出流：</p> 
+<pre><code>    avformat_alloc_output_context2(&amp;ofmt_ctx, NULL, NULL, out_filename);
+
+	if (!ofmt_ctx)
+	{
+		printf("Could not create output context\n");
+		ret = AVERROR_UNKNOWN;
+		goto end;
+	}
+</code></pre> 
+<p>这个函数的作用是根据文件名寻找合适的AVFormatContext管理结构。接下来写文件头到输出文件：</p> 
+<pre><code>    //写文件头到输出文件
+    ret = avformat_write_header(ofmt_ctx, NULL);
+    if (ret &lt; 0)
+    {
+    	printf("Error occured when opening output URL\n");
+    	goto end;
+    }
+</code></pre> 
+<p>接下来就是把数据存入视频文件啦。我们使用一个while循环：</p> 
+<pre><code>	while (1)
+	{
+		AVStream* in_stream, * out_stream;
+		//从输入流获取一个数据包
+		ret = av_read_frame(ifmt_ctx, &amp;pkt);//读一帧并放到pkt中去
+		if (ret &lt; 0)
+			break;//读取失败
+
+		in_stream = ifmt_ctx-&gt;streams[pkt.stream_index];
+		out_stream = ofmt_ctx-&gt;streams[pkt.stream_index];
+		//copy packet
+		//转换 PTS/DTS 时序
+		pkt.pts = av_rescale_q_rnd(pkt.pts, in_stream-&gt;time_base, out_stream-&gt;time_base, (enum AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		pkt.dts = av_rescale_q_rnd(pkt.dts, in_stream-&gt;time_base, out_stream-&gt;time_base, (enum AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//printf("pts %d dts %d base %d\n",pkt.pts,pkt.dts, in_stream-&gt;time_base);
+		pkt.duration = av_rescale_q(pkt.duration, in_stream-&gt;time_base, out_stream-&gt;time_base);
+		pkt.pos = -1;
+
+		//此while循环中并非所有packet都是视频帧，当收到视频帧时记录一下，仅此而已
+		if (pkt.stream_index == video_index)
+		{
+			printf("Receive %8d video frames from input URL\n", frame_index);
+			frame_index++;
+		}
+
+		//将包数据写入到文件。
+		ret = av_interleaved_write_frame(ofmt_ctx, &amp;pkt);
+		if (ret &lt; 0)
+		{
+			if (ret == -22) {
+				continue;
+			}
+			else {
+				printf("Error muxing packet.error code %d\n", ret);
+				break;
+			}
+		}
+</code></pre> 
+<p>对网络视频文件的播放需要经过以下步骤：解协议，解封装，解码视音频，视音频同步。这其中，接协议后的输出就是AVStream类。我们首先用av_read_frame读取一帧的数据。紧接着，我们用指针in_stream指向packet中某一个流的数据，out_stream指向另一个流的数据。获取流的指针后，进行pts/dts转换。pts，dts分别是视频播放和解码时间戳，下面这篇文章叙述地比较详细：</p> 
+<p>pts，dts的概念——作者:SamirChen</p> 
+<p>若收到视频帧，则打印到控制台：</p> 
+<pre><code>		if (pkt.stream_index == video_index)
+		{
+			printf("Receive %8d video frames from input URL\n", frame_index);
+			frame_index++;
+		}
+</code></pre> 
+<p>最后，调用av_interleaved_write_frame写数据，av_interleaved_write_frame函数相较于av_write_frame提供了对 packet 进行缓存和 pts 检查的功能。</p> 
+<pre><code>		//将包数据写入到文件。
+		ret = av_interleaved_write_frame(ofmt_ctx, &amp;pkt);
+		if (ret &lt; 0)
+		{
+			if (ret == -22) {
+				continue;
+			}
+			else {
+				printf("Error muxing packet.error code %d\n", ret);
+				break;
+			}
+		}
+				av_packet_unref(&amp;pkt);
+	}
+</code></pre> 
+<p>最后，我们写文件尾和对之前的错误进行后续处理：</p> 
+<pre><code>	//写文件尾
+	av_write_trailer(ofmt_ctx);
+
+end:
+	av_dict_free(&amp;avdic);
+	avformat_close_input(&amp;ifmt_ctx);
+	//Close input
+	if (ofmt_ctx &amp;&amp; !(ofmt-&gt;flags &amp; AVFMT_NOFILE))
+		avio_close(ofmt_ctx-&gt;pb);
+	avformat_free_context(ofmt_ctx);
+	if (ret &lt; 0 &amp;&amp; ret != AVERROR_EOF)
+	{
+		cout&lt;&lt;"Error occured."&lt;&lt;endl;
+		return -1;
+	}
+
+	return 0;
+}
+</code></pre> 
+<p>在使用visual studio运行时，需要关闭SDL检查，否则会因为版本原因报错</p> 
+<h3>总结</h3> 
+<p>第一次使用FFmpeg进行多媒体开发，虽然代码是搬运的，但过程还是很有趣的，以后有时间会继续学习这一块。<br> 原文链接:<br><a href="https://link.zhihu.com/?target=https%3A//blog.csdn.net/u010871058/article/details/72368274" rel="nofollow" title="FFmpeg从rtsp抓取流">FFmpeg从rtsp抓取流</a><br> 完整项目代码：</p> 
+<pre><code>#ifndef INT64_C 
+#define INT64_C(c) (c ## LL) 
+#define UINT64_C(c) (c ## ULL) 
+#endif 
+
+extern "C" {
+	/*Include ffmpeg header file*/
+#include &lt;libavformat/avformat.h&gt; 
+#include &lt;libavcodec/avcodec.h&gt; 
+#include &lt;libswscale/swscale.h&gt; 
+
+#include &lt;libavutil/imgutils.h&gt;  
+#include &lt;libavutil/opt.h&gt;     
+#include &lt;libavutil/mathematics.h&gt;   
+#include &lt;libavutil/samplefmt.h&gt;
+}
+
+#include &lt;iostream&gt;
+using namespace std;
+
+int main(void)
+{
+	AVFormatContext* ifmt_ctx = NULL, * ofmt_ctx = NULL;
+	const char* in_filename, * out_filename;
+	in_filename = "rtsp://admin:WY@123456@192.168.0.64/h264/ch1/main/av_stream";
+	out_filename = "output.flv";
+
+	avformat_network_init();
+
+	AVDictionary* avdic = NULL;
+	char option_key[] = "rtsp_transport";
+	char option_value[] = "tcp";
+	av_dict_set(&amp;avdic, option_key, option_value, 0);
+	char option_key2[] = "max_delay";
+	char option_value2[] = "5000000";
+	av_dict_set(&amp;avdic, option_key2, option_value2, 0);
+
+	AVPacket pkt;
+	AVOutputFormat* ofmt = NULL;
+	int video_index = -1;
+	int frame_index = 0;
+
+	int i;
+
+	//打开输入流
+	int ret;
+	if ((ret = avformat_open_input(&amp;ifmt_ctx, in_filename, 0, &amp;avdic)) &lt; 0)
+	{
+		cout&lt;&lt;"Could not open input file."&lt;&lt;endl;
+		goto end;
+	}
+	if ((ret = avformat_find_stream_info(ifmt_ctx, 0)) &lt; 0)
+	{
+		cout&lt;&lt;"Failed to retrieve input stream information"&lt;&lt;endl;
+		goto end;
+	}
+
+
+	//nb_streams代表有几路流
+
+	for (i = 0; i &lt; ifmt_ctx-&gt;nb_streams; i++) 
+	{
+		if (ifmt_ctx-&gt;streams[i]-&gt;codecpar-&gt;codec_type == AVMEDIA_TYPE_VIDEO)
+		{
+			//视频流
+			video_index = i;
+			cout &lt;&lt; "get videostream." &lt;&lt; endl;
+			break;
+		}
+	}
+
+	av_dump_format(ifmt_ctx, 0, in_filename, 0);
+
+	//打开输出流
+	avformat_alloc_output_context2(&amp;ofmt_ctx, NULL, NULL, out_filename);
+
+	if (!ofmt_ctx)
+	{
+		printf("Could not create output context\n");
+		ret = AVERROR_UNKNOWN;
+		goto end;
+	}
+	ofmt = ofmt_ctx-&gt;oformat;
+
+	for (i = 0; i &lt; ifmt_ctx-&gt;nb_streams; i++)
+	{
+		AVStream* in_stream = ifmt_ctx-&gt;streams[i];
+		AVStream* out_stream = avformat_new_stream(ofmt_ctx, in_stream-&gt;codec-&gt;codec);
+
+		if (!out_stream)
+		{
+			printf("Failed allocating output stream.\n");
+			ret = AVERROR_UNKNOWN;
+			goto end;
+		}
+
+		//将输出流的编码信息复制到输入流
+		ret = avcodec_copy_context(out_stream-&gt;codec, in_stream-&gt;codec);
+		if (ret &lt; 0)
+		{
+			printf("Failed to copy context from input to output stream codec context\n");
+			goto end;
+		}
+
+		out_stream-&gt;codec-&gt;codec_tag = 0;
+
+		if (ofmt_ctx-&gt;oformat-&gt;flags &amp; AVFMT_GLOBALHEADER)
+			out_stream-&gt;codec-&gt;flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+	}
+
+	av_dump_format(ofmt_ctx, 0, out_filename, 1);
+
+	if (!(ofmt-&gt;flags &amp; AVFMT_NOFILE))
+	{
+		ret = avio_open(&amp;ofmt_ctx-&gt;pb, out_filename, AVIO_FLAG_WRITE);
+		if (ret &lt; 0)
+		{
+			printf("Could not open output URL '%s'", out_filename);
+			goto end;
+		}
+	}
+
+	//写文件头到输出文件
+	ret = avformat_write_header(ofmt_ctx, NULL);
+	if (ret &lt; 0)
+	{
+		printf("Error occured when opening output URL\n");
+		goto end;
+	}
+
+
+	//while循环中持续获取数据包，不管音频视频都存入文件
+	while (1)
+	{
+		AVStream* in_stream, * out_stream;
+		//从输入流获取一个数据包
+		ret = av_read_frame(ifmt_ctx, &amp;pkt);
+		if (ret &lt; 0)
+			break;
+
+		in_stream = ifmt_ctx-&gt;streams[pkt.stream_index];
+		out_stream = ofmt_ctx-&gt;streams[pkt.stream_index];
+		//copy packet
+		//转换 PTS/DTS 时序
+		pkt.pts = av_rescale_q_rnd(pkt.pts, in_stream-&gt;time_base, out_stream-&gt;time_base, (enum AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		pkt.dts = av_rescale_q_rnd(pkt.dts, in_stream-&gt;time_base, out_stream-&gt;time_base, (enum AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//printf("pts %d dts %d base %d\n",pkt.pts,pkt.dts, in_stream-&gt;time_base);
+		pkt.duration = av_rescale_q(pkt.duration, in_stream-&gt;time_base, out_stream-&gt;time_base);
+		pkt.pos = -1;
+
+		//此while循环中并非所有packet都是视频帧，当收到视频帧时记录一下
+		if (pkt.stream_index == video_index)
+		{
+			printf("Receive %8d video frames from input URL\n", frame_index);
+			frame_index++;
+		}
+
+		//将包数据写入到文件。
+		ret = av_interleaved_write_frame(ofmt_ctx, &amp;pkt);
+		if (ret &lt; 0)
+		{
+			if (ret == -22) {
+				continue;
+			}
+			else {
+				printf("Error muxing packet.error code %d\n", ret);
+				break;
+			}
+
+		}
+
+		//av_free_packet(&amp;pkt); //此句在新版本中已deprecated 由av_packet_unref代替
+		av_packet_unref(&amp;pkt);
+	}
+
+
+	//写文件尾
+	av_write_trailer(ofmt_ctx);
+
+end:
+	av_dict_free(&amp;avdic);
+	avformat_close_input(&amp;ifmt_ctx);
+	//Close input
+	if (ofmt_ctx &amp;&amp; !(ofmt-&gt;flags &amp; AVFMT_NOFILE))
+		avio_close(ofmt_ctx-&gt;pb);
+	avformat_free_context(ofmt_ctx);
+	if (ret &lt; 0 &amp;&amp; ret != AVERROR_EOF)
+	{
+		cout&lt;&lt;"Error occured."&lt;&lt;endl;
+		return -1;
+	}
+
+	return 0;
+}
+
+</code></pre> 
+<p>原文 <a href="https://link.zhihu.com/?target=https%3A//blog.csdn.net/qq_33316004/article/details/100113963%3Fops_request_misc%3D%26request_id%3D%26biz_id%3D102%26utm_term%3DFFMPEG%2520%26utm_medium%3Ddistribute.pc_search_result.none-task-blog-2~blog~sobaiduweb~default-6-100113963.nonecase%26spm%3D1018.2226.3001.4450" rel="nofollow" title="使用FFmpeg读取视频流并保存_ffmpeg保存视频流_豹纹法克米的博客-CSDN博客">使用FFmpeg读取视频流并保存_ffmpeg保存视频流_豹纹法克米的博客-CSDN博客</a></p> 
+<p><span style="color:#fe2c24;"><strong>★文末名片可以免费领取音视频开发学习资料，内容包括（FFmpeg ，webRTC ，rtmp ，hls ，rtsp ，ffplay ，srs）以及音视频学习路线图等等。</strong></span></p> 
+<p><span style="color:#fe2c24;"><strong>见下方!↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓</strong></span></p> 
+<p> </p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/4c393a4e4a4623a33457f4b5e090a478/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">ChatGLM2-6B 模型本地部署及基于 P-Tuning v2 的微调</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/e161078afbb8135d85caf163c93cf5ad/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">基于javaweb的在线宠物商店系统(java&#43;SSM&#43;mysql&#43;maven&#43;tomcat)</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

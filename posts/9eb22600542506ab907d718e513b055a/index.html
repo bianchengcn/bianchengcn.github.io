@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MySQL进阶篇之索引1 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MySQL进阶篇之索引1" />
+<meta property="og:description" content="02、索引 2.1、索引概述 1、介绍
+索引（index）是帮助MySQL高效获取数据的数据结构（有序）。在数据之外，数据库系统还维护着满足特定查找算法的数据结构，这些数据结构以某种方式引用（指向）数据，这样就可以在这些数据结构上实现高级查找算法，这种数据结构就是索引。
+2、演示
+备注：上述二叉树索引结构只是一个示意图，并不是真实的索引结构。
+3、优缺点
+优势劣势提高数据检索的速率，降低数据库的IO成本索引列也是要占用空间的。通过索引列对数据进行排序，降低数据排序的成本，降低CPU的消耗。索引大大提高了查询效率，同时却也降低更新表的速度，如对表进行INSERT、UPDATE、DELETE时，效率降低。 2.2、索引结构 2.2.1、介绍 MySQL的索引是在存储引擎层实现的，不同的存储引擎有不同的结构，主要包含以下几种：
+索引结构描述B&#43;Tree索引最常见的索引类型，大部分引擎都支持B&#43;树索引Hash索引底层数据结构是用哈希表实现的，只有精确匹配索引列的查询才有效，不支持范围查询R-tree（空间索引）空间索引是MyISAM引擎的一个特殊索引类型，主要用于地理空间数据类型，通常使用较少Full-text（全文索引）是一种通过建立倒排索引，快速匹配文档的方式。类似于Lucene，Solr，ES 索引InnoDBMyISAMMemoryB&#43;Tree索引支持支持支持Hash索引不支持不支持支持R-tree索引不支持支持不支持Full-text5.6版本之后支持支持不支持 我们平常所说的索引，如果没有特别指明，都是指B&#43;树结构组织的索引。
+2.2.2、BTree 1、二叉树
+二叉树缺点：
+① 顺序插入时，会形成一个链表，查询性能大大降低。
+② 大数据量情况下，层级越深，检索速度慢。
+2、红黑树
+解决了二叉树的缺点①
+红黑树缺点：
+① 大数据量情况下，层级越深，检索速度慢。
+3、BTree(多路平衡查找树)
+① 例如：一棵最大度数（max-degree）为5（5阶）的BTree（每个节点最多存储4个key，5个指针）：
+知识小贴士：树的度数指的是一个节点的子节点个数。
+② 插入100、65、169、368、900、556、780、35、215、1200、234、888、158、90、1000、88、120、268、250数据为例
+具体动态变化的过程可以参考网站：https://www.cs.usfca.edu/~galles/visualization/BTree.html
+2.2.3、B&#43;Tree 1、以一颗最大度数（max-degree）为4（4阶）的B&#43;Tree（每个节点最多存储3个key，4个指针）为例：
+2、 插入100、65、169、368、900、556、780、35、215、1200、234、888、158、90、1000、88、120、268、250数据为例
+B&#43;Tree与BTree区别（B&#43;Tree的特点）：
+所有的数据都会出现在叶子节点叶子结点构成一个单向有序链表 3、MySQL索引数据结构对经典的B&#43;Tree进行了优化。在原B&#43;Tree的基础上，增加一个指向相邻叶子结点的链表指针，就形成了带有顺序指针的B&#43;Tree，提高区间访问的性能。
+2.2.4、Hash 1、哈希索引就是采用一定的hash算法，将键值换算成新的hash值，映射到对应的槽位上，然后存储在hash表中。
+如果两个（或多个）键值，映射到一个相同的槽位上，他们就产生了hash冲突（也称为hash碰撞），可以通过链表来解决。
+2、Hash索引特点：
+Hash索引只能用于对等比较（=，in），不支持范围查询（between，&gt;，&lt;，…）无法利用索引完成排序操作查询效率高，通常只需要一次检索就可以了，效率通常要高于B&#43;Tree索引 3、存储引擎支持
+在MySQL中，支持Hash索引的是Memory引擎，而InnoDB中具有自适应hash功能，hash索引是存储引擎根据B&#43;Tree索引在指定条件下自动构建的。
+2.2.5、思考题 为什么InnoDB存储引擎选择使用B&#43;Tree索引结构？
+相对于二叉树，层级更少，搜索效率高；相对于BTree，无论是叶子结点还是非叶子结点，都会保存数据，这样导致一页中存储的键值减少，指针跟着减少，要同样保存大量数据，只能增加树的高度，导致性能的降低；相对于Hash索引，B&#43;Tree支持范围匹配及排序操作。 2.3、索引分类 1、索引分类
+分类含义特点关键字关键索引针对于表中主键创建的索引默认自动创建，只能有一个PRIMARY唯一索引避免同一个表中某数据列中的值重复可以有多个UNIQUE常规索引快速定位特定数据可以有多个全文索引全文索引查找的是文本中的关键词，而不是比较索引中的值可以有多个FULLTEXT 2、在InnoDB存储引擎中，根据索引的存储形式，又可以分为以下两种：
+分类含义特点聚集索引（Clustered Index）将数据存储与索引放到了一块，索引结构的叶子节点保存了行数据必须有，而且只有一个二级索引（Secondary Index）将数据与索引分开存储，索引结构的叶子节点关联的是对应的主键可以存在多个 聚集索引的选取规则：
+如果存在主键，主键索引就是聚集索引。如果不存在主键，将使用第一个唯一（UNIQUE）索引作为聚集索引。如果表没有主键，或没有合适的唯一索引，则InnoDB会自动生成一个rowid作为隐藏的聚集索引。 具体使用：
+回表查询：先根据条件在二级索引找到对应的主键值，再将主键值在聚集索引中查找，找到对应的行数据。
+即：先根据name=&#39;Arm’在二级索引中找到对应的id值为10，再将id=10在聚集索引中查找，找到对应的row。
+3、思考题
+① 以下SQL语句，哪个执行效率高？为什么？
+select * from user where id = 10; select * from user where name = &#39;Arm&#39;; # 备注：id为主键，name字段创建的有索引; 答：第一个SQL语句执行效率高。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/9eb22600542506ab907d718e513b055a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-01-23T20:57:16+08:00" />
+<meta property="article:modified_time" content="2023-01-23T20:57:16+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MySQL进阶篇之索引1</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="02_0"></a>02、索引</h3> 
+<h4><a id="21_2"></a>2.1、索引概述</h4> 
+<p>1、介绍</p> 
+<p>索引（index）是帮助MySQL<strong>高效获取数据</strong>的<strong>数据结构</strong>（<strong>有序</strong>）。在数据之外，数据库系统还维护着满足特定查找算法的数据结构，这些数据结构以某种方式引用（指向）数据，这样就可以在这些数据结构上实现高级查找算法，这种数据结构就是索引。</p> 
+<p>2、演示</p> 
+<p><img src="https://images2.imgbox.com/c7/0b/EzQCKesI_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>备注：上述二叉树索引结构只是一个示意图，并不是真实的索引结构。</p> 
+</blockquote> 
+<p>3、优缺点</p> 
+<table><thead><tr><th align="center">优势</th><th align="center">劣势</th></tr></thead><tbody><tr><td align="center">提高数据检索的速率，降低数据库的IO成本</td><td align="center">索引列也是要占用空间的。</td></tr><tr><td align="center">通过索引列对数据进行排序，降低数据排序的成本，降低CPU的消耗。</td><td align="center">索引大大提高了查询效率，同时却也降低更新表的速度，如对表进行INSERT、UPDATE、DELETE时，效率降低。</td></tr></tbody></table> 
+<h4><a id="22_22"></a>2.2、索引结构</h4> 
+<h5><a id="221_24"></a>2.2.1、介绍</h5> 
+<p>MySQL的索引是在存储引擎层实现的，不同的存储引擎有不同的结构，主要包含以下几种：</p> 
+<table><thead><tr><th align="center">索引结构</th><th align="center">描述</th></tr></thead><tbody><tr><td align="center"><strong>B+Tree索引</strong></td><td align="center"><strong>最常见的索引类型，大部分引擎都支持B+树索引</strong></td></tr><tr><td align="center">Hash索引</td><td align="center">底层数据结构是用哈希表实现的，只有精确匹配索引列的查询才有效，不支持范围查询</td></tr><tr><td align="center">R-tree（空间索引）</td><td align="center">空间索引是MyISAM引擎的一个特殊索引类型，主要用于地理空间数据类型，通常使用较少</td></tr><tr><td align="center">Full-text（全文索引）</td><td align="center">是一种通过建立倒排索引，快速匹配文档的方式。类似于Lucene，Solr，ES</td></tr></tbody></table> 
+<table><thead><tr><th align="center">索引</th><th align="center">InnoDB</th><th align="center">MyISAM</th><th align="center">Memory</th></tr></thead><tbody><tr><td align="center">B+Tree索引</td><td align="center">支持</td><td align="center">支持</td><td align="center">支持</td></tr><tr><td align="center">Hash索引</td><td align="center">不支持</td><td align="center">不支持</td><td align="center">支持</td></tr><tr><td align="center">R-tree索引</td><td align="center">不支持</td><td align="center">支持</td><td align="center">不支持</td></tr><tr><td align="center">Full-text</td><td align="center">5.6版本之后支持</td><td align="center">支持</td><td align="center">不支持</td></tr></tbody></table> 
+<p>我们平常所说的索引，如果没有特别指明，都是指B+树结构组织的索引。</p> 
+<h5><a id="222BTree_46"></a>2.2.2、BTree</h5> 
+<p>1、二叉树</p> 
+<p><img src="https://images2.imgbox.com/25/0b/rzsC2O9V_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>二叉树缺点：</p> 
+ <p>① 顺序插入时，会形成一个链表，查询性能大大降低。</p> 
+ <p>② 大数据量情况下，层级越深，检索速度慢。</p> 
+</blockquote> 
+<p>2、红黑树</p> 
+<p>解决了二叉树的缺点①</p> 
+<p><img src="https://images2.imgbox.com/86/70/Eoq8gEOi_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>红黑树缺点：</p> 
+ <p>① 大数据量情况下，层级越深，检索速度慢。</p> 
+</blockquote> 
+<p>3、BTree(<strong>多路</strong>平衡查找树)</p> 
+<p>① 例如：一棵最大度数（max-degree）为5（5阶）的BTree（每个节点最多存储4个key，5个指针）：</p> 
+<blockquote> 
+ <p>知识小贴士：树的度数指的是一个节点的子节点个数。</p> 
+</blockquote> 
+<p><img src="https://images2.imgbox.com/c9/b8/KHEjEGrw_o.png" alt="在这里插入图片描述"></p> 
+<p>② 插入100、65、169、368、900、556、780、35、215、1200、234、888、158、90、1000、88、120、268、250数据为例</p> 
+<p><img src="https://images2.imgbox.com/46/2c/vFR601jO_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>具体动态变化的过程可以参考网站：<a href="https://www.cs.usfca.edu/~galles/visualization/BTree.html" rel="nofollow">https://www.cs.usfca.edu/~galles/visualization/BTree.html</a></p> 
+</blockquote> 
+<h5><a id="223BTree_86"></a>2.2.3、B+Tree</h5> 
+<p>1、以一颗最大度数（max-degree）为4（4阶）的B+Tree（每个节点最多存储3个key，4个指针）为例：</p> 
+<p><img src="https://images2.imgbox.com/f8/33/2tVZkYGI_o.png" alt="在这里插入图片描述"></p> 
+<p>2、 插入100、65、169、368、900、556、780、35、215、1200、234、888、158、90、1000、88、120、268、250数据为例</p> 
+<p><img src="https://images2.imgbox.com/8b/47/INIQRi0r_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>B+Tree与BTree区别（B+Tree的特点）：</p> 
+ <ul><li>所有的数据都会出现在叶子节点</li><li>叶子结点构成一个单向有序链表</li></ul> 
+</blockquote> 
+<p>3、MySQL索引数据结构对经典的B+Tree进行了优化。在原B+Tree的基础上，增加一个指向相邻叶子结点的链表指针，就形成了带有顺序指针的B+Tree，提高区间访问的性能。</p> 
+<p><img src="https://images2.imgbox.com/0e/7a/1VFmf1YF_o.png" alt="在这里插入图片描述"></p> 
+<h5><a id="224Hash_108"></a>2.2.4、Hash</h5> 
+<p>1、哈希索引就是采用一定的hash算法，将键值换算成新的hash值，映射到对应的槽位上，然后存储在hash表中。</p> 
+<p>如果两个（或多个）键值，映射到一个相同的槽位上，他们就产生了hash冲突（也称为hash碰撞），可以通过链表来解决。</p> 
+<p>2、Hash索引特点：</p> 
+<ul><li>Hash索引只能用于对等比较（=，in），不支持范围查询（between，&gt;，&lt;，…）</li><li>无法利用索引完成排序操作</li><li>查询效率高，通常只需要一次检索就可以了，效率通常要高于B+Tree索引</li></ul> 
+<p>3、存储引擎支持</p> 
+<p>在MySQL中，支持Hash索引的是Memory引擎，而InnoDB中具有自适应hash功能，hash索引是存储引擎根据B+Tree索引在指定条件下自动构建的。</p> 
+<h5><a id="225_124"></a>2.2.5、思考题</h5> 
+<p>为什么InnoDB存储引擎选择使用B+Tree索引结构？</p> 
+<ul><li>相对于二叉树，层级更少，搜索效率高；</li><li>相对于BTree，无论是叶子结点还是非叶子结点，都会保存数据，这样导致一页中存储的键值减少，指针跟着减少，要同样保存大量数据，只能增加树的高度，导致性能的降低；</li><li>相对于Hash索引，B+Tree支持范围匹配及排序操作。</li></ul> 
+<h4><a id="23_132"></a>2.3、索引分类</h4> 
+<p>1、索引分类</p> 
+<table><thead><tr><th align="center">分类</th><th align="center">含义</th><th align="center">特点</th><th align="center">关键字</th></tr></thead><tbody><tr><td align="center">关键索引</td><td align="center">针对于表中主键创建的索引</td><td align="center">默认自动创建，只能有一个</td><td align="center">PRIMARY</td></tr><tr><td align="center">唯一索引</td><td align="center">避免同一个表中某数据列中的值重复</td><td align="center">可以有多个</td><td align="center">UNIQUE</td></tr><tr><td align="center">常规索引</td><td align="center">快速定位特定数据</td><td align="center">可以有多个</td><td align="center"></td></tr><tr><td align="center">全文索引</td><td align="center">全文索引查找的是文本中的关键词，而不是比较索引中的值</td><td align="center">可以有多个</td><td align="center">FULLTEXT</td></tr></tbody></table> 
+<p>2、在InnoDB存储引擎中，根据索引的存储形式，又可以分为以下两种：</p> 
+<table><thead><tr><th align="center">分类</th><th align="center">含义</th><th align="center">特点</th></tr></thead><tbody><tr><td align="center">聚集索引（Clustered Index）</td><td align="center">将数据存储与索引放到了一块，索引结构的叶子节点保存了行数据</td><td align="center">必须有，而且只有一个</td></tr><tr><td align="center">二级索引（Secondary Index）</td><td align="center">将数据与索引分开存储，索引结构的叶子节点关联的是对应的主键</td><td align="center">可以存在多个</td></tr></tbody></table> 
+<p>聚集索引的选取规则：</p> 
+<ul><li>如果存在主键，主键索引就是聚集索引。</li><li>如果不存在主键，将使用第一个唯一（UNIQUE）索引作为聚集索引。</li><li>如果表没有主键，或没有合适的唯一索引，则InnoDB会自动生成一个rowid作为隐藏的聚集索引。</li></ul> 
+<p><img src="https://images2.imgbox.com/bc/ac/STPLH758_o.png" alt="在这里插入图片描述"></p> 
+<p>具体使用：</p> 
+<p><img src="https://images2.imgbox.com/49/42/DDpdWyKF_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>回表查询：先根据条件在二级索引找到对应的主键值，再将主键值在聚集索引中查找，找到对应的行数据。</p> 
+ <p>即：先根据name='Arm’在二级索引中找到对应的id值为10，再将id=10在聚集索引中查找，找到对应的row。</p> 
+</blockquote> 
+<p>3、思考题</p> 
+<p>① 以下SQL语句，哪个执行效率高？为什么？</p> 
+<pre><code class="prism language-mysql">select * from user where id = 10;
+select * from user where name = 'Arm';
+
+# 备注：id为主键，name字段创建的有索引;
+</code></pre> 
+<p>答：第一个SQL语句执行效率高。</p> 
+<p>第一个SQL语句，直接在聚集索引进行查询，只需要扫描一次索引。</p> 
+<p>第二个SQL语句，先根据name='Arm’在二级索引中找到对应的id值为10，再将id=10在聚集索引中查找，找到对应的行数据。需要扫描两次索引。</p> 
+<p>② InnoDB主键索引的B+Tree高度为多高呢？</p> 
+<p>假设：一行数据大小为1k，一页中可以存储16行这样的数据。InnoDB的指针占用6个字节的空间，主键即使为bigint，占用字节数为8。</p> 
+<p><img src="https://images2.imgbox.com/bc/4a/LgJRfZBh_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="24_192"></a>2.4、索引语法</h4> 
+<p>1、索引语法</p> 
+<ul><li> <p>创建索引</p> <pre><code class="prism language-mysql">CREATE [UNIQUE | FULLTEXT] INDEX index_name ON table_name (index_col_name,...);
+</code></pre> <p>一个索引只关联一个字段，这个索引称之为单列索引；</p> <p>一个索引关联多个字段，这个索引称之为联合索引或组合索引。</p> </li><li> <p>查看索引</p> <pre><code class="prism language-mysql">SHOW INDEX FROM table_name;
+</code></pre> </li><li> <p>删除索引</p> <pre><code class="prism language-mysql">DROP INDEX index_name ON table_name;
+</code></pre> </li></ul> 
+<p>2、按照下列的需求，完成索引的创建</p> 
+<p>① name字段为姓名字段，该字段的值可能会重复，为该字段创建索引。</p> 
+<pre><code class="prism language-mysql">create index idx_user_name on tb_user(name);
+</code></pre> 
+<p><img src="https://images2.imgbox.com/14/89/cFvrr6ie_o.png" alt="在这里插入图片描述"></p> 
+<p>② phone手机号字段的值，是非空，且唯一的，为该字段创建唯一索引。</p> 
+<pre><code class="prism language-mysql">create unique index idx_user_phone on tb_user(phone);
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a4/7a/3wxIFqfz_o.png" alt="在这里插入图片描述"></p> 
+<p>③ 为profession、age、status创建联合索引。</p> 
+<pre><code class="prism language-mysql">create index idx_user_profession_age_status on tb_user(profession,age,status);
+</code></pre> 
+<p><img src="https://images2.imgbox.com/3d/02/ruLveEjl_o.png" alt="在这里插入图片描述"></p> 
+<p>④ 为email建立合适的索引来提升查询效率。</p> 
+<pre><code class="prism language-mysql">create index idx_user_email on tb_user(email);
+</code></pre> 
+<p><img src="https://images2.imgbox.com/cc/5f/SoBYEEA6_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p><strong>注意：</strong><br> 后三节内容：<a href="https://blog.csdn.net/kuaixiao0217/article/details/128754022">https://blog.csdn.net/kuaixiao0217/article/details/128754022</a></p> 
+</blockquote>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1ebd30ac1ad6d418cd2ef6d0720b3537/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Python基础—分支结构</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/6cab5d875cda8523ca47e86d4079552a/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">MySQL - text字段</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

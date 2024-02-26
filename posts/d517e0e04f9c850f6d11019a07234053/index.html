@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>使用c&#43;&#43;/winrt API获取RGB相机视频流 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="使用c&#43;&#43;/winrt API获取RGB相机视频流" />
+<meta property="og:description" content="使用c&#43;&#43;/winrt API获取RGB相机视频流
+1、前提条件
+该示例使用c&#43;&#43;/winrt进行开发，需要编译器支持c&#43;&#43;17，本人使用Visual Studio2017，系统版本为Windows10 21H2，由于UWP API是从Windows10系统进行支持的，故而Windows7及Windows8等系统可能不能正常使用。
+注：遇到未定义行为请先检查该API是从哪个Windows版本支持的，可能你当前的系统版本还不支持该API。
+2、使用MediaCapture获取RGB相机视频的流程
+使用FindAllAsync接口获取所有的VideoCapture设备，选择你想要的设备；根据选好的设备ID及自定义配置初始化MediaCapture对象；使用刚刚初始化的MediaCapture获取所有的帧源，我们这里选择RGB视频流这个帧源；为选择好的MeidaFrameSource设置指定的format（width,height）；获取读取视频流帧对象MediaFrameReader;使用MediaFrameReader读取相机的视频帧； 3、代码演示
+注：演示代码中还需要依赖opencv进行nv12-&gt;bgr的转换工作，以及使用opencv进行实时显示取到的视频帧工作。
+头文件
+//MediaFrameCapture.h #pragma once #ifdef _WIN32 // winrt #include &lt;mfapi.h&gt; #include &lt;mfidl.h&gt; #include &lt;winrt/base.h&gt; #include &lt;winrt/Windows.Media.Core.h&gt; #include &lt;winrt/Windows.Media.Devices.h&gt; #include &lt;winrt/Windows.Media.Capture.h&gt; #include &lt;winrt/Windows.Media.Capture.Frames.h&gt; #include &lt;winrt/Windows.Media.Mediaproperties.h&gt; #include &lt;winrt/Windows.Foundation.h&gt; #include &lt;winrt/Windows.Foundation.Collections.h&gt; #include &lt;winrt/Windows.Storage.Streams.h&gt; #include &lt;winrt/Windows.Devices.Enumeration.h&gt; #include &lt;winrt/Windows.Graphics.h&gt; #include &lt;winrt/Windows.Graphics.Imaging.h&gt; using namespace winrt; #include &#34;opencv2/opencv.hpp&#34; // std #include &lt;vector&gt; class MediaFrameCapture { public: MediaFrameCapture(); ~MediaFrameCapture(); /** * @brief 获取已连接的设备数 * * @return 返回已连接的mipi RGB的设备数量 * @note */ int listDevices(); /** * @brief 更新已连接mipi RGB相机列表 * * @return void * @note */ void updateListDevices(); /** * @brief 连接指定deviceId的设备 * * 通过deviceId获取指定设备并初始MediaCapture对象 * * @param[in] deviceId RGB设备的PID，通过该deviceId查询设备是否存在 * @return 返回设置是否被正确的打开和初始化 * @note */ bool setupDevice(const std::string&amp; deviceId); /** * @brief 连接指定deviceId的设备并指定帧的分辨率 * * 通过deviceId获取指定设备并初始MediaCapture对象；指定帧的分辨率，若指定的大小格式不支持则失败 * * @param[in] deviceId RGB设备的PID，通过该deviceId查询设备是否存在 * @param[in] width 分辨率宽 * @param[in] height 分辨率高 * @return 返回设置是否被正确的打开和初始化 * @note */ bool setupDevice(const std::string&amp; deviceId, int width, int height); bool startCapture(); bool stopCapture(); /** * @brief 提供给外部调用返回读取到的新帧 * * * @param[out] oneFrame 返回读取到的新帧 * @return false没有获取到新帧，true获取到新帧 * @note */ bool read(cv::Mat&amp;); /** * @brief 用于通过设备PID号选择指定的设备，初始化m_selectedDevice字段 * * * @param[in] deviceId 设备的PID号 * @return false指定的设备不存在，获取失败；true指定的设备存在 * @note */ bool selectDeviceByDeviceId(const std::string&amp; deviceId); /** * @brief 判断已选设备是否被占用 * * @param[in] selectedDevice 传入选中的设备信息 * @return false设备未被占用，可以使用；true设备已被占用或互斥打开 * @note */ bool isDeviceInUse(Windows::Devices::Enumeration::DeviceInformation selectedDevice); /** * @brief 获取设备列表 * * @return 返回设备列表结果集 * @note */ Windows::Devices::Enumeration::DeviceInformationCollection getDeviceList(); private: /** * @brief 通过选好的设备初始化MediaCapture对象，该对象用于媒体设备流采集 * * * @param[in] selectedDevice 选择的设备信息 * @return false初始化失败，true初始化成功 * @note */ bool initMediaCapture(const Windows::Devices::Enumeration::DeviceInformation&amp; selectedDevice); /** * @brief 选择Color帧源，由于一个设备中可能有color、depth、ir等源，选择color帧 * * @return false不存在color源，true存在并初始化成功 * @note */ bool chooseMediaFrameSource(); /** * @brief 获取最合适的分辨率 * * 若width和height为0时，选择最高分辨率，不为0时，选择与width、height对应的分辨率 * * @param[in] width 需要适配的分辨率宽 * @param[in] height 需要适配的分辨率高 * @return 为nullptr表示没有找到适配的format * @note */ Windows::Media::Capture::Frames::MediaFrameFormat getSupportFormat(int width = 0, int height = 0); private: int m_width;	// 分辨率-宽 int m_height;	// 分辨率-高 int m_deviceNums;	// 设备数 std::string m_deviceId; // 设备的PID param::hstring m_subType; std::map&lt;uint32_t, std::pair&lt;int, int&gt;&gt; m_supportFormatMap;// 支持的NV12格式 static std::map &lt;std::string, bool&gt; m_deviceOpenedMap; Windows::Devices::Enumeration::DeviceInformation m_selectedDevice;	// 被选择的设备 Windows::Devices::Enumeration::DeviceInformationCollection m_deviceList; // 设备列表 Windows::Media::Capture::MediaCapture m_mediaCapture;	// 媒体流采集 Windows::Media::Capture::Frames::MediaFrameSource m_mediaFrameSource;	// 媒体流源，从mediacapture获取 Windows::Media::Capture::Frames::MediaFrameFormat m_defaultFormat;	// 媒体格式，用于自定义视频流的分辨率 Windows::Media::Capture::Frames::MediaFrameReader m_mediaFrameReader;	// 读取视频流 }; #endif 实现" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d517e0e04f9c850f6d11019a07234053/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-04-12T15:12:03+08:00" />
+<meta property="article:modified_time" content="2023-04-12T15:12:03+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">使用c&#43;&#43;/winrt API获取RGB相机视频流</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>使用c++/winrt API获取RGB相机视频流</p> 
+<p>1、前提条件</p> 
+<blockquote> 
+ <p>该示例使用c++/winrt进行开发，需要编译器支持c++17，本人使用Visual Studio2017，系统版本为Windows10 21H2，由于UWP API是从Windows10系统进行支持的，故而Windows7及Windows8等系统可能不能正常使用。</p> 
+</blockquote> 
+<p>注：遇到未定义行为请先检查该API是从哪个Windows版本支持的，可能你当前的系统版本还不支持该API。</p> 
+<p>2、使用MediaCapture获取RGB相机视频的流程</p> 
+<ul><li>使用FindAllAsync接口获取所有的VideoCapture设备，选择你想要的设备；</li><li>根据选好的设备ID及自定义配置初始化MediaCapture对象；</li><li>使用刚刚初始化的MediaCapture获取所有的帧源，我们这里选择RGB视频流这个帧源；</li><li>为选择好的MeidaFrameSource设置指定的format（width,height）；</li><li>获取读取视频流帧对象MediaFrameReader;</li><li>使用MediaFrameReader读取相机的视频帧；</li></ul> 
+<p>3、代码演示</p> 
+<p>注：演示代码中还需要依赖opencv进行nv12-&gt;bgr的转换工作，以及使用opencv进行实时显示取到的视频帧工作。</p> 
+<p>头文件</p> 
+<pre><code class="prism language-c++">//MediaFrameCapture.h
+
+#pragma once
+#ifdef _WIN32
+// winrt
+#include &lt;mfapi.h&gt;
+#include &lt;mfidl.h&gt;
+#include &lt;winrt/base.h&gt;
+#include &lt;winrt/Windows.Media.Core.h&gt;
+#include &lt;winrt/Windows.Media.Devices.h&gt;
+#include &lt;winrt/Windows.Media.Capture.h&gt;
+#include &lt;winrt/Windows.Media.Capture.Frames.h&gt;
+#include &lt;winrt/Windows.Media.Mediaproperties.h&gt;
+#include &lt;winrt/Windows.Foundation.h&gt;
+#include &lt;winrt/Windows.Foundation.Collections.h&gt;
+#include &lt;winrt/Windows.Storage.Streams.h&gt;
+#include &lt;winrt/Windows.Devices.Enumeration.h&gt;
+#include &lt;winrt/Windows.Graphics.h&gt;
+#include &lt;winrt/Windows.Graphics.Imaging.h&gt;
+using namespace winrt;
+#include "opencv2/opencv.hpp"
+// std
+#include &lt;vector&gt;
+
+class MediaFrameCapture
+{
+public:
+	MediaFrameCapture();
+	~MediaFrameCapture();
+	/**
+     * @brief 获取已连接的设备数
+     * 
+     * @return 返回已连接的mipi RGB的设备数量
+     * @note
+     */
+	int listDevices();
+	/**
+     * @brief 更新已连接mipi RGB相机列表
+     *
+     * @return void
+     * @note 
+     */
+	void updateListDevices();
+	/**
+     * @brief 连接指定deviceId的设备
+     *
+     * 通过deviceId获取指定设备并初始MediaCapture对象
+     *
+     * @param[in] deviceId RGB设备的PID，通过该deviceId查询设备是否存在
+     * @return 返回设置是否被正确的打开和初始化
+     * @note 
+     */
+	bool setupDevice(const std::string&amp; deviceId);
+	/**
+	 * @brief 连接指定deviceId的设备并指定帧的分辨率
+	 *
+	 * 通过deviceId获取指定设备并初始MediaCapture对象；指定帧的分辨率，若指定的大小格式不支持则失败
+	 *
+	 * @param[in] deviceId RGB设备的PID，通过该deviceId查询设备是否存在
+	 * @param[in] width 分辨率宽
+	 * @param[in] height 分辨率高
+	 * @return 返回设置是否被正确的打开和初始化
+	 * @note
+	 */
+	bool setupDevice(const std::string&amp; deviceId, int width, int height);
+
+	bool startCapture();
+	bool stopCapture();
+	/**
+	 * @brief 提供给外部调用返回读取到的新帧
+	 *
+	 *
+	 * @param[out] oneFrame 返回读取到的新帧
+	 * @return false没有获取到新帧，true获取到新帧
+	 * @note
+	 */
+	bool read(cv::Mat&amp;);
+
+	/**
+	 * @brief 用于通过设备PID号选择指定的设备，初始化m_selectedDevice字段
+	 *
+	 *
+	 * @param[in] deviceId 设备的PID号
+	 * @return false指定的设备不存在，获取失败；true指定的设备存在
+	 * @note
+	 */
+	bool selectDeviceByDeviceId(const std::string&amp; deviceId);
+
+	/**
+	 * @brief 判断已选设备是否被占用
+	 *
+	 * @param[in] selectedDevice 传入选中的设备信息
+	 * @return false设备未被占用，可以使用；true设备已被占用或互斥打开
+	 * @note
+	 */
+	bool isDeviceInUse(Windows::Devices::Enumeration::DeviceInformation selectedDevice);
+
+	/**
+	 * @brief 获取设备列表
+	 *
+	 * @return 返回设备列表结果集
+	 * @note
+	 */
+	Windows::Devices::Enumeration::DeviceInformationCollection getDeviceList();
+private:
+	/**
+	 * @brief 通过选好的设备初始化MediaCapture对象，该对象用于媒体设备流采集
+	 *
+	 *
+	 * @param[in] selectedDevice 选择的设备信息
+	 * @return false初始化失败，true初始化成功
+	 * @note
+	 */
+	bool initMediaCapture(const Windows::Devices::Enumeration::DeviceInformation&amp; selectedDevice);
+
+	/**
+	 * @brief 选择Color帧源，由于一个设备中可能有color、depth、ir等源，选择color帧
+	 *
+	 * @return false不存在color源，true存在并初始化成功
+	 * @note
+	 */
+	bool chooseMediaFrameSource();
+
+	/**
+	 * @brief 获取最合适的分辨率
+	 *
+	 * 若width和height为0时，选择最高分辨率，不为0时，选择与width、height对应的分辨率
+	 *
+	 * @param[in] width 需要适配的分辨率宽
+	 * @param[in] height 需要适配的分辨率高
+	 * @return 为nullptr表示没有找到适配的format
+	 * @note
+	 */
+	Windows::Media::Capture::Frames::MediaFrameFormat getSupportFormat(int width = 0, int height = 0);
+
+private:
+	int m_width;			// 分辨率-宽
+	int m_height;			// 分辨率-高
+	int m_deviceNums;		// 设备数
+	std::string m_deviceId; // 设备的PID
+	param::hstring m_subType;
+	std::map&lt;uint32_t, std::pair&lt;int, int&gt;&gt; m_supportFormatMap;// 支持的NV12格式
+	static std::map &lt;std::string, bool&gt; m_deviceOpenedMap;
+	Windows::Devices::Enumeration::DeviceInformation m_selectedDevice;		 // 被选择的设备
+	Windows::Devices::Enumeration::DeviceInformationCollection m_deviceList; // 设备列表
+	Windows::Media::Capture::MediaCapture m_mediaCapture;	 // 媒体流采集
+	Windows::Media::Capture::Frames::MediaFrameSource m_mediaFrameSource;		 // 媒体流源，从mediacapture获取
+	Windows::Media::Capture::Frames::MediaFrameFormat m_defaultFormat;			 // 媒体格式，用于自定义视频流的分辨率
+	Windows::Media::Capture::Frames::MediaFrameReader m_mediaFrameReader;		 // 读取视频流
+
+};
+
+#endif
+</code></pre> 
+<p>实现</p> 
+<pre><code class="prism language-c++">#ifdef _WIN32
+#include "MediaFrameCapture.h"
+#include &lt;iostream&gt; // 后期使用log代替
+#include "opencv2/core/core.hpp"
+#include "opencv2/imgproc.hpp"
+std::map&lt;std::string,bool&gt; MediaFrameCapture::m_deviceOpenedMap;
+
+MediaFrameCapture::MediaFrameCapture():
+	m_selectedDevice(nullptr),
+	m_mediaFrameSource(nullptr), 
+	m_defaultFormat(nullptr), 
+	m_deviceList(nullptr),
+	m_mediaFrameReader(nullptr),
+	//m_mediaCapture(nullptr),
+	m_subType(L"NV12")
+{
+	init_apartment();
+	updateListDevices();
+}
+
+MediaFrameCapture::~MediaFrameCapture()
+{
+	if (m_mediaFrameReader)
+	{
+		stopCapture();
+		m_mediaFrameReader.Close();
+		m_mediaFrameReader = nullptr;
+	}
+	if (m_mediaCapture)
+	{
+		m_mediaCapture.Close();
+	}
+	m_deviceOpenedMap[m_deviceId] = false;
+}
+
+void MediaFrameCapture::updateListDevices()
+{
+	// 选择设备类型为视频
+	auto selector = Windows::Devices::Enumeration::DeviceClass::VideoCapture;
+	m_deviceList = Windows::Devices::Enumeration::DeviceInformation::FindAllAsync(selector).get();
+}
+
+int MediaFrameCapture::listDevices()
+{
+	updateListDevices();
+	return m_deviceList.Size();
+}
+
+bool MediaFrameCapture::selectDeviceByDeviceId(const std::string&amp; deviceId)
+{
+	bool haveFound = false;
+	for (const Windows::Devices::Enumeration::DeviceInformation&amp; device : m_deviceList)
+	{
+		std::wstring wDeviceId(device.Id().c_str());
+		std::string devId(wDeviceId.begin(), wDeviceId.end());
+		if (m_deviceOpenedMap.find(devId) != m_deviceOpenedMap.end())
+		{
+			if (m_deviceOpenedMap.at(devId)) continue;
+		}
+		if (devId.find("PID_" + deviceId) != std::string::npos)
+		{
+			haveFound = true;
+			m_selectedDevice = device;
+			m_deviceId = devId;
+		}
+	}
+	return haveFound;
+}
+
+bool MediaFrameCapture::initMediaCapture(const Windows::Devices::Enumeration::DeviceInformation&amp; selectedDevice)
+{
+	Windows::Media::Capture::MediaCaptureInitializationSettings settings;
+	settings.VideoDeviceId(selectedDevice.Id());
+	settings.SharingMode(winrt::Windows::Media::Capture::MediaCaptureSharingMode::ExclusiveControl);
+	settings.MemoryPreference(winrt::Windows::Media::Capture::MediaCaptureMemoryPreference::Cpu);
+	settings.StreamingCaptureMode(winrt::Windows::Media::Capture::StreamingCaptureMode::Video);
+	try {
+		m_mediaCapture.InitializeAsync(settings).get();
+	}
+	catch (...)
+	{
+		std::cout &lt;&lt; "MediaCapture初始化失败" &lt;&lt; std::endl;
+		return false;
+	}
+	m_deviceOpenedMap[m_deviceId] = true;
+	return true;
+}
+
+bool MediaFrameCapture::isDeviceInUse(Windows::Devices::Enumeration::DeviceInformation selectedDevice)
+{
+	std::wstring wDeviceId(selectedDevice.Id().c_str());
+	std::string devId(wDeviceId.begin(), wDeviceId.end());
+	if (m_deviceOpenedMap.find(devId) != m_deviceOpenedMap.end() &amp;&amp; m_deviceOpenedMap.at(devId))
+		return true;
+	return false;
+}
+
+Windows::Devices::Enumeration::DeviceInformationCollection MediaFrameCapture::getDeviceList()
+{
+	updateListDevices();
+	return m_deviceList;
+}
+
+bool MediaFrameCapture::chooseMediaFrameSource()
+{
+	if (m_mediaCapture == nullptr)
+	{
+		return false;
+	}
+	auto frameSources = m_mediaCapture.FrameSources();
+	Windows::Media::Capture::Frames::MediaFrameSource mediaFrameSource = nullptr;
+	for (auto frameSource : frameSources)
+	{
+		mediaFrameSource = frameSource.Value();
+		if (mediaFrameSource.Info().MediaStreamType() == Windows::Media::Capture::MediaStreamType::VideoRecord
+			&amp;&amp; mediaFrameSource.Info().SourceKind() == Windows::Media::Capture::Frames::MediaFrameSourceKind::Color)
+		{
+			m_mediaFrameSource = mediaFrameSource;
+			return true;
+		}
+	}
+	return false;
+}
+
+Windows::Media::Capture::Frames::MediaFrameFormat MediaFrameCapture::getSupportFormat(int t_width, int t_height)
+{
+	if (!m_mediaFrameSource) return nullptr;
+	int max_width = 0;
+	int max_height = 0;
+	Windows::Media::Capture::Frames::MediaFrameFormat preffered_format = nullptr;
+
+	for (Windows::Media::Capture::Frames::MediaFrameFormat format : m_mediaFrameSource.SupportedFormats())
+	{
+		std::wcout &lt;&lt; format.Subtype().data() &lt;&lt; " "
+			&lt;&lt; format.VideoFormat().Width() &lt;&lt; " "
+			&lt;&lt; format.VideoFormat().Height() &lt;&lt; std::endl;
+		std::wstring subType = format.Subtype().data();
+		auto width = format.VideoFormat().Width();
+		auto height = format.VideoFormat().Height();
+		if (L"NV12" == subType)
+		{
+			if (t_width == 0 &amp;&amp; t_height == 0)
+			{
+				if (max_width &lt; width &amp;&amp; max_height &lt; height)
+				{
+					max_width = width;
+					max_height = height;
+					preffered_format = format;
+				}
+			}
+			else if (t_width == width &amp;&amp; t_height == height)
+			{
+				preffered_format = format;
+				break;
+			}
+		}
+	}
+	if (preffered_format)
+	{
+		if (t_width == 0 &amp;&amp; t_height == 0)
+		{
+			m_width = max_width;
+			m_height = max_height;
+		}
+		else
+		{
+			m_width = t_width;
+			m_height = t_height;
+		}
+	}
+	return preffered_format;
+}
+
+bool MediaFrameCapture::setupDevice(const std::string&amp; deviceId)
+{
+	if (!initMediaCapture(m_selectedDevice))
+	{
+		return false;
+	}
+	if (!chooseMediaFrameSource())
+	{
+		return false;
+	}
+
+	m_defaultFormat = getSupportFormat();
+	if (!m_defaultFormat)
+	{
+		return false;
+	}
+	try
+	{
+		m_mediaFrameSource.SetFormatAsync(m_defaultFormat).get();
+		m_mediaFrameReader = m_mediaCapture.CreateFrameReaderAsync(m_mediaFrameSource, m_subType).get();
+	}
+	catch (...)
+	{
+		return false;
+	}
+	return startCapture();
+}
+
+bool MediaFrameCapture::setupDevice(const std::string&amp; deviceId, int t_width, int t_height)
+{
+	if (!initMediaCapture(m_selectedDevice))
+	{
+		return false;
+	}
+	if (!chooseMediaFrameSource())
+	{
+		return false;
+	}
+
+	m_defaultFormat = getSupportFormat(t_width, t_height);
+	if (!m_defaultFormat)
+	{
+		return false;
+	}
+	try
+	{
+		m_mediaFrameSource.SetFormatAsync(m_defaultFormat).get();
+		m_mediaFrameReader = m_mediaCapture.CreateFrameReaderAsync(m_mediaFrameSource, m_subType).get();
+	}
+	catch (...)
+	{
+		return false;
+	}
+	return startCapture();
+}
+
+bool MediaFrameCapture::startCapture()
+{
+	if (!m_mediaFrameReader) return false;
+	try {
+		m_mediaFrameReader.StartAsync().get();
+	}
+	catch (...)
+	{
+		return false;
+	}
+	return true;
+}
+
+bool MediaFrameCapture::stopCapture()
+{
+	if (!m_mediaFrameReader) return false;
+	try {
+		m_mediaFrameReader.StopAsync().get();
+	}
+	catch (...)
+	{
+		return false;
+	}
+	return true;
+}
+
+bool MediaFrameCapture::read(cv::Mat&amp; oneFrame)
+{
+	Windows::Media::Capture::Frames::MediaFrameReference videoMediaFrame = m_mediaFrameReader.TryAcquireLatestFrame();
+	if (videoMediaFrame)
+	{
+		auto videoFrame = videoMediaFrame.VideoMediaFrame().GetVideoFrame();
+		cv::Mat bgrMat;
+		if (videoFrame != nullptr)
+		{
+			auto ff = videoMediaFrame.Format();
+			std::wcout &lt;&lt; ff.Subtype().data()
+				&lt;&lt; " " &lt;&lt; ff.VideoFormat().Width()
+				&lt;&lt; " " &lt;&lt; ff.VideoFormat().Height() &lt;&lt; std::endl;
+			uint32_t cap = m_width * m_height * 1.5;
+			Windows::Storage::Streams::Buffer buffer(cap);
+			videoFrame.SoftwareBitmap().CopyToBuffer(buffer);
+			uint8_t *data = buffer.data();
+			cv::Mat yuvMat(m_height * 3 / 2, m_width, CV_8UC1, data);
+			cv::cvtColor(yuvMat, bgrMat, cv::COLOR_YUV2BGR_NV12);
+			oneFrame = bgrMat.clone();
+			return true;
+		}
+	}
+	return false;
+}
+
+
+#endif
+</code></pre> 
+<p>测试代码</p> 
+<pre><code class="prism language-c++">#include "MediaFrameCapture.h"
+#include &lt;opencv2/opencv.hpp&gt;
+
+int main(int argc, char*argv[])
+{
+	std::string PID = "";
+	if (argc &gt; 1)
+	{
+		PID = argv[1];
+	}
+	MediaFrameCapture frameCapture;
+	if (!frameCapture.selectDeviceByDeviceId(PID))
+	{
+		std::cout &lt;&lt; "没有找到对应PID为&lt;" &lt;&lt; PID &lt;&lt; "&gt;的相机" &lt;&lt; std::endl;
+		return false;
+	}
+	bool ret = frameCapture.setupDevice(PID, 1280, 720);
+	if (!ret)
+	{
+		std::cout &lt;&lt; "open PID : " &lt;&lt; PID &lt;&lt; " failed" &lt;&lt; std::endl;
+		return 0;
+	}
+	while (1)
+	{
+		cv::Mat readFrame;
+		ret = frameCapture.read(readFrame);
+		if (ret)
+		{
+			cv::imshow("NV12 Image", readFrame);
+
+			cv::waitKey(50);
+		}
+	}
+	return 0;
+}
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/11b1dd60002f6ab741703af8afbd9130/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【Godot】根据 Image/Texture 创建不规则碰撞形状</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/bf81d664c58b0907c6555c6a2bf5f317/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【驱动开发】文件系统微过滤驱动（Minifilter）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

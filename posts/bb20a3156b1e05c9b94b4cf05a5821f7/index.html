@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Flink Watermark和时间语义 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Flink Watermark和时间语义" />
+<meta property="og:description" content="Flink 中的时间语义 时间语义： EventTime：事件创建时间；Ingestion Time：数据进入Flink的时间；Processing Time：执行操作算子的本地系统时间，与机器无关。不同的时间语义有不同的应用场合，我们往往更关系事件时间Event Time。数据生成的时候就会自动注入时间戳，Event Time可以从日志数据的时间戳timestamp)中提取。
+设置 Event Time 我们可以直接在代码中，对执行环境调用setStreamTimeCharacteristic方法，设置流的时间特性。具体的时间，还需要从数据中提取时间戳timestamp。
+val env = StreamExecutionEnvironment.getExecutionEnvironment //从调用时刻开始给 env 创建的每一个 stream 追加时间特性 env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime) 乱序数据的影响 当Flink以Event Time模式处理数据流时，它会根据数据里的时间戳来处理基于时间的算子。由于网络、分布式等原因，会导致乱序数据的产生。如上图所示，理想情况与实际情况会存在差异，乱序数据会让窗口计算不准确。解决方案是让窗口等几分钟。
+水位线 Watermark 怎么避免乱序数据带来计算不正确？
+遇到一个时间戳到达了窗口关闭时间，不应该立刻触发窗口计算，而是等待一段时间，等迟到的数据来了再关闭窗口。Watermark是一种衡量Event Time进展的机制，可以设置延迟触发。Watermark是用于处理乱序事件的，而正确的处理乱序事件，通常用Watermark机制结合window来实现。数据流中的Watermark用于表示timestamp小于Watermark的数据，都已经达到了，因此，window的执行也是由Watermark触发的。Watermark用来让程序自己延迟和结果正确性。
+Watermark 的特点： Watermark是一条特殊的数据记录，必须单调递增，以确保任务的事件时间时钟在向前推进，而不是在后退。Watermark与数据的时间戳有关。
+watermark 的传递、引入和设定 watermark的传递： 一个Task输入可以并行多个，如下有4个并行度，输出也可能存在多个并行，如下有3个。每个任务Task内部都有一个事件时钟，且每个分区也维护了对应的WM，如下的Partition WM。当事件流流进Partition时会判断新事件流的WM是否大于当前的Partition WM，当大于时就更新Partition的时间戳WM为新流入的WM（取最大值），如下1-&gt;2象限Partition WM的变化。同时，如下Task也维护了一个全局的WM表示事件时钟，该值取分区中最小的WM作为输出的时间戳，如下第二象限的输出选择最小的WM=3向下传递。当第二个(横线)分区Partition WM流进来WM=7的事件流时，就会出现第三象限的情景，但是最小的WM还是=3，因此不更新Task全局的WM。当第三个分区Partition WM流进来WM=6的事件流时，就会出现第四象限的情景，此时分区Partition WM的最小值=4，因此Task全局WM就=4。
+watermark的引入： Event Time的使用一定要指定数据源中的时间戳。对于排好序的数据，只需要指定时间戳就够了，不需要延迟触发。
+import org.apache.flink.streaming.api.windowing.time.Time //同时分配时间戳和水位线 dataStream.assignTimestampsAndWatermarks( //无序数据 Time.milliseconds(1000)=延迟时间 new BoundedOutOfOrdernessTimestampExtractor[SensorReading](Time.milliseconds(1000)) { //提取事件戳 = timestamp * 1000是因为出入的毫秒 override def extractTimestamp(t: SensorReading): Long = { t.timestamp * 1000 } }) 【1】对于排好序的数据，不需要延迟触发，可以只指定事件戳就行了" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/bb20a3156b1e05c9b94b4cf05a5821f7/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-03T17:49:32+08:00" />
+<meta property="article:modified_time" content="2024-01-03T17:49:32+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Flink Watermark和时间语义</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-tomorrow-night">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="Flink__1"></a>Flink 中的时间语义</h3> 
+<p><img src="https://images2.imgbox.com/49/d1/p9zYR2eH_o.png" alt="[点击并拖拽以移动] ​"></p> 
+<p><strong>时间语义：</strong> <code>EventTime</code>：事件创建时间；<code>Ingestion Time</code>：数据进入<code>Flink</code>的时间；<code>Processing Time</code>：执行操作算子的本地系统时间，与机器无关。不同的时间语义有不同的应用场合，我们往往更关系事件时间<code>Event Time</code>。数据生成的时候就会自动注入时间戳，<code>Event Time</code>可以从日志数据的时间戳<code>timestamp)</code>中提取。</p> 
+<h3><a id="_Event_Time_6"></a>设置 Event Time</h3> 
+<p>我们可以直接在代码中，对执行环境调用<code>setStreamTimeCharacteristic</code>方法，设置流的时间特性。具体的时间，还需要从数据中提取时间戳<code>timestamp</code>。</p> 
+<pre><code class="prism language-java">val env <span class="token operator">=</span> <span class="token class-name">StreamExecutionEnvironment</span><span class="token punctuation">.</span>getExecutionEnvironment
+<span class="token comment">//从调用时刻开始给 env 创建的每一个 stream 追加时间特性</span>
+env<span class="token punctuation">.</span><span class="token function">setStreamTimeCharacteristic</span><span class="token punctuation">(</span><span class="token class-name">TimeCharacteristic<span class="token punctuation">.</span>EventTime</span><span class="token punctuation">)</span>
+</code></pre> 
+<h3><a id="_15"></a>乱序数据的影响</h3> 
+<p><img src="https://images2.imgbox.com/46/9d/glTZ7NYt_o.png" alt="[点击并拖拽以移动] ​"></p> 
+<p>当<code>Flink</code>以<code>Event Time</code>模式处理数据流时，它会根据数据里的时间戳来处理基于时间的算子。由于网络、分布式等原因，会导致乱序数据的产生。如上图所示，理想情况与实际情况会存在差异，乱序数据会让窗口计算不准确。解决方案是让窗口等几分钟。</p> 
+<h3><a id="_Watermark_21"></a>水位线 Watermark</h3> 
+<p><strong>怎么避免乱序数据带来计算不正确？</strong><br> 遇到一个时间戳到达了窗口关闭时间，不应该立刻触发窗口计算，而是等待一段时间，等迟到的数据来了再关闭窗口。<code>Watermark</code>是一种衡量<code>Event Time</code>进展的机制，可以设置延迟触发。<code>Watermark</code>是用于处理乱序事件的，而正确的处理乱序事件，通常用<code>Watermark</code>机制结合<code>window</code>来实现。数据流中的<code>Watermark</code>用于表示<code>timestamp</code>小于<code>Watermark</code>的数据，都已经达到了，因此，<code>window</code>的执行也是由<code>Watermark</code>触发的。<code>Watermark</code>用来让程序自己延迟和结果正确性。</p> 
+<p><strong>Watermark 的特点：</strong> <code>Watermark</code>是一条特殊的数据记录，必须单调递增，以确保任务的事件时间时钟在向前推进，而不是在后退。<code>Watermark</code>与数据的时间戳有关。<br> <img src="https://images2.imgbox.com/f1/61/kWZntpCm_o.png" alt="[点击并拖拽以移动] ​"></p> 
+<h3><a id="watermark__29"></a>watermark 的传递、引入和设定</h3> 
+<p><strong><code>watermark</code>的传递：</strong> 一个<code>Task</code>输入可以并行多个，如下有<code>4</code>个并行度，输出也可能存在多个并行，如下有3个。每个任务<code>Task</code>内部都有一个事件时钟，且每个分区也维护了对应的<code>WM</code>，如下的<code>Partition WM</code>。当事件流流进<code>Partition</code>时会判断新事件流的<code>WM</code>是否大于当前的<code>Partition WM</code>，当大于时就更新<code>Partition</code>的时间戳<code>WM</code>为新流入的<code>WM</code>（取最大值），如下<code>1-&gt;2</code>象限<code>Partition WM</code>的变化。同时，如下<code>Task</code>也维护了一个全局的<code>WM</code>表示事件时钟，该值取分区中最小的<code>WM</code>作为输出的时间戳，如下第二象限的输出选择最小的<code>WM=3</code>向下传递。当第二个(横线)分区<code>Partition WM</code>流进来<code>WM=7</code>的事件流时，就会出现第三象限的情景，但是最小的<code>WM</code>还是<code>=3</code>，因此不更新<code>Task</code>全局的<code>WM</code>。当第三个分区<code>Partition WM</code>流进来<code>WM=6</code>的事件流时，就会出现第四象限的情景，此时分区<code>Partition WM</code>的最小值<code>=4</code>，因此<code>Task</code>全局<code>WM</code>就<code>=4</code>。<br> <img src="https://images2.imgbox.com/ff/e0/jGOIuv81_o.png" alt="[点击并拖拽以移动] ​"></p> 
+<p><strong><code>watermark</code>的引入：</strong> <code>Event Time</code>的使用一定要指定数据源中的时间戳。对于排好序的数据，只需要指定时间戳就够了，不需要延迟触发。</p> 
+<pre><code class="prism language-java"><span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>flink<span class="token punctuation">.</span>streaming<span class="token punctuation">.</span>api<span class="token punctuation">.</span>windowing<span class="token punctuation">.</span>time<span class="token punctuation">.</span></span><span class="token class-name">Time</span>
+<span class="token comment">//同时分配时间戳和水位线</span>
+dataStream<span class="token punctuation">.</span><span class="token function">assignTimestampsAndWatermarks</span><span class="token punctuation">(</span>
+<span class="token comment">//无序数据       Time.milliseconds(1000)=延迟时间</span>
+<span class="token keyword">new</span> <span class="token class-name">BoundedOutOfOrdernessTimestampExtractor</span><span class="token punctuation">[</span><span class="token class-name">SensorReading</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token class-name">Time</span><span class="token punctuation">.</span><span class="token function">milliseconds</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+  <span class="token comment">//提取事件戳 = timestamp * 1000是因为出入的毫秒</span>
+  override def <span class="token function">extractTimestamp</span><span class="token punctuation">(</span>t<span class="token operator">:</span> <span class="token class-name">SensorReading</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token class-name">Long</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    t<span class="token punctuation">.</span>timestamp <span class="token operator">*</span> <span class="token number">1000</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>【1】对于排好序的数据，不需要延迟触发，可以只指定事件戳就行了</p> 
+<pre><code class="prism language-java">dataStream<span class="token punctuation">.</span><span class="token function">assignTimestampsAndWatermarks</span><span class="token punctuation">(</span>_<span class="token punctuation">.</span>timestamp <span class="token operator">*</span> <span class="token number">1000</span><span class="token punctuation">)</span>
+</code></pre> 
+<p>【2】<code>Flink</code>暴露了<code>TimestampAssigner</code>接口供我们实现，使我们可以自定义如何从事件数据中抽取时间戳和生成 <code>watermark</code>。<code>MyAssigner</code>可以有两种类型，都继承自<code>TimestampAssigner</code>。</p> 
+<pre><code class="prism language-java">dataStream<span class="token punctuation">.</span><span class="token function">assignTimestampsAndWatermarks</span><span class="token punctuation">(</span><span class="token keyword">new</span> <span class="token class-name">MyAssigner</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+</code></pre> 
+<p><strong><code>TimestampAssigner</code>：定义了抽取时间戳，以及生成<code>watermark</code>的方法，有两种类型：</strong><br> <strong>【1】<code>AssignerWithPeriodicWatermarks</code>：</strong> 系统会周期性的将<code>Watermark</code>插入到流中。默认周期是<code>200</code>毫秒（如果是<code>processingTime</code>则<code>Watermark = 0</code> ），可以使用<code>ExecutionConfig.setAutoWatermarkInterval()</code>方法进行设置。升序和前面乱序的处理<code>BoundedOutOfOrderness</code>，都是基于周期性<code>watermark</code>的。举例：如下产生<code>watermark</code>的逻辑：每隔<code>5</code>秒，<code>Flink</code>调用<code>AssignerWithPeriodicWatermarks</code>的<code>getCurrentWatermark()</code>方法。如果方法返回一个时间戳大于之前水位的时间戳，新的<code>water</code>会被插入到流中。这个检查保证了水位线是单调递增的。如果方法返回的时间戳小于之前水位的时间戳，则不会产生新的<code>watermark</code>。</p> 
+<pre><code class="prism language-java"><span class="token comment">//方案一:</span>
+<span class="token comment">//EventTime是以数据自带的时间戳字段为准，应用程序需要指定如何从record中抽取时间戳字段</span>
+env<span class="token punctuation">.</span><span class="token function">setStreamTimeCharacteristic</span><span class="token punctuation">(</span><span class="token class-name">TimeCharacteristic<span class="token punctuation">.</span>EventTime</span><span class="token punctuation">)</span>
+<span class="token comment">//每隔 5秒产生一个 watermark</span>
+env<span class="token punctuation">.</span>getConfig<span class="token punctuation">.</span><span class="token function">setAutoWatermarkInterval</span><span class="token punctuation">(</span><span class="token number">5000</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+​
+<span class="token comment">//方案二</span>
+<span class="token comment">//自定义一个周期性的时间戳</span>
+<span class="token keyword">class</span> <span class="token class-name">PeriodicAssigner</span> <span class="token keyword">extends</span> <span class="token class-name">AssignerWithPeriodicWatermarks</span><span class="token punctuation">[</span><span class="token class-name">SensorReading</span><span class="token punctuation">]</span><span class="token punctuation">{<!-- --></span>
+
+  val bound<span class="token operator">:</span> <span class="token class-name">Long</span> <span class="token operator">=</span> <span class="token number">60</span> <span class="token operator">*</span> <span class="token number">1000</span> <span class="token comment">//延时为 1 分钟</span>
+  <span class="token keyword">var</span> maxTs<span class="token operator">:</span> <span class="token class-name">Long</span> <span class="token operator">=</span> <span class="token class-name">Long<span class="token punctuation">.</span>MinValue</span> <span class="token comment">//观察到的最大时间戳</span>
+
+  <span class="token comment">//生成水位线</span>
+  override def getCurrentWatermark<span class="token operator">:</span> <span class="token class-name">Watermark</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">new</span> <span class="token class-name">Watermark</span><span class="token punctuation">(</span>maxTs <span class="token operator">-</span> bound<span class="token punctuation">)</span>
+  <span class="token punctuation">}</span>
+
+  <span class="token comment">//抽取时间戳的方法</span>
+  override def <span class="token function">extractTimestamp</span><span class="token punctuation">(</span>t<span class="token operator">:</span> <span class="token class-name">SensorReading</span><span class="token punctuation">,</span> l<span class="token operator">:</span> <span class="token class-name">Long</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token class-name">Long</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    maxTs <span class="token operator">=</span> maxTs<span class="token punctuation">.</span><span class="token function">max</span><span class="token punctuation">(</span>t<span class="token punctuation">.</span>timestamp<span class="token punctuation">)</span>
+    t<span class="token punctuation">.</span>timestamp
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><strong>【2】<code>AssignerWithPunctuatedWatermarks</code>：</strong> 没有时间周期规律，可打断的生成<code>watermark</code>。</p> 
+<pre><code class="prism language-java"><span class="token keyword">class</span> <span class="token class-name">PunctuatedAssigner</span> <span class="token keyword">extends</span> <span class="token class-name">AssignerWithPunctuatedWatermarks</span><span class="token punctuation">[</span><span class="token class-name">SensorReading</span><span class="token punctuation">]</span><span class="token punctuation">{<!-- --></span>
+  val bound<span class="token operator">:</span> <span class="token class-name">Long</span> <span class="token operator">=</span> <span class="token number">60</span> <span class="token operator">*</span> <span class="token number">1000</span>
+
+  <span class="token comment">//获取水位线，根据数据触发</span>
+  override def <span class="token function">checkAndGetNextWatermark</span><span class="token punctuation">(</span>t<span class="token operator">:</span> <span class="token class-name">SensorReading</span><span class="token punctuation">,</span> l<span class="token operator">:</span> <span class="token class-name">Long</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token class-name">Watermark</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">if</span><span class="token punctuation">(</span>t<span class="token punctuation">.</span>id <span class="token operator">==</span> <span class="token string">"sensor_1"</span><span class="token punctuation">)</span><span class="token punctuation">{<!-- --></span>
+      <span class="token keyword">new</span> <span class="token class-name">Watermark</span><span class="token punctuation">(</span>l <span class="token operator">-</span> bound<span class="token punctuation">)</span>
+    <span class="token punctuation">}</span><span class="token keyword">else</span><span class="token punctuation">{<!-- --></span>
+      <span class="token keyword">null</span>
+    <span class="token punctuation">}</span>
+  <span class="token punctuation">}</span>
+
+  <span class="token comment">//抽取时间戳的方法</span>
+  override def <span class="token function">extractTimestamp</span><span class="token punctuation">(</span>t<span class="token operator">:</span> <span class="token class-name">SensorReading</span><span class="token punctuation">,</span> l<span class="token operator">:</span> <span class="token class-name">Long</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token class-name">Long</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    t<span class="token punctuation">.</span>timestamp
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><strong>watermark 的设定：</strong><br> 【1】在<code>Flink</code>中，<code>watermark</code>由应用程序开发人员生成，这通常需要对相应的领域有一定的了解。<br> 【2】如果<code>watermark</code>设置的延迟太久，收到结果的速度可能就会很慢，解决办法是在水位线到达之前输出一个近似结果。<br> 【3】而如果<code>watermark</code>到达得太早，则可能收到错误结果，不过<code>Flink</code>处理迟到数据的机制可以解决这个问题。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/fe9799b8e34b3ca7ab670a785c801e4a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Vue3&#43;TS&#43;ElementPlus的安装和使用教程【详细讲解】</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/04e15414dad895c791ba6f818e451ff2/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【MySQL】MySQL如何查询和筛选存储的JSON数据？</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>[样本分析初体验] Parite家族感染型病毒 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="[样本分析初体验] Parite家族感染型病毒" />
+<meta property="og:description" content="文章目录 样本信息样本行为详细分析病毒主体解密ShellCodeShellCode主体 病毒DLL脱壳DllEntryPoint感染过程 总结分析 样本信息 MD5：b4964c8ac85b1e428c9eefe572237b21
+类型：exe32
+分析工具：DIE、OD、x32dbg、IDA
+样本行为 该样本是感染性极强的病毒，属于Parite家族，其运行后会先解密并运行一段ShellCode，ShellCode会解密文件末尾的病毒DLL并通过SetWindowsHookExA将其注入explorer进程，创建新线程来感染本地磁盘和网络资源中的exe文件和scr文件。
+详细分析 病毒主体 拿到病毒样本之后，先拖到DIE中看一下，发现它是32位的exe文件，C&#43;&#43;写的，无壳。
+解密ShellCode 拖到IDA里，发现没解析出个啥，再拖到OD里，入口是：
+可以发现，一上来是个循环，这其实是个解密：
+我们在数据窗口看一下解密前的数据：
+再看一下解密后的：
+ShellCode主体 然后 call 进入0066519C，这其实是一段ShellCode。主要有四个行为：
+上来的第一个函数，获得了Kernel32.dll中一系列函数的地址。先LoadLibraryA，然后GetProcAddress。查询注册表键值，HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer中PINF的值，如果查询失败则继续第三步。
+在Temp目录中释放一个.tmp文件，文件名是随机字符串。经查验，该tmp文件实质上是个DLL，具体释放过程如下： 首先GetModuleFileNameA获得当前进程完整路径，然后CreateFileA获得文件句柄（0x94）。
+然后生成一个随机文件名，并创建文件，句柄为0x98。
+SetFilePointer设置进程文件的文件指针，位置为0x243AFC；然后ReadFile循环从进程文件中读数据，每次读的大小为0x2800。数据窗口中显示的是读出来的数据。
+随后调用的一个解密函数，解密后的数据一看就很明显了，是PE文件。然后将解密后的数据写入tmp文件。
+重复读写，直到完成，总大小为2B000。 加载该DLL文件，并运行其导出函数Initiate。
+Initiate函数的行为：
+检测互斥体Residented是否存在，不存在的话，通过SetWindowsHookExA设置消息钩子，消息类型为WH_CALLWNDPROC，钩子子程为DLL的导出函数AttachHook。
+这样，当有进程产生WH_CALLWNDPROC消息时，DLL就会被注入到该进程中。
+病毒主体的分析到这里就差不多结束了，接下来看一下释放的病毒DLL的行为。 病毒DLL 拖到DIE中看了下，发现有UPX壳。
+脱壳 用UPX直接脱壳，但是失败了。
+那就手动脱一下壳吧，这里用的是ESP定律。先拖到OD里看看：
+运行完pushad这一句时，ESP变红，右键空白处，点击HW break［ESP］。
+然后F9继续运行，断点断到这里：
+F8走一步就找到OEP了。
+最后显示：
+也不知道为什么？后面同事给指了条明路，改用x32dbg。进来之后首先进入的是系统函数：
+继续运行，找到pushad后，然后还是用ESP定律，最终找到OEP：
+点击最上方插件-&gt;Scylla，弹出窗口，先点击Pick DLL选择目标LL，然后在下面的编辑框输入真正的OEP地址，然后依次点击IAT Autosearch、Get Imports、Dump，Fix Dump按钮。
+将脱壳后的文件拖入DIE，发现脱壳成功。脱壳成功后就可以通过IDA看源代码了，有源码再结合OD动态调试会更方便一点。
+DllEntryPoint 病毒Dll在入口处会先判断当前进程是不是explorer进程，它只对explorer进程进行操作。
+主要功能是在sub_2F1B5C中实现，其行为有：
+创建互斥体Residented；加载自身DLL；删除temp目录下的.tmp文件，被占用的除外；将自身路径写入注册表HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer中的PINF；SetWindowsHookExA挂钩当前线程，钩子类型还是WH_CALLWNDPROC；
+创建感染线程，线程回调函数为sub_2F5778()。
+线程回调函数中，主要就是遍历磁盘和网络资源，感染.exe文件和.scr文件。但是不会感染C:\Windows\system32\dllcache\下的文件以及readbook.exe、rundll32.exe。 遍历磁盘：
+遍历网络资源：
+感染过程 真正对文件进行感染的函数是sub_2F2C7C()，这块分析需要对PE文件结构很熟悉，下面直接放IDA中的代码分析。
+接下来挨个看一下其中的各个子功能：
+判断目标文件是否有PE头。
+读取目标文件的节表以及后面0x28字节的内容，为后续新增节做准备。
+判断目标文件是否已经被感染，即看最后一个节表头中节区名称是否符合条件。
+随机生成新增节的名称，生成算法如下，上面判断的算法也是由此而来。
+修正新增节表头中的数据成员。
+构造解密代码，后续会将其写入新增节的开头，作为目标文件新的EP。判断目标文件是否具备感染条件，即看其导入表中有没有kernel32.dll，如果有则Hook其IAT和INT。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/931a9c536df830418e2fe6aa1b28d8a5/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-01-06T14:55:29+08:00" />
+<meta property="article:modified_time" content="2022-01-06T14:55:29+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">[样本分析初体验] Parite家族感染型病毒</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_1" rel="nofollow">样本信息</a></li><li><a href="#_5" rel="nofollow">样本行为</a></li><li><a href="#_7" rel="nofollow">详细分析</a></li><li><ul><li><a href="#_8" rel="nofollow">病毒主体</a></li><li><ul><li><a href="#ShellCode_11" rel="nofollow">解密ShellCode</a></li><li><a href="#ShellCode_20" rel="nofollow">ShellCode主体</a></li></ul> 
+   </li><li><a href="#DLL_44" rel="nofollow">病毒DLL</a></li><li><ul><li><a href="#_47" rel="nofollow">脱壳</a></li><li><a href="#DllEntryPoint_68" rel="nofollow">DllEntryPoint</a></li><li><a href="#_88" rel="nofollow">感染过程</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#_117" rel="nofollow">总结分析</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="_1"></a>样本信息</h2> 
+<p>MD5：b4964c8ac85b1e428c9eefe572237b21<br> 类型：exe32<br> 分析工具：DIE、OD、x32dbg、IDA</p> 
+<h2><a id="_5"></a>样本行为</h2> 
+<p>该样本是感染性极强的病毒，属于Parite家族，其运行后会先解密并运行一段ShellCode，ShellCode会解密文件末尾的病毒DLL并通过SetWindowsHookExA将其注入explorer进程，创建新线程来感染本地磁盘和网络资源中的exe文件和scr文件。</p> 
+<h2><a id="_7"></a>详细分析</h2> 
+<h3><a id="_8"></a>病毒主体</h3> 
+<p>拿到病毒样本之后，先拖到DIE中看一下，发现它是32位的exe文件，C++写的，无壳。<br> <img src="https://images2.imgbox.com/14/08/cvsG3Jku_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="ShellCode_11"></a>解密ShellCode</h4> 
+<p>拖到IDA里，发现没解析出个啥，再拖到OD里，入口是：<br> <img src="https://images2.imgbox.com/fe/32/j83HtAZ2_o.png" alt="在这里插入图片描述"><br> 可以发现，一上来是个循环，这其实是个解密：<br> <img src="https://images2.imgbox.com/d6/2e/kChGfVw5_o.png" alt="在这里插入图片描述"><br> 我们在数据窗口看一下解密前的数据：<br> <img src="https://images2.imgbox.com/a6/db/7HqVtEed_o.png" alt="在这里插入图片描述"><br> 再看一下解密后的：<br> <img src="https://images2.imgbox.com/42/ee/GIPPaQg1_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="ShellCode_20"></a>ShellCode主体</h4> 
+<p>然后 call 进入0066519C，这其实是一段ShellCode。主要有<strong>四个行为</strong>：<br> <img src="https://images2.imgbox.com/c2/59/EadPbVdK_o.png" alt="在这里插入图片描述"></p> 
+<ol><li>上来的第一个函数，获得了<code>Kernel32.dll</code>中一系列函数的地址。先<code>LoadLibraryA</code>，然后<code>GetProcAddress</code>。</li><li>查询注册表键值，<code>HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer</code>中<code>PINF</code>的值，如果查询失败则继续第三步。<br> <img src="https://images2.imgbox.com/68/81/pgdyjyMo_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/d8/14/Z4KQho4O_o.png" alt="在这里插入图片描述"></li><li>在Temp目录中释放一个<code>.tmp</code>文件，文件名是随机字符串。经查验，该tmp文件实质上是个DLL，<strong>具体释放过程如下</strong>：</li></ol> 
+<ul><li>首先<code>GetModuleFileNameA</code>获得当前进程完整路径，然后<code>CreateFileA</code>获得文件句柄（0x94）。<br> <img src="https://images2.imgbox.com/64/09/G8DCnoc6_o.png" alt="在这里插入图片描述"></li><li>然后生成一个随机文件名，并创建文件，句柄为0x98。<br> <img src="https://images2.imgbox.com/2c/3f/bFdaF0AO_o.png" alt="在这里插入图片描述"></li><li><code>SetFilePointer</code>设置进程文件的文件指针，位置为<code>0x243AFC</code>；然后<code>ReadFile</code>循环从进程文件中读数据，每次读的大小为<code>0x2800</code>。数据窗口中显示的是读出来的数据。<br> <img src="https://images2.imgbox.com/15/53/1WSVcN8T_o.png" alt="在这里插入图片描述"></li><li>随后调用的一个解密函数，解密后的数据一看就很明显了，是PE文件。然后将解密后的数据写入tmp文件。<br> <img src="https://images2.imgbox.com/cf/d6/riob95ea_o.png" alt="在这里插入图片描述"></li><li>重复读写，直到完成，总大小为<code>2B000</code>。</li></ul> 
+<ol start="4"><li>加载该DLL文件，并运行其导出函数<code>Initiate</code>。<br> <img src="https://images2.imgbox.com/57/c9/hxYqZKuZ_o.png" alt="在这里插入图片描述"><br> <strong>Initiate函数的行为</strong>：<br> 检测互斥体<code>Residented</code>是否存在，不存在的话，通过<code>SetWindowsHookExA</code>设置消息钩子，消息类型为<code>WH_CALLWNDPROC</code>，钩子子程为DLL的导出函数<code>AttachHook</code>。<br> 这样，当有进程产生<code>WH_CALLWNDPROC</code>消息时，DLL就会被注入到该进程中。<br> <img src="https://images2.imgbox.com/c7/a4/ayWIZnaV_o.png" alt="在这里插入图片描述"><br> 病毒主体的分析到这里就差不多结束了，接下来看一下释放的病毒DLL的行为。</li></ol> 
+<h3><a id="DLL_44"></a>病毒DLL</h3> 
+<p>拖到DIE中看了下，发现有UPX壳。<br> <img src="https://images2.imgbox.com/8e/d7/PE9Nzwcb_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="_47"></a>脱壳</h4> 
+<p>用UPX直接脱壳，但是失败了。<br> <img src="https://images2.imgbox.com/da/f4/q5xAlk1l_o.png" alt="在这里插入图片描述"><br> 那就手动脱一下壳吧，这里用的是ESP定律。先拖到OD里看看：<br> <img src="https://images2.imgbox.com/b6/6e/zSU2wHBo_o.png" alt="在这里插入图片描述"><br> 运行完<code>pushad</code>这一句时，ESP变红，右键空白处，点击<code>HW break［ESP］</code>。<br> <img src="https://images2.imgbox.com/c2/76/Xb8kAYO5_o.png" alt="在这里插入图片描述"><br> 然后F9继续运行，断点断到这里：<br> <img src="https://images2.imgbox.com/94/31/qiWTgU1m_o.png" alt="在这里插入图片描述"><br> F8走一步就找到OEP了。<br> <img src="https://images2.imgbox.com/d5/8a/cKmKsIhr_o.png" alt="在这里插入图片描述"><br> 最后显示：<br> <img src="https://images2.imgbox.com/b8/53/rTOmN94Q_o.png" alt="在这里插入图片描述"><br> 也不知道为什么？后面同事给指了条明路，改用x32dbg。进来之后首先进入的是系统函数：<br> <img src="https://images2.imgbox.com/32/c5/8nPAvCXO_o.png" alt="在这里插入图片描述"><br> 继续运行，找到<code>pushad</code>后，然后还是用ESP定律，最终找到OEP：<br> <img src="https://images2.imgbox.com/fd/3f/3Oa330yV_o.png" alt="在这里插入图片描述"><br> 点击最上方插件-&gt;Scylla，弹出窗口，先点击<code>Pick DLL</code>选择目标LL，然后在下面的编辑框输入真正的OEP地址，然后依次点击<code>IAT Autosearch</code>、<code>Get Imports</code>、<code>Dump</code>，<code>Fix Dump</code>按钮。<br> <img src="https://images2.imgbox.com/89/ef/SqwyK5Jv_o.png" alt="在这里插入图片描述"><br> 将脱壳后的文件拖入DIE，发现脱壳成功。脱壳成功后就可以通过IDA看源代码了，有源码再结合OD动态调试会更方便一点。<br> <img src="https://images2.imgbox.com/a8/a8/oMlP9mzB_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="DllEntryPoint_68"></a>DllEntryPoint</h4> 
+<p>病毒Dll在入口处会先判断当前进程是不是<code>explorer</code>进程，它只对<code>explorer</code>进程进行操作。<br> <img src="https://images2.imgbox.com/4b/45/9F9nIHti_o.png" alt="在这里插入图片描述"><br> 主要功能是在sub_2F1B5C中实现，其行为有：<br> <img src="https://images2.imgbox.com/27/df/UIh6TAi1_o.png" alt="在这里插入图片描述"></p> 
+<ol><li>创建互斥体<code>Residented</code>；</li><li>加载自身DLL；</li><li>删除temp目录下的<code>.tmp</code>文件，被占用的除外；</li><li>将自身路径写入注册表<code>HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer</code>中的<code>PINF</code>；</li><li>SetWindowsHookExA挂钩当前线程，钩子类型还是<code>WH_CALLWNDPROC</code>；<br> <img src="https://images2.imgbox.com/90/71/xQpfks74_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/3d/c2/UUi28Y8f_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/e8/aa/lxjjitd0_o.png" alt="在这里插入图片描述"></li><li>创建感染线程，线程回调函数为sub_2F5778()。<br> <img src="https://images2.imgbox.com/be/09/CvdVWgqW_o.png" alt="在这里插入图片描述"><br> 线程回调函数中，主要就是遍历磁盘和网络资源，感染<code>.exe</code>文件和<code>.scr</code>文件。但是不会感染<code>C:\Windows\system32\dllcache\</code>下的文件以及<code>readbook.exe</code>、<code>rundll32.exe</code>。</li></ol> 
+<ul><li>遍历磁盘：<br> <img src="https://images2.imgbox.com/cd/48/wauUnVa9_o.png" alt="在这里插入图片描述"></li><li>遍历网络资源：<br> <img src="https://images2.imgbox.com/dc/1f/I3ZXx88D_o.png" alt="在这里插入图片描述"></li></ul> 
+<h4><a id="_88"></a>感染过程</h4> 
+<p>真正对文件进行感染的函数是sub_2F2C7C()，这块分析需要对PE文件结构很熟悉，下面直接放IDA中的代码分析。<br> <img src="https://images2.imgbox.com/84/52/lfu2aLID_o.png" alt="在这里插入图片描述"><br> 接下来挨个看一下其中的各个子功能：</p> 
+<ul><li>判断目标文件是否有PE头。<br> <img src="https://images2.imgbox.com/96/c0/19BbduTz_o.png" alt="在这里插入图片描述"></li><li>读取目标文件的节表以及后面0x28字节的内容，为后续新增节做准备。<br> <img src="https://images2.imgbox.com/83/47/dM6lNoYa_o.png" alt="在这里插入图片描述"></li><li>判断目标文件是否已经被感染，即看最后一个节表头中节区名称是否符合条件。<br> <img src="https://images2.imgbox.com/1b/12/njbgIHpU_o.png" alt="在这里插入图片描述"></li><li>随机生成新增节的名称，生成算法如下，上面判断的算法也是由此而来。<br> <img src="https://images2.imgbox.com/f4/a2/cf98KvPV_o.png" alt="在这里插入图片描述"></li><li>修正新增节表头中的数据成员。<br> <img src="https://images2.imgbox.com/fb/a9/WChuKgBK_o.png" alt="在这里插入图片描述"></li><li>构造解密代码，后续会将其写入新增节的开头，作为目标文件新的EP。</li><li>判断目标文件是否具备感染条件，即看其导入表中有没有<code>kernel32.dll</code>，如果有则Hook其IAT和INT。<br> <img src="https://images2.imgbox.com/9a/0a/8daGxtcP_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/6a/74/eUUP56eX_o.png" alt="在这里插入图片描述"></li><li>将新的头部信息和节表信息写入目标文件(新增节后需要修改部分头部信息)。<br> <img src="https://images2.imgbox.com/10/77/EX57QmX0_o.png" alt="在这里插入图片描述"></li><li>将解密函数写到新增节的开头，即新的EP。<br> <img src="https://images2.imgbox.com/41/4b/zEMTfoQr_o.png" alt="在这里插入图片描述"></li><li>将原文件的各种信息(0x84字节)、ShellCode(0x540字节)以及ShellCode要用到的字符串信息(0xFE字节)，进行加密后写入目标文件。<br> <img src="https://images2.imgbox.com/39/ae/08Y62kNv_o.png" alt="在这里插入图片描述"></li><li>随后写入关键函数的名称，<code>LoadLibraryA()</code>和<code>GetProcAddress()</code>。<br> <img src="https://images2.imgbox.com/f1/3c/iNNdXqzf_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/89/18/cbRQ0sTo_o.png" alt="在这里插入图片描述"></li><li>最后将病毒DLL加密后写入目标文件末尾。<br> <img src="https://images2.imgbox.com/e7/09/KvcCRziv_o.png" alt="在这里插入图片描述"></li></ul> 
+<h2><a id="_117"></a>总结分析</h2> 
+<p>最后发现，我们分析的样本其实就是一个被感染的exe文件，感染的过程其实就是在原文件的基础上新增一个节，并将EP改成新增节的开头，依次写入解密代码、加密后的文件信息、加密后的ShellCode及其用到的字符串、加密后的病毒DLL。<br> 这样在运行被感染后的文件时，会先运行解密代码，然后运行解密出的ShellCode，ShellCode会解密文件末尾的病毒DLL，把它释放到temp目录，然后加载它并运行其导出函数Initiate，Initiate中通过SetWindowsHookExA设置消息钩子，当有进程产生WH_CALLWNDPROC消息时，DLL会被强制注入到该进程中，但它自身会做检查，只对explorer进程有效。在explorer进程中它会创建新线程来感染本地磁盘或网络资源中的exe文件和scr文件，如此反复，感染性极强。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/eaf4a516cf40f5c9f498185d81aec481/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">菜单目录-行转树</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/4d7b096c49b109f72265633ea0a5844c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">关于BITMAP位图结构体中的颜色平面的理解</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

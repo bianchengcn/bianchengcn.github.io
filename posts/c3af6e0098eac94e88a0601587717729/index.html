@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>《操作系统真象还原》第十五篇：实现用户进程 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="《操作系统真象还原》第十五篇：实现用户进程" />
+<meta property="og:description" content="第十五篇：实现用户进程 第十五篇：实现用户进程进程创建流程创建虚拟地址空间页表创建及激活初始化中断栈 ，实现特权转移 进程创建流程 进程的创建基于线程来实现，进程创建和线程创建有以下三点不同：
+进程拥有自己的虚拟地址空间进程拥有自己的页表和3特权级栈进程创建后需要由特权级0进入特权级3 进程创建和第一次执行的流程如下:
+创建进程函数如下：
+//创建用户进程 void process_execute(void* filename, char* name) { //在内核中申请一页用作pcb struct task_struct* thread = get_kernel_pages(1); //初始化进程pcb init_thread(thread, name, DEFAULT_PRIO); //创建进程虚拟地址池 create_user_vaddr_bitmap(thread); //创建并初始化线程栈 thread_create(thread, start_process, filename); //创建页表 thread-&gt;pgdir = create_page_dir(); //将新进程加入队列 enum intr_status old_status = intr_disable(); ASSERT(!node_find(&amp;thread_ready_list, &amp;thread-&gt;general_tag)); list_append(&amp;thread_ready_list, &amp;thread-&gt;general_tag); ASSERT(!node_find(&amp;thread_all_list, &amp;thread-&gt;all_list_tag)); list_append(&amp;thread_all_list, &amp;thread-&gt;all_list_tag); set_intr_status(old_status); } 创建虚拟地址空间 //创建用户进程虚拟地址位图 void create_user_vaddr_bitmap(struct task_struct* user_prog) { user_prog-&gt;userprog_vaddr_pool.vaddr_start = USER_VADDR_START; uint32_t bitmap_pg_cnt = DIV_ROUND_UP((0xc0000000 - USER_VADDR_START) / PG_SIZE / 8, PG_SIZE); user_prog-&gt;userprog_vaddr_pool." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/c3af6e0098eac94e88a0601587717729/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-31T11:30:57+08:00" />
+<meta property="article:modified_time" content="2024-01-31T11:30:57+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">《操作系统真象还原》第十五篇：实现用户进程</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="_0"></a>第十五篇：实现用户进程</h2> 
+<p></p> 
+<div class="toc"> 
+ <h4> </h4> 
+ <ul><li><a href="#_0" rel="nofollow">第十五篇：实现用户进程</a></li><li><ul><li><a href="#_2" rel="nofollow">进程创建流程</a></li><li><a href="#_49" rel="nofollow">创建虚拟地址空间</a></li><li><a href="#_62" rel="nofollow">页表创建及激活</a></li><li><a href="#__113" rel="nofollow">初始化中断栈 ，实现特权转移</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h3><a id="_2"></a>进程创建流程</h3> 
+<p>进程的创建基于线程来实现，进程创建和线程创建有以下三点不同：</p> 
+<ul><li>进程拥有自己的虚拟地址空间</li><li>进程拥有自己的页表和3特权级栈</li><li>进程创建后需要由特权级0进入特权级3</li></ul> 
+<p>进程创建和第一次执行的流程如下:</p> 
+<p><img src="https://images2.imgbox.com/b6/57/cyAIwbFM_o.png" alt="在这里插入图片描述"></p> 
+<p>创建进程函数如下：</p> 
+<pre><code class="prism language-c"><span class="token comment">//创建用户进程</span>
+<span class="token keyword">void</span> <span class="token function">process_execute</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> filename<span class="token punctuation">,</span> <span class="token keyword">char</span><span class="token operator">*</span> name<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//在内核中申请一页用作pcb</span>
+	<span class="token keyword">struct</span> <span class="token class-name">task_struct</span><span class="token operator">*</span> thread <span class="token operator">=</span> <span class="token function">get_kernel_pages</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//初始化进程pcb</span>
+	<span class="token function">init_thread</span><span class="token punctuation">(</span>thread<span class="token punctuation">,</span> name<span class="token punctuation">,</span> DEFAULT_PRIO<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//创建进程虚拟地址池</span>
+	<span class="token function">create_user_vaddr_bitmap</span><span class="token punctuation">(</span>thread<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//创建并初始化线程栈</span>
+	<span class="token function">thread_create</span><span class="token punctuation">(</span>thread<span class="token punctuation">,</span> start_process<span class="token punctuation">,</span> filename<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//创建页表</span>
+	thread<span class="token operator">-&gt;</span>pgdir <span class="token operator">=</span> <span class="token function">create_page_dir</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//将新进程加入队列</span>
+	<span class="token keyword">enum</span> <span class="token class-name">intr_status</span> old_status <span class="token operator">=</span> <span class="token function">intr_disable</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">ASSERT</span><span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">node_find</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>thread_ready_list<span class="token punctuation">,</span> <span class="token operator">&amp;</span>thread<span class="token operator">-&gt;</span>general_tag<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">list_append</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>thread_ready_list<span class="token punctuation">,</span> <span class="token operator">&amp;</span>thread<span class="token operator">-&gt;</span>general_tag<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token function">ASSERT</span><span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">node_find</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>thread_all_list<span class="token punctuation">,</span> <span class="token operator">&amp;</span>thread<span class="token operator">-&gt;</span>all_list_tag<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">list_append</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>thread_all_list<span class="token punctuation">,</span> <span class="token operator">&amp;</span>thread<span class="token operator">-&gt;</span>all_list_tag<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token function">set_intr_status</span><span class="token punctuation">(</span>old_status<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<h3><a id="_49"></a>创建虚拟地址空间</h3> 
+<pre><code class="prism language-c"><span class="token comment">//创建用户进程虚拟地址位图</span>
+<span class="token keyword">void</span> <span class="token function">create_user_vaddr_bitmap</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">task_struct</span><span class="token operator">*</span> user_prog<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	user_prog<span class="token operator">-&gt;</span>userprog_vaddr_pool<span class="token punctuation">.</span>vaddr_start <span class="token operator">=</span> USER_VADDR_START<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> bitmap_pg_cnt <span class="token operator">=</span> <span class="token function">DIV_ROUND_UP</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token number">0xc0000000</span> <span class="token operator">-</span> USER_VADDR_START<span class="token punctuation">)</span> <span class="token operator">/</span> PG_SIZE <span class="token operator">/</span> <span class="token number">8</span><span class="token punctuation">,</span> PG_SIZE<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	user_prog<span class="token operator">-&gt;</span>userprog_vaddr_pool<span class="token punctuation">.</span>vaddr_bitmap<span class="token punctuation">.</span>bits <span class="token operator">=</span> <span class="token function">get_kernel_pages</span><span class="token punctuation">(</span>bitmap_pg_cnt<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	user_prog<span class="token operator">-&gt;</span>userprog_vaddr_pool<span class="token punctuation">.</span>vaddr_bitmap<span class="token punctuation">.</span>btmp_bytes_len <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token number">0xc0000000</span> <span class="token operator">-</span> USER_VADDR_START<span class="token punctuation">)</span> <span class="token operator">/</span> PG_SIZE <span class="token operator">/</span> <span class="token number">8</span><span class="token punctuation">;</span>
+	<span class="token function">bitmap_init</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>user_prog<span class="token operator">-&gt;</span>userprog_vaddr_pool<span class="token punctuation">.</span>vaddr_bitmap<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="_62"></a>页表创建及激活</h3> 
+<pre><code class="prism language-c"><span class="token comment">//激活页表</span>
+<span class="token keyword">void</span> <span class="token function">page_dir_activate</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">task_struct</span><span class="token operator">*</span> pthread<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//默认更换为内核的页目录表</span>
+	<span class="token class-name">uint32_t</span> pagedir_phy_addr <span class="token operator">=</span> <span class="token number">0x100000</span><span class="token punctuation">;</span>
+	<span class="token comment">//如果下一个线程有自己的页表，就更换为他的页表</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>pthread<span class="token operator">-&gt;</span>pgdir <span class="token operator">!=</span> <span class="token constant">NULL</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		pagedir_phy_addr <span class="token operator">=</span> <span class="token function">addr_v2p</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token punctuation">)</span>pthread<span class="token operator">-&gt;</span>pgdir<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token comment">//更新页目录表寄存器cr3，刷新页表</span>
+	<span class="token keyword">asm</span> <span class="token keyword">volatile</span> <span class="token punctuation">(</span><span class="token string">"movl %0, %%cr3"</span> <span class="token operator">:</span> <span class="token operator">:</span> <span class="token string">"r"</span> <span class="token punctuation">(</span>pagedir_phy_addr<span class="token punctuation">)</span> <span class="token operator">:</span> <span class="token string">"memory"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">//激活线程或进程的页表，更新tss中esp0为进程的特权级0的栈</span>
+<span class="token keyword">void</span> <span class="token function">process_activate</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">task_struct</span><span class="token operator">*</span> pthread<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">ASSERT</span><span class="token punctuation">(</span>pthread <span class="token operator">!=</span> <span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//激活页表</span>
+	<span class="token function">page_dir_activate</span><span class="token punctuation">(</span>pthread<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//如果是用户进程，则在tss中写入0级栈的地址</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>pthread<span class="token operator">-&gt;</span>pgdir<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">update_tss_esp</span><span class="token punctuation">(</span>pthread<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">//创建页目录表，将当前页表的表示内核的pde复制，成功则返回页表的虚拟地址，否则返回-1</span>
+<span class="token class-name">uint32_t</span><span class="token operator">*</span> <span class="token function">create_page_dir</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token comment">//用户进程的页表只能由内核维护，所以在内核空间申请</span>
+	<span class="token class-name">uint32_t</span><span class="token operator">*</span> page_dir_vaddr <span class="token operator">=</span> <span class="token function">get_kernel_pages</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>page_dir_vaddr <span class="token operator">==</span> <span class="token constant">NULL</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+		<span class="token function">console_put_str</span><span class="token punctuation">(</span><span class="token string">"create_page_dir: get_kernel_page failed!"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span> <span class="token constant">NULL</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token comment">//先复制页表</span>
+	<span class="token comment">//把内核目录表的768项到1023项复制到用户页表中，共享内核</span>
+	<span class="token comment">//0x300是768，一个页目录项占4字节</span>
+	<span class="token comment">//通过虚拟地址0xfffff000访问到PDT的地址</span>
+	<span class="token function">memcpy</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token punctuation">)</span>page_dir_vaddr <span class="token operator">+</span> <span class="token number">0x300</span> <span class="token operator">*</span> <span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token number">0xfffff000</span> <span class="token operator">+</span> <span class="token number">0x300</span> <span class="token operator">*</span> <span class="token number">4</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token number">1024</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//再更新页目录地址</span>
+	<span class="token comment">//将页目录表最后一项更新为页目录表自己的物理地址</span>
+	<span class="token class-name">uint32_t</span> new_page_dir_phy_addr <span class="token operator">=</span> <span class="token function">addr_v2p</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token punctuation">)</span>page_dir_vaddr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	page_dir_vaddr<span class="token punctuation">[</span><span class="token number">1023</span><span class="token punctuation">]</span> <span class="token operator">=</span> new_page_dir_phy_addr <span class="token operator">|</span> PG_US_U <span class="token operator">|</span> PG_RW_W <span class="token operator">|</span> PG_P_1<span class="token punctuation">;</span>
+	<span class="token keyword">return</span> page_dir_vaddr<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="__113"></a>初始化中断栈 ，实现特权转移</h3> 
+<pre><code class="prism language-c"><span class="token comment">//构建用户进程初始上下文信息</span>
+<span class="token keyword">void</span> <span class="token function">start_process</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> filename_<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token keyword">void</span><span class="token operator">*</span> function <span class="token operator">=</span> filename_<span class="token punctuation">;</span>
+
+	<span class="token comment">//获取当前进程的栈指针</span>
+	<span class="token keyword">struct</span> <span class="token class-name">task_struct</span><span class="token operator">*</span> cur <span class="token operator">=</span> <span class="token function">running_thread</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	cur<span class="token operator">-&gt;</span>self_kstack <span class="token operator">+=</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">thread_stack</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">struct</span> <span class="token class-name">intr_stack</span><span class="token operator">*</span> proc_stack <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">intr_stack</span><span class="token operator">*</span><span class="token punctuation">)</span>cur<span class="token operator">-&gt;</span>self_kstack<span class="token punctuation">;</span>
+	
+	
+	<span class="token comment">//初始化中段栈</span>
+	proc_stack<span class="token operator">-&gt;</span>edi <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>esi <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>ebp <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>esp_dummy <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>ebx <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>edx <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>ecx <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>eax <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	<span class="token comment">//用户态不能操作显存，直接初始化为0</span>
+	proc_stack<span class="token operator">-&gt;</span>gs <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>ds <span class="token operator">=</span> SELECTOR_U_DATA<span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>es <span class="token operator">=</span> SELECTOR_U_DATA<span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>fs <span class="token operator">=</span> SELECTOR_U_DATA<span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>eip <span class="token operator">=</span> function<span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>cs <span class="token operator">=</span> SELECTOR_U_CODE<span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>eflags <span class="token operator">=</span> <span class="token punctuation">(</span>EFLAGS_IOPL_0 <span class="token operator">|</span> EFLAGS_MBS <span class="token operator">|</span> EFLAGS_IF_1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>esp <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token punctuation">)</span><span class="token function">get_a_page</span><span class="token punctuation">(</span>PF_USER<span class="token punctuation">,</span> USER_STACK3_VADDR<span class="token punctuation">)</span> <span class="token operator">+</span> PG_SIZE<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	proc_stack<span class="token operator">-&gt;</span>ss <span class="token operator">=</span> SELECTOR_U_DATA<span class="token punctuation">;</span>
+	
+	
+	<span class="token keyword">asm</span> <span class="token keyword">volatile</span> <span class="token punctuation">(</span><span class="token string">"movl %0 , %%esp ; jmp intr_exit"</span> <span class="token operator">:</span> <span class="token operator">:</span> <span class="token string">"g"</span> <span class="token punctuation">(</span>proc_stack<span class="token punctuation">)</span> <span class="token operator">:</span> <span class="token string">"memory"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/d9b51de6b41d163e89b562764e370825/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">科普类——设计一套无人驾驶遥操作系统的步骤、架构、软硬件需求（十一）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/83c4371976042355b456ff2bdfadff60/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">STM32低功耗模式</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

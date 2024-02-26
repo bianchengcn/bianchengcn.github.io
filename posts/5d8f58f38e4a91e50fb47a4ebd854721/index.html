@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>STM32单片机（六）TIM定时器 -＞ 第三节：TIM输出比较 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="STM32单片机（六）TIM定时器 -＞ 第三节：TIM输出比较" />
+<meta property="og:description" content="❤️ 专栏简介：本专栏记录了从零学习单片机的过程，其中包括51单片机和STM32单片机两部分；建议先学习51单片机，其是STM32等高级单片机的基础；这样再学习STM32时才能融会贯通。
+☀️ 专栏适用人群 ：适用于想要从零基础开始学习入门单片机，且有一定C语言基础的的童鞋。
+🌙专栏目标：实现从零基础入门51单片机和STM32单片机，力求在玩好单片机的同时，能够了解一些计算机的基本概念，了解电路及其元器件的基本理论等。
+⭐️ 专栏主要内容： 主要学习STM32单片机的功能、各个模块、单片机的外设、驱动等，最终玩好单片机和单片机的外设，全程手敲代码，实现我们所要实现的功能。
+🌴 专栏说明 ：如果文章知识点有错误的地方，欢迎大家随时在文章下面评论，我会第一时间改正。让我们一起学习，一起进步。
+💑专栏主页：http://t.csdn.cn/HCD8v
+本学习过程参考：https://space.bilibili.com/383400717
+STM3单片机安装软件、各种资料以及源码的路径：
+链接：https://pan.baidu.com/s/1snD0uuTfMhchFqOMWvAiHA?pwd=asdf#list/path=%2F 提取码：asdf
+链接里压缩包的解压密码：32
+本大节主要学习TIM定时器的相关知识，包含八小节：
+第一小节主要学习定时器基本定时的功能，第二小节是对第一小节的内容写两个程序进行练习，分别是定时器定时中断和定时器外部时钟；
+第三小节主要学习定时器输出比较的功能，第四小节是对第三小节的内容写三个程序进行练习，分别是PWM驱动LED呼吸灯、PWM驱动舵机以及PWM驱动直流电机；
+第五小节主要学习定时器输入捕获的功能，第六小节是对第五小节的内容写两个程序进行练习，分别是输入捕获模式测频率和PWMI模式测频率占空比；
+第七小节主要学习定时器的编码器接口功能，第八小节是对第七小节的内容写一个程序进行练习，即编码器接口测速；
+最终附上所有的源代码；
+本小节主要是学习定时器输出比较的功能；输出比较这个模块最常见的用途就是产生PWM波形，PWM波形又是驱动电机的必要条件，所以常用于驱动电机等设备；在此小节我们将会学习到使用STM32输出PWM波形，来驱动舵机和直流电机；
+文章目录 一、输出比价和PWM简介1.1 输出比较简介1.2 PWM简介 二、输出比较基础知识2.1 输出比较通道（通用）2.2 输出比较通道（高级）2.3 输出比较模式 三、PWM基本知识3.1 PWM基本结构3.2 PWM参数计算 四、舵机和直流电机介绍4.1 舵机简介4.2 舵机硬件电路4.3 直流电机及驱动简介4.4 直流电机硬件电路 一、输出比价和PWM简介 1.1 输出比较简介 OC(Output Comepare)输出比较；IC（Input Capture）输入捕获；CC（Capture/Compare）输入捕获和输出比较的单元； 1.2 PWM简介 PWM波形是一个数字输出信号，也是由高低电平组成的；
+解释一下PWM应用于控制LED灯亮度（也就是目标一的内容）：
+按理说LED灯只能有完全亮和完全灭两种状态，怎么能实现控制亮度大小呢？通过PWM波形就可以实现。我们可以让LED不断点亮、熄灭、点亮、熄灭；当这个点灯、熄灭的频率足够大时，LED就不会闪烁了，而是呈现出一个中等亮度；当我们调控这个点亮和熄灭时间比例时，就能让LED呈现出不同的亮度级别了；
+对于电机调速也是一样的道理，我们以一个很快的频率，给电机通电、断电、通电、断电，那么电机的速度就能维持在一个中等速度，这就是PWM的基本思想；
+PWM参数的公式，要熟记
+占空比等于高电平的时间比上低电平的时间；T_ON是高电平的时间，T_OFF是低电平的时间，T_S是一个周期的时间；所以占空比的含义就是高电平的时间相对于整个周期时间的比例；
+比如占空比位50%，那就是高低电平时间相等的方波；波形如下图：
+占空比为20%，那就是高电平占20%，低电平占80%，波形如下图
+占空比为100%，那就是全程都是高电平；
+占空比决定了PWM等效出来的模拟电压的大小； 占空比越大，那等效出来的模拟电压就越趋近于高电平；占空比越小，那等效出来的模拟电压就越趋近于低电平；分辨率就是占空比变化的细腻程度 二、输出比较基础知识 2.1 输出比较通道（通用） 上图的输出比较电路就对应上一节，通用定时器的如下图的红框部分:
+左边是CNT和CCR比较的结果，右边就是输出比较电路，最后通过TIM_CH1输出到GPIO引脚上，下面还有三个同样的单元，分别输出到CH2、CH3、CH4；
+在上图的输出比较电路图中，左边就是CNT计数器和CCR1第一路的捕获/比较寄存器，他俩进行比较，当CNT&gt;CCR1时，或者CNU=CCR1时，就会给输出模式控制器传一个信号，然后输出模式控制器就会改变它输出oc1ref的高低电平，REF信号实际上就是指这里的高低电平；REF是refense的缩写，即参考信号；
+ref信号会到达上述箭头所指位置，这是一个极性选择，给这个寄存器0，信号就会往上走，就是信号电平不反转；给这个寄存器写1，信号就会往下走，就是信号通过一个非门取反，那输出的信号就是输入信号高低电平反转的信号；这就是极性选择，就是选择是不是要把高低电平反转一下；
+再往后是输出使能电路，选择要不要输出；
+最后是OC1引脚，这个引脚就是CH1通道的引脚；" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/5d8f58f38e4a91e50fb47a4ebd854721/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-06-15T11:35:41+08:00" />
+<meta property="article:modified_time" content="2023-06-15T11:35:41+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">STM32单片机（六）TIM定时器 -＞ 第三节：TIM输出比较</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <blockquote> 
+ <p>❤️ 专栏简介：本专栏记录了从零学习单片机的过程，其中包括51单片机和STM32单片机两部分；建议先学习51单片机，其是STM32等高级单片机的基础；这样再学习STM32时才能融会贯通。<br> ☀️ 专栏适用人群 ：适用于想要从零基础开始学习入门单片机，且有一定C语言基础的的童鞋。<br> 🌙专栏目标：实现从零基础入门51单片机和STM32单片机，力求在玩好单片机的同时，能够了解一些计算机的基本概念，了解电路及其元器件的基本理论等。</p> 
+ <p>⭐️ 专栏主要内容： 主要学习STM32单片机的功能、各个模块、单片机的外设、驱动等，最终玩好单片机和单片机的外设，全程手敲代码，实现我们所要实现的功能。<br> 🌴 专栏说明 ：如果文章知识点有错误的地方，欢迎大家随时在文章下面评论，我会第一时间改正。让我们一起学习，一起进步。<br> 💑专栏主页：<a href="http://t.csdn.cn/HCD8v" rel="nofollow">http://t.csdn.cn/HCD8v</a></p> 
+</blockquote> 
+<p>本学习过程参考：<a href="https://space.bilibili.com/383400717" rel="nofollow">https://space.bilibili.com/383400717</a></p> 
+<p>STM3单片机安装软件、各种资料以及源码的路径：<br> <a href="https://pan.baidu.com/s/1snD0uuTfMhchFqOMWvAiHA?pwd=asdf" rel="nofollow">链接：https://pan.baidu.com/s/1snD0uuTfMhchFqOMWvAiHA?pwd=asdf#list/path=%2F </a><br> 提取码：asdf</p> 
+<p>链接里压缩包的解压密码：32</p> 
+<blockquote> 
+ <p>本大节主要学习TIM定时器的相关知识，包含八小节：<br> 第一小节主要学习定时器基本定时的功能，第二小节是对第一小节的内容写两个程序进行练习，分别是定时器定时中断和定时器外部时钟；<br> 第三小节主要学习定时器输出比较的功能，第四小节是对第三小节的内容写三个程序进行练习，分别是PWM驱动LED呼吸灯、PWM驱动舵机以及PWM驱动直流电机；<br> 第五小节主要学习定时器输入捕获的功能，第六小节是对第五小节的内容写两个程序进行练习，分别是输入捕获模式测频率和PWMI模式测频率占空比；<br> 第七小节主要学习定时器的编码器接口功能，第八小节是对第七小节的内容写一个程序进行练习，即编码器接口测速；<br> 最终附上所有的源代码；</p> 
+</blockquote> 
+<p>本小节主要是学习定时器输出比较的功能；输出比较这个模块最常见的用途就是产生PWM波形，PWM波形又是驱动电机的必要条件，所以常用于驱动电机等设备；在此小节我们将会学习到使用STM32输出PWM波形，来驱动舵机和直流电机；</p> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#PWM_31" rel="nofollow">一、输出比价和PWM简介</a></li><li><ul><li><a href="#11__32" rel="nofollow">1.1 输出比较简介</a></li><li><a href="#12_PWM_39" rel="nofollow">1.2 PWM简介</a></li></ul> 
+  </li><li><a href="#_59" rel="nofollow">二、输出比较基础知识</a></li><li><ul><li><a href="#21__61" rel="nofollow">2.1 输出比较通道（通用）</a></li><li><a href="#22__81" rel="nofollow">2.2 输出比较通道（高级）</a></li><li><a href="#23__88" rel="nofollow">2.3 输出比较模式</a></li></ul> 
+  </li><li><a href="#PWM_98" rel="nofollow">三、PWM基本知识</a></li><li><ul><li><a href="#31_PWM_99" rel="nofollow">3.1 PWM基本结构</a></li><li><a href="#32_PWM_114" rel="nofollow">3.2 PWM参数计算</a></li></ul> 
+  </li><li><a href="#_123" rel="nofollow">四、舵机和直流电机介绍</a></li><li><ul><li><a href="#41__124" rel="nofollow">4.1 舵机简介</a></li><li><a href="#42__131" rel="nofollow">4.2 舵机硬件电路</a></li><li><a href="#43___135" rel="nofollow">4.3 直流电机及驱动简介</a></li><li><a href="#44__138" rel="nofollow">4.4 直流电机硬件电路</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h2><a id="PWM_31"></a>一、输出比价和PWM简介</h2> 
+<h3><a id="11__32"></a>1.1 输出比较简介</h3> 
+<p><img src="https://images2.imgbox.com/d5/07/CNZm9LEB_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>OC(Output Comepare)输出比较；IC（Input Capture）输入捕获；CC（Capture/Compare）输入捕获和输出比较的单元；</li></ul> 
+<h3><a id="12_PWM_39"></a>1.2 PWM简介</h3> 
+<p><img src="https://images2.imgbox.com/50/f0/MBBPmXGq_o.png" alt="在这里插入图片描述"></p> 
+<ul><li> <p>PWM波形是一个数字输出信号，也是由高低电平组成的；</p> </li><li> <p>解释一下PWM应用于控制LED灯亮度（也就是目标一的内容）：<br> 按理说LED灯只能有完全亮和完全灭两种状态，怎么能实现控制亮度大小呢？通过PWM波形就可以实现。我们可以让LED不断点亮、熄灭、点亮、熄灭；当这个点灯、熄灭的频率足够大时，LED就不会闪烁了，而是呈现出一个中等亮度；当我们调控这个点亮和熄灭时间比例时，就能让LED呈现出不同的亮度级别了；</p> </li><li> <p>对于电机调速也是一样的道理，我们以一个很快的频率，给电机通电、断电、通电、断电，那么电机的速度就能维持在一个中等速度，这就是PWM的基本思想；</p> </li><li> <p>PWM参数的公式，要熟记</p> </li><li> <p>占空比等于高电平的时间比上低电平的时间；T_ON是高电平的时间，T_OFF是低电平的时间，T_S是一个周期的时间；所以<code>占空比的含义就是高电平的时间相对于整个周期时间的比例</code>；</p> </li></ul> 
+<p>比如占空比位50%，那就是高低电平时间相等的方波；波形如下图：<br> <img src="https://images2.imgbox.com/7c/21/aapCKAyN_o.png" alt="在这里插入图片描述"><br> 占空比为20%，那就是高电平占20%，低电平占80%，波形如下图<br> <img src="https://images2.imgbox.com/c9/5f/4rKgQDoE_o.png" alt="在这里插入图片描述"></p> 
+<p>占空比为100%，那就是全程都是高电平；</p> 
+<ul><li>占空比决定了PWM等效出来的模拟电压的大小； 占空比越大，那等效出来的模拟电压就越趋近于高电平；占空比越小，那等效出来的模拟电压就越趋近于低电平；</li><li>分辨率就是占空比变化的细腻程度</li></ul> 
+<h2><a id="_59"></a>二、输出比较基础知识</h2> 
+<h3><a id="21__61"></a>2.1 输出比较通道（通用）</h3> 
+<p><img src="https://images2.imgbox.com/97/4d/vE7ThBel_o.png" alt="在这里插入图片描述"></p> 
+<p>上图的输出比较电路就对应上一节，通用定时器的如下图的红框部分:<br> <img src="https://images2.imgbox.com/d8/a8/t94yLSlA_o.png" alt="在这里插入图片描述"><br> 左边是CNT和CCR比较的结果，右边就是输出比较电路，最后通过TIM_CH1输出到GPIO引脚上，下面还有三个同样的单元，分别输出到CH2、CH3、CH4；</p> 
+<p><img src="https://images2.imgbox.com/d3/bd/RxVOs301_o.png" alt="在这里插入图片描述"></p> 
+<ul><li> <p>在上图的输出比较电路图中，左边就是CNT计数器和CCR1第一路的捕获/比较寄存器，他俩进行比较，当CNT&gt;CCR1时，或者CNU=CCR1时，就会给输出模式控制器传一个信号，然后输出模式控制器就会改变它输出oc1ref的高低电平，REF信号实际上就是指这里的高低电平；REF是refense的缩写，即参考信号；<br> <img src="https://images2.imgbox.com/3e/ff/aLtjcxTD_o.png" alt="在这里插入图片描述"></p> </li><li> <p>ref信号会到达上述箭头所指位置，这是一个极性选择，给这个寄存器0，信号就会往上走，就是信号电平不反转；给这个寄存器写1，信号就会往下走，就是信号通过一个非门取反，那输出的信号就是输入信号高低电平反转的信号；这就是极性选择，就是选择是不是要把高低电平反转一下；</p> </li><li> <p>再往后是输出使能电路，选择要不要输出；</p> </li><li> <p>最后是OC1引脚，这个引脚就是CH1通道的引脚；</p> </li></ul> 
+<p>那么输出模式控制器，什么时候给ref输出高电平，什么时候给ref输出低电平呢？就是下面2.3节<strong>输出比较模式</strong>的内容；</p> 
+<h3><a id="22__81"></a>2.2 输出比较通道（高级）</h3> 
+<p><img src="https://images2.imgbox.com/3f/03/VtpjUh0o_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="23__88"></a>2.3 输出比较模式</h3> 
+<p><img src="https://images2.imgbox.com/d4/4f/xM6YdN0r_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>可以这么理解：置有效电平就是置高电平，置无效电平就是置低电平；</li><li>PWM模式1和PWM模式2非常重要，它们可以用于输出频率和占空比都可调的PWM波形；也是我们主要使用的模式</li><li>PWM模式1，我们一般使用向上计数的方式；PWM模式2实际上就是PWM模式1的取反；</li></ul> 
+<p>PWM模式1是怎么输出频率和占空比都可调的PWM波形的呢？看3.1节PWM基本结构所讲的内容；</p> 
+<h2><a id="PWM_98"></a>三、PWM基本知识</h2> 
+<h3><a id="31_PWM_99"></a>3.1 PWM基本结构</h3> 
+<p><img src="https://images2.imgbox.com/23/a1/7IaZ5zW8_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>CCR是我们自己设置的一个目标值；CNT是一个计数器在不断地自增；同时它俩还在不断进行比较；</li><li>CCR捕获/比价器后面的就是输出模式控制器；以PWM模式1为例，里面写的也是PWM模式1的执行逻辑；</li></ul> 
+<p>整个过程如下图所示：</p> 
+<p><img src="https://images2.imgbox.com/e4/a5/VCIHTbpq_o.png" alt="在这里插入图片描述"><br> 红线代表CCR值，是可以预先设定的；蓝线代表CNT值；绿线代表输出的REF值；</p> 
+<ul><li>当CCR小于CNT值时，输出为有效电平（高电平），当CCR大于等于CNT时，输出的REF为无效电平（低电平）；</li><li>所以，PWM的占空比是受CCR值调控的，如果CCR值设置的高，输出的占空比就变大；反之如果CCR设置的低一些，那么输出的占空比就会变小；</li><li>最终经过输出比较，输出的REF就是一个频率可调，占空比也可调的PWM波形了；</li></ul> 
+<h3><a id="32_PWM_114"></a>3.2 PWM参数计算</h3> 
+<p><img src="https://images2.imgbox.com/0d/e9/4PDSELyB_o.png" alt="在这里插入图片描述"><br> PWM各个参数的计算，记住公式就行，写代码设置具体参数的时候要用到的；</p> 
+<ul><li>CK_PSC通俗说就是单片机的72MHz</li><li>蓝线是CNT，黄线是ARRF，红线是CCR</li></ul> 
+<h2><a id="_123"></a>四、舵机和直流电机介绍</h2> 
+<h3><a id="41__124"></a>4.1 舵机简介</h3> 
+<p><img src="https://images2.imgbox.com/82/84/ycJJRBYl_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>总结来说就是，给舵机输入一个PWM波形，输出轴就会固定在一个角度；</li></ul> 
+<h3><a id="42__131"></a>4.2 舵机硬件电路</h3> 
+<p><img src="https://images2.imgbox.com/d1/19/OacUWA3x_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="43___135"></a>4.3 直流电机及驱动简介</h3> 
+<p><img src="https://images2.imgbox.com/ea/56/uu81yzEY_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="44__138"></a>4.4 直流电机硬件电路</h3> 
+<p><img src="https://images2.imgbox.com/8e/40/0SJnZp2X_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>上图的PWMA、AIN2、AIN1三个脚可以控制点击的正反转和速度；具体控制方式要参考右下角的输入输出表，分以下几种情况</li><li>当IN1为L，IN2为H时：PWM给H高电平，电机反转；当PWM给L低电平时，电机制动</li><li>当IN1为H，IN2为L时：PWM给H高电平，电机正转；当PWM给L低电平时，电机制动</li><li>至于电机的转动速度，取决于PWM的占空比，前面有介绍。</li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/03bb5bd7750e509016f874635eeb9211/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Java遍历Map的五种方式</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f36c2d77c7babd8a1a5454a1b743da53/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">常用数字设计仿真工具(Questa,VCS,IUS/Xcelium,Verdi等)使用入门</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

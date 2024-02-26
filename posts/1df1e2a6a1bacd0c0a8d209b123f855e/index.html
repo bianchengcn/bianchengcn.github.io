@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>NIPS15 - 神经网络中的空间转换模块STN《Spatial Transformer Network》(含代码复现) - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="NIPS15 - 神经网络中的空间转换模块STN《Spatial Transformer Network》(含代码复现)" />
+<meta property="og:description" content="文章目录 原文地址论文阅读方法初识相知回顾代码 原文地址 原文
+论文阅读方法 三遍论文法
+初识 CNN方法在计算机视觉领域大放异彩，在很多领域都已经代替了传统方法。然而卷积神经网络的架构缺乏空间不变性（Spatially Invariant），即使卷积和max-pooling操作在一定程度上引入了平移不变性和空间不变性，但如果输入发生了较大的空间变化，CNN就变得无法识别了。
+因此本文提出了一个空间转换模块，并以此构建了空间转换网络，能在一定程度增加CNN的空间不变性。并且这是一个即插即用的模块，能较方便地插入到各种架构中。
+相知 介绍主要技术和部分实验
+基于矩阵操作的空间变换
+熟悉传统图像处理的小伙伴肯定知道大多数空间转换就可以转换成基于矩阵的采样操作，假设输入图像(source)的像素点由( x i s , y i s x_i^s, y_i^s xis​,yis​)表示，输出图像(target)像素点由( x i t , y i t x_i^t, y_i^t xit​,yit​)表示，只要确定了一组变换参数θ就能确定一种空间变换。以2D放射变换矩阵为例：
+矩阵 A θ A_θ Aθ​可以有平移、旋转、缩放、错切等操作，只要确定了其中6个参数，就可以根据矩阵变换求得输出图像各像素点的值（视为从原图采样的操作）。
+这里贴上恒等映射（ θ 11 , θ 22 θ_{11}, θ_{22} θ11​,θ22​为1其他为0）和一种仿射变化的效果图：
+了解更多关于2D仿射变换矩阵请参照这篇文章：仿射变换及其变换矩阵的理解
+既然可以将空间变换确定为矩阵操作，那么不妨让网络去学习生成矩阵参数，从而学会空间转换。
+整体架构
+STN模块的整体结构如上图所示，其由localisation net、Grid generator和Sampler三部分组成，输入特征图U（也可以直接是RGB图像）经过空间变换模块得到输出特征图V。
+其中Localisation net将输入特征图中送到一个子网中，得到空间变化参数θ；Grid generator根据θ确定一个空间变化，并创建采样网格(sampling grid， 确定输入图中哪些点会被用于变换)；Sampler根据采样网格对输入特征图进行采样，从而得到最终的输出。
+Localisation net
+定位子网接受输入特征图，送到隐层中提取特征（可以是卷积层，也可以是全连接层），并根据预设的变换输出对应的参数（比如之前提到的仿射变换就是6个参数）。
+Grid generator
+其实就是根据参数构造转换矩阵，从而确定采样空间。
+其中有一些细节需要注意，输入输出图的坐标均归一化到[-1, 1]之间
+Image Sampling" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/1df1e2a6a1bacd0c0a8d209b123f855e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-09-12T21:58:01+08:00" />
+<meta property="article:modified_time" content="2021-09-12T21:58:01+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">NIPS15 - 神经网络中的空间转换模块STN《Spatial Transformer Network》(含代码复现)</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atelier-sulphurpool-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><a href="#_1" rel="nofollow">原文地址</a></li><li><a href="#_3" rel="nofollow">论文阅读方法</a></li><li><a href="#_6" rel="nofollow">初识</a></li><li><a href="#_11" rel="nofollow">相知</a></li><li><a href="#_65" rel="nofollow">回顾</a></li><li><a href="#_72" rel="nofollow">代码</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h3><a id="_1"></a>原文地址</h3> 
+<p><a href="https://proceedings.neurips.cc//paper/2015/file/33ceb07bf4eeb3da587e268d663aba1a-Paper.pdf" rel="nofollow">原文</a></p> 
+<h3><a id="_3"></a>论文阅读方法</h3> 
+<p><a href="https://blog.csdn.net/qq_36560894/article/details/104614354">三遍论文法</a></p> 
+<h3><a id="_6"></a>初识</h3> 
+<p>CNN方法在计算机视觉领域大放异彩，在很多领域都已经代替了传统方法。然而卷积神经网络的架构缺乏空间不变性（<code>Spatially Invariant</code>），即使卷积和<code>max-pooling</code>操作在一定程度上引入了平移不变性和空间不变性，但如果输入发生了较大的空间变化，CNN就变得无法识别了。</p> 
+<p>因此本文提出了一个空间转换模块，并以此构建了空间转换网络，能在一定程度增加CNN的空间不变性。并且这是一个即插即用的模块，能较方便地插入到各种架构中。</p> 
+<h3><a id="_11"></a>相知</h3> 
+<blockquote> 
+ <p>介绍主要技术和部分实验</p> 
+</blockquote> 
+<p><strong>基于矩阵操作的空间变换</strong></p> 
+<p>熟悉传统图像处理的小伙伴肯定知道大多数空间转换就可以转换成基于矩阵的采样操作，假设输入图像(source)的像素点由(<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          x 
+         
+        
+          i 
+         
+        
+          s 
+         
+        
+       
+         , 
+        
+        
+        
+          y 
+         
+        
+          i 
+         
+        
+          s 
+         
+        
+       
+      
+        x_i^s, y_i^s 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.923056em; vertical-align: -0.258664em;"></span><span class="mord"><span class="mord mathdefault">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.664392em;"><span class="" style="top: -2.44134em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">s</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.258664em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathdefault" style="margin-right: 0.03588em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.664392em;"><span class="" style="top: -2.44134em; margin-left: -0.03588em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">s</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.258664em;"><span class=""></span></span></span></span></span></span></span></span></span></span>)表示，输出图像(target)像素点由(<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          x 
+         
+        
+          i 
+         
+        
+          t 
+         
+        
+       
+         , 
+        
+        
+        
+          y 
+         
+        
+          i 
+         
+        
+          t 
+         
+        
+       
+      
+        x_i^t, y_i^t 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1.05222em; vertical-align: -0.258664em;"></span><span class="mord"><span class="mord mathdefault">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.793556em;"><span class="" style="top: -2.44134em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.258664em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathdefault" style="margin-right: 0.03588em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.793556em;"><span class="" style="top: -2.44134em; margin-left: -0.03588em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span><span class="" style="top: -3.063em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.258664em;"><span class=""></span></span></span></span></span></span></span></span></span></span>)表示，只要确定了一组变换参数θ就能确定一种空间变换。以2D放射变换矩阵为例：</p> 
+<p><img src="https://images2.imgbox.com/84/6b/H0c46tFN_o.png" alt="在这里插入图片描述"><br> 矩阵<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          A 
+         
+        
+          θ 
+         
+        
+       
+      
+        A_θ 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.83333em; vertical-align: -0.15em;"></span><span class="mord"><span class="mord mathdefault">A</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.336108em;"><span class="" style="top: -2.55em; margin-left: 0em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight" style="margin-right: 0.02778em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span></span></span></span></span>可以有平移、旋转、缩放、错切等操作，只要确定了其中6个参数，就可以根据矩阵变换求得输出图像各像素点的值（视为从原图采样的操作）。</p> 
+<p>这里贴上恒等映射（<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+        
+        
+          θ 
+         
+        
+          11 
+         
+        
+       
+         , 
+        
+        
+        
+          θ 
+         
+        
+          22 
+         
+        
+       
+      
+        θ_{11}, θ_{22} 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.88888em; vertical-align: -0.19444em;"></span><span class="mord"><span class="mord mathdefault" style="margin-right: 0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02778em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right: 0.166667em;"></span><span class="mord"><span class="mord mathdefault" style="margin-right: 0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 0.301108em;"><span class="" style="top: -2.55em; margin-left: -0.02778em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mord mtight">2</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.15em;"><span class=""></span></span></span></span></span></span></span></span></span></span>为1其他为0）和一种仿射变化的效果图：<br> <img src="https://images2.imgbox.com/5d/0e/FZmD3YJe_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>了解更多关于2D仿射变换矩阵请参照这篇文章：<a href="https://www.cnblogs.com/shine-lee/p/10950963.html" rel="nofollow">仿射变换及其变换矩阵的理解</a></p> 
+</blockquote> 
+<p>既然可以将空间变换确定为矩阵操作，那么不妨让网络去学习生成矩阵参数，从而学会空间转换。</p> 
+<p><strong>整体架构</strong><br> <img src="https://images2.imgbox.com/fb/45/xibmBTFJ_o.png" alt="在这里插入图片描述"><br> STN模块的整体结构如上图所示，其由<code>localisation net、Grid generator和Sampler</code>三部分组成，输入特征图U（也可以直接是RGB图像）经过空间变换模块得到输出特征图V。</p> 
+<p>其中<code>Localisation net</code>将输入特征图中送到一个子网中，得到空间变化参数θ；<code>Grid generator</code>根据θ确定一个空间变化，并创建采样网格(sampling grid， 确定输入图中哪些点会被用于变换)；<code>Sampler</code>根据采样网格对输入特征图进行采样，从而得到最终的输出。</p> 
+<p><strong>Localisation net</strong></p> 
+<p>定位子网接受输入特征图，送到隐层中提取特征（可以是卷积层，也可以是全连接层），并根据预设的变换输出对应的参数（比如之前提到的仿射变换就是6个参数）。</p> 
+<p><strong>Grid generator</strong></p> 
+<p>其实就是根据参数构造转换矩阵，从而确定采样空间。</p> 
+<blockquote> 
+ <p>其中有一些细节需要注意，输入输出图的坐标均归一化到[-1, 1]之间</p> 
+</blockquote> 
+<p><strong>Image Sampling</strong></p> 
+<p>想要通过梯度下降的方法来学习网络参数，那么就一定要注意操作的可导行。而采样操作本身并不是可导的，因为输入像素点是离散的，而空间转换会导致采样点并不是原图上的像素值。因此作者引入了插值操作，使得过程可导：</p> 
+<p><img src="https://images2.imgbox.com/ad/e9/coHbqKlI_o.png" alt="在这里插入图片描述"><br> 其中U是输入特征图，V是输出特征图，k为插值操作。</p> 
+<p>从而<code>最近邻插值</code>和 <code>双线性插值</code>，如下：</p> 
+<p><img src="https://images2.imgbox.com/47/e5/WEnWEhEJ_o.png" alt="在这里插入图片描述"><img src="https://images2.imgbox.com/05/8b/aShl6P4s_o.png" alt="在这里插入图片描述"><br> 而插值过程是可导的，其的求偏导过程如下：<br> <img src="https://images2.imgbox.com/54/c1/8o2BBZA6_o.png" alt="在这里插入图片描述"><br> 因此整个模块就可以通过反向传播算法进行参数更新，从而嵌入到网络中进行端到端训练。</p> 
+<p><strong>部分实验</strong></p> 
+<p>① 对MNIST数据进行一些扰动，使得其对于正常CNN难以分辨，而引入了STN模块后，经过变换后能够正常识别。<br> <img src="https://images2.imgbox.com/7e/06/sscGHgaF_o.png" alt="在这里插入图片描述"><br> ② 在门牌数字识别上，引入多重STN结构，提升了识别性能。<br> <img src="https://images2.imgbox.com/d2/3f/DwiuaDmK_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="_65"></a>回顾</h3> 
+<p>STN是15年的工作，但它的思想也影响了后面的一大批工作。其主要的亮点就是将空间变换变成一种参数的预测，然后通过插值的方式进行采样，从而能够嵌入到网络中进行端到端的训练。</p> 
+<p>但它的性能并不是想传说中的那么好，也无法替代随机增广的作用。因为没有对空间转换进行直接的约束，所以你无法期望它能达到你想要的变换形式。比如，在MNIST实验中，它之所以能学会将翻转的4变换复原，是因为整个类别大多数训练数据都是正向的，如果你整个类别都是翻转后的4，它是无法学会的，它的参数更新依赖于你整体的训练目标。</p> 
+<p>我在图像分类的比赛中用过这个模块，期望其能起到类似于<code>Attention</code>的作用，将图像中的关键信息进行放大，但实验效果并不好。</p> 
+<h3><a id="_72"></a>代码</h3> 
+<p>Pytorch将STN网络的<code>生成采样网络</code>+<code>采样</code>两个主要操作已经封装到<code>torch.nn.funcitonal</code>里了，因此复现比较简单。</p> 
+<p>以下代码主要展示了STN模块，其中<code>localisation net</code>可以依据具体的任务和数据进行修正。这里默认输入图像维度为<code>512x512x3</code>：</p> 
+<pre><code class="prism language-python"><span class="token comment"># 基于卷积的下采样模块</span>
+<span class="token keyword">def</span> <span class="token function">ConvBnRelu</span><span class="token punctuation">(</span>in_channel<span class="token punctuation">,</span> out_channel<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    convbnrelu <span class="token operator">=</span> nn<span class="token punctuation">.</span>Sequential<span class="token punctuation">(</span>
+        nn<span class="token punctuation">.</span>Conv2d<span class="token punctuation">(</span>in_channel<span class="token punctuation">,</span> out_channel<span class="token punctuation">,</span> kernel_size<span class="token operator">=</span><span class="token number">3</span><span class="token punctuation">,</span> stride<span class="token operator">=</span><span class="token number">2</span><span class="token punctuation">,</span> padding<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        nn<span class="token punctuation">.</span>BatchNorm2d<span class="token punctuation">(</span>out_channel<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        nn<span class="token punctuation">.</span>ReLU<span class="token punctuation">(</span>inplace<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+    <span class="token punctuation">)</span>
+    <span class="token keyword">return</span> convbnrelu
+
+
+<span class="token keyword">class</span> <span class="token class-name">SpatialTransformer</span><span class="token punctuation">(</span>nn<span class="token punctuation">.</span>Module<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">""" Spatial Transformer Network """</span>
+    <span class="token keyword">def</span> <span class="token function">__init__</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token builtin">super</span><span class="token punctuation">(</span>SpatialTransformer<span class="token punctuation">,</span> self<span class="token punctuation">)</span><span class="token punctuation">.</span>__init__<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        self<span class="token punctuation">.</span>localization <span class="token operator">=</span> nn<span class="token punctuation">.</span>Sequential<span class="token punctuation">(</span>
+            <span class="token comment"># Conv-Bn-Relu (downsampling)</span>
+            ConvBnRelu<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span> <span class="token number">64</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            ConvBnRelu<span class="token punctuation">(</span><span class="token number">64</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            ConvBnRelu<span class="token punctuation">(</span><span class="token number">128</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            ConvBnRelu<span class="token punctuation">(</span><span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">512</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>Conv2d<span class="token punctuation">(</span><span class="token number">512</span><span class="token punctuation">,</span> <span class="token number">256</span><span class="token punctuation">,</span> kernel_size<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">,</span> bias<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>Conv2d<span class="token punctuation">(</span><span class="token number">256</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> kernel_size<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">,</span> bias<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span>
+        <span class="token punctuation">)</span>
+		<span class="token comment"># 定位子网</span>
+        self<span class="token punctuation">.</span>fc_loc <span class="token operator">=</span> nn<span class="token punctuation">.</span>Sequential<span class="token punctuation">(</span>
+            nn<span class="token punctuation">.</span>Linear<span class="token punctuation">(</span><span class="token number">32</span><span class="token operator">*</span><span class="token number">32</span><span class="token punctuation">,</span> <span class="token number">128</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>BatchNorm1d<span class="token punctuation">(</span><span class="token number">128</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>ReLU<span class="token punctuation">(</span>inplace<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            nn<span class="token punctuation">.</span>Linear<span class="token punctuation">(</span><span class="token number">128</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token operator">*</span><span class="token number">3</span><span class="token punctuation">)</span>
+        <span class="token punctuation">)</span>
+        <span class="token comment"># initialization</span>
+        <span class="token keyword">for</span> m <span class="token keyword">in</span> self<span class="token punctuation">.</span>modules<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            <span class="token keyword">if</span> <span class="token builtin">isinstance</span><span class="token punctuation">(</span>m<span class="token punctuation">,</span> nn<span class="token punctuation">.</span>Conv2d<span class="token punctuation">)</span><span class="token punctuation">:</span>
+                nn<span class="token punctuation">.</span>init<span class="token punctuation">.</span>kaiming_normal_<span class="token punctuation">(</span>m<span class="token punctuation">.</span>weight<span class="token punctuation">,</span> mode<span class="token operator">=</span><span class="token string">'fan_out'</span><span class="token punctuation">,</span> nonlinearity<span class="token operator">=</span><span class="token string">'relu'</span><span class="token punctuation">)</span>
+            <span class="token keyword">elif</span> <span class="token builtin">isinstance</span><span class="token punctuation">(</span>m<span class="token punctuation">,</span> <span class="token punctuation">(</span>nn<span class="token punctuation">.</span>BatchNorm2d<span class="token punctuation">,</span> nn<span class="token punctuation">.</span>GroupNorm<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+                nn<span class="token punctuation">.</span>init<span class="token punctuation">.</span>constant_<span class="token punctuation">(</span>m<span class="token punctuation">.</span>weight<span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">)</span>
+                nn<span class="token punctuation">.</span>init<span class="token punctuation">.</span>constant_<span class="token punctuation">(</span>m<span class="token punctuation">.</span>bias<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span>
+        <span class="token comment"># indentity transformation 初始化恒等映射</span>
+        self<span class="token punctuation">.</span>fc_loc<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">.</span>weight<span class="token punctuation">.</span>data<span class="token punctuation">.</span>fill_<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span>
+        self<span class="token punctuation">.</span>fc_loc<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span><span class="token punctuation">.</span>bias<span class="token punctuation">.</span>data <span class="token operator">=</span> torch<span class="token punctuation">.</span>FloatTensor<span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">def</span> <span class="token function">forward</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> img<span class="token punctuation">)</span><span class="token punctuation">:</span>
+
+        n <span class="token operator">=</span> img<span class="token punctuation">.</span>shape<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+
+        feature <span class="token operator">=</span> self<span class="token punctuation">.</span>localization<span class="token punctuation">(</span>img<span class="token punctuation">)</span><span class="token punctuation">.</span>flatten<span class="token punctuation">(</span>start_dim<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>
+        theta <span class="token operator">=</span> self<span class="token punctuation">.</span>fc_loc<span class="token punctuation">(</span>feature<span class="token punctuation">)</span><span class="token punctuation">.</span>reshape<span class="token punctuation">(</span>n<span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">,</span> <span class="token number">3</span><span class="token punctuation">)</span>
+
+        <span class="token comment"># spatial transform</span>
+        grid <span class="token operator">=</span> F<span class="token punctuation">.</span>affine_grid<span class="token punctuation">(</span>theta<span class="token punctuation">,</span> size<span class="token operator">=</span>img<span class="token punctuation">.</span>size<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> align_corners<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span>
+        trans_img <span class="token operator">=</span> F<span class="token punctuation">.</span>grid_sample<span class="token punctuation">(</span>img<span class="token punctuation">,</span> grid<span class="token punctuation">,</span> align_corners<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span>
+
+        <span class="token keyword">return</span> trans_img
+
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7d0bbca357cefc922209f1709102ee74/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">前端基础知识总结---HTML篇</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f83455f39aabdfc8d412c5f364241fc9/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">NLP之英文分词</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

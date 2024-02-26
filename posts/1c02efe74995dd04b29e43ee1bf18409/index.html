@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【DeepLearning-8】MobileViT模块配置 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【DeepLearning-8】MobileViT模块配置" />
+<meta property="og:description" content="完整代码： import torch import torch.nn as nn from einops import rearrange def conv_1x1_bn(inp, oup): return nn.Sequential( nn.Conv2d(inp, oup, 1, 1, 0, bias=False), nn.BatchNorm2d(oup), nn.SiLU() ) def conv_nxn_bn(inp, oup, kernal_size=3, stride=1): return nn.Sequential( nn.Conv2d(inp, oup, kernal_size, stride, 1, bias=False), nn.BatchNorm2d(oup), nn.SiLU() ) class PreNorm(nn.Module): def __init__(self, dim, fn): super().__init__() self.norm = nn.LayerNorm(dim) self.fn = fn # mg def forward(self, x, **kwargs): return self.fn(self.norm(x), **kwargs) class Attention(nn.Module): def __init__(self, dim, heads=8, dim_head=64, dropout=0." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/1c02efe74995dd04b29e43ee1bf18409/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-27T12:33:56+08:00" />
+<meta property="article:modified_time" content="2024-01-27T12:33:56+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【DeepLearning-8】MobileViT模块配置</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><strong>完整代码：</strong> </p> 
+<pre><code class="language-python">import torch
+import torch.nn as nn
+from einops import rearrange
+def conv_1x1_bn(inp, oup):
+    return nn.Sequential(
+        nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
+        nn.BatchNorm2d(oup),
+        nn.SiLU()
+    )
+def conv_nxn_bn(inp, oup, kernal_size=3, stride=1):
+    return nn.Sequential(
+        nn.Conv2d(inp, oup, kernal_size, stride, 1, bias=False),
+        nn.BatchNorm2d(oup),
+        nn.SiLU()
+    )
+class PreNorm(nn.Module):
+    def __init__(self, dim, fn):
+        super().__init__()
+        self.norm = nn.LayerNorm(dim)
+        self.fn = fn # mg
+    
+    def forward(self, x, **kwargs):
+        return self.fn(self.norm(x), **kwargs)
+class Attention(nn.Module):
+    def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
+        super().__init__()
+        inner_dim = dim_head *  heads
+        project_out = not (heads == 1 and dim_head == dim)
+        self.heads = heads
+        self.scale = dim_head ** -0.5
+        self.attend = nn.Softmax(dim = -1)
+        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
+        self.to_out = nn.Sequential(
+            nn.Linear(inner_dim, dim),
+            nn.Dropout(dropout)# mg
+        ) if project_out else nn.Identity()
+    def forward(self, x):
+        qkv = self.to_qkv(x).chunk(3, dim=-1)
+        q, k, v = map(lambda t: rearrange(t, 'b p n (h d) -&gt; b p h n d', h = self.heads), qkv)
+        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+        attn = self.attend(dots)
+        out = torch.matmul(attn, v)
+        out = rearrange(out, 'b p h n d -&gt; b p n (h d)')
+        return self.to_out(out)
+class FeedForward(nn.Module):
+    def __init__(self, dim, hidden_dim, dropout=0.):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, hidden_dim),
+            nn.SiLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, dim),
+            nn.Dropout(dropout)
+        )
+    
+    def forward(self, x):
+        return self.net(x)
+class UserDefined(nn.Module):
+    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
+        super().__init__()
+        self.layers = nn.ModuleList([])
+        for _ in range(depth):
+            self.layers.append(nn.ModuleList([
+                PreNorm(dim, Attention(dim, heads, dim_head, dropout)),
+                PreNorm(dim, FeedForward(dim, mlp_dim, dropout))
+            ]))
+    
+    def forward(self, x):
+        for attn, ff in self.layers:
+            x = attn(x) + x
+            x = ff(x) + x
+        return x
+
+class IRBlock(nn.Module):
+    def __init__(self, inp, oup, stride=1, expansion=4):
+        super().__init__()
+        self.stride = stride
+        assert stride in [1, 2]
+        hidden_dim = int(inp * expansion)
+        self.use_res_connect = self.stride == 1 and inp == oup
+        if expansion == 1: # 构建没有扩展层的卷积块
+            self.conv = nn.Sequential(
+                # 深度可分离卷积（Depthwise Convolution）
+                nn.Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
+                nn.BatchNorm2d(hidden_dim),
+                nn.SiLU(),
+                # “线性”逐点卷积 (Pointwise-Linear Convolution)
+                nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(oup),
+            )
+        else:  # 构建包含扩展层的卷积块
+            self.conv = nn.Sequential(
+                # 逐点卷积 (Pointwise Convolution)
+                nn.Conv2d(inp, hidden_dim, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(hidden_dim),
+                nn.SiLU(),
+                # 深度可分离卷积 (Depthwise Convolution)
+                nn.Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
+                nn.BatchNorm2d(hidden_dim),
+                nn.SiLU(),
+                # “线性”逐点卷积 (Pointwise-Linear Convolution)
+                nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(oup),
+            )
+    def forward(self, x):
+        if self.use_res_connect:
+            return x + self.conv(x)
+        else:
+            return self.conv(x)
+
+class MobileViTBv3(nn.Module):
+    def __init__(self, channel, dim, depth=2, kernel_size=3, patch_size=(2, 2), mlp_dim=int(64*2), dropout=0.):
+        super().__init__()
+        self.ph, self.pw = patch_size
+        self.mv01 = IRBlock(channel, channel) 
+        self.conv1 = conv_nxn_bn(channel, channel, kernel_size)
+        self.conv3 = conv_1x1_bn(dim, channel)
+        self.conv2 = conv_1x1_bn(channel, dim)
+        self.transformer = UserDefined(dim, depth, 4, 8, mlp_dim, dropout)
+        self.conv4 = conv_nxn_bn(2 * channel, channel, kernel_size)
+    def forward(self, x):
+        y = x.clone()
+        x = self.conv1(x)
+        x = self.conv2(x)
+        z = x.clone()
+        _, _, h, w = x.shape
+        x = rearrange(x, 'b d (h ph) (w pw) -&gt; b (ph pw) (h w) d', ph=self.ph, pw=self.pw)
+        x = self.transformer(x)
+        x = rearrange(x, 'b (ph pw) (h w) d -&gt; b d (h ph) (w pw)', h=h//self.ph, w=w//self.pw, ph=self.ph, pw=self.pw)
+        x = self.conv3(x)
+        x = torch.cat((x, z), 1)
+        x = self.conv4(x)
+        x = x + y
+        x = self.mv01(x)
+        return x</code></pre> 
+<p><strong>文件配置在D:\yolov5-master\models路径下</strong></p> 
+<p><img alt="" height="849" src="https://images2.imgbox.com/99/23/4hEXOrtI_o.png" width="949"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/255fde6acc155c83908545d62f913268/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">「优选算法刷题」：将×减到0的最小操作数</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1891f41c45f29a8e3e83892bc6673076/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【数据分析】numpy基础第四天</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

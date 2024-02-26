@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>rundll32.exe和regsvr32.exe - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="rundll32.exe和regsvr32.exe" />
+<meta property="og:description" content="众所周知，DLL文件是不能独自运行的，需要被进程加载到其地址空间后才能执行。
+那怎么运行一个DLL呢?
+答案：可以借助Windows所提供的rundll32.exe或regsvr32.exe。
+rundll32.exe 通过rundll32.exe可以直接调用DLL的导出函数来执行功能。
+命令行：rundll32.exe DllName,FuncName [Arguments]
+但被指定的导出函数有格式要求，导出函数的格式如下，函数参数列表中的pCommand就是通过[Arguments]传入的。
+void WINAPI FuncName(HWND hWnd, HINSTANCE hInst, LPCWSTR pCommand, DWORD nCmdShow); 执行流程 其内部通过LoadLibraryEx来加载该DLL，然后通过GetProcAddress来获取导出函数地址并调用，当该导出函数返回时，rundll32会通过FreeLibrary卸载该DLL并通过ExitProcess退出进程。
+看着是不是很简单，确实很简单，但涉及到了两个失败。
+LoadLibraryEx失败：
+GetLastError获得失败原因，然后MessageBox错误弹窗，最后ExitProcess退出进程。
+GetProcAddress失败：
+MessageBox错误弹窗，然后FreeLibrary卸载DLL，最后ExitProcess退出进程。
+注意：MessageBox是有阻塞线程的作用的，关闭弹窗才能继续往下执行。
+调试实例 以rundll32.exe &#34;C:\\testDll.dll&#34;,DllMain为例，看一下rundll32.exe的执行流程：
+通过LoadLibraryEx加载该DLL，此时会调用DllMain，且第二参数是DLL_PROCESS_ATTACH。
+通过GetProcAddress获得指定的导出函数地址。
+获得DllMainW失败后，又获得了DllMainA的地址。
+获得导出函数地址失败后，准备错误弹窗。
+首先通过LoadStringW获得资源ID为400的字符串（&#34;%s 出错\n丢失条目: %s&#34;）；
+然后格式化弹窗字符串：
+然后通过LoadStringW获得资源ID为0x402的字符串（“RunDLL”）；
+最后通过MessageBoxW弹窗。
+弹窗后，如果不关闭对话框，线程会一直阻塞。点击确定后rundll32会通过FreeLibrary卸载该DLL。最后rundll32通过ExitProcess结束自身进程。 regsvr32.exe regsvr32.exe用于注册/卸载COM组件。
+COM组件：Component Object Mode，是微软提出的一种软件开发技术。组件其实是一些小的二进制可执行程序，它们可以用于给应用程序、操作系统及其他组件提供服务。COM组件由 以DLL或EXE形式发布的可执行代码 组成。
+组件DLL的导出函数列表通常会包含DllRegisterServer和DllUnregisterServer。
+DllRegisterServer：注册组件，在注册表中登记该DLL；DllUnregisterServer：卸载组件，在注册表中取消该DLL的登记。 先来看一下官方给出的用法（在cmd里输入regsvr32.exe即可）。
+看着有点迷糊，挨个来解释一下：
+默认情况下：即regsvr32.exe xxx.dll，此时调用DllRegisterServer来注册该DLL。/u：Unregister，即调用DllUnregisterServer来卸载该DLL。/s：Silent，静默，即不显示任何消息框。/n：No(我猜的)，不调用DllRegisterServer或DllUnregisterServer，/n必须和/i一起用。/i:command：有/u时，调用DllInstall(FALSE, [cmdline])来卸载该DLL；没有/u时，调用DllInstall(TRUE, [cmdline])来注册该DLL。 应用场景 可以用regsvr32.exe来运行Scriptlet脚本：regsvr32.exe /s /u /n /i:http://127.0.0.1/file.sct scrobj.dll
+该命令会调用scrobj.dll的DllInstall(FALSE, &#34;http://127.0.0.1/file.sct&#34;)，此时会去下载file.sct并执行；
+而scrobj.dll也不会被登记到注册表中，因为指定了/u。
+附上scrobj.dll的导出函数列表：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/28f28ba66168450a113543ad1c6b9806/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-03-28T10:25:09+08:00" />
+<meta property="article:modified_time" content="2022-03-28T10:25:09+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">rundll32.exe和regsvr32.exe</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>众所周知，DLL文件是不能独自运行的，需要被进程加载到其地址空间后才能执行。<br> 那怎么运行一个DLL呢?<br> 答案：可以借助Windows所提供的rundll32.exe或regsvr32.exe。</p> 
+<h2><a id="rundll32exe_4"></a>rundll32.exe</h2> 
+<p>通过rundll32.exe可以直接调用DLL的导出函数来执行功能。<br> 命令行：<code>rundll32.exe DllName,FuncName [Arguments]</code><br> 但被指定的导出函数有格式要求，导出函数的格式如下，函数参数列表中的<code>pCommand</code>就是通过<code>[Arguments]</code>传入的。</p> 
+<pre><code class="prism language-c"><span class="token keyword">void</span> WINAPI <span class="token function">FuncName</span><span class="token punctuation">(</span>HWND hWnd<span class="token punctuation">,</span> HINSTANCE hInst<span class="token punctuation">,</span> LPCWSTR pCommand<span class="token punctuation">,</span> DWORD nCmdShow<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<h4><a id="_11"></a>执行流程</h4> 
+<p>其内部通过<code>LoadLibraryEx</code>来加载该DLL，然后通过<code>GetProcAddress</code>来获取导出函数地址并调用，当该导出函数返回时，rundll32会通过<code>FreeLibrary</code>卸载该DLL并通过<code>ExitProcess</code>退出进程。</p> 
+<p>看着是不是很简单，确实很简单，但涉及到了两个失败。</p> 
+<ol><li>LoadLibraryEx失败：<br> GetLastError获得失败原因，然后MessageBox错误弹窗，最后ExitProcess退出进程。<br> <img src="https://images2.imgbox.com/a6/8c/HUleA7H9_o.png" alt="在这里插入图片描述"></li><li>GetProcAddress失败：<br> MessageBox错误弹窗，然后FreeLibrary卸载DLL，最后ExitProcess退出进程。<br> <img src="https://images2.imgbox.com/a1/33/YzHxOsxm_o.png" alt="在这里插入图片描述"></li></ol> 
+<p>注意：MessageBox是有阻塞线程的作用的，关闭弹窗才能继续往下执行。</p> 
+<h4><a id="_24"></a>调试实例</h4> 
+<p>以<code>rundll32.exe "C:\\testDll.dll",DllMain</code>为例，看一下rundll32.exe的执行流程：</p> 
+<ol><li>通过<code>LoadLibraryEx</code>加载该DLL，此时会调用DllMain，且第二参数是<code>DLL_PROCESS_ATTACH</code>。<br> <img src="https://images2.imgbox.com/2c/2a/5AwpdnCX_o.png" alt="在这里插入图片描述"></li><li>通过<code>GetProcAddress</code>获得指定的导出函数地址。<br> <img src="https://images2.imgbox.com/d9/fb/wttroLD7_o.png" alt="在这里插入图片描述">获得<code>DllMainW</code>失败后，又获得了<code>DllMainA</code>的地址。<br> <img src="https://images2.imgbox.com/3a/13/iW6s7kej_o.png" alt="在这里插入图片描述"></li><li>获得导出函数地址失败后，准备错误弹窗。<br> 首先通过<code>LoadStringW</code>获得资源ID为400的字符串（"%s 出错\n丢失条目: %s"）；<br> <img src="https://images2.imgbox.com/53/56/ATQp1qXI_o.png" alt="在这里插入图片描述">然后格式化弹窗字符串：<br> <img src="https://images2.imgbox.com/ae/78/dZQAc5p9_o.png" alt="在这里插入图片描述"><br> 然后通过<code>LoadStringW</code>获得资源ID为0x402的字符串（“RunDLL”）；<br> <img src="https://images2.imgbox.com/35/d1/JBycSQ74_o.png" alt="在这里插入图片描述"><br> 最后通过MessageBoxW弹窗。<br> <img src="https://images2.imgbox.com/c6/53/pGDOXylK_o.png" alt="在这里插入图片描述"><br> 弹窗后，如果不关闭对话框，线程会一直阻塞。</li><li>点击确定后rundll32会通过<code>FreeLibrary</code>卸载该DLL。</li><li>最后rundll32通过<code>ExitProcess</code>结束自身进程。</li></ol> 
+<h2><a id="regsvr32exe_45"></a>regsvr32.exe</h2> 
+<p>regsvr32.exe用于注册/卸载COM组件。</p> 
+<p><strong>COM组件</strong>：Component Object Mode，是微软提出的一种软件开发技术。组件其实是一些小的二进制可执行程序，它们可以用于给应用程序、操作系统及其他组件提供服务。COM组件由 以DLL或EXE形式发布的<code>可执行代码</code> 组成。</p> 
+<p>组件DLL的导出函数列表通常会包含<code>DllRegisterServer</code>和<code>DllUnregisterServer</code>。</p> 
+<ul><li>DllRegisterServer：注册组件，在注册表中登记该DLL；</li><li>DllUnregisterServer：卸载组件，在注册表中取消该DLL的登记。</li></ul> 
+<p>先来看一下官方给出的用法（在cmd里输入<code>regsvr32.exe</code>即可）。<br> <img src="https://images2.imgbox.com/be/65/6Xu7e513_o.png" alt="在这里插入图片描述"><br> 看着有点迷糊，挨个来解释一下：</p> 
+<ul><li>默认情况下：即<code>regsvr32.exe xxx.dll</code>，此时调用DllRegisterServer来注册该DLL。</li><li><code>/u</code>：Unregister，即调用DllUnregisterServer来卸载该DLL。</li><li><code>/s</code>：Silent，静默，即不显示任何消息框。</li><li><code>/n</code>：No(我猜的)，不调用DllRegisterServer或DllUnregisterServer，<code>/n</code>必须和<code>/i</code>一起用。</li><li><code>/i:command</code>：有<code>/u</code>时，调用<code>DllInstall(FALSE, [cmdline])</code>来卸载该DLL；没有<code>/u</code>时，调用<code>DllInstall(TRUE, [cmdline])</code>来注册该DLL。</li></ul> 
+<h4><a id="_63"></a>应用场景</h4> 
+<p>可以用regsvr32.exe来运行Scriptlet脚本：<code>regsvr32.exe /s /u /n /i:http://127.0.0.1/file.sct scrobj.dll</code></p> 
+<p>该命令会调用scrobj.dll的<code>DllInstall(FALSE, "http://127.0.0.1/file.sct")</code>，此时会去下载file.sct并执行；<br> 而scrobj.dll也不会被登记到注册表中，因为指定了<code>/u</code>。</p> 
+<p>附上scrobj.dll的导出函数列表：<br> <img src="https://images2.imgbox.com/c0/65/zDaezn2q_o.png" alt="在这里插入图片描述"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/b5474fc332dc3393dae5d3d3199a136c/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">github上传大文件</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/b322775d94ac8ff5ac7f0596ec7ce828/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">使用Qt线程 &#43; FFmpeg获取视频流并显示图像到窗口</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

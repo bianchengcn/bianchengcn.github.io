@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>孤儿进程和僵尸进程的区别 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="孤儿进程和僵尸进程的区别" />
+<meta property="og:description" content="一.产生的原因
+一般进程 正常情况下：子进程由父进程创建，子进程再创建新的进程。父子进程是一个异步过程，父进程永远无法预测子进程的结束，所以，当子进程结束后，它的父进程会调用wait()或waitpid()取得子进程的终止状态，回收掉子进程的资源。
+2)孤儿进程
+孤儿进程：父进程结束了，而它的一个或多个子进程还在运行，那么这些子进程就成为孤儿进程(father died)。子进程的资源由init进程(进程号PID = 1)回收。
+3)僵尸进程
+僵尸进程：子进程退出了，但是父进程没有用wait或waitpid去获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中，这种进程称为僵死进程。
+二.问题危害
+注意：unix提供了一种机制保证父进程知道子进程结束时的状态信息。
+这种机制是：在每个进程退出的时候，内核会释放所有的资源，包括打开的文件，占用的内存等。但是仍保留一部分信息(进程号PID，退出状态，运行时间等)。直到父进程通过wait或waitpid来取时才释放。
+但是这样就会产生问题：如果父进程不调用wait或waitpid的话，那么保留的信息就不会被释放，其进程号就会被一直占用，但是系统所能使用的进程号是有限的，如果大量产生僵死进程，将因没有可用的进程号而导致系统无法产生新的进程，这就是僵尸进程的危害
+孤儿进程是没有父进程的进程，它由init进程循环的wait()回收资源，init进程充当父进程。因此孤儿进程并没有什么危害。
+补充：任何一个子进程(init除外)在exit()之后，并非马上就消失掉，而是留下一个称为僵尸进程的数据结构，等待父进程去处理。如果父进程在子进程exit()之后，没有及时处理，出现僵尸进程，并可以用ps命令去查看，它的状态是“Z”。
+三.解决方案
+1)kill杀死元凶父进程(一般不用)
+严格的说，僵尸进程并不是问题的根源，罪魁祸首是产生大量僵死进程的父进程。因此，我们可以直接除掉元凶，通过kill发送SIGTERM或者SIGKILL信号。元凶死后，僵尸进程进程变成孤儿进程，由init充当父进程，并回收资源。
+或者运行：kill -9 父进程的pid值、
+2)父进程用wait或waitpid去回收资源(方案不好)
+父进程通过wait或waitpid等函数去等待子进程结束，但是不好，会导致父进程一直等待被挂起，相当于一个进程在干活，没有起到多进程的作用。
+3)通过信号机制，在处理函数中调用wait，回收资源
+通过信号机制，子进程退出时向父进程发送SIGCHLD信号，父进程调用signal(SIGCHLD,sig_child)去处理SIGCHLD信号，在信号处理函数sig_child()中调用wait进行处理僵尸进程。什么时候得到子进程信号，什么时候进行信号处理，父进程可以继续干其他活，不用去阻塞等待。
+ps -A -o stat,ppid,pid,cmd | grep -e &#39;^[Zz]&#39; 显示：(状态Z代表僵尸进程)
+S PID PPID CMD
+S 3213 2529 ./pid1
+Z 3214 3213 [pid1]
+Z 3215 3213 [pid1]
+Z 3219 3213 [pid1]
+Z 3220 3213 [pid1]
+Z 3221 3213 [pid1]
+R 3223 3104 ps -a -o state,pid,ppid,cmd" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/569214fe5093948ea69f850484df7666/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-01-06T10:05:31+08:00" />
+<meta property="article:modified_time" content="2020-01-06T10:05:31+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">孤儿进程和僵尸进程的区别</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-dracula">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p><strong>一.产生的原因</strong></p> 
+<ol><li>一般进程</li></ol> 
+<p>正常情况下：子进程由父进程创建，子进程再创建新的进程。父子进程是一个异步过程，父进程永远无法预测子进程的结束，所以，当子进程结束后，它的父进程会调用wait()或waitpid()取得子进程的终止状态，回收掉子进程的资源。</p> 
+<p>2)孤儿进程</p> 
+<p>孤儿进程：父进程结束了，而它的一个或多个子进程还在运行，那么这些子进程就成为孤儿进程(father died)。子进程的资源由init进程(进程号PID = 1)回收。</p> 
+<p>3)僵尸进程</p> 
+<p>僵尸进程：子进程退出了，但是父进程没有用wait或waitpid去获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中，这种进程称为僵死进程。</p> 
+<p>二.问题危害</p> 
+<p>注意：unix提供了一种机制保证父进程知道子进程结束时的状态信息。</p> 
+<p>这种机制是：在每个进程退出的时候，内核会释放所有的资源，包括打开的文件，占用的内存等。但是仍保留一部分信息(进程号PID，退出状态，运行时间等)。直到父进程通过wait或waitpid来取时才释放。</p> 
+<p>但是这样就会产生问题：如果父进程不调用wait或waitpid的话，那么保留的信息就不会被释放，其进程号就会被一直占用，但是系统所能使用的进程号是有限的，如果大量产生僵死进程，将因没有可用的进程号而导致系统无法产生新的进程，这就是僵尸进程的危害</p> 
+<p>孤儿进程是没有父进程的进程，它由init进程循环的wait()回收资源，init进程充当父进程。因此孤儿进程并没有什么危害。</p> 
+<p>补充：任何一个子进程(init除外)在exit()之后，并非马上就消失掉，而是留下一个称为僵尸进程的数据结构，等待父进程去处理。如果父进程在子进程exit()之后，没有及时处理，出现僵尸进程，并可以用ps命令去查看，它的状态是“Z”。</p> 
+<p>三.解决方案</p> 
+<p>1)kill杀死元凶父进程(一般不用)</p> 
+<p>严格的说，僵尸进程并不是问题的根源，罪魁祸首是产生大量僵死进程的父进程。因此，我们可以直接除掉元凶，通过kill发送SIGTERM或者SIGKILL信号。元凶死后，僵尸进程进程变成孤儿进程，由init充当父进程，并回收资源。</p> 
+<p>或者运行：kill -9 父进程的pid值、</p> 
+<p>2)父进程用wait或waitpid去回收资源(方案不好)</p> 
+<p>父进程通过wait或waitpid等函数去等待子进程结束，但是不好，会导致父进程一直等待被挂起，相当于一个进程在干活，没有起到多进程的作用。</p> 
+<p>3)通过信号机制，在处理函数中调用wait，回收资源</p> 
+<p>通过信号机制，子进程退出时向父进程发送SIGCHLD信号，父进程调用signal(SIGCHLD,sig_child)去处理SIGCHLD信号，在信号处理函数sig_child()中调用wait进行处理僵尸进程。什么时候得到子进程信号，什么时候进行信号处理，父进程可以继续干其他活，不用去阻塞等待。</p> 
+<pre><code class="prism language-bash"><span class="token function">ps</span> -A -o stat,ppid,pid,cmd <span class="token operator">|</span> <span class="token function">grep</span> -e <span class="token string">'^[Zz]'</span>
+</code></pre> 
+<p>显示：(状态Z代表僵尸进程)</p> 
+<p>S PID PPID CMD</p> 
+<p>S 3213 2529 ./pid1</p> 
+<p>Z 3214 3213 [pid1]</p> 
+<p>Z 3215 3213 [pid1]</p> 
+<p>Z 3219 3213 [pid1]</p> 
+<p>Z 3220 3213 [pid1]</p> 
+<p>Z 3221 3213 [pid1]</p> 
+<p>R 3223 3104 ps -a -o state,pid,ppid,cmd</p> 
+<p>用第一种方法，解决僵尸进程，杀死其父进程</p> 
+<p>运行：<code>kill -9 3213</code></p> 
+<p>注意：僵尸进程无法用kill直接杀死，如kill -9 3214，再用上面命令去查看进程状态，发现3214进程还在。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1e43a4e0d284e2693e946d48d55d30f4/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">ubuntu安装PCL过程中遇到的问题总结</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/81698e62ded83b68ecb83a4391e443d4/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">java图片转base64和base64保存到本地</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

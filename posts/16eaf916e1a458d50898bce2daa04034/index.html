@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>内网安全：代理技术详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="内网安全：代理技术详解" />
+<meta property="og:description" content="目录
+代理技术实验所用网络拓扑图及说明
+代理技术
+SOCK协议
+使用代理技术的原因
+正向代理与反向代理
+实战一：MSF代理通讯
+实验原理说明
+一. Meterpreter建立路由
+二. MSF建立节点
+三. 建立代理到MSF上
+实战二：CS代理通讯
+实验原理说明
+一. CS建立SOCKS代理
+二. 使用proxifier 设置代理 ​编辑
+实战三：CS正向连接上线
+实验原理说明
+一. 配置监听器，让win10把自己的流量转发到本地的2222端口上
+二. CS执行命令上线
+实战四：MSF正向连接上线
+实验原理说明
+一. 生成后门，流量转发到自己的端口上
+二. MSF主动访问
+关于反向连接
+思路总结
+本篇将介绍在内网攻防中经常用到的代理技术，正向连接，反向连接。
+内网攻防中阶段有三：
+1. 建立通讯 使用代理技术，建立攻击机与目标的联系
+2. 横向移动
+3. 后渗透 获得主机权限后，使用隧道技术，把权限移交给攻击机
+本篇中的所有实现均是获得了系统权限，因为不涉及内网横向移动，只是为了研究第一，第三阶段。
+代理技术实验所用网络拓扑图及说明 网段情况：Vmware配置网络
+攻击机：47.94.236.117 靶机：
+win 7：内网唯一可出网主机 也可对内网192.168.11.* 网段主机进行通讯
+192.168.1.119 （外网的出口）192.168.11.128（内网Vmware2）
+win 10：内网主机 流量不出网
+192.168.11.129（内网Vmware2）192.168.22.130（内网Vmware3）
+win 2008：内网主机 流量不出网
+192.168.22.131（内网Vmware3）192.168.33.129（内网Vmware4）
+win 2012：内网主机 流量不出网
+192.168.33.130（内网Vmware4）" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/16eaf916e1a458d50898bce2daa04034/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-06-03T19:56:22+08:00" />
+<meta property="article:modified_time" content="2023-06-03T19:56:22+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">内网安全：代理技术详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p id="main-toc"><strong>目录</strong></p> 
+<p id="%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E5%AE%9E%E9%AA%8C%E6%89%80%E7%94%A8%E7%BD%91%E7%BB%9C%E6%8B%93%E6%89%91%E5%9B%BE%E5%8F%8A%E8%AF%B4%E6%98%8E-toc" style="margin-left:0px;"><a href="#%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E5%AE%9E%E9%AA%8C%E6%89%80%E7%94%A8%E7%BD%91%E7%BB%9C%E6%8B%93%E6%89%91%E5%9B%BE%E5%8F%8A%E8%AF%B4%E6%98%8E" rel="nofollow">代理技术实验所用网络拓扑图及说明</a></p> 
+<p id="%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF-toc" style="margin-left:0px;"><a href="#%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF" rel="nofollow">代理技术</a></p> 
+<p id="SOCK%E5%8D%8F%E8%AE%AE-toc" style="margin-left:40px;"><a href="#SOCK%E5%8D%8F%E8%AE%AE" rel="nofollow">SOCK协议</a></p> 
+<p id="%E4%BD%BF%E7%94%A8%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E7%9A%84%E5%8E%9F%E5%9B%A0-toc" style="margin-left:40px;"><a href="#%E4%BD%BF%E7%94%A8%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E7%9A%84%E5%8E%9F%E5%9B%A0" rel="nofollow">使用代理技术的原因</a></p> 
+<p id="%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E7%9A%84%E6%AD%A3%E5%90%91%EF%BC%8C%E5%8F%8D%E5%90%91-toc" style="margin-left:0px;"><a href="#%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E7%9A%84%E6%AD%A3%E5%90%91%EF%BC%8C%E5%8F%8D%E5%90%91" rel="nofollow">正向代理与反向代理</a></p> 
+<p id="MSF%E4%BB%A3%E7%90%86%E4%B8%8A%E7%BA%BF-toc" style="margin-left:0px;"><a href="#MSF%E4%BB%A3%E7%90%86%E4%B8%8A%E7%BA%BF" rel="nofollow">实战一：MSF代理通讯</a></p> 
+<p id="%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E-toc" style="margin-left:40px;"><a href="#%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E" rel="nofollow">实验原理说明</a></p> 
+<p id="%E4%B8%80.%20Meterpreter%E5%BB%BA%E7%AB%8B%E8%B7%AF%E7%94%B1-toc" style="margin-left:80px;"><a href="#%E4%B8%80.%20Meterpreter%E5%BB%BA%E7%AB%8B%E8%B7%AF%E7%94%B1" rel="nofollow">一. Meterpreter建立路由</a></p> 
+<p id="%E4%BA%8C.%20MSF%E5%BB%BA%E7%AB%8B%E8%8A%82%E7%82%B9-toc" style="margin-left:80px;"><a href="#%E4%BA%8C.%20MSF%E5%BB%BA%E7%AB%8B%E8%8A%82%E7%82%B9" rel="nofollow">二. MSF建立节点</a></p> 
+<p id="3.%20%E5%BB%BA%E7%AB%8B%E4%BB%A3%E7%90%86%E5%88%B0MSF%E4%B8%8A-toc" style="margin-left:80px;"><a href="#3.%20%E5%BB%BA%E7%AB%8B%E4%BB%A3%E7%90%86%E5%88%B0MSF%E4%B8%8A" rel="nofollow">三. 建立代理到MSF上</a></p> 
+<p id="%E5%AE%9E%E6%88%98%E4%BA%8C%EF%BC%9ACS%E4%BB%A3%E7%90%86%E9%80%9A%E8%AE%AF-toc" style="margin-left:0px;"><a href="#%E5%AE%9E%E6%88%98%E4%BA%8C%EF%BC%9ACS%E4%BB%A3%E7%90%86%E9%80%9A%E8%AE%AF" rel="nofollow">实战二：CS代理通讯</a></p> 
+<p id="%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E-toc" style="margin-left:40px;"><a href="#%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E" rel="nofollow">实验原理说明</a></p> 
+<p id="%E4%B8%80.%20CS%E5%BB%BA%E7%AB%8BSOCKS%E4%BB%A3%E7%90%86-toc" style="margin-left:80px;"><a href="#%E4%B8%80.%20CS%E5%BB%BA%E7%AB%8BSOCKS%E4%BB%A3%E7%90%86" rel="nofollow">一. CS建立SOCKS代理</a></p> 
+<p id="%E4%BA%8C.%20%E4%BD%BF%E7%94%A8proxifier%20%E8%AE%BE%E7%BD%AE%E4%BB%A3%E7%90%86%C2%A0-toc" style="margin-left:80px;"><a href="#%E4%BA%8C.%20%E4%BD%BF%E7%94%A8proxifier%20%E8%AE%BE%E7%BD%AE%E4%BB%A3%E7%90%86%C2%A0" rel="nofollow">二. 使用proxifier 设置代理 </a></p> 
+<p id="%E2%80%8B%E7%BC%96%E8%BE%91-toc" style="margin-left:80px;"><a href="#%E2%80%8B%E7%BC%96%E8%BE%91" rel="nofollow">​编辑</a></p> 
+<p id="%E5%AE%9E%E6%88%98%E4%B8%89%EF%BC%9A%E6%AD%A3%E5%90%91%E8%BF%9E%E6%8E%A5-toc" style="margin-left:0px;"><a href="#%E5%AE%9E%E6%88%98%E4%B8%89%EF%BC%9A%E6%AD%A3%E5%90%91%E8%BF%9E%E6%8E%A5" rel="nofollow">实战三：CS正向连接上线</a></p> 
+<p id="%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E-toc" style="margin-left:40px;"><a href="#%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E" rel="nofollow">实验原理说明</a></p> 
+<p id="%E4%B8%80.%20%E9%85%8D%E7%BD%AE%E7%9B%91%E5%90%AC%E5%99%A8%EF%BC%8C%E8%AE%A9win10%E6%8A%8A%E8%87%AA%E5%B7%B1%E7%9A%84%E6%B5%81%E9%87%8F%E8%BD%AC%E5%8F%91%E5%88%B0%E6%9C%AC%E5%9C%B0%E7%9A%842222%E7%AB%AF%E5%8F%A3%E4%B8%8A-toc" style="margin-left:80px;"><a href="#%E4%B8%80.%20%E9%85%8D%E7%BD%AE%E7%9B%91%E5%90%AC%E5%99%A8%EF%BC%8C%E8%AE%A9win10%E6%8A%8A%E8%87%AA%E5%B7%B1%E7%9A%84%E6%B5%81%E9%87%8F%E8%BD%AC%E5%8F%91%E5%88%B0%E6%9C%AC%E5%9C%B0%E7%9A%842222%E7%AB%AF%E5%8F%A3%E4%B8%8A" rel="nofollow">一. 配置监听器，让win10把自己的流量转发到本地的2222端口上</a></p> 
+<p id="%E4%BA%8C.%20CS%E6%89%A7%E8%A1%8C%E5%91%BD%E4%BB%A4%E4%B8%8A%E7%BA%BF-toc" style="margin-left:80px;"><a href="#%E4%BA%8C.%20CS%E6%89%A7%E8%A1%8C%E5%91%BD%E4%BB%A4%E4%B8%8A%E7%BA%BF" rel="nofollow">二. CS执行命令上线</a></p> 
+<p id="%E5%AE%9E%E6%88%98%E5%9B%9B%EF%BC%9A%E5%8F%8D%E5%90%91%E8%BF%9E%E6%8E%A5-toc" style="margin-left:0px;"><a href="#%E5%AE%9E%E6%88%98%E5%9B%9B%EF%BC%9A%E5%8F%8D%E5%90%91%E8%BF%9E%E6%8E%A5" rel="nofollow">实战四：MSF正向连接上线</a></p> 
+<p id="%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E-toc" style="margin-left:40px;"><a href="#%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E" rel="nofollow">实验原理说明</a></p> 
+<p id="%E4%B8%80.%20%E7%94%9F%E6%88%90%E5%90%8E%E9%97%A8%EF%BC%8C%E6%B5%81%E9%87%8F%E8%BD%AC%E5%8F%91%E5%88%B0%E8%87%AA%E5%B7%B1%E7%9A%84%E7%AB%AF%E5%8F%A3%E4%B8%8A-toc" style="margin-left:80px;"><a href="#%E4%B8%80.%20%E7%94%9F%E6%88%90%E5%90%8E%E9%97%A8%EF%BC%8C%E6%B5%81%E9%87%8F%E8%BD%AC%E5%8F%91%E5%88%B0%E8%87%AA%E5%B7%B1%E7%9A%84%E7%AB%AF%E5%8F%A3%E4%B8%8A" rel="nofollow">一. 生成后门，流量转发到自己的端口上</a></p> 
+<p id="%E4%BA%8C.%20MSF%E4%B8%BB%E5%8A%A8%E8%AE%BF%E9%97%AE-toc" style="margin-left:80px;"><a href="#%E4%BA%8C.%20MSF%E4%B8%BB%E5%8A%A8%E8%AE%BF%E9%97%AE" rel="nofollow">二. MSF主动访问</a></p> 
+<p id="%E5%8F%8D%E5%90%91%E8%BF%9E%E6%8E%A5-toc" style="margin-left:0px;"><a href="#%E5%8F%8D%E5%90%91%E8%BF%9E%E6%8E%A5" rel="nofollow">关于反向连接</a></p> 
+<p id="%E6%80%9D%E8%B7%AF%E6%80%BB%E7%BB%93-toc" style="margin-left:0px;"><a href="#%E6%80%9D%E8%B7%AF%E6%80%BB%E7%BB%93" rel="nofollow">思路总结</a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<p></p> 
+<p class="img-center"><img alt="" height="614" src="https://images2.imgbox.com/23/bb/FcVFzLw1_o.png" width="1088"></p> 
+<p> </p> 
+<blockquote> 
+ <p>本篇将介绍在内网攻防中经常用到的代理技术，正向连接，反向连接。</p> 
+ <p>内网攻防中阶段有三：</p> 
+ <p>1.  建立通讯 使用代理技术，建立攻击机与目标的联系</p> 
+ <p>2.  横向移动</p> 
+ <p>3.  后渗透 获得主机权限后，使用隧道技术，把权限移交给攻击机</p> 
+ <p></p> 
+ <p>本篇中的所有实现均是获得了系统权限，因为不涉及内网横向移动，只是为了研究第一，第三阶段。</p> 
+</blockquote> 
+<p></p> 
+<h2 id="%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E5%AE%9E%E9%AA%8C%E6%89%80%E7%94%A8%E7%BD%91%E7%BB%9C%E6%8B%93%E6%89%91%E5%9B%BE%E5%8F%8A%E8%AF%B4%E6%98%8E">代理技术实验所用网络拓扑图及说明</h2> 
+<p class="img-center"><img alt="" height="608" src="https://images2.imgbox.com/70/5c/faUsgH23_o.png" width="1018"></p> 
+<p>网段情况：Vmware配置网络</p> 
+<p class="img-center"><img alt="" height="239" src="https://images2.imgbox.com/62/bb/Zi5BQTpZ_o.png" width="676"></p> 
+<p>攻击机：47.94.236.117 </p> 
+<p>靶机：</p> 
+<p>        win 7：内网唯一可出网主机 也可对内网192.168.11.* 网段主机进行通讯</p> 
+<p>                192.168.1.119 （外网的出口）192.168.11.128（内网Vmware2）</p> 
+<p>        win 10：内网主机 流量不出网</p> 
+<p>                192.168.11.129（内网Vmware2）192.168.22.130（内网Vmware3）</p> 
+<p>        win 2008：内网主机 流量不出网</p> 
+<p>                192.168.22.131（内网Vmware3）192.168.33.129（内网Vmware4）</p> 
+<p>        win 2012：内网主机 流量不出网</p> 
+<p>                192.168.33.130（内网Vmware4）</p> 
+<p></p> 
+<h2 id="%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF">代理技术</h2> 
+<p>代理技术使用的协议是SOCK 4/5</p> 
+<p>常使用的代理工具有 SockCap， Proxifier， ProxyChains 等</p> 
+<p>代理工具的使用会在下面实验中演示出来</p> 
+<h3 id="SOCK%E5%8D%8F%E8%AE%AE">SOCK协议</h3> 
+<p>SOCK（Socket）协议是一种网络协议，用于在计算机网络中提供网络应用程序之间的通信。<strong>它是一种通用的、面向连接的协议，常用于实现客户端和服务器之间的通信。</strong></p> 
+<p>SOCK协议可以分为两个主要的版本：SOCKS4和SOCKS5。下面对这两个版本进行简要介绍：</p> 
+<ol><li> <p>SOCKS4协议：</p> 
+  <ul><li>SOCKS4协议是SOCK协议的第一个版本，最早由David Koblas开发。</li><li>它是一种简单的协议，只支持IPv4地址，不支持认证，适用于IPv4环境。</li><li>客户端向服务器发送连接请求，并指定目标主机的IP地址和端口号。</li><li>服务器将请求转发到目标主机，并在建立连接后将数据流转发给客户端。</li></ul></li><li> <p>SOCKS5协议：</p> 
+  <ul><li>SOCKS5协议是SOCK协议的第二个版本，由RFC 1928规范定义。</li><li>它是SOCKS协议的扩展版本，支持更多的功能和特性。</li><li>SOCKS5协议支持IPv4和IPv6地址，支持各种身份验证方法，如无验证、用户名/密码验证等。</li><li>客户端向服务器发送连接请求，并指定目标主机的域名或IP地址以及端口号。</li><li>服务器根据客户端请求的目标地址，与目标主机建立连接，并将数据流转发给客户端。</li></ul></li></ol> 
+<p><strong>SOCK协议主要用于实现网络代理功能，可以在本地计算机和远程服务器之间建立一个中间通道，使得网络请求可以通过该通道进行转发和处理。</strong>这在某些场景下具有重要的应用，例如在防火墙后访问被封锁的网站、隐藏真实IP地址等。</p> 
+<p>SOCK协议并不属于OSI（Open Systems Interconnection）参考模型中的七层模型，它更多地被视为一个独立的协议或协议族，用于实现网络代理功能。然<strong>而，从功能上来说，SOCK协议涉及到了传输层和应用层的一些功能。</strong></p> 
+<p>具体地说，<strong>SOCK协议在传输层负责建立和管理连接，以及数据的传输。它在应用层负责处理网络代理的相关功能，例如解析目标地址、转发数据等。</strong></p> 
+<p>尽管SOCK协议在传输层和应用层之间扮演着关键的角色，但它并没有明确定义在OSI参考模型中的特定层级。<strong>它更像是一个在传输层和应用层之间操作的协议集合，具体实现可能会有所不同。</strong>SOCK协议通常是在操作系统的网络栈中实现的</p> 
+<p>总结起来，SOCK协议在功能上涉及传输层和应用层，但它并没有明确定义在OSI参考模型中的特定层级。</p> 
+<p></p> 
+<h3 id="%E4%BD%BF%E7%94%A8%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E7%9A%84%E5%8E%9F%E5%9B%A0">使用代理技术的原因</h3> 
+<p>从代理技术的表现来看，主要是<strong>通过跳板机来代理流量</strong>。</p> 
+<p>将通过上面的网络拓扑图说明代理技术</p> 
+<p><strong>使用代理技术的原因一：建立攻击机与内网主机通讯</strong></p> 
+<p>Ubuntu主机是作为我们的攻击机，win7作为外网主机通过web渗透测试被拿下。但是Ubuntu无法拿下win10，因为Ubuntu访问不到。</p> 
+<p><strong>使用代理技术的原因二：避免被发现，隐蔽自身，执行攻击对象</strong></p> 
+<p>Ubuntu上安装有大量的渗透测试工具，有人头铁可能会想到在win7上上传工具，通过win7能攻击到win10，之后的其它内网主机也是同理。这样做符合网络通信，但是风险极大。首先需要考虑到真实环境可能存在有安全设备，流量检测设备，杀软。上传几个G的流量动静太大了，很容易被发现，一般情况下，流量的大小最好500KB左右，不要超过1KB.</p> 
+<p><strong>使用代理技术的原因三：实现持久化控制</strong></p> 
+<p>通过横向渗透拿下全新后，我们需要把权限反弹给攻击机实现持久化控制。因为攻击机上集成大量工具软件，需要使用来进行权限维持。</p> 
+<p></p> 
+<h2 id="%E4%BB%A3%E7%90%86%E6%8A%80%E6%9C%AF%E7%9A%84%E6%AD%A3%E5%90%91%EF%BC%8C%E5%8F%8D%E5%90%91">正向代理与反向代理</h2> 
+<p>当我们建立目标机与攻击机的联系往往需要考虑连接的正向反向问题。</p> 
+<p>在实际内网环境，运维人员针对主机上防火墙往往有设置，比如有的主机只放开80端口通讯，甚至有的禁止了全部的TCP协议。运维人员会根据主机的功能，地位做出安全性考虑，针对入站，出站规则做出限制。往往入站规则设置严格，出站规则宽松一些。</p> 
+<p>正向，反向是针对目标机而言的。</p> 
+<ul><li>正向连接：代理机主动连接目标机</li><li>反向连接：目标机主动连接代理机</li></ul> 
+<p><strong>正向，反向技术往往是针对防火墙的规则设置而选择合适的。</strong></p> 
+<p>在内网攻防里面，是要建立在已经建立代理通讯的情况下。</p> 
+<p>正向连接：目标把流量发到自己的某个端口，攻击机主动去连接，适合入站规则宽松</p> 
+<p>反向连接：目标把流量发给攻击机的某个端口，目标主动去连接，适合入站严格，出站宽松</p> 
+<p></p> 
+<h2 id="MSF%E4%BB%A3%E7%90%86%E4%B8%8A%E7%BA%BF">实战一：MSF代理通讯</h2> 
+<p>首先win7已经被我们取得system权限，并且已经上线了</p> 
+<p>目标：建立通讯 拿下win10</p> 
+<h3 id="%E5%AE%9E%E9%AA%8C%E5%8E%9F%E7%90%86%E8%AF%B4%E6%98%8E">实验原理说明</h3> 
+<p class="img-center"><img alt="" height="403" src="https://images2.imgbox.com/e6/6b/xpdXUS2J_o.png" width="822"></p> 
+<p>开启路由，相当于MSF也进入192.168.11.*网段</p> 
+<p>开启节点，就是接收代理来的流量，再通过路由转发出去</p> 
+<p>可以把win7与MSF视为一体，流量相当于从win7出去的</p> 
+<h4 id="%E4%B8%80.%20Meterpreter%E5%BB%BA%E7%AB%8B%E8%B7%AF%E7%94%B1"><strong>一. Meterpreter建立路由</strong></h4> 
+<p>添加路由</p> 
+<p class="img-center"><img alt="" height="228" src="https://images2.imgbox.com/79/f8/RRwLrZYb_o.png" width="785"></p> 
+<p class="img-center"><img alt="" height="257" src="https://images2.imgbox.com/27/a2/QAdi3DKt_o.png" width="608"></p> 
+<p>这个时候MSF可以与192.168.11.*这个网段进行通讯。</p> 
+<p>但是MSF所在服务器上其它工具网络是不能享有这个路由的。只有Meterpreter享有。</p> 
+<h4 id="%E4%BA%8C.%20MSF%E5%BB%BA%E7%AB%8B%E8%8A%82%E7%82%B9"><strong>二. MSF建立节点</strong></h4> 
+<p>建立节点，使用MSF的模块建立节点，相当于在MSF建立连接的节点，别的流量可以来连接它。</p> 
+<p>账号密码可以选择不设置</p> 
+<p>这里的端口是开启在MSF的服务器上的</p> 
+<p class="img-center"><img alt="" height="224" src="https://images2.imgbox.com/a4/dc/Nq0ldHXR_o.png" width="965"></p> 
+<p class="img-center"><img alt="" height="346" src="https://images2.imgbox.com/5c/95/RFKrCyxD_o.png" width="994"></p> 
+<p class="img-center"><img alt="" height="126" src="https://images2.imgbox.com/eb/86/e6J6gOyW_o.png" width="774"></p> 
+<p>这时候任何一台主机均可以设置代理到MSF转发流量进入192.168.11.*的内网中</p> 
+<h4 id="3.%20%E5%BB%BA%E7%AB%8B%E4%BB%A3%E7%90%86%E5%88%B0MSF%E4%B8%8A">三. 建立代理到MSF上</h4> 
+<p>在一台外网主机上设置代理，代理的地址为MSF服务器，会把这台外网主机的流量转发到MSF上去。</p> 
+<p>设置代理</p> 
+<p class="img-center"><img alt="" height="413" src="https://images2.imgbox.com/01/83/Q8oeWxRv_o.png" width="735"></p> 
+<p> 需要注意SOCK协议需要对应上。</p> 
+<p class="img-center"><img alt="" height="530" src="https://images2.imgbox.com/c2/f5/tgqdBIhF_o.png" width="941"></p> 
+<p>可以给某个程序（EXE）配置代理，通讯的时候就会进行流量转发</p> 
+<p class="img-center"><img alt="" height="402" src="https://images2.imgbox.com/e0/37/suLNwGk4_o.png" width="568"></p> 
+<p> </p> 
+<p class="img-center"><img alt="" height="517" src="https://images2.imgbox.com/67/b3/qoNg42yU_o.png" width="725"></p> 
+<p>成功访问内网主机</p> 
+<p class="img-center"><img alt="" height="393" src="https://images2.imgbox.com/e2/23/Viylhbje_o.png" width="954"></p> 
+<p class="img-center"><img alt="" height="481" src="https://images2.imgbox.com/d2/a3/ikI278qf_o.png" width="656"></p> 
+<p>实现了攻击机A与内网主机的通讯 </p> 
+<p>这个时候我们就可以把渗透测试工具放到这台主机开始测试。</p> 
+<p></p> 
+<h2 id="%E5%AE%9E%E6%88%98%E4%BA%8C%EF%BC%9ACS%E4%BB%A3%E7%90%86%E9%80%9A%E8%AE%AF">实战二：CS代理通讯</h2> 
+<p>首先win7已经被我们取得system权限，并且已经上线了</p> 
+<p class="img-center"><img alt="" height="625" src="https://images2.imgbox.com/86/09/cvGGWjsA_o.png" width="824"></p> 
+<p>目标：建立通讯 拿下win10</p> 
+<h3>实验原理说明</h3> 
+<p class="img-center"><img alt="" height="354" src="https://images2.imgbox.com/1b/52/Ux23Iumf_o.png" width="854"></p> 
+<p>可以把CS和win7视为一体，流量相当于从win7出去的</p> 
+<h4 id="%E4%B8%80.%20CS%E5%BB%BA%E7%AB%8BSOCKS%E4%BB%A3%E7%90%86">一. CS建立SOCKS代理</h4> 
+<p>这个过程就和MSF设置路由，设置节点一样</p> 
+<p class="img-center"><img alt="" height="620" src="https://images2.imgbox.com/e6/e3/48QhsnJB_o.png" width="822"></p> 
+<p class="img-center"><img alt="" height="614" src="https://images2.imgbox.com/bb/47/amcVUJXS_o.png" width="823"></p> 
+<p> </p> 
+<h4 id="%E4%BA%8C.%20%E4%BD%BF%E7%94%A8proxifier%20%E8%AE%BE%E7%BD%AE%E4%BB%A3%E7%90%86%C2%A0">二. 使用proxifier 设置代理 </h4> 
+<h4 id="%E2%80%8B%E7%BC%96%E8%BE%91"><img alt="" height="645" src="https://images2.imgbox.com/c2/d1/HmZ10gpn_o.png" width="993"></h4> 
+<p class="img-center"><img alt="" height="455" src="https://images2.imgbox.com/93/73/w1ZDtmRl_o.png" width="379"></p> 
+<p> 接通</p> 
+<p class="img-center"><img alt="" height="398" src="https://images2.imgbox.com/d4/cf/WXVWkG1f_o.png" width="639"></p> 
+<p>配置代理规则</p> 
+<p>设置的应用程序的流量会走代理</p> 
+<p>设置的访问主机IP会走代理</p> 
+<p class="img-center"><img alt="" height="509" src="https://images2.imgbox.com/aa/2f/tTs2IXem_o.png" width="501"></p> 
+<p> 通讯成功</p> 
+<p class="img-center"><img alt="" height="610" src="https://images2.imgbox.com/40/9e/9S8vCgiY_o.png" width="1200"></p> 
+<p>成功通讯！！！</p> 
+<p></p> 
+<h2 id="%E5%AE%9E%E6%88%98%E4%B8%89%EF%BC%9A%E6%AD%A3%E5%90%91%E8%BF%9E%E6%8E%A5">实战三：CS正向连接上线</h2> 
+<p>意义：通过建立正向连接把win10的权限移交给CS上，实现持久化控制</p> 
+<p>CS也可以反向代理，类比下面MSF反向做即可</p> 
+<h3>实验原理说明</h3> 
+<p>这个适合入站规则限制宽松的情况</p> 
+<p>win10把自己的流量放送到本地端口</p> 
+<p>win7正向访问win10以及端口，相当于CS正向访问win10</p> 
+<h4 id="%E4%B8%80.%20%E9%85%8D%E7%BD%AE%E7%9B%91%E5%90%AC%E5%99%A8%EF%BC%8C%E8%AE%A9win10%E6%8A%8A%E8%87%AA%E5%B7%B1%E7%9A%84%E6%B5%81%E9%87%8F%E8%BD%AC%E5%8F%91%E5%88%B0%E6%9C%AC%E5%9C%B0%E7%9A%842222%E7%AB%AF%E5%8F%A3%E4%B8%8A">一. 配置监听器，让win10把自己的流量转发到本地的2222端口上</h4> 
+<p class="img-center"><img alt="" height="547" src="https://images2.imgbox.com/9a/cc/dQmwW9Ul_o.png" width="484"></p> 
+<p><img alt="" height="624" src="https://images2.imgbox.com/e6/83/ivhi6pKv_o.png" width="825"></p> 
+<p>name=1的是配置反向代理的监听器</p> 
+<p>name=2的是配置正向代理监听器</p> 
+<p>制作后门放到win10上执行（不要抬杠，实验只是展示权限的移交，已经完成了横向移动）</p> 
+<h4 id="%E4%BA%8C.%20CS%E6%89%A7%E8%A1%8C%E5%91%BD%E4%BB%A4%E4%B8%8A%E7%BA%BF">二. CS执行命令上线</h4> 
+<p>正向代理上线：</p> 
+<p>是要通过win7连接，所以命令的执行也要在win7上做，选择连接win7的会话</p> 
+<pre><code class="hljs">connect 192.168.11.128 2222</code></pre> 
+<p class="img-center"><img alt="" height="481" src="https://images2.imgbox.com/7f/bc/LhapVAdQ_o.png" width="637"></p> 
+<p class="img-center"><img alt="" height="494" src="https://images2.imgbox.com/cb/8c/zvqM4Rft_o.png" width="640"></p> 
+<p class="img-center"><img alt="" height="480" src="https://images2.imgbox.com/84/06/tS8uLpCX_o.png" width="637"></p> 
+<p> 上线！！！</p> 
+<p> </p> 
+<h2 id="%E5%AE%9E%E6%88%98%E5%9B%9B%EF%BC%9A%E5%8F%8D%E5%90%91%E8%BF%9E%E6%8E%A5">实战四：MSF正向连接上线</h2> 
+<p>意义：通过建立正向连接把win10的权限移交给MSF上，实现持久化控制</p> 
+<p>MSF也可以做正向代理，类比上面CS正向做即可。</p> 
+<h3>实验原理说明</h3> 
+<p>这个适合入站规则严格，出站规则宽松的情况</p> 
+<p>win10把流量交给win7的端口上，MSF监听win7的端口，相当于交给MSF</p> 
+<p></p> 
+<h4 id="%E4%B8%80.%20%E7%94%9F%E6%88%90%E5%90%8E%E9%97%A8%EF%BC%8C%E6%B5%81%E9%87%8F%E8%BD%AC%E5%8F%91%E5%88%B0%E8%87%AA%E5%B7%B1%E7%9A%84%E7%AB%AF%E5%8F%A3%E4%B8%8A">一. 生成后门，流量转发到自己的端口上</h4> 
+<p class="img-center"><img alt="" height="84" src="https://images2.imgbox.com/49/d1/02yUyZc5_o.png" width="799"></p> 
+<p> </p> 
+<h4 id="%E4%BA%8C.%20MSF%E4%B8%BB%E5%8A%A8%E8%AE%BF%E9%97%AE">二. MSF主动访问</h4> 
+<p><img alt="" height="139" src="https://images2.imgbox.com/53/6e/Nbj2nBJY_o.png" width="646"></p> 
+<p></p> 
+<h2 id="%E5%8F%8D%E5%90%91%E8%BF%9E%E6%8E%A5">关于反向连接</h2> 
+<p>这里实验只做了正向连接的，因为反向连接比较麻烦，而且反向连接是为了通过目标主动连接来绕过入站规则，基于这个目的下，其实有更好的思路，就是使用隧道技术（下期预告！！！）</p> 
+<p>反向连接思路以win10连接win7为例：</p> 
+<p class="img-center"><img alt="" height="289" src="https://images2.imgbox.com/11/6b/lZKFbYOq_o.png" width="307"></p> 
+<ol><li>后门生成绑定win7的192.168.11.128 4444端口上</li><li>再把4444数据进行端口转发到本地5555</li><li>再去主动连接win10接收数据</li></ol> 
+<p>操作过于繁琐，不如直接使用隧道技术</p> 
+<p><a href="https://blog.csdn.net/qq_61553520/article/details/130994124" title="内网安全：初探隧道技术_貌美不及玲珑心，贤妻扶我青云志的博客-CSDN博客">内网安全：初探隧道技术_貌美不及玲珑心，贤妻扶我青云志的博客-CSDN博客</a></p> 
+<p>在我的这篇博客中有关于ICMP协议的隧道技术，可以参考一下，hh</p> 
+<p></p> 
+<h2 id="%E6%80%9D%E8%B7%AF%E6%80%BB%E7%BB%93">思路总结</h2> 
+<p><strong>代理技术总结：</strong></p> 
+<p>背景：拿下内网的一个主机权限并且上线到MSF/CS上，IP：192.168.x.*</p> 
+<p>MSF代理建立：</p> 
+<ol><li>使用控制192.168.x.*的Meterpreter启动路由，MSF相当于进入到该网段中</li><li>开启节点，支持代理来的转发流量</li><li>攻击机A（外网，军火库）配置代理到MSF上</li></ol> 
+<p>CS代理建立：有手就行</p> 
+<ol><li>在192.168.x.*的会话上开启SOCKS代理</li><li>在攻击机A上配置代理装置</li></ol> 
+<p>建立通讯的最大意义就是：可以实现攻击机与内网主机的通讯，有了通讯才能横向移动</p> 
+<p><strong>正向反向连接总结：</strong></p> 
+<ul><li>要根据防火墙因地制宜的选择方式</li><li>在内网攻防里面，是要建立在已经建立代理通讯的情况下。</li><li>正向连接：目标把流量发到自己的某个端口，攻击机主动去连接，适合入站规则宽松</li><li>反向连接：目标把流量发给攻击机的某个端口，目标主动去连接，适合入站严格，出站宽松</li></ul> 
+<p></p> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/e508e650fe53671f593d1936f3b544e1/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Unity Addressables学习笔记(3)---加载远程场景Scenes</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3ed325511d03b363d106e0a9719a1dfa/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">安装vuex报错</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

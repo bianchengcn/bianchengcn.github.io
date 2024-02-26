@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【ASP】文件上传 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【ASP】文件上传" />
+<meta property="og:description" content="由于VBScript这门古老的编程语言并没有像ASP.NET，Servlet、Struts2，PHP等封装好文件上传的方法，绝对不可能一个request.form[&#34;file&#34;]就能够拿到文件，因此处理文件上传是很艰难的，需要自己截获HTTP传递过来的二进制报文，进行报文中的二进制字符切割，才能拿到文件以及我们想要的信息，不过这也更接近底层，更能让我们清楚HTTP文件上传的原理。
+网上一些文章的VBScript的文件上传写得天华龙凤，短短的3KB代码居然能写到16KB，让人完全看不懂在干什么。或者就是用a,b,c命名，完全不知道怎么修改。而且大多数流传下来的文章都没有考虑到如果此网站是UTF-8编码的问题，容易造成乱码，毕竟文件上传涉及二进制操作，不是一句简简单单的Response.Charset=&#34;UTF-8&#34;然后加个&lt;%@LANGUAGE=&#34;VBSCRIPT&#34; CODEPAGE=&#34;65001&#34;%&gt;就能完成的事，还需要对二进制文件流的编码进行修改。甚至还有些是用AspUpload来做，你不可能保证任何一个服务器都有这个组件吧？这会严重影响迁移问题。
+下面，将为大家剖析如何在ASP做文件上传，让大家也写出属于自己的文件上传类！
+将完成，如下图的一个文件系统：
+不仅能够完成文件上传，还能自定义服务器保存文件的文件名，比如这里以原文件名&#43;时间戳的方式保存文件，获取用户上传的后缀（你可以据此进一步加工，限定用户上传的文件类型了）等。
+具体制作过程如下：
+1、首先是这个工程的目录结构：
+在进行代码写作之前，请保证你网站，至少是upload_file文件夹的Web共享是打开的，在属性界面有如下图的属性：
+同时，Internet来宾账户有读取、写入的权限。
+不然，有可能出现二进制流无法写入文件的情况，然而VBScript这门古老的编程语言是不会报错的，每次处理二进制流出现问题，它就给你看一个完全空白页面，就只会沉默，不跟你沟通，很蛋疼的。
+2、之后是upload.html这个上传表单，本来没什么好说的，主要是表单有两个小地方需要注意的，这个表单必须给file标好name，同时表示这个表单是扔二进制数据上去upload.asp，同时必须用post的方式，而不是简简单单的文件。
+&lt;!DOCTYPE html PUBLIC &#34;-//W3C//DTD XHTML 1.0 Transitional//EN&#34; &#34;http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd&#34;&gt; &lt;html xmlns=&#34;http://www.w3.org/1999/xhtml&#34;&gt; &lt;head&gt; &lt;meta http-equiv=&#34;Content-Type&#34; content=&#34;text/html; charset=utf-8&#34; /&gt; &lt;title&gt;文件上传&lt;/title&gt; &lt;/head&gt; &lt;body&gt; &lt;form method=&#34;post&#34; action=&#34;upload.asp&#34; enctype=&#34;multipart/form-data&#34;&gt;&lt;!--一定要有enctype=&#34;multipart/form-data&#34;，表示这个表单是传递二进制数据的，同时不能再传一些text,password这些无关的文件域上去了。--&gt; &lt;input type=&#34;file&#34; name=&#34;file&#34;/&gt;&lt;!--这里的file文件域，就是一定要有name属性，虽然在之后的二进制处理根本没有用到这个name，你随便给个名称都行，但就是要有--&gt; &lt;input type=&#34;submit&#34; value=&#34;提交&#34; /&gt; &lt;/form&gt; &lt;/body&gt; &lt;/html&gt; 如果这个file域没有name属性的话，无论你上传什么东西，upload.asp接受到的二进制流就只能是如下的东西，换句话说，是无法接受文件的。 3、最后就是这个工程的精华，upload.asp。
+首先，你完全可以在upload.asp写入如下的代码：
+&lt;% filesize=Request.TotalBytes filedata=Request.BinaryRead(Request.TotalBytes) response.BinaryWrite(filedata) %&gt; 将接受到的二进制数据打印出来，比如你将C盘的一个内容如下的aa.txt文件在upload.html的表单提交给upload.asp的话： 上述的代码，在upload.asp打印出来的东西如下：
+接下来，你的目标很明了，就是对这串二进制字符进行切割，这串二进制内容里面有我们想要的一切信息，包括文件内容、客户端上传的文件名，
+里面的-----------------7e010b37206c4其实是条分割线来的，如果你的表单里面有多个带name的文件域，则你会发现系统会用-----------------7e010b37206c4将多个文件报文分割。
+同时，这里有部分回车在IE6浏览器中显示不出来，你可以用查看源代码的方式，看得一清二楚。
+upload.asp具体代码如下所示：
+&lt;%@LANGUAGE=&#34;VBSCRIPT&#34; CODEPAGE=&#34;65001&#34;%&gt; &lt;% &#39;禁止缓存&#39; Response.CacheControl=&#34;no-cache&#34; Response.Expires=-1 Response.Charset=&#34;UTF-8&#34; &#39;配合第一行设定网页编码 if Request.TotalBytes then	&#39;如果上传文件非空&#39; set read_stream=createobject(&#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/aed5f503c93e7077a8933387c392e063/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2016-01-20T17:09:03+08:00" />
+<meta property="article:modified_time" content="2016-01-20T17:09:03+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【ASP】文件上传</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>由于VBScript这门古老的编程语言并没有像ASP.NET，Servlet、Struts2，PHP等封装好文件上传的方法，绝对不可能一个request.form["file"]就能够拿到文件，因此处理文件上传是很艰难的，需要自己截获HTTP传递过来的二进制报文，进行报文中的二进制字符切割，才能拿到文件以及我们想要的信息，不过这也更接近底层，更能让我们清楚HTTP文件上传的原理。</p> 
+<p>网上一些文章的VBScript的文件上传写得天华龙凤，短短的3KB代码居然能写到16KB，让人完全看不懂在干什么。或者就是用a,b,c命名，完全不知道怎么修改。而且大多数流传下来的文章都没有考虑到如果此网站是UTF-8编码的问题，容易造成乱码，毕竟文件上传涉及二进制操作，不是一句简简单单的Response.Charset="UTF-8"然后加个&lt;%@LANGUAGE="VBSCRIPT" CODEPAGE="65001"%&gt;就能完成的事，还需要对二进制文件流的编码进行修改。甚至还有些是用AspUpload来做，你不可能保证任何一个服务器都有这个组件吧？这会严重影响迁移问题。</p> 
+<p>下面，将为大家剖析如何在ASP做文件上传，让大家也写出属于自己的文件上传类！</p> 
+<p>将完成，如下图的一个文件系统：</p> 
+<p><img src="https://images2.imgbox.com/04/fa/erGQQNCR_o.gif" alt=""><br> </p> 
+<p>不仅能够完成文件上传，还能自定义服务器保存文件的文件名，比如这里以原文件名+时间戳的方式保存文件，获取用户上传的后缀（你可以据此进一步加工，限定用户上传的文件类型了）等。</p> 
+<p>具体制作过程如下：</p> 
+<p>1、首先是这个工程的目录结构：</p> 
+<p><img src="https://images2.imgbox.com/eb/20/qV6wPpNW_o.png" alt=""><br> </p> 
+<p>在进行代码写作之前，请保证你网站，至少是upload_file文件夹的Web共享是打开的，在属性界面有如下图的属性：</p> 
+<p><img src="https://images2.imgbox.com/b1/88/RROLwqgb_o.png" alt=""><br> </p> 
+<p>同时，Internet来宾账户有读取、写入的权限。</p> 
+<p><img src="https://images2.imgbox.com/f2/fe/ijyPc1SW_o.png" alt=""><br> </p> 
+<p>不然，有可能出现二进制流无法写入文件的情况，然而VBScript这门古老的编程语言是不会报错的，每次处理二进制流出现问题，它就给你看一个完全空白页面，就只会沉默，不跟你沟通，很蛋疼的。</p> 
+<p>2、之后是upload.html这个上传表单，本来没什么好说的，主要是表单有两个小地方需要注意的，这个表单必须给file标好name，同时表示这个表单是扔二进制数据上去upload.asp，同时必须用post的方式，而不是简简单单的文件。</p> 
+<p></p> 
+<pre><code class="language-html">&lt;!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"&gt;
+&lt;html xmlns="http://www.w3.org/1999/xhtml"&gt;
+&lt;head&gt;
+&lt;meta http-equiv="Content-Type" content="text/html; charset=utf-8" /&gt;
+&lt;title&gt;文件上传&lt;/title&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+    &lt;form method="post" action="upload.asp" enctype="multipart/form-data"&gt;&lt;!--一定要有enctype="multipart/form-data"，表示这个表单是传递二进制数据的，同时不能再传一些text,password这些无关的文件域上去了。--&gt;
+        &lt;input type="file" name="file"/&gt;&lt;!--这里的file文件域，就是一定要有name属性，虽然在之后的二进制处理根本没有用到这个name，你随便给个名称都行，但就是要有--&gt;
+        &lt;input type="submit" value="提交" /&gt;
+    &lt;/form&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre> 
+<br> 如果这个file域没有name属性的话，无论你上传什么东西，upload.asp接受到的二进制流就只能是如下的东西，换句话说，是无法接受文件的。 
+<p></p> 
+<p><img src="https://images2.imgbox.com/df/49/biUKLdSi_o.png" alt=""><br> </p> 
+<p>3、最后就是这个工程的精华，upload.asp。</p> 
+<p>首先，你完全可以在upload.asp写入如下的代码：</p> 
+<p></p> 
+<pre><code class="language-vb">&lt;%
+filesize=Request.TotalBytes
+filedata=Request.BinaryRead(Request.TotalBytes)
+response.BinaryWrite(filedata)
+%&gt;</code></pre> 
+<br> 将接受到的二进制数据打印出来，比如你将C盘的一个内容如下的aa.txt文件在upload.html的表单提交给upload.asp的话： 
+<p></p> 
+<p><img src="https://images2.imgbox.com/c9/f4/8j8IDg3b_o.png" alt=""><br> </p> 
+<p>上述的代码，在upload.asp打印出来的东西如下：</p> 
+<p><img src="https://images2.imgbox.com/3c/0c/RVeMphAW_o.png" alt=""><br> </p> 
+<p>接下来，你的目标很明了，就是对这串二进制字符进行切割，这串二进制内容里面有我们想要的一切信息，包括文件内容、客户端上传的文件名，</p> 
+<p>里面的-----------------7e010b37206c4其实是条分割线来的，如果你的表单里面有多个带name的文件域，则你会发现系统会用-----------------7e010b37206c4将多个文件报文分割。</p> 
+<p>同时，这里有部分回车在IE6浏览器中显示不出来，你可以用查看源代码的方式，看得一清二楚。</p> 
+<p>upload.asp具体代码如下所示：<br> </p> 
+<p></p> 
+<pre><code class="language-vb">&lt;%@LANGUAGE="VBSCRIPT" CODEPAGE="65001"%&gt;
+&lt;%
+'禁止缓存'
+Response.CacheControl="no-cache"  
+Response.Expires=-1
+Response.Charset="UTF-8"    '配合第一行设定网页编码
+
+if Request.TotalBytes then	'如果上传文件非空'
+	set read_stream=createobject("adodb.stream")	'设置一个流'
+	read_stream.Type=1	'这个流读二进制数据，如果Type=2则读文本数据'
+	read_stream.Open	'打开流'
+	read_stream.write Request.BinaryRead(Request.TotalBytes)	'将表单传过来的二进制数据写入流read_stream'
+	'将流read_stream的所有数据读到binary_stream中，binary_stream相当于一个临时变量，接下来将对binary_stream进行切割，以免污染read_stream中的原数据'
+	read_stream.Position=0
+	binary_stream=read_stream.Read
+
+	enter=chrB(13)&amp;chrB(10)	'二进制流中的回车'
+	first_enter=clng(instrb(binary_stream,enter))	'寻找第一个回车的位置'
+	second_enter=instrb(first_enter+1,binary_stream,enter)	'寻找第二个回车的位置'
+
+	set write_stream=createobject("adodb.stream")	'定义一个流write_stream'
+	write_stream.type=1	'write_stream是处理二进制数据的'
+	write_stream.open
+	'将read_stream中文件信息部分写到write_stream'
+	read_stream.Position=first_enter+1
+	read_stream.copyto write_stream,second_enter-first_enter-3
+	
+	write_stream.Position=0
+	write_stream.type=2	'再将write_stream转为文本流'
+	write_stream.CharSet="UTF-8"
+	file_info=write_stream.readtext	'写到file_info这个字符串'
+	write_stream.Close	'暂且关闭write_stream这个流，接下来对file_info这个字符串进行切割'
+
+	file_name=mid(file_info,instrRev(file_info,"\")+1)	'取得全文件名'
+	file_pre_suffix=left(file_name,instrRev(file_name,".")-1)	'取得文件前缀'
+	suffix=mid(file_name,instrRev(file_name,"."))	'取得文件后缀，带.的'
+   
+	server_file_name=file_pre_suffix&amp;"_"&amp;datediff("s","1970-01-01 00:00:00",now)&amp;suffix	'在服务器保存的文件名就是“原文件前缀_时间戳.原文件后缀名”'
+	
+	delimiter=leftB(binary_stream,clng(instrb(binary_stream,enter))-1)	'取得-----------------7e010b37206c4这个文件分隔符，用于给字符串处理函数找到文件内容'
+	third_enter=instrb(second_enter+1,binary_stream,enter)	'找第三个回车的位置'
+	file_begin_position=clng(instrb(third_enter+1,binary_stream,enter))+1	'获取文件内容第一个字符之前的位置'
+	file_end_position=clng(instrb(lenb(delimiter),binary_stream,delimiter))-3  '获取文件内容中最后一个字符的位置，就是第二个分隔符"delimiter"开始的前一个二进制字符'
+
+	write_stream.type=1	'write_stream是处理二进制数据'
+	write_stream.open
+	read_stream.Position=file_begin_position	'将流read_stream的开始位置移到文件开始的位置'
+	read_stream.copyto write_stream,file_end_position-file_begin_position	'把流read_stream的开始位置之后 长为 文件长度 的内容复制到write_stream，其中文件长度就是文件结束的位置file_end_position-文件开始的位置file_begin_position'
+	write_stream.SaveToFile server.mappath("upload_file/"&amp;server_file_name),2	'将write_stream转化为文件，保存在设定好的文件目录'
+
+	'人走带门，关闭所有用到的流'	
+	write_stream.Close
+	Set write_stream=nothing
+	read_stream.Close
+	Set read_stream=nothing
+
+	'打印文件信息到网页'
+	response.write "你上传的文件是："&amp;file_name&amp;"&lt;br&gt;"
+	response.write "你上传文件的后缀为："&amp;suffix&amp;"&lt;br&gt;"
+	url="http://"&amp;Request.ServerVariables("HTTP_HOST")&amp;"/my_asp/upload/upload_file/"&amp;server_file_name
+	response.write "访问地址：&lt;a href='"&amp;url&amp;"' target='_blank'&gt;"&amp;url&amp;"&lt;/a&gt;&lt;br&gt;"
+	response.write "&lt;a href='upload.html'&gt;返回&lt;/a&gt;&lt;br&gt;" 
+   
+end if
+%&gt;</code></pre> 
+<br> 上述代码做的事，如下图所示： 
+<p></p> 
+<p><img src="https://images2.imgbox.com/f5/bc/vyi1RwlB_o.png" alt=""><br> </p> 
+<p>说白了就是一个字符串切割的过程，虽然这个字符串切割过程有点复杂。</p> 
+<p>利用instr函数来确定字符在字符串位置，InStr(string1,string2)返回的是string2在string1出现的位置。例如：</p> 
+<p></p> 
+<pre><code class="language-vb">SearchString="XXpXXpXXPXXP"'被搜索的字符串。
+SearchChar="P"'要查找字符串"P"。
+MyPos=Instr(SearchString,SearchChar)'返回9。</code></pre> 
+<br> 而Clng则是强行讲其转化为long型。 
+<p></p> 
+<p>至于LEFT函数用于从一个文本字符串的第一个字符开始返回指定个数的字符，例如：</p> 
+<p></p> 
+<pre><code class="language-vb">AnyString = "Hello World" '定义字符串。
+MyStr = Left(AnyString, 1) '返回 "H"。
+MyStr = Left(AnyString, 7) '返回 "Hello W"。
+MyStr = Left(AnyString, 10) '返回 "Hello Worl"。</code></pre> 
+<br> 而Mid函数用法如下： 
+<p></p> 
+<p>Mid(String As Variant, Start As Long, [Length As Variant]) As Variant</p> 
+<p>String，必选。变体（字符串）表达式，要被截取的字符。如果该参数为Null，则函数返回Null。</p> 
+<p>Start，必选。数值表达式，从左起第几位开始截取。</p> 
+<p>Length，可选，从Start参数指定的位置开始，要向右截取的长度。如果省略，将指定为从Start参数位置开始向右到字符串结尾的所有字符数。<br> </p> 
+<p>例子如下：</p> 
+<p></p> 
+<pre><code class="language-vb">v=Mid("VisualBasic",0,12)'提示实时错误5
+v=Mid("VisualBasic",1,6)'v的值为"Visual"
+v=Mid("VisualBasic",1,20)'v的值为"VisualBasic"
+v=Mid("VisualBasic",8)'v的值为"asic"
+v=Mid("VisualBasic",15)'v的值为空字符串
+v=Mid("中文VB",2,2)'v的值为"文V"</code></pre> 
+<br> 当然还有right函数，不过left与带参数与不参数的mid函数足矣。 
+<br> 
+<p></p> 
+<p>其实这些函数都是从Excel里面来的。唯一需要注意的是，在VBScript需要严格区分二进制的流的截取和字符串的截取，截取二进制里面的东西函数后面都补一个b，例如找二进制中字符出现的位置用instrb而不是原版的instr，instr是用来处理文本、字符串的。</p> 
+<p>form表单传递过来的一个二进制流，而部分二进制流的文本信息部分被转化为字符串来保存，这需要区别对待的。</p> 
+<p><br> </p> 
+<p>通过，上述的例子，你就可以在ASP中实现文件上传了，配合《【ASP】利用MVC分层结构，优化ASP的登录系统的写作》（<a target="_blank" href="http://blog.csdn.net/yongh701/article/details/50544574" rel="noopener noreferrer">点击打开链接</a>），你可以利用Access2003+记事本+IIS服务器，写出一个需求不大但严格要求不能在服务器乱装东西的小网站。这也是当年XP刚刚出来的时候，辉煌一时的建站方式。当然，现在的Windows2003一般都在跑SQL Server+ASP.NET了，不过研究一下前辈的东西有好处的。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/021080d7c9838918fcaf593830857485/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">循环的软流水原理和实例展示</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/c65a95e27c038cdb1523fa7642d0816c/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">WAMP配置httpd.conf允许外部访问</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

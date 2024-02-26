@@ -1,0 +1,2468 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>魔塔类游戏实现源码及关卡生成 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="魔塔类游戏实现源码及关卡生成" />
+<meta property="og:description" content="《魔塔》》是一种策略类的固定数值RPG游戏。 本篇主要讨论红塔游戏，侧重于路线的寻找。 一般RPG类游戏可以使用脚本语言来编写任务剧情，这样可以使得剧情更复杂和灵活多变，这同样适用于魔塔游戏。但是为了自动生成关卡的目的，还是使用数据驱动的方法来实现游戏逻辑，这样方便编写搜索算法。
+游戏关卡的设计一般可以使用编辑器来编辑，编辑器很好实现，但要设计一个耐玩的关卡似乎不太简单，后面会做一些自动生成的尝试。 参考“魔塔吧”，网站WDMOTA
+在讨论自动生成关卡之前，先来复刻一版现成的魔塔游戏。这里选择胖老鼠的21层魔塔，
+这一版魔塔相对简单：楼层数少、迷宫不复杂、没有坑人的机关、商店不会涨价，因此更容易编写自动生成的算法。
+游戏剧情
+前来拯救公主的勇者在魔塔醒来后遇到了仙子，仙子告诉他他被魔塔的小怪打晕了，是自己将他救了出来。仙子让勇者去找一个十字架，这样仙子可以把自己的力量借给勇者。仙子给了勇者三把钥匙后，勇者就出发了。
+勇者在4层找到了一个小偷，小偷答应帮助勇者，于是勇者请求小偷为自己开2层的门，小偷答应了，并告诉勇者如果找到了镶有红宝石的铁榔头，他可以为勇者打开18层的路。
+勇者在16层遇见了魔王和神秘老人（若在规定时间内未到达16层，则老人不会出现），神秘老人将神秘宝物交给勇者，让他交给仙子。仙子告诉勇者这个宝物叫“灵智障灵之杖”，勇者现在拿着的是“冰之灵杖”。灵杖总共有三把，另外两把是“心之灵杖”和“炎之灵杖”，三灵杖是封印地下层的血影的钥匙。
+勇者回到16层打败魔王，然后将12层的榔头交给4层的小偷，18层救公主的通道打开了。公主说勇者必须杀死恶魔自己才愿意走，与公主对话后通往19层的楼梯开启。
+勇者在19层击败冥灵魔王，冥灵魔王逃到21层。勇者来到20层后，发现没有上楼的楼梯了，之后将7层的十字架交给仙子，仙子将勇者所有能力值提高1/3。
+勇者来到21层击败了冥灵魔王，来到22层找到仙子，仙子让勇者找齐另外两个灵杖。勇者收集三个魔杖后与仙子对话，然后从23层的花门进入地下层杀死血影。（若未带着三个权杖与仙子对话，则地下层出现的怪物是魔龙，正常情况下无法击败）打败血影后，勇者救出公主离开魔塔。 自动生成关卡的思路：
+方案一
+1，先生成迷宫。
+2，摆放楼梯、门、怪物、NPC、商店等。一般每层两个楼梯（可连通），若干层一个商店，若干层一对商人，每层一到两个NPC就可以了，怪物的分布等级低的出现在较低楼层。
+3，最后摆放道具。通过摆放奖励道具来控制引导行进路线的复杂性，因为直接往后走是无法通关的，玩家必须按一定顺序获取道具，才能保证最后通关。
+4，通过算法给生成的关卡评分，如果不够好则重新生成，或许也可以试试用遗传算法对关卡做一些改动。
+如何判别一个关卡的好坏：
+1，对关卡进行搜索模拟角色行进路线，路线不能太简单，如果有很多的道具都没有走到直接就通关了，无疑是一个很糟的关卡。
+2，路线必须要可以走到底，不能是一个不可完成的关卡。
+3，游戏需要一定难度，即玩家如果选择的路线不对会出现卡关，玩家行走的路线要有一定的曲折。
+搜索算法：
+将生成的地图变成稀疏图的结构以便于搜索。 商店节点要挂上所出售的商品节点，NPC节点要挂上奖励的物品节点。图的变动搜索，根据角色属性不同，图节点之间的路径是否可通也是不断变化的。
+//搜索深度太大，和地图上所有非空节点数差不多，有的节点还要访问多次。深度可能达到数千。
+//随着步数的深入，可选的下一步节点集迅速增大， 这已经是一个np难题了。 大约是不可能完成的任务，必须做优化处理。
+//在访问并清除一个节点时将其邻节点加入前锋边，在搜索失败回退时要同时回退n个邻节点。 //剪枝方法，当节点集中出现奖励物品时，可以优先访问。当商店节点打通后，会优先频繁访问商店。采用分阶段的方法减少搜索深度，避免出现太大的节点集。
+方案二，直接算法生成，避免耗时的搜索算法。先生成路径，先考虑最简单的情况，一张大图，没有楼梯口（楼梯口可以最后将大图切割成小的楼层时再添加），也先不考虑npc和商店。
+定好主角在每个阶段的属性值，根据属性值是可以倒推出怪物和奖励道具的。
+//先生成迷宫大地图，分割路径为一段段的小胡同，计算胡同邻接关系，使用随机算法遍历胡同，根据遍历顺序生成到达胡同末端时的战力值，
+//因为战力值的限制，玩家游戏时只能按照遍历顺序清关，否则会卡关失败
+//然后根据起点和终点战力值在每条胡同上布置怪物和奖励
+另外对于魔塔游戏一般会有一些漏洞。尽快到达商店是玩家主选策略，因为打通商店后玩家就可以及时更新自身属性了，这样优势累积越来越大。到了后期主角属性可以相差很大，平衡已经不太好控制了。所以可以考虑分阶段规整角色属性，使得累积优势变小，重新开始新阶段的关卡。
+数据配置：
+怪物
+id112001,&#34;史莱姆&#34;, &#34;monster_01.png&#34;,life50, force20, defend1, money1, exp1,	id112002,&#34;中史莱姆&#34;, &#34;monster_02.png&#34;,life70, force15, defend2, money2, exp1,	id112003,&#34;大史莱姆&#34;, &#34;monster_03.png&#34;,life200, force35, defend10, money5, exp3,	id112004,&#34;史莱姆王&#34;, &#34;monster_04.png&#34;,life700, force250, defend125, money32, exp30,	id112005,&#34;小蝙蝠&#34;, &#34;monster_05.png&#34;,life100, force20, defend5, money3, exp2,	id112006,&#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/2f70983f7d134e2b16b2fb8a55f4b536/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-06-09T13:01:36+08:00" />
+<meta property="article:modified_time" content="2022-06-09T13:01:36+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">魔塔类游戏实现源码及关卡生成</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>        《魔塔》》是一种策略类的固定数值RPG游戏。 本篇主要讨论红塔游戏，侧重于路线的寻找。 <br>         一般RPG类游戏可以使用脚本语言来编写任务剧情，这样可以使得剧情更复杂和灵活多变，这同样适用于魔塔游戏。但是为了自动生成关卡的目的，还是使用数据驱动的方法来实现游戏逻辑，这样方便编写搜索算法。<br>         游戏关卡的设计一般可以使用编辑器来编辑，编辑器很好实现，但要设计一个耐玩的关卡似乎不太简单，后面会做一些自动生成的尝试。 <img alt="" height="768" src="https://images2.imgbox.com/e5/88/TS4YsZR6_o.png" width="1024"></p> 
+<p> <img alt="" height="768" src="https://images2.imgbox.com/4a/04/85HPFShd_o.png" width="1024"></p> 
+<p></p> 
+<p>参考“魔塔吧”，网站WDMOTA</p> 
+<p>        在讨论自动生成关卡之前，先来复刻一版现成的魔塔游戏。这里选择胖老鼠的21层魔塔，<br> 这一版魔塔相对简单：楼层数少、迷宫不复杂、没有坑人的机关、商店不会涨价，因此更容易编写自动生成的算法。</p> 
+<p><strong>游戏剧情</strong><br>         前来拯救公主的勇者在魔塔醒来后遇到了仙子，仙子告诉他他被魔塔的小怪打晕了，是自己将他救了出来。仙子让勇者去找一个十字架，这样仙子可以把自己的力量借给勇者。仙子给了勇者三把钥匙后，勇者就出发了。</p> 
+<p>        勇者在4层找到了一个小偷，小偷答应帮助勇者，于是勇者请求小偷为自己开2层的门，小偷答应了，并告诉勇者如果找到了镶有红宝石的铁榔头，他可以为勇者打开18层的路。</p> 
+<p>        勇者在16层遇见了魔王和神秘老人（若在规定时间内未到达16层，则老人不会出现），神秘老人将神秘宝物交给勇者，让他交给仙子。仙子告诉勇者这个宝物叫“灵智障灵之杖”，勇者现在拿着的是“冰之灵杖”。灵杖总共有三把，另外两把是“心之灵杖”和“炎之灵杖”，三灵杖是封印地下层的血影的钥匙。</p> 
+<p>        勇者回到16层打败魔王，然后将12层的榔头交给4层的小偷，18层救公主的通道打开了。公主说勇者必须杀死恶魔自己才愿意走，与公主对话后通往19层的楼梯开启。</p> 
+<p>        勇者在19层击败冥灵魔王，冥灵魔王逃到21层。勇者来到20层后，发现没有上楼的楼梯了，之后将7层的十字架交给仙子，仙子将勇者所有能力值提高1/3。<br>         勇者来到21层击败了冥灵魔王，来到22层找到仙子，仙子让勇者找齐另外两个灵杖。勇者收集三个魔杖后与仙子对话，然后从23层的花门进入地下层杀死血影。（若未带着三个权杖与仙子对话，则地下层出现的怪物是魔龙，正常情况下无法击败）打败血影后，勇者救出公主离开魔塔。  <img alt="" height="600" src="https://images2.imgbox.com/14/5d/FzRiUYfW_o.png" width="800"></p> 
+<p><br><strong>自动生成关卡的思路：</strong></p> 
+<p><strong>方案一</strong></p> 
+<p>1，先生成迷宫。<br> 2，摆放楼梯、门、怪物、NPC、商店等。一般每层两个楼梯（可连通），若干层一个商店，若干层一对商人，每层一到两个NPC就可以了，怪物的分布等级低的出现在较低楼层。<br> 3，最后摆放道具。通过摆放奖励道具来控制引导行进路线的复杂性，因为直接往后走是无法通关的，玩家必须按一定顺序获取道具，才能保证最后通关。<br> 4，通过算法给生成的关卡评分，如果不够好则重新生成，或许也可以试试用遗传算法对关卡做一些改动。</p> 
+<p>如何判别一个关卡的好坏：<br> 1，对关卡进行搜索模拟角色行进路线，路线不能太简单，如果有很多的道具都没有走到直接就通关了，无疑是一个很糟的关卡。<br> 2，路线必须要可以走到底，不能是一个不可完成的关卡。<br> 3，游戏需要一定难度，即玩家如果选择的路线不对会出现卡关，玩家行走的路线要有一定的曲折。</p> 
+<p>搜索算法：<br> 将生成的地图变成稀疏图的结构以便于搜索。 商店节点要挂上所出售的商品节点，NPC节点要挂上奖励的物品节点。图的变动搜索，根据角色属性不同，图节点之间的路径是否可通也是不断变化的。</p> 
+<p><img alt="" height="320" src="https://images2.imgbox.com/24/ba/ClU1Yu0z_o.png" width="320"> <img alt="" height="320" src="https://images2.imgbox.com/d5/a2/hWQ3YDrn_o.png" width="320"></p> 
+<p> //搜索深度太大，和地图上所有非空节点数差不多，有的节点还要访问多次。深度可能达到数千。<br> //随着步数的深入，可选的下一步节点集迅速增大， 这已经是一个np难题了。 大约是不可能完成的任务，必须做优化处理。<br> //在访问并清除一个节点时将其邻节点加入前锋边，在搜索失败回退时要同时回退n个邻节点。    <br> //剪枝方法，当节点集中出现奖励物品时，可以优先访问。当商店节点打通后，会优先频繁访问商店。采用分阶段的方法减少搜索深度，避免出现太大的节点集。</p> 
+<p><strong>方案二</strong>，直接算法生成，避免耗时的搜索算法。先生成路径，先考虑最简单的情况，一张大图，没有楼梯口（楼梯口可以最后将大图切割成小的楼层时再添加），也先不考虑npc和商店。<br> 定好主角在每个阶段的属性值，根据属性值是可以倒推出怪物和奖励道具的。</p> 
+<p>    //先生成迷宫大地图，分割路径为一段段的小胡同，计算胡同邻接关系，使用随机算法遍历胡同，根据遍历顺序生成到达胡同末端时的战力值，<br>     //因为战力值的限制，玩家游戏时只能按照遍历顺序清关，否则会卡关失败<br>     //然后根据起点和终点战力值在每条胡同上布置怪物和奖励</p> 
+<p>另外对于魔塔游戏一般会有一些漏洞。尽快到达商店是玩家主选策略，因为打通商店后玩家就可以及时更新自身属性了，这样优势累积越来越大。到了后期主角属性可以相差很大，平衡已经不太好控制了。所以可以考虑分阶段规整角色属性，使得累积优势变小，重新开始新阶段的关卡。</p> 
+<p></p> 
+<p><strong>数据配置：</strong><br> 怪物</p> 
+<pre><code>id112001,"史莱姆",     "monster_01.png",life50,     force20,   defend1,  money1,  exp1,					   
+id112002,"中史莱姆",   "monster_02.png",life70,     force15,   defend2,  money2,  exp1,					   
+id112003,"大史莱姆",   "monster_03.png",life200,    force35,   defend10,  money5,  exp3,					   
+id112004,"史莱姆王",   "monster_04.png",life700,    force250,  defend125,  money32, exp30,					   
+id112005,"小蝙蝠",     "monster_05.png",life100,    force20,   defend5,  money3,  exp2,					   
+id112006,"大蝙蝠",     "monster_06.png",life150,    force65,   defend30,  money10, exp8,					   
+id112007,"吸血蝙蝠",   "monster_07.png",life550,    force160,  defend90,  money25, exp20,					   
+id112008,"冥灵魔王",   "monster_08.png",life33333,  force2000, defend1600,   money375,exp300,					   
+id112009,"骷髅兵",     "monster_09.png",life110,    force25,   defend5,  money5,  exp8,					   
+id112010,"小魔法师",   "monster_10.png",life250,    force120,  defend70,  money20, exp17,					   
+id112011,"大魔法师",   "monster_11.png",life500,    force400,  defend260,  money47, exp45,					   
+id112012,"大护法",     "monster_12.png",life450,    force150,  defend90,  money22, exp19,					   
+id112013,"骷髅队长",   "monster_13.png",life140,    force40,   defend20,  money8,  exp5,					   
+id112014,"骷髅王",     "monster_14.png",life400,    force90,   defend50,  money15, exp12,					   
+id112015,"骷髅王后",   "monster_15.png",life3333,   force1200, defend1133,   money126,exp112,					   
+id112016,"半兽人",     "monster_16.png",life300,    force75,   defend45,  money13, exp10,					   
+id112017,"兽人王",     "monster_17.png",life900,    force450,  defend330,  money50, exp50,					   
+id112018,"石怪",       "monster_18.png",life500,    force115,  defend65,  money15, exp15,					   
+id112019,"Pilgrim",    "monster_19.png",life3100,   force1150, defend1050,   money92, exp80,					   
+id112020,"蓝袍法师",   "monster_20.png",life125,    force50,   defend25,  money10, exp7,					   
+id112021,"红袍法师",   "monster_21.png",life100,    force200,  defend110,  money30, exp25,					   
+id112022,"小护法",     "monster_22.png",life1250,   force500,  defend400,  money55, exp55,					   
+id112023,"牛头护法",   "monster_23.png",life1500,   force560,  defend460,  money60, exp60,					   
+id112024,"双刀鬼士",   "monster_24.png",life120,    force620,  defend520,  money65, exp75,					   
+id112025,"铠甲魔",     "monster_25.png",life2000,   force680,  defend590,  money70, exp65,					   
+id112026,"骑士",       "monster_26.png",life850,    force350,  defend200,  money45, exp40,					   
+id112027,"骑士队长",   "monster_27.png",life900,    force750,  defend650,  money77, exp70,					   
+id112028,"幽灵骑士",   "monster_28.png",life1600,   force1306, defend1200,   money132,exp112,					   
+id112029,"红衣魔王",   "monster_29.png",life15000,  force1500, defend1400,   money100,exp100,					   
+id112030,"邪魔",       "monster_30.png",life1300,   force300,  defend150,  money40, exp35,					   
+id112031,"幽灵法师",   "monster_31.png",life2000,   force1106, defend973,  money120,exp105,					   
+</code></pre> 
+<p>道具</p> 
+<pre><code>"",
+46,
+id113001,"红色钥匙", "",   "data/minigame/magictower/key_01.png",     "",    persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey1,  yellowKey0,   blueKey0,   
+id113002,"黄色钥匙", "",   "data/minigame/magictower/key_02.png",     "",    persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey1,   blueKey0,   
+id113003,"蓝色钥匙", "",   "data/minigame/magictower/key_03.png",     "",    persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey1,   
+id113004,"红色门",   "",   "data/minigame/magictower/door_01.png",     "data/minigame/magictower/door_01",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey-1,  yellowKey0,    blueKey0,   
+id113005,"黄色门",   "",   "data/minigame/magictower/door_02.png",     "data/minigame/magictower/door_02",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,   yellowKey-1,   blueKey0,   
+id113006,"蓝色门",   "",   "data/minigame/magictower/door_03.png",     "data/minigame/magictower/door_03",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,   yellowKey0,    blueKey-1,   
+id113007,"红色门",   "",   "data/minigame/magictower/door_04.png",     "data/minigame/magictower/door_04",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey-1,  yellowKey0,    blueKey0,   
+id113008,"黄色门",   "",   "data/minigame/magictower/door_05.png",     "data/minigame/magictower/door_05",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,   yellowKey-1,   blueKey0,   
+id113009,"蓝色门",   "",   "data/minigame/magictower/door_06.png",     "data/minigame/magictower/door_06",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,   yellowKey0,    blueKey-1,   
+					   
+id113010,"铁门",     "",   "data/minigame/magictower/door_07.png",     "data/minigame/magictower/door_07",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+					   
+id113011,"血瓶",     "",   "data/minigame/magictower/item_05.png",     "",   persent0,       life200,   force0,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113012,"蓝瓶",     "",   "data/minigame/magictower/item_06.png",     "",   persent0,       life500,   force0,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113013,"红宝石",   "",   "data/minigame/magictower/item_01.png",     "",   persent0,       life0,     force3,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113014,"蓝宝石",   "",   "data/minigame/magictower/item_02.png",     "",   persent0,       life0,     force0,     defend3,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+id113015,"碧灵神剑",   "得到碧灵神剑，攻击+150",   "data/minigame/magictower/item_61.png",     "",   persent0,       life0,     force150,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113016,"玄武铁盾",   "得到玄武铁盾，防御+190",   "data/minigame/magictower/item_85.png",     "",   persent0,       life0,     force0,     defend190,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+id113017,"铁剑",   "获得铁剑，攻击+10",   "data/minigame/magictower/item_49.png",     "",   persent0,       life0,     force10,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113018,"铁盾",   "获得铁盾，防御+10",   "data/minigame/magictower/item_73.png",     "",   persent0,       life0,     force0,     defend10,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113019,"金币",   "得到金钱$200",   "data/minigame/magictower/item_63.png",     "",   persent0,       life0,     force0,     defend0,      money200,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113020,"青锋剑",   "得到青锋剑,攻击力+70",   "data/minigame/magictower/item_51.png",     "",   persent0,       life0,     force70,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113021,"黄金盾",   "得到黄金盾,防御力+55",   "data/minigame/magictower/item_75.png",     "",   persent0,       life0,     force0,     defend55,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113022,"升级羽毛",   "得到升级羽毛，等级提高1级",   "data/minigame/magictower/item_21.png",     "",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev1,   redKey0,  yellowKey0,   blueKey0,   
+id113023,"寒鸦羽",   "得到寒鸦羽，等级提高三级",   "data/minigame/magictower/item_22.png",     "",   persent0,       life0,     force0,     defend0,      money0,      exp0,     lev3,   redKey0,  yellowKey0,   blueKey0,   
+id113024,"千年玉露",   "得到千年玉露，生命提高一倍",   "data/minigame/magictower/item_40.png",     "",   persent1,       life1,     force0,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+id113500,"奖励",   "得到三种钥匙各一把！",   ".png",     "",   persent0,       life0,     force0,     defend3,      money0,      exp0,     lev0,   redKey1,  yellowKey1,   blueKey1,   
+id113501,"奖励",   "能力上升，生命+4000,攻击+200,防御+200！",  ".png",     "", persent0,       life4000,     force200,     defend200,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113502,"奖励",   "得到铠甲衣，防御+55！",  ".png",     "", persent0,       life0,     force0,     defend55,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113503,"奖励",   "得到钢剑，攻击+55！",  ".png",     "", persent0,       life0,     force55,     defend0,      money0,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+id113800,"商品",   "800点生命/$25",  ".png",     "", persent0,       life800,     force0,     defend0,      money-25,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113801,"商品",   "4点攻击/$25",  ".png",     "", persent0,       life0,     force4,     defend0,      money-25,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113802,"商品",   "4点防御/$25",  ".png",     "", persent0,       life0,     force0,     defend4,      money-25,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+id113803,"商品",   "提升一级/100点",  ".png",     "", persent0,       life0,     force0,     defend0,      money0,      exp-100,     lev1,   redKey0,  yellowKey0,   blueKey0,   
+id113804,"商品",   "4点攻击/30点",  ".png",     "", persent0,       life0,     force4,     defend0,      money0,      exp-30,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113805,"商品",   "4点防御/30点",  ".png",     "", persent0,       life0,     force0,     defend4,      money0,      exp-30,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+id113806,"商品",   "1把黄钥匙/$10",  ".png",     "", persent0,       life0,     force0,     defend0,      money-10,      exp0,     lev0,   redKey0,  yellowKey1,   blueKey0,   
+id113807,"商品",   "1把蓝钥匙/$50",  ".png",     "", persent0,       life0,     force0,     defend0,      money-50,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey1,   
+id113808,"商品",   "1把红钥匙/$100",  ".png",     "", persent0,       life0,     force0,     defend0,      money-100,      exp0,     lev0,   redKey1,  yellowKey0,   blueKey0,   
+
+
+id113809,"商品",   "4000点生命/$100",  ".png",     "", persent0,       life4000,     force0,     defend0,      money-100,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113810,"商品",   "20点攻击/$100",  ".png",     "", persent0,       life0,     force20,     defend0,      money-100,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113811,"商品",   "20点防御/$100",  ".png",     "", persent0,       life0,     force0,     defend20,      money-100,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+
+id113812,"商品",   "卖一把黄钥匙/$7",  ".png",     "", persent0,       life0,     force0,     defend0,      money7,      exp0,     lev0,   redKey0,  yellowKey-1,   blueKey0,   
+id113813,"商品",   "卖一把蓝钥匙/$35",  ".png",     "", persent0,       life0,     force0,     defend0,      money35,      exp0,     lev0,   redKey0,  yellowKey0,   blueKey-1,   
+id113814,"商品",   "卖一把红钥匙/$70",  ".png",     "", persent0,       life0,     force0,     defend0,      money70,      exp0,     lev0,   redKey-1,  yellowKey0,   blueKey0,   
+     
+id113815,"商品",   "提升三级/270点",  ".png",     "", persent0,       life0,     force0,     defend0,      money0,      exp-270,     lev3,   redKey0,  yellowKey0,   blueKey0,   
+id113816,"商品",   "增加攻击17/95点",  ".png",     "", persent0,       life0,     force17,     defend0,      money0,      exp-95,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+id113817,"商品",   "增加防御17/95点",  ".png",     "", persent0,       life0,     force0,     defend17,      money0,      exp-95,     lev0,   redKey0,  yellowKey0,   blueKey0,   
+
+"success",
+
+</code></pre> 
+<p>NPC<br> 通过改变NPC的talkindex来控制剧情走向，NPC在说完一句话后会执行用 [ ] 括起来的一段命令，命令可以认为是基于行为模板的。比如[break 20]表示npc说道第20句对白后将结束对话，并且下次对话从第20句开始。 比如[npctalkindex 115001,21]会改变115001号npc的对话索引到21，那么该NPC的下次对话将从第21句开始。</p> 
+<pre><code>"",
+17,
+id115001,"仙子",   "data/minigame/magictower/npc_04.png",     bitem0,
+talknum24,talkindex0
+0 , time-1, [null],    "\c4仙子:\n\c0    勇士——，勇士——，快醒醒！", 
+1 , time-1, [null],    "\c4勇士:\n\c0     唔......头好痛 ......", 
+2 , time-1, [null],    "\c4仙子:\n\c0    勇士你终于醒啦！O(∩_∩)O~",
+3 , time-1, [null],    "\c4勇士:\n\c0    ......,你是谁，我在哪里？", 
+4 , time-1, [null],    "\c4仙子:\n\c0    我是这里的守护者——蝴蝶仙子,你是来救公主的吧!", 
+5 , time-1, [null],    "\c4勇士:\n\c0    是的，你知道公主现在在哪里吗？",
+6 , time-1, [null],    "\c4仙子:\n\c0    公主被怪物抓到塔里去了.....", 
+7 , time-1, [null],    "\c4勇士:\n\c0    啊,那公主不是有危险吗,我要进去救公主...唔...!", 
+8 , time-1, [null],    "\c4仙子:\n\c0    勇士不要,你这样进去是打不过那些怪物的!",
+9 , time-1, [null],    "\c4勇士:\n\c0    可是我答应国王要救公主回去的,我不能半途而废!", 
+10, time-1, [null],    "\c4仙子:\n\c0    这样吧我把我的力量给你,不过你要先找到一个镶着宝石的十字架!",
+11, time-1, [null],    "\c4勇士:\n\c0    十字架？它有什么用？", 
+12, time-1, [null],    "\c4仙子:\n\c0    我本来是这座塔的守护者,半年前,从北方来了一群怪物,他们打伤我...!", 
+13, time-1, [null],    "\c4仙子:\n\c0    他们霸占了塔,到处做坏事并将我的力量封到了那个十字架上...!", 
+14, time-1, [null],    "\c4仙子:\n\c0    有了它,我就能慢慢才能发挥自己的力量,十字架应该在7楼！",
+15, time-1, [null],    "\c4勇士:\n\c0    仙子，我会拿到的,我一定要救出公主,打败那群可恶的怪物!", 
+16, time-1, [reward 113500],"\c4仙子:\n\c0    我这里有三把钥匙,塔里面有很多不同颜色的门,需要钥匙才能打开。",
+17, time-1, [null],    "\c4勇士:\n\c0    那三把钥匙怎么够用啊？.....", 
+18, time-1, [null],    "\c4仙子:\n\c0    里面还有很多这样的钥匙,但是勇士你要合理利用好才行！", 
+19, time-1, [npcmove -1,-1,0],"\c4勇士:\n\c0    我知道了,那我要进塔了!",
+20, time-1, [break 20],"\c4仙子:\n\c0    勇士一定要小心,拿到十字架后就可以交给我了。", 
+21, time-1, [null],    "\c4勇士:\n\c0    仙子我拿到十字架了,你看是不是这个？",
+22, time-1, [reward 113501],"\c4仙子:\n\c0    就是这个十字架,勇士谢谢你，现在我就把我的力量给你。", 
+23, time-1, [null],    "\c4仙子:\n\c0    希望你能尽快打败大魔王，记得21层没有准备好不要进去!",
+
+
+id115002,"关于",   "data/minigame/magictower/monster_32.png",          bitem0,
+talknum4,talkindex0
+0 , time-1, [null],    "\c4关于:\n\c0    嗨，你好勇士！我是程序的作者，我叫...！", 
+1 , time-1, [null],    "\c4关于:\n\c0    自我介绍完了,同时很高兴认识你,那我们来说一下游戏吧！",
+2 , time-1, [null],    "\c4关于:\n\c0    勇敢的勇士,是初次玩魔塔吗？如果是，那就请快进入游戏吧！", 
+3 , time-1, [break 0],"\c4关于:\n\c0    加油，勇士，去拯救你的公主吧!"
+  
+
+id115003,"十字架",   "data/minigame/magictower/item_24.png",          bitem1,
+talknum1,talkindex0
+0 , time-1, [npctalkindex 115001,21],"\c4十字架:\n\c0    得到十字架，可以去交给仙子！", 
+
+
+
+id115004,"小偷",   "data/minigame/magictower/npc_03.png",          bitem0,
+talknum12,talkindex0
+0 , time-1, [null],    "\c4勇士:\n\c0    你已经得救了，快离开这里吧!", 
+1 , time-1, [null],    "\c4小偷:\n\c0    哇,我又可以在这里寻宝啦，多谢勇士相救。", 
+2 , time-1, [null],    "\c4小偷:\n\c0    我叫无魂，是这里有名的神盗,哎, 一不小心被抓了,那现在你救了我",
+3 , time-1, [null],    "\c4无魂:\n\c0    那我也帮你做一件事吧，有什么需要我帮忙的吗？", 
+4 , time-1, [null],    "\c4勇士:\n\c0    你还是快走吧，这里怪物太多了，很危险！",
+5 , time-1, [null],    "\c4无魂:\n\c0    不行的，知恩要图报,我帮了你就会离开。", 
+6 , time-1, [null],    "\c4勇士:\n\c0    那你可以打开第二层的铁门吗？", 
+7 , time-1, [npcmove 115005,-99,0],"\c4无魂:\n\c0    这个简单，我就帮你打开,噢还有一件事,18层的路被魔王堵住了。",
+8 , time-1, [break 8],"\c4无魂:\n\c0    如果你能找到一个水晶榔头,我就能打通18层，找到了记得找我哦。", 
+9 , time-1, [null],    "\c4勇士:\n\c0    无魂，我找到了，是这一把吗？", 
+10, time-1, [null],    "\c4无魂:\n\c0    O(∩_∩)O~，就是这一把,现在我就去打通18层，后会有期哦。"
+10, time-1, [setblock 111017,0,10,6001],"\c4无魂:\n\c0    18层已经打通了。"
+
+id115005,"铁门",   "data/minigame/magictower/door_07.png",          bitem0,
+talknum0,talkindex0
+
+id115006,"水晶榔头",   "data/minigame/magictower/item_10.png",          bitem1,
+talknum1,talkindex0
+0 , time-1, [npctalkindex 115004,9],"\c4水晶榔头:\n\c0    得到水晶榔头,交给4层的小偷,可打通18层！", 
+
+id115007,"上锁的楼梯",   "data/minigame/magictower/item_37.png",          bitem0,
+talknum1,talkindex0
+0 , time-1, [npctalkindex 115004,9],"\c4上锁的楼梯:\n\c0    第18层的路尚未打通！", 
+
+id115008,"红衣魔王",   "data/minigame/magictower/monster_29.png",          bitem0,
+talknum3,talkindex0
+0 , time-1, [null],    "\c4红衣魔王:\n\c0    愚蠢的人类，快停止吧,不要再执迷不悟了！",
+1 , time-1, [setblock -1,-1,-1,2029],"\c4勇士:\n\c0    该醒悟的是你,快叫你们大王出来受死！",
+2 , time-1, [null],    "\c4红衣魔王:\n\c0    想见我们魔王，先过我这一关!"	
+
+id115009,"公主",   "data/minigame/magictower/npc_06.png",          bitem0,
+talknum7,talkindex0
+0 , time-1, [null],    "\c4勇士:\n\c0    公主，我终于找到你了,快跟我走吧，这里危险！",
+1 , time-1, [null],    "\c4公主:\n\c0    你是父王派来救我的吧,可是我不想走，我要你把魔王赶出去。",
+2 , time-1, [null],    "\c4公主:\n\c0    到那时我再跟你走！",
+3 , time-1, [null],    "\c4勇士:\n\c0    可是真的很危险啊,公主我怕你受到伤害，还是现在就带你出去吧！",
+4 , time-1, [null],    "\c4公主:\n\c0    有你保护我，我不会害怕！",
+5 , time-1, [null],    "\c4勇士:\n\c0    那好吧，公主,记得要躲在我的身后，我会一直保护你的。",
+6 , time-1, [setblock -1,-1,-1,6001],    "\c4公主:\n\c0    谢谢你，人家知道了。"
+
+
+id115010,"冥灵魔王分身",   "data/minigame/magictower/monster_08.png",          bitem0,
+talknum4,talkindex0
+0 , time-1, [null],    "\c4冥灵魔王:\n\c0    有意思，年轻人,你竟然能走到这里,看来是我低估你了！",
+1 , time-1, [null],    "\c4勇士:\n\c0    你就是魔王吧，为了公主,我要杀了你,把你们赶出去！"	,
+2 , time-1, [null],    "\c4冥灵魔王:\n\c0    哈哈哈哈！来吧,让我见识一下你的能力！",
+3 , time-1, [setblock -1,-1,-1,2008],    "\c4冥灵魔王:\n\c0    看来你的能力真的提高了不少,去21层吧，那里才是真正的我！"
+
+id115011,"老爷爷",   "data/minigame/magictower/npc_01.png",          bitem1,
+talknum4,talkindex0
+0 , time-1, [null],    "\c4勇士:\n\c0    老爷爷你可以走了,妖魔已经被我打死了!",
+1 , time-1, [null],    "\c4老爷爷:\n\c0    哦，我的孩子，太谢谢你了,你真勇敢，我就把这个给你吧！", 
+2 , time-1, [null],    "\c4老爷爷:\n\c0    这是我年轻时用过了，穿在身上很坚固,孩子，快穿上吧！",
+3 , time-1, [reward 113502],    "\c4勇士:\n\c0    谢谢老爷爷，你快离开这里吧,这里很危险！",
+
+id115012,"商真人",   "data/minigame/magictower/npc_02.png",          bitem1,
+talknum4,talkindex0
+0 , time-1, [null],    "\c4勇士:\n\c0    老先生快离开这里吧,已经没妖怪了!",
+1 , time-1, [null],    "\c4老先生:\n\c0    谢谢你，壮士，我叫商真人,一直经商,为了回报你，这把剑给你！",
+2 , time-1, [null],    "\c4商真人:\n\c0    壮士，你一定要小心,这里的怪物很残暴！"
+3 , time-1, [reward 113503],    "\c4勇士:\n\c0    谢谢商先生，你路上也要小心！"
+	
+id115013,"风信子",   "data/minigame/magictower/item_11.png",          bitem1,
+talknum1,talkindex0
+0 , time-1, [reward -1],    "\n\c0    得到风信子,按[W]可以任意穿梭楼层!",
+	
+id115014,"怪物属性表",   "data/minigame/magictower/item_35.png",          bitem1,
+talknum1,talkindex0
+0 , time-1, [reward -2],    "\n\c0    获得怪物属性表,点击[Q]查看或关闭!",
+	
+
+id115015,"经验老人",   "data/minigame/magictower/npc_01.png",          bitem1,
+talknum4,talkindex0
+0 , time-1, [null],    "\c4经验老人:\n\c0    勇敢的年轻人，你终于来了,我在这里等了好久了,为了能尽快打败魔王，我找到一把上古神剑，如果你愿意用500点经验和我交换，可以使你的攻击增加120,那么你愿意交换吗？",
+1 , time-1, [null],    "\c4经验老人:\n\c0    经验不足，等等再来吧！", 
+2 , time-1, [null],    "\c4经验老人:\n\c0    获得月光神剑，攻击+120！",
+3 , time-1, [reward 113502],    "\c4经验老人:\n\c0    获得月光神剑，攻击+120！",
+
+
+		
+id115016,"大商人",   "data/minigame/magictower/npc_02.png",          bitem1,
+talknum4,talkindex0
+0 , time-1, [null],    "\c4大商人:\n\c0    勇士我这里有一件很好的盾可以增加防御120,为了帮助你尽快打败打败魔王，只要你有500金币,我就把它送给你,你愿意花500金币来和我交换吗？",
+1 , time-1, [null],    "\c4大商人:\n\c0    金币不足，等等再来吧！",
+2 , time-1, [null],    "\c4大商人:\n\c0    获得月光神盾，防御+120！"
+3 , time-1, [reward 113503],    "\c4大商人:\n\c0    获得月光神盾，防御+120！"
+	
+	
+id115999,"终了",   "data/minigame/magictower/npc_06.png",          bitem1,
+talknum1,talkindex0
+0 , time-1, [null],    "\n\c0    历尽千辛万苦\n方救得公主\n因为心中朦胧的感觉\n不畏险阻\n  \n听过千叮万嘱\n才收获有无\n只因自己平凡的思想\n哪懂踌躇\n| | 终",
+	
+"success",
+  
+          
+
+  reward: -1楼层穿梭器 -2怪物属性表
+ </code></pre> 
+<p>商店略<br> 地图</p> 
+<pre><code>"",
+23,
+
+id111000,"序章",            "data/minigame/magictower/road_1.png",        size{11,11,}, entryUP{160,288,}, entryDown{160,32,}, 
+ 4007, 4014, 4014, 4014, 4014, 6001, 4014, 4014, 4014, 4014, 4007,
+ 4007, 4014, 4014, 4014, 4014,   -1, 4014, 4014, 4014, 4014, 4007,
+ 4007, 4014, 4014, 4014, 4014,   -1, 4014, 4014, 4014, 4014, 4007,
+ 4007, 4014, 4014, 4014, 4014,   -1, 4014, 4014, 4014, 4014, 4007,
+ 4007, 4014, 4014, 4014, 4014,   -1, 4014, 4014, 4014, 4014, 4007,
+ 4007, 4014, 4014, 4014, 4014,   -1, 4014, 4014, 4014, 4014, 4007,
+ 4007, 4007, 4014, 4014, 4014,   -1, 4014, 4014, 4014, 4007, 4007,
+ 4007, 4007, 4007, 4007, 4007, 3005, 4007, 4007, 4007, 4007, 4007,
+   -1, 4007,   -1, 4007,   -1, 5001,   -1, 4007,   -1, 4007, 5002,
+   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+ 4007, 4007, 4007, 4007, 4007,   -1, 4007, 4007, 4007, 4007, 4007,
+
+id111001,"第1层",           "data/minigame/magictower/road_1.png",        size{11,11,}, entryUP{160,288,}, entryDown{32,0,}, 
+ 6001,   -1, 3002, 2001, 2002, 2001,   -1,   -1,   -1,   -1,   -1,
+ 4007, 4007, 4007, 4007, 4007, 4007, 4007, 4007, 4007, 4007,   -1,
+ 3011,   -1, 2009, 3005,   -1, 4007, 3011, 3002, 3011, 4007,   -1,
+ 3002, 2009, 3013, 4007,   -1, 4007, 3011, 3002, 3011, 4007,   -1,
+ 4007, 3005, 4007, 4007,   -1, 4007, 4007, 4007, 2003, 4007,   -1,
+ 3002, 2013,   -1, 4007,   -1, 3005, 2020, 2001, 2005, 4007,   -1,
+ 3014,   -1, 3003, 4007,   -1, 4007, 4007, 4007, 4007, 4007,   -1,
+ 4007, 3005, 4007, 4007,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+   -1, 2013,   -1, 4007, 4007, 3004, 4007, 4007, 4007, 3005, 4007,
+ 3011, 3012, 3002, 4007, 3001,   -1,   -1, 4007, 3002, 2016, 3003,
+ 3011, 5014, 3002, 4007,   -1, 6002,   -1, 4007, 3002, 3002, 3002,
+
+
+id111002,"第2层",           "data/minigame/magictower/road_1.png",        size{11,11,}, entryUP{0,32,}, entryDown{0,288,}, 
+ 6002, 4007,   -1, 2027,   -1, 4007, 3013, 3014, 3002, 3001, 4007,
+   -1, 4007, 3014, 4007, 3012, 4007, 3013, 3014, 3002, 3003, 4007,
+   -1, 4007, 3002, 4007, 3002, 4007, 3013, 3014, 3002, 2026, 4007,
+   -1, 4007, 3002, 4007, 3002, 4007, 4007, 4007, 4007, 3005, 4007,
+   -1, 4007,   -1, 4007,   -1,   -1,   -1, 3005,   -1,   -1, 4007,
+   -1, 4007, 3005, 4007, 4007, 3005, 4007, 4007, 3005, 4007, 4007,
+   -1, 5005,   -1,   -1,   -1,   -1, 4007,   -1, 2026,   -1, 4007,
+   -1, 4007, 3005, 4007, 4007, 3006, 4007, 3010, 4007, 3010, 4007,
+   -1, 4007, 3002, 4007, 3012, 3011, 4007,   -1, 4007,   -1, 4007,
+   -1, 4007, 3002, 4007, 3012, 3011, 4007,   -1, 4007,   -1, 4007,
+ 6001, 4007, 3013, 4007, 3012, 3011, 4007, 5011, 4007, 5012, 4007,
+
+
+id111003,"第3层",           "data/minigame/magictower/road_1.png",        size{11,11,}, entryUP{32,320,}, entryDown{320,288,}, 
+ 3017, 2002, 3002, 4007, 7001, 7002, 7003, 4007, 4007, 4007, 4007,
+ 2002, 3002,   -1, 4007,   -1,   -1,   -1, 4007,   -1, 2005,   -1,
+ 3002, 2009,   -1, 4007, 4007, 3005, 4007, 4007,   -1, 4007,   -1,
+ 4007, 3005, 4007, 4007,   -1, 2009,   -1, 4007, 3002, 4007, 2002,
+   -1,   -1,   -1, 4007, 4007, 4007,   -1, 4007, 3002, 4007, 2005,
+ 2001, 4007,   -1, 2005, 2002, 2005,   -1, 4007, 3002, 4007, 2002,
+ 2001, 4007, 4007, 4007, 4007, 4007,   -1,   -1,   -1, 4007,   -1,
+   -1,   -1,   -1,   -1,   -1, 4007, 4007, 3005, 4007, 4007,   -1,
+ 4007, 4007, 4007, 4007, 2005, 4007, 2002,   -1, 2002, 4007,   -1,
+ 4007,   -1,   -1,   -1,   -1, 4007, 3014, 2005, 3002, 4007,   -1,
+ 6002,   -1, 4007, 4007, 4007, 4007, 3013, 3012, 3002, 4007, 6001,
+
+ </code></pre> 
+<p><strong>游戏源码：</strong></p> 
+<p>配置数据结构</p> 
+<pre><code>
+#ifndef  __TowerMap__H__
+#define  __TowerMap__H__
+
+#include "Math/MathLib.h"
+#include "AI/Entity/GameStyle.h"
+#include "General/String.h"
+#include "Render/Texture.h"
+
+enum  TowerBlock
+{
+	TB_UpStairs   = 116001,//楼梯
+	TB_DownStairs = 116002,
+
+	TB_WallMin = 114000,      //墙  
+	//TB_WallMax = 114999,      //
+
+	//TB_ItemMin = 113000,      //道具  
+	//TB_ItemMax = 113999,      //
+	
+	TB_GhostMin = 112000,//怪物
+	TB_GhostMax = 112999,
+
+};
+
+class MTStyle:public Style
+{
+public:
+#ifdef CLIENT_APP
+	virtual  void UpdateAllItems(ListItemUpdater&amp; updater);
+#endif
+	//默认的路图片
+	String     m_textureName;
+	TexturePtr m_texture;
+};
+
+class MTWallStyle:public MTStyle
+{
+public:
+	DeclareStyleEnum(MTWallStyle		   ,114001);
+
+	MTWallStyle();
+	~MTWallStyle();
+	bool Load( File&amp; file );
+	bool Save( File&amp; file );
+#ifdef CLIENT_APP
+	virtual  void UpdateAllItems(ListItemUpdater&amp; updater);
+#endif
+
+public:
+	int    m_walkAble;
+};
+
+
+class MTItemStyle:public MTStyle
+{
+public:
+	DeclareStyleEnum(MTItemStyle		   ,113001);
+
+	MTItemStyle();
+	~MTItemStyle();
+	bool Load( File&amp; file );
+	bool Save( File&amp; file );
+#ifdef CLIENT_APP
+	virtual  void UpdateAllItems(ListItemUpdater&amp; updater);
+#endif
+
+
+	String m_anim;//拾取或开门动画
+	bool   m_bPersent;
+
+	int m_life   ;
+	int m_force  ;
+	int m_defense;
+	int m_exp    ;
+	int m_money  ;
+	int m_level  ;
+
+	int   m_yellowKeyNum;
+	int   m_blueKeyNum	;
+	int   m_redKeyNum	;
+
+	TexturePtr m_textureAnim[3];
+
+};
+
+class MTGhostStyle:public MTStyle
+{
+public:
+	DeclareStyleEnum(MTGhostStyle		   ,112001);
+
+	MTGhostStyle();
+	~MTGhostStyle();
+	bool Load( File&amp; file );
+	bool Save( File&amp; file );
+#ifdef CLIENT_APP
+	virtual  void UpdateAllItems(ListItemUpdater&amp; updater);
+#endif
+
+
+	int m_life   ;
+	int m_force  ;
+	int m_defense;
+	int m_exp    ;
+	int m_money  ;
+	int m_level  ;
+};
+
+class MTNpcStyle:public MTStyle
+{
+public:
+	DeclareStyleEnum(MTNpcStyle		   ,115001);
+
+	MTNpcStyle();
+	~MTNpcStyle();
+	bool Load( File&amp; file );
+	bool Save( File&amp; file );
+
+	enum  TalkAction
+	{
+		TA_Null          = 0,
+		TA_Reward        = 1, //parm  itemid
+		TA_NpcTalkIndex  = 2, //parm  npcid,talkindex
+		TA_Break         = 3, //parm: thistalkindex
+		TA_NpcMove       = 4, //parm: npcid offx offy
+		TA_SetBlock      = 5, //parm: floor x y block
+		TA_StairUp   = 6, //parm:  
+		TA_StairDown = 7, //parm:  
+		TA_Transport = 8, //parm:  floor
+	};
+
+	static const char* TalkActionToString(int enumeration);
+	static bool StringToTalkAction(const char* str,int&amp; type);
+
+#ifdef CLIENT_APP
+	virtual  void UpdateAllItems(ListItemUpdater&amp; updater);
+#endif
+
+
+	class Talk
+	{
+	public:
+		String     words;
+		TalkAction action; 
+		int        parm1,parm2,parm3,parm4; 
+		float      time;//到时间自动切换下一句
+	};
+
+	bool   bitem;  //一次性npc，或者叫作任务物品 
+	Talk*  talks;
+	int    talkNum;
+	int    talkIndex;
+};
+
+//TB_UpStairs   = 6001,//楼梯
+
+class MTShopStyle:public MTStyle
+{
+public:
+	DeclareStyleEnum(MTShopStyle		   ,117001);
+
+	MTShopStyle();
+	~MTShopStyle();
+	bool Load( File&amp; file );
+	bool Save( File&amp; file );
+#ifdef CLIENT_APP
+	virtual  void UpdateAllItems(ListItemUpdater&amp; updater);
+#endif
+
+	int    itemNum;
+	int*   items;
+};
+
+class MTMapStyle:public MTStyle
+{
+public:
+	DeclareStyleEnum(MTMapStyle		   ,111001);
+	class Block
+	{
+	public:
+		MTStyle* style;
+		int block;
+	};
+	MTMapStyle();
+	~MTMapStyle();
+	bool Load( File&amp; file );
+	bool Save( File&amp; file );
+#ifdef CLIENT_APP
+	virtual  void UpdateAllItems(ListItemUpdater&amp; updater);
+#endif
+
+	int  Clear();
+	void Render();
+	void RendToTexture(TextureData&amp; image);
+
+	Block* GetBlock(const vec2I&amp; pos);
+	void   SetBlock(const vec2I&amp; pos,int block);
+
+	bool IsOut(const vec2I&amp; pos);
+	vec2I m_size;
+	vec2I m_entryUP;
+	vec2I m_entryDown;
+
+	Block*  m_blocks;
+
+	//默认的路图片
+	String  m_roadTexName;
+	TexturePtr m_texRoad;
+
+};
+
+#endif 
+</code></pre> 
+<p>游戏类：</p> 
+<pre><code>
+#ifndef  __MiniGameMine__H__
+#define  __MiniGameMine__H__
+
+#include "Rpg/MiniGame.h"
+#include "Render/Texture.h"
+#include "MagicTower/MagicTowerMap.h"
+
+class GuiGroupCtrl;
+
+class MiniGameMagicTower:public MiniGame
+{
+public:
+	MiniGameMagicTower();	
+	virtual ~MiniGameMagicTower();
+
+public:
+	virtual bool Start();
+	virtual bool Stop();
+	virtual bool Render();
+	virtual void RenderUI();
+	virtual bool Update();
+	virtual bool Free();
+	virtual bool KeepResource(bool once,int&amp; circle,String&amp; nextTip);
+
+	//三种类型结构
+	virtual MiniPlayer*  CreatePlayer();
+	virtual MiniPlayer*  CreateRobot ();
+	virtual MiniPlayer*  CreateRole  ();
+
+	void Update_Running();
+	void Update_Talking();
+	void Update_Fighting();
+	void Update_Shopping();
+	void Update_Messaging();
+
+	void Transport(int floor);
+	bool CanBuy(MTItemStyle* item);
+
+	void OnSave();
+	void OnLoad();
+
+	//[0~max]
+	MTMapStyle* GetMap(int floor);
+
+	void OpenDoor(MTItemStyle* door);
+
+	void MoveNpc(int npcId,const vec2I&amp; mov);
+
+	void ShowMsg(int x, int y, const char* msg);
+	void ShowNotice(const char* msg);
+	void TextAtPos_(const vec2&amp; pos, const char* txt);
+	void DoUp();
+	void DoDown();
+
+	//对话界面
+	void PopTalking(const vec2I&amp; npcpos, MTNpcStyle* who);
+	//商城界面
+	void PopShopping(const vec2I&amp; shoppos,MTShopStyle* who);
+	//战斗界面
+	void PopFighting();
+	//怪物图鉴界面
+	void PopViewBook();
+	//传送界面
+	void PopTransporting();
+
+	enum GameState
+	{
+		GS_Starting,
+		GS_Running,
+		GS_Talking,
+		GS_Fighting,
+		GS_Shopping,
+		GS_Transporting,
+		GS_Viewing,
+		GS_Message,
+		GS_OpeningDoor,
+	};
+	GameState m_GameState;
+
+	String  m_message;
+
+	String m_notice;
+	float  m_noticeTime;
+
+//protected:
+
+	MTMapStyle* m_curMap;
+	int         m_curFloor; //楼层，从0开始
+	int         m_enterMaxFloor; //记录最大的进入层数，方便风信子的程序
+
+	MTNpcStyle* m_talkingNpc;
+	float       m_talkingTime;
+	vec2I       m_talkingNpcPos;
+
+
+	MTGhostStyle* m_fightingGhost;
+	float         m_fightingTime;
+	int           m_fightingGhostLife;
+
+	MTShopStyle* m_shoppingNpc;
+	vec2I        m_shopPos;
+
+	RectF m_talkWindowRect;
+	RectF m_windowRect;
+
+
+	MTItemStyle*  m_openingDoor;
+	float         m_openingDoorTime;
+	vec2I         m_openingDoorPos;
+
+	//楼层穿梭器
+	bool m_transportLock;
+	//怪物图鉴
+	bool m_handBookLock; 
+
+
+	TexturePtr  m_texViewingBack;
+	TexturePtr  m_texRole;
+
+};
+
+extern MiniGameMagicTower* G_MagicTowerGame;
+
+#endif 
+
+
+#include "General/Pch.h"
+#include "General/StringUtil.h"
+#include "General/Window.h"
+#include "General/Timer.h"
+#include "General/File.h"
+#include "MagicTower/MagicTowerPlayer.h"
+#include "MagicTower/MiniGameMagicTower.h"
+#include "MagicTower/MiMagicTower_PlayGui.h"
+#include "Render/RendDriver.h"
+#include "Render/Font.h"
+#include "Input/InputMgr.h"
+#include "Render/Camera.h"
+#include "Gui/GuiMgr.h"
+#include "Gui/GuiFrame.h"
+#include "Gui/GuiControlMisc.h"
+#include "General/Pce.h"
+ 
+MiniGameMagicTower* G_MagicTowerGame = NULL;
+
+MiniGameMagicTower::MiniGameMagicTower()
+{
+    G_MagicTowerGame = this;
+}
+MiniGameMagicTower::~MiniGameMagicTower()
+{
+	G_MagicTowerGame = NULL;
+}
+
+ 
+bool MiniGameMagicTower::Start()
+{
+	if(!MiniGame::Start())
+		return false;
+
+	m_talkingNpc = NULL;
+	m_fightingGhost = NULL;
+	m_fightingGhostLife = 0;
+	m_shoppingNpc = NULL;
+
+	LoadMTStyls();
+	
+	m_curFloor = 0;
+	m_enterMaxFloor = 0; //记录最大的进入层数，方便风信子的程序
+	m_curMap = G_MagicTowerGame-&gt;GetMap(m_curFloor);
+	m_towerRole.pos = m_curMap-&gt;m_entryUP;
+	
+	G_TextureMgr-&gt;AddTexture(m_texViewingBack     , "data/minigame/magictower/ViewingBack.png");
+	G_TextureMgr-&gt;AddTexture(m_texRole   , "data/minigame/magictower/role1.png");
+
+	m_GameState = GS_Running;
+	m_handBookLock = true;
+	m_transportLock = true;
+	//PlaySoundEx(SOUND_BEGIN);
+
+	m_windowRect = RectF(0,0,m_curMap-&gt;m_size.x*32+150,m_curMap-&gt;m_size.y*32);
+
+	//进入miniplaygui，（选人、选关卡都已在房间里进行完毕)。
+	if(GetStyle()) G_GuiMgr-&gt;PushGui(GetStyle()-&gt;playGUI.c_str(),GL_DIALOG);
+
+	//设置摄像机
+	CameraCtrlerTarget* ctrler = new CameraCtrlerTarget;
+	ctrler-&gt;SetDistToTar(60);
+	ctrler-&gt;SetTarPos(m_startPos);
+	G_Camera-&gt;PushCtrler(ctrler);	
+	G_Camera-&gt;SetEuler(0, -60, 0);
+	//片头摄像机
+	PushIntroCamera();
+
+	RandMTMap1();
+
+	return true;
+}
+
+void MiniGameMagicTower::OnSave()
+{
+}
+
+void MiniGameMagicTower::OnLoad()
+{
+}
+
+
+bool MiniGameMagicTower::Stop()
+{
+	MiniGame::Stop();
+	return true;
+}
+
+bool MiniGameMagicTower::Free()
+{
+	MiniGame::Free();
+	return true;
+}
+
+bool MiniGameMagicTower::Render()
+{
+	G_RendDriver-&gt;ClearClipRect();
+	G_RendDriver-&gt;EndUI();
+	G_RendDriver-&gt;SetViewPortf(0,0,1,1);
+    return true;
+}
+
+bool MiniGameMagicTower::Update()
+{
+    MiniGame::Update();
+
+    switch(m_GameState)
+    {
+    case GS_Running:
+        Update_Running();
+        break;
+    case GS_Talking:
+		{
+			Update_Talking();
+		}
+        break;
+    case GS_Shopping:
+        Update_Shopping();
+        break;
+
+	case GS_Viewing:
+	case GS_Starting:
+    case GS_Transporting:
+		if(G_Keyboard-&gt;IsKeyUping(DIK_C))
+		{
+			m_GameState = GS_Running;
+
+			MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+			//playGui-&gt;m_dlgFighting    -&gt;SetVisible(false);
+			//playGui-&gt;m_dlgTalking     -&gt;SetVisible(false);
+			playGui-&gt;m_dlgShopping    -&gt;SetVisible(false);
+			playGui-&gt;m_dlgTransporting-&gt;SetVisible(false);
+			playGui-&gt;m_dlgViewingBook -&gt;SetVisible(false);
+		}
+        break;
+    case GS_Message:
+        Update_Messaging();
+        break;
+    case GS_Fighting:
+    {
+        static char str2[40];
+
+		//if(G_Keyboard-&gt;IsKeyPressed(DIK_P)==false)
+		{
+			m_fightingTime += G_Timer-&gt;GetStepTime();
+		}
+
+		//直接胜利
+        if(G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+        {
+            m_fightingGhostLife = 0;
+			m_GameState = GS_Running;
+        }
+		else
+		{
+			//if(m_fightTime &gt; 0.3f || G_Keyboard-&gt;IsKeyPressed(DIK_F))//DIK_F fast
+			if(m_fightingTime &gt; 0.1f || G_Keyboard-&gt;IsKeyPressed(DIK_F))
+			{
+				m_fightingTime = 0;
+				//角色先攻击
+				m_fightingGhostLife -= (m_towerRole.m_force - m_fightingGhost-&gt;m_defense);
+				if(m_fightingGhostLife &lt;= 0)
+				{
+					m_GameState = GS_Running;
+					sprintf(str2, "获得 金钱：%d 经验：%d", m_fightingGhost-&gt;m_money,m_fightingGhost-&gt;m_exp);
+					ShowNotice(M2U(str2).c_str());
+					m_towerRole.m_money += m_fightingGhost-&gt;m_money;
+					m_towerRole.m_exp += m_fightingGhost-&gt;m_exp;
+				}
+				if(m_fightingGhost-&gt;m_force - m_towerRole.m_defense &gt; 0) //设置吸血蝙蝠等特殊怪物的减血方式
+				{
+					//	if(m_fightingGhost==29)
+					//	if(m_towerRole.m_life/(4*m_fightingGhost-&gt;m_life/(m_towerRole.m_force-m_fightingGhost-&gt;m_defense)))&gt;m_fightingGhost-&gt;m_force-m_defense)
+					m_towerRole.m_life -= m_fightingGhost-&gt;m_force - m_towerRole.m_defense;
+				}
+				else
+				{
+					m_towerRole.m_life -= 1;
+				}
+			}
+
+			{
+				MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+				playGui-&gt;m_textOtherLife-&gt;SetText(StrFormat("%d", m_fightingGhost-&gt;m_life));
+ 				playGui-&gt;m_textMyLife  -&gt;SetText(StrFormat("%d", m_towerRole.m_life));
+			}
+
+		}
+
+    }
+    break;
+    }
+
+	MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+
+	playGui-&gt;m_textRoleInfos[0]-&gt;SetText(StrFormat("%d", m_towerRole.m_level));
+	playGui-&gt;m_textRoleInfos[1]-&gt;SetText(StrFormat("%d", m_towerRole.m_life));
+	playGui-&gt;m_textRoleInfos[2]-&gt;SetText(StrFormat("%d", m_towerRole.m_force));
+	playGui-&gt;m_textRoleInfos[3]-&gt;SetText(StrFormat("%d", m_towerRole.m_defense));
+	playGui-&gt;m_textRoleInfos[4]-&gt;SetText(StrFormat("%d", m_towerRole.m_money));
+	playGui-&gt;m_textRoleInfos[5]-&gt;SetText(StrFormat("%d", m_towerRole.m_exp));
+	playGui-&gt;m_textRoleInfos[6]-&gt;SetText(StrFormat("%d", m_towerRole.m_yellowKeyNum));
+	playGui-&gt;m_textRoleInfos[7]-&gt;SetText(StrFormat("%d", m_towerRole.m_blueKeyNum));
+	playGui-&gt;m_textRoleInfos[8]-&gt;SetText(StrFormat("%d", m_towerRole.m_redKeyNum));
+
+	playGui-&gt;m_textMapName-&gt;SetText(m_curMap-&gt;name.c_str());
+
+    return true;
+}
+
+
+bool MiniGameMagicTower::KeepResource(bool once, int&amp; circle, String&amp; nextTip)
+{
+    return true;
+}
+
+void MiniGameMagicTower::RenderUI()
+{
+    G_RendDriver-&gt;PushMatrix();
+	
+	G_RendDriver-&gt;Translatef((G_Window-&gt;m_iWidth-500)/2,-(G_Window-&gt;m_iHeight-360)/2,0);
+
+	//vec2 offset;//= vec2((m_windowRect.width-430)/2,(m_windowRect.height-120)/2);
+
+	//窗口大小不变 如果格子数变大 则格子尺寸变小
+    G_FontMgr-&gt;SetSize(12);
+	
+	m_curMap-&gt;Render();
+
+	m_texRole-&gt;Bind();
+	G_RendDriver-&gt;DrawTextureRect(RectF(m_towerRole.pos.x,m_towerRole.pos.y,32,32));
+
+    if(m_GameState == GS_Starting)
+    {
+        //DRAW Poem
+        //{
+        m_GameState = GS_Running;
+        //}
+    }
+  
+    if(m_GameState == GS_Message)
+    {
+		G_RendDriver-&gt;Color4f(1,1,1,1);
+		m_texViewingBack-&gt;Bind();
+		G_RendDriver-&gt;DrawTextureRect(RectF(0,0,m_windowRect.width,m_windowRect.height));
+
+        RectF r = m_talkWindowRect;
+        G_RendDriver-&gt;DrawRect(m_talkWindowRect);
+        TextAtPos_(vec2(4, 22), m_message.c_str());
+
+        G_FontMgr-&gt;SetColor(Color(1, 0, 1, 1));
+        TextAtPos_(vec2(34, 182), " 按下[Y]\\[N]或[鼠标]操作");
+
+    }
+   
+    if(m_GameState == GS_OpeningDoor)
+    {
+        int i = m_openingDoorTime * 4;
+        m_openingDoorTime += G_Timer-&gt;GetStepTime();
+        if(i &gt;= 3 || G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+        {
+            m_GameState = GS_Running;
+        }
+        else
+        {
+			G_RendDriver-&gt;Color4f(1, 1, 1, 1);
+			if(m_openingDoor-&gt;m_textureAnim[i])
+				m_openingDoor-&gt;m_textureAnim[i]-&gt;Bind();
+			G_RendDriver-&gt;DrawTextureRect(RectF(m_openingDoorPos.x,m_openingDoorPos.y,  32,  32));
+        }
+    }
+    if(m_noticeTime &lt; 2)
+    {
+        m_noticeTime += G_Timer-&gt;GetStepTime();
+        G_FontMgr-&gt;TextAtPos(vec2(10, 30), m_notice.c_str());
+    }
+    G_FontMgr-&gt;SetSize(16);
+	G_RendDriver-&gt;PopMatrix();
+
+}
+
+void MiniGameMagicTower::TextAtPos_(const vec2&amp; pos, const char* txt)
+{
+    G_FontMgr-&gt;TextAtPos(pos, M2U(txt).c_str());
+}
+
+void MiniGameMagicTower::Update_Running()
+{
+	vec2I move;
+	MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+
+	if(G_Keyboard-&gt;IsKeyUping(DIK_Q))
+	{
+		PopViewBook();
+	}
+	else if(G_Keyboard-&gt;IsKeyUping(DIK_W))
+	{
+		PopTransporting();
+	}
+	else if(G_Keyboard-&gt;IsKeyPressed(DIK_UP))
+	{
+		move.y = -32;
+	}
+	else if(G_Keyboard-&gt;IsKeyPressed(DIK_DOWN))
+	{
+		move.y = 32;
+	}
+	else if(G_Keyboard-&gt;IsKeyPressed(DIK_LEFT))
+	{
+		move.x = -32;
+	}
+	else if(G_Keyboard-&gt;IsKeyPressed(DIK_RIGHT))
+	{
+		move.x = 32;
+	}
+	if(G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+	{
+		m_towerRole.m_moveTime = 99;
+	}
+
+	m_towerRole.m_moveTime += G_Timer-&gt;GetStepTime();
+
+	if(m_towerRole.m_moveTime&gt;0.1f
+		&amp;&amp; (move.x || move.y)
+		)
+	{
+		m_towerRole.m_moveTime = 0;
+		bool canMove = true;
+		m_towerRole.pos += move;
+
+		MTMapStyle::Block* pBlock = m_curMap-&gt;GetBlock(m_towerRole.pos/ 32);
+		int block = pBlock-&gt;block;
+
+		if(m_curMap-&gt;IsOut(m_towerRole.pos/32))//超出边界
+		{
+			m_towerRole.pos -= move;
+		}
+
+		else if(block==TB_UpStairs) //楼梯
+		{
+			DoUp();
+		}
+		else if(block==TB_DownStairs) //楼梯
+		{
+			DoDown();
+		}
+
+		else if(dynamic_cast&lt;MTGhostStyle*&gt;(pBlock-&gt;style)) //遇敌
+		{
+			MTGhostStyle* ghost = dynamic_cast&lt;MTGhostStyle*&gt;(pBlock-&gt;style);
+			if(m_towerRole.IsWin(ghost) == false
+				&amp;&amp; G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL)==false)
+			{
+				//无法战胜
+				m_towerRole.pos -= move;
+			}
+			else
+			{
+				//可以战胜
+				m_fightingGhost = ghost;
+				PopFighting();
+				m_curMap-&gt;SetBlock(m_towerRole.pos / 32, -1);
+			}
+		}
+		//wall
+		else if(dynamic_cast&lt;MTWallStyle*&gt;(pBlock-&gt;style))
+		{
+			MTWallStyle* wall = dynamic_cast&lt;MTWallStyle*&gt;(pBlock-&gt;style);
+			//不能通过区域
+			if(wall-&gt;m_walkAble==false 
+				&amp;&amp;  G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL)==false//穿墙
+				)
+				m_towerRole.pos -= move;
+		}
+		//item
+		else if(dynamic_cast&lt;MTItemStyle*&gt;(pBlock-&gt;style))
+		{
+			MTItemStyle* item = dynamic_cast&lt;MTItemStyle*&gt;(pBlock-&gt;style);
+
+			bool canUse = true;
+			bool canMove = true;
+			if (item-&gt;m_redKeyNum&lt;0)
+			{
+				if (m_towerRole.m_redKeyNum&gt;= -item-&gt;m_redKeyNum || G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+				{
+					OpenDoor(item);//开门
+				}
+				else
+				{
+					canUse = false;
+				}
+				canMove = false;
+			}
+			if (item-&gt;m_yellowKeyNum&lt;0)
+			{
+				if (m_towerRole.m_yellowKeyNum&gt;= -item-&gt;m_yellowKeyNum || G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+				{
+					OpenDoor(item);
+				}
+				else
+				{
+					canUse = false;
+				}
+				canMove = false;
+			}
+			if (item-&gt;m_blueKeyNum&lt;0)
+			{
+				if (m_towerRole.m_blueKeyNum&gt;= -item-&gt;m_blueKeyNum || G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+				{
+					OpenDoor(item);
+				}
+				else
+				{
+					canUse = false;
+				}
+				canMove = false;
+			}
+
+			if (item-&gt;ID==113010)//铁门 不需要钥匙
+			{
+				canUse = true;
+				canMove = false;
+				OpenDoor(item);
+			}
+
+			if (canUse)
+			{
+				//获得资源或能力
+				m_towerRole.UseItem(item);
+				if (item-&gt;description!="")
+				{
+					ShowMsg(340,40,item-&gt;description.c_str());
+				}
+				m_curMap-&gt;SetBlock(m_towerRole.pos/ 32, -1);//清除道具
+			}
+
+			if (canMove==false)
+			{
+				m_towerRole.pos -= move;
+			}
+		}
+		//npc
+		else if(dynamic_cast&lt;MTNpcStyle*&gt;(pBlock-&gt;style))
+		{
+			MTNpcStyle* npc = dynamic_cast&lt;MTNpcStyle*&gt;(pBlock-&gt;style);
+			PopTalking(m_towerRole.pos, npc);
+			m_towerRole.pos -= move;
+		}
+		//shop
+		else if(dynamic_cast&lt;MTShopStyle*&gt;(pBlock-&gt;style))
+		{
+			MTShopStyle* shop = dynamic_cast&lt;MTShopStyle*&gt;(pBlock-&gt;style);
+			PopShopping(m_towerRole.pos, shop);
+			m_towerRole.pos -= move;
+		}
+	}
+}
+
+void MiniGameMagicTower::Update_Talking()
+{
+	if (m_talkingNpc==NULL)
+		return;
+
+	//if(G_Keyboard-&gt;IsKeyPressed(DIK_P)==false)
+	{
+		m_talkingTime += G_Timer-&gt;GetStepTime();
+	}
+ 	MTNpcStyle::Talk* talk = &amp;m_talkingNpc-&gt;talks[m_talkingNpc-&gt;talkIndex];
+
+	MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+	if(G_Keyboard-&gt;IsKeyUping(DIK_SPACE)
+		|| (G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL) &amp;&amp; G_Keyboard-&gt;IsKeyPressed(DIK_SPACE))
+		|| (talk-&gt;time!=-1 &amp;&amp; m_talkingTime&gt; talk-&gt;time)
+		)
+	{
+		if (talk-&gt;action==MTNpcStyle::TA_Break)
+		{
+			m_talkingNpc-&gt;talkIndex = talk-&gt;parm1;
+			m_GameState = GS_Running;
+			playGui-&gt;m_dlgTalking-&gt;SetVisible(false);
+		}
+		else 
+		{
+			if (talk-&gt;action==MTNpcStyle::TA_Reward)
+			{
+				if (talk-&gt;parm1==-1)
+				{
+					m_transportLock = false;
+				}
+				else if (talk-&gt;parm1==-2)
+				{
+					m_handBookLock = false;
+				}
+				else
+				{
+					MTItemStyle* item = G_StyleMgr-&gt;GetStyle&lt;MTItemStyle&gt;(talk-&gt;parm1);
+					if (item)
+					{
+						m_towerRole.UseItem(item);
+						//ShowMsg(300, 40, "得到三种钥匙各一把！" item.name );//todo 飞入动画
+					}
+				}
+			}
+			else if (talk-&gt;action==MTNpcStyle::TA_NpcTalkIndex)
+			{
+				MTNpcStyle* npc = G_StyleMgr-&gt;GetStyle&lt;MTNpcStyle&gt;(talk-&gt;parm1);
+				if (npc)
+				{
+					npc-&gt;talkIndex = talk-&gt;parm2;
+					if (npc-&gt;talkIndex&gt;=npc-&gt;talkNum)
+					{
+						npc-&gt;talkIndex = npc-&gt;talkNum-1;
+						//Assert(0,"npc-&gt;talkIndex&gt;=npc-&gt;talkNum");
+					}
+				}
+			}
+			else if (talk-&gt;action==MTNpcStyle::TA_NpcMove)//npc移动
+			{
+				int npcID = talk-&gt;parm1;
+				if (npcID==-1)
+				{
+					npcID = m_talkingNpc-&gt;ID;
+				}
+				MoveNpc(npcID,vec2I(talk-&gt;parm2,talk-&gt;parm3));
+			}
+			else if (talk-&gt;action==MTNpcStyle::TA_SetBlock)//设置block
+			{
+				int floor = talk-&gt;parm1;
+				if (floor==-1)
+					floor = m_curMap-&gt;ID;
+				vec2I pos(talk-&gt;parm2,talk-&gt;parm3);
+				if (pos.x==-1)
+					pos = m_talkingNpcPos/32;
+				MTMapStyle* curMap = G_StyleMgr-&gt;GetStyle&lt;MTMapStyle&gt;(floor);
+				curMap-&gt;SetBlock(pos,talk-&gt;parm4);
+			}
+
+			m_talkingNpc-&gt;talkIndex ++;
+			if (m_talkingNpc-&gt;talkIndex&gt;=m_talkingNpc-&gt;talkNum)
+			{
+				m_talkingNpc-&gt;talkIndex = m_talkingNpc-&gt;talkNum-1;
+				m_GameState = GS_Running;
+				playGui-&gt;m_dlgTalking-&gt;SetVisible(false);
+
+				//一次性npc
+				if(m_talkingNpc-&gt;bitem)
+				{
+					MoveNpc(m_talkingNpc-&gt;ID,vec2I(-999,0));
+				}
+			}
+			else
+			{
+				PopTalking(m_talkingNpcPos, m_talkingNpc);
+			}
+		}
+	}
+}
+void MiniGameMagicTower::Update_Shopping()
+{
+	MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+
+    if(G_Keyboard-&gt;IsKeyUping(DIK_C))
+    {
+        m_GameState = GS_Running;
+		playGui-&gt;m_dlgShopping-&gt;SetVisible(false);
+		return;
+    }
+    int select = -1;
+	for(int i=0;i&lt;9;i++)
+	{
+		if(G_Keyboard-&gt;IsKeyUping(DIK_1+i))
+		{
+			select = i;
+		}
+	}
+
+	if (select&gt;=0 &amp;&amp; select&lt;m_shoppingNpc-&gt;itemNum)
+	{
+		int index = 0;
+		MTItemStyle* selectItem = NULL;
+
+		for(int i=0;i&lt;m_shoppingNpc-&gt;itemNum;++i)
+		{
+			MTItemStyle* item = G_StyleMgr-&gt;GetStyle&lt;MTItemStyle&gt;(m_shoppingNpc-&gt;items[i]);
+			if(item)
+			{
+				if (index==select)
+				{			
+					selectItem = item;
+					break;
+				}
+				index++;
+			}
+		}
+
+
+		GuiListCtrl* listCtrl;
+		playGui-&gt;m_dlgShopping-&gt;MAPCTRL(listCtrl,"scroll.contentGroup.list");
+		if (selectItem &amp;&amp; listCtrl)
+		{
+			GuiGroupCtrl*  groupItem;
+			GuiButtonCtrl* itemText1;
+			groupItem = dynamic_cast&lt;GuiGroupCtrl*&gt;(listCtrl-&gt;GetItem(index));
+			groupItem-&gt;MAPCTRL(itemText1,"text1");
+			if (itemText1-&gt;IsEnable())
+			{
+				m_towerRole.UseItem(selectItem);
+
+				if (G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL)==false)
+				{					
+					itemText1-&gt;SetEnable(CanBuy(selectItem));
+				}
+			}
+		}
+	}
+}
+
+void MiniGameMagicTower::Transport(int floor)
+{
+	m_GameState = GS_Running;
+	m_curFloor = floor;
+	m_curMap   = G_MagicTowerGame-&gt;GetMap(m_curFloor);
+	m_towerRole.pos = m_curMap-&gt;m_entryUP;
+	ShowNotice(StrFormat("进入 '%s'",m_curMap-&gt;name.c_str()));
+}
+
+bool MiniGameMagicTower::CanBuy( MTItemStyle* item )
+{
+	bool enable = true;
+	if (item-&gt;m_money&lt;0 &amp;&amp; -item-&gt;m_money&gt;m_towerRole.m_money)
+		enable = false;
+	if (item-&gt;m_exp&lt;0 &amp;&amp; -item-&gt;m_exp&gt;m_towerRole.m_exp)
+		enable = false;
+	if (item-&gt;m_redKeyNum&lt;0 &amp;&amp; -item-&gt;m_redKeyNum&gt;m_towerRole.m_redKeyNum)
+		enable = false;
+	if (item-&gt;m_yellowKeyNum&lt;0 &amp;&amp; -item-&gt;m_yellowKeyNum&gt;m_towerRole.m_yellowKeyNum)
+		enable = false;
+	if (item-&gt;m_blueKeyNum&lt;0 &amp;&amp; -item-&gt;m_blueKeyNum&gt;m_towerRole.m_blueKeyNum)
+		enable = false;
+	return enable;
+}
+
+void MiniGameMagicTower::Update_Messaging()
+{
+    if(G_Keyboard-&gt;IsKeyUping(DIK_C))
+    {
+        m_GameState = GS_Running;
+    }
+}
+
+void MiniGameMagicTower::OpenDoor(MTItemStyle* door)
+{
+    m_openingDoorTime = 0;
+    m_GameState = GS_OpeningDoor;
+    m_openingDoor = door;
+	m_openingDoorPos = m_towerRole.pos;
+}
+
+MTMapStyle* MiniGameMagicTower::GetMap(int floor)
+{
+    return G_StyleMgr-&gt;GetStyle&lt;MTMapStyle&gt;(111000 + floor);
+}
+
+void MiniGameMagicTower::ShowNotice(const char* msg)
+{
+    m_notice = msg;
+    m_noticeTime = 0;
+}
+
+void MiniGameMagicTower::ShowMsg(int x, int y, const char* msg)
+{
+	m_message = msg;
+	m_GameState = GS_Message;
+}
+
+void MiniGameMagicTower::DoUp()
+{
+	char buf[256];
+	m_curFloor++;
+	if(m_enterMaxFloor &lt; m_curFloor)
+		m_enterMaxFloor = m_curFloor;
+
+	m_curMap = G_MagicTowerGame-&gt;GetMap(m_curFloor);
+	m_towerRole.pos = G_MagicTowerGame-&gt;m_curMap-&gt;m_entryUP;
+	sprintf(buf, M2U("进入 %s").c_str(), m_curMap-&gt;name.c_str());
+	G_MagicTowerGame-&gt;ShowNotice(buf);
+	m_fightingGhost = 0;
+}
+void MiniGameMagicTower::DoDown()
+{
+	char buf[256];
+	m_curFloor--;
+	m_curMap = G_MagicTowerGame-&gt;GetMap(m_curFloor);
+	m_towerRole.pos = G_MagicTowerGame-&gt;m_curMap-&gt;m_entryDown;
+	sprintf(buf, M2U("进入 %s").c_str(), m_curMap-&gt;name.c_str());
+	G_MagicTowerGame-&gt;ShowNotice(buf);
+	m_fightingGhost = 0;
+}
+
+void MiniGameMagicTower::PopTalking( const vec2I&amp; npcpos, MTNpcStyle* who )
+{
+	if (who==NULL
+		||who-&gt;talkIndex&gt;=who-&gt;talkNum)
+	{
+		return;
+	}
+
+	MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+
+	m_talkingTime   = 0;
+	m_talkingNpcPos = npcpos;
+	m_talkingNpc = who;
+
+	m_GameState = GS_Talking;
+	GuiGroupCtrl* dlg = playGui-&gt;m_dlgTalking;
+	dlg-&gt;SetVisible(true);
+	
+	vec2 pos(npcpos.x,npcpos.y);
+	if (npcpos.x&gt;300)
+	{
+		//pos.x = 140;
+		pos.x = 110;
+	}
+	else
+	{
+		pos.x = 10;
+	}
+	if (npcpos.y&gt;250)
+	{
+		pos.y = npcpos.y - 120;
+	}
+	else
+	{
+		pos.y = npcpos.y + 10;
+	}
+
+	RectF rect = dlg-&gt;GetRectReal();
+	rect.SetPos(pos);
+	dlg-&gt;SetRectReal(rect);
+
+	dlg-&gt;RePlay();
+
+
+	GuiRichTextCtrl* text;
+	dlg-&gt;MAPCTRL(text,"richtext");
+	text-&gt;Clear();
+ 	text-&gt;AddHtmlWords(m_talkingNpc-&gt;talks[m_talkingNpc-&gt;talkIndex].words.c_str(),16);
+}
+
+//战斗界面
+void MiniGameMagicTower::PopFighting()
+{
+	m_fightingTime = 0;
+	m_GameState = GS_Fighting;
+	m_fightingGhostLife = m_fightingGhost-&gt;m_life;
+
+	MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+	GuiGroupCtrl* dlg = playGui-&gt;m_dlgFighting;
+	dlg-&gt;SetVisible(true);
+	dlg-&gt;RePlay();
+
+	GuiDragIconCtrl* icon;
+	dlg-&gt;MAPCTRL(icon,"icon");
+	icon-&gt;SetIconTexture(m_fightingGhost-&gt;m_texture);
+
+	playGui-&gt;m_textOtherName-&gt;SetText(m_fightingGhost-&gt;name.c_str());
+	playGui-&gt;m_textOtherLife-&gt;SetText(StrFormat("%d", m_fightingGhost-&gt;m_life));
+	playGui-&gt;m_textOtherForce-&gt;SetText(StrFormat("%d", m_fightingGhost-&gt;m_force));
+	playGui-&gt;m_textOtherDefend-&gt;SetText(StrFormat("%d", m_fightingGhost-&gt;m_defense));
+	playGui-&gt;m_textMyLife  -&gt;SetText(StrFormat("%d", m_towerRole.m_life));
+	playGui-&gt;m_textMyForce -&gt;SetText(StrFormat("%d", m_towerRole.m_force));
+	playGui-&gt;m_textMyDefend-&gt;SetText(StrFormat("%d", m_towerRole.m_defense));
+
+}
+
+//商城界面
+void MiniGameMagicTower::PopShopping(const vec2I&amp; shoppos,MTShopStyle* who )
+{
+	m_GameState = GS_Shopping;
+	m_shoppingNpc = who;
+	m_shopPos = shoppos;
+
+	MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+	GuiGroupCtrl* dlg = playGui-&gt;m_dlgShopping;
+	dlg-&gt;SetVisible(true);
+
+	vec2 pos(shoppos.x,shoppos.y);
+	if (shoppos.x&gt;300)
+	{
+		//pos.x = 140;
+		pos.x = 110;
+	}
+	else
+	{
+		pos.x = 10;
+	}
+	if (shoppos.y&gt;250)
+	{
+		pos.y = shoppos.y - 210;
+	}
+	else
+	{
+		pos.y = shoppos.y + 10;
+	}
+
+	RectF rect = dlg-&gt;GetRectReal();
+	rect.SetPos(pos);
+	dlg-&gt;SetRectReal(rect);
+	dlg-&gt;RePlay();
+
+	GuiDragIconCtrl* icon;
+	dlg-&gt;MAPCTRL(icon,"icon");
+	icon-&gt;SetIconTexture(m_shoppingNpc-&gt;m_texture);
+
+	GuiRichTextCtrl* text;
+	dlg-&gt;MAPCTRL(text,"richtext");
+	text-&gt;Clear();
+	text-&gt;AddHtmlWords(m_shoppingNpc-&gt;description.c_str(),16);
+
+	GuiListCtrl* listCtrl;
+	playGui-&gt;m_dlgShopping-&gt;MAPCTRL(listCtrl,"scroll.contentGroup.list");
+	if (listCtrl)
+	{
+		listCtrl-&gt;ClearItem();
+		GuiGroupCtrl*  groupItem;
+		GuiButtonCtrl* itemText1;
+		GuiButtonCtrl* itemText2;
+		GuiDragIconCtrl* itemIcon;
+		for(int i=0;i&lt;m_shoppingNpc-&gt;itemNum;++i)
+		{
+			MTItemStyle* item = G_StyleMgr-&gt;GetStyle&lt;MTItemStyle&gt;(m_shoppingNpc-&gt;items[i]);
+			if(item)
+			{
+				groupItem = dynamic_cast&lt;GuiGroupCtrl*&gt;(listCtrl-&gt;InsertItem());
+				groupItem-&gt;MAPCTRL(itemIcon,"icon");
+				groupItem-&gt;MAPCTRL(itemText1,"text1");
+				groupItem-&gt;MAPCTRL(itemText2,"text2");
+				itemIcon-&gt;SetIconTexture(item-&gt;m_texture);
+				itemText1-&gt;SetText(item-&gt;description.c_str());
+
+				bool enable = true;
+				if (G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL)==false)
+				{
+					 enable = CanBuy(item); 
+				}
+				itemText1-&gt;SetEnable(enable);
+			}
+		}
+	}
+}
+
+//怪物图鉴界面
+void MiniGameMagicTower::PopViewBook()
+{
+	if(m_handBookLock == false || G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+	{
+		MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+
+		m_GameState = GS_Viewing;
+		GuiGroupCtrl* dlg = playGui-&gt;m_dlgViewingBook;
+		dlg-&gt;SetVisible(true);
+		dlg-&gt;RePlay();
+
+
+
+		//计数
+		int  monsterNum[1000];
+		memset(monsterNum, 0, 256 * 4);
+		int blockNum = m_curMap-&gt;m_size.x * m_curMap-&gt;m_size.y;
+		for(int i = 0; i &lt; blockNum; i++)
+		{
+			MTMapStyle::Block* pBlock = &amp;m_curMap-&gt;m_blocks[i];
+			if(dynamic_cast&lt;MTGhostStyle*&gt;(pBlock-&gt;style))
+			{
+				MTGhostStyle* ghost = dynamic_cast&lt;MTGhostStyle*&gt;(pBlock-&gt;style);
+				monsterNum[ghost-&gt;ID-TB_GhostMin] ++;
+			}
+		}
+
+		GuiListCtrl* listCtrl;
+		playGui-&gt;m_dlgViewingBook-&gt;MAPCTRL(listCtrl,"scroll.contentGroup.list");
+		if (listCtrl)
+		{
+			listCtrl-&gt;ClearItem();
+			GuiGroupCtrl*  groupItem;
+			GuiButtonCtrl* itemText1;
+			GuiButtonCtrl* itemText2;
+			GuiDragIconCtrl* itemIcon;
+
+			char buf[256];
+			char lost[32];
+
+			{
+				StyleGroupRef styles(Enum_Style(MTGhostStyle));
+				Style* it = styles.GetFirst();
+				while (it)
+				{
+					MTGhostStyle* style = (MTGhostStyle*)it;
+
+					if(monsterNum[style-&gt;ID - TB_GhostMin] &gt; 0)
+					{
+						groupItem = dynamic_cast&lt;GuiGroupCtrl*&gt;(listCtrl-&gt;InsertItem());
+						groupItem-&gt;MAPCTRL(itemIcon,"icon");
+						groupItem-&gt;MAPCTRL(itemText1,"text1");
+						groupItem-&gt;MAPCTRL(itemText2,"text2");
+						itemIcon-&gt;SetIconTexture(style-&gt;m_texture);
+						itemText1-&gt;SetText(style-&gt;name.c_str());
+
+
+						if(m_towerRole.IsWin(style)==0)
+						{
+							strcpy(lost, "无法战胜");
+						}
+						else
+						{
+							sprintf(lost, "%d", m_towerRole.GetLost(style));
+						}
+						sprintf(buf, "生命：%-2d  攻击：%-2d  防御:%-2d  金钱：%-2d  经验：%-2d  损失:%s", 
+							style-&gt;m_life, style-&gt;m_force, style-&gt;m_defense, style-&gt;m_money, style-&gt;m_exp, lost);
+
+						itemText2-&gt;SetText(M2U(buf).c_str());
+
+					}
+
+					it = styles.GetNext();
+				}
+			}
+		}
+	}
+}
+
+//传送界面
+void MiniGameMagicTower::PopTransporting()
+{
+	if(m_transportLock==false || G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+	{
+		MiMagicTower_PlayGui* playGui = G_GuiMgr-&gt;GetGui&lt;MiMagicTower_PlayGui&gt;();
+
+		m_GameState = GS_Transporting;
+
+		GuiGroupCtrl* dlg = playGui-&gt;m_dlgTransporting;
+		dlg-&gt;SetVisible(true);
+		dlg-&gt;RePlay();
+
+		int MaxFloor = m_enterMaxFloor;
+		if(G_Keyboard-&gt;IsKeyPressed(DIK_LCONTROL))
+		{
+			MaxFloor = G_StyleMgr-&gt;GetStyleNum&lt;MTMapStyle&gt;()-1;
+		}
+
+		GuiListCtrl* listCtrl;
+		playGui-&gt;m_dlgTransporting-&gt;MAPCTRL(listCtrl,"scroll.contentGroup.list");
+		if (listCtrl)
+		{
+			listCtrl-&gt;ClearItem();
+			GuiGroupCtrl* groupItem;
+			GuiButtonCtrl* itemName;
+
+			for(int i = 0; i &lt;= MaxFloor; i++)
+			{
+				groupItem = dynamic_cast&lt;GuiGroupCtrl*&gt;(listCtrl-&gt;InsertItem());
+				groupItem-&gt;MAPCTRL(itemName,"text");
+				MTMapStyle* map = GetMap(i);
+				if(map)
+					itemName-&gt;SetText(map-&gt;name.c_str());
+				//itemName-&gt;CallBack()-&gt;Add("MouseUp",(*it).address,this,&amp;LoginGui::OnComListButton_LocalNetServer);
+			}
+		}
+	}
+}
+
+
+void MiniGameMagicTower::MoveNpc( int npcID,const vec2I&amp; mov )
+{
+	for(int y = 0; y &lt; m_curMap-&gt;m_size.y; y++)
+	{
+		for(int x = 0; x &lt; m_curMap-&gt;m_size.x; x++)
+		{
+			MTMapStyle::Block* pBlock = m_curMap-&gt;GetBlock(vec2I(x, y));
+			if(pBlock-&gt;style
+				&amp;&amp;pBlock-&gt;style-&gt;ID==npcID)
+			{
+				//todo判断可移动？
+				m_curMap-&gt;SetBlock(vec2I(x+mov.x,y+mov.y),pBlock-&gt;block);
+				m_curMap-&gt;SetBlock(vec2I(x,y),-1);
+				return;
+			}
+		}
+	}
+
+	StyleGroupRef styles(Enum_Style(MTMapStyle));
+	Style* it = styles.GetFirst();
+	while (it)
+	{
+		MTMapStyle* style = (MTMapStyle*)it;
+		MTMapStyle* curMap = style;
+
+		for(int y = 0; y &lt; curMap-&gt;m_size.y; y++)
+		{
+			for(int x = 0; x &lt; curMap-&gt;m_size.x; x++)
+			{
+				MTMapStyle::Block* pBlock = curMap-&gt;GetBlock(vec2I(x, y));
+				if(pBlock-&gt;style
+					&amp;&amp;pBlock-&gt;style-&gt;ID==npcID)
+				{
+					//todo判断可移动？
+					curMap-&gt;SetBlock(vec2I(x+mov.x,y+mov.y),pBlock-&gt;block);
+					curMap-&gt;SetBlock(vec2I(x,y),-1);
+				}
+			}
+		}
+		it = styles.GetNext();
+	}
+}
+
+</code></pre> 
+<p>自动生成算法思路（未完成）：</p> 
+<pre><code>class MTGraphNode
+{
+public:
+	MTGraphNode();
+	~MTGraphNode();
+
+	int      index;
+
+	int      floor;     //节点所在楼层
+	vec2I    blockPos;  //节点所在格子
+
+	int      block;     //节点内容 
+	MTStyle* blockStyle;
+
+	int      neighborNum;   //邻节点
+	MTGraphNode** neighbors;
+
+	bool*    neighborOpens; //邻节点是否因为此节点的打通而加入了前锋边，用于回退去除。
+
+	vec2     drawPos;//绘制图时节点位置RendToTexture
+};
+
+class TextureData;
+class MTGraph
+{
+public:
+	MTGraph();
+	~MTGraph();
+
+	void Add(MTMapStyle* map);
+
+	int  Score();
+	void Arrange();
+	void RendToTexture(TextureData&amp; image);
+
+	int           MaxNodeNum;
+	int           nodeNum;
+	MTGraphNode*  nodes;
+};
+
+
+MTGraphNode::MTGraphNode()
+:floor(1)
+,block(-1)
+,blockStyle(NULL)
+,neighborNum(0)
+,neighbors(NULL)
+{
+
+}
+
+MTGraphNode::~MTGraphNode()
+{
+	SafeDeleteArray(neighbors);
+}
+
+MTGraph::MTGraph()
+:MaxNodeNum(20*20*100)
+,nodeNum(0)
+,nodes(NULL)
+{
+	nodes = new MTGraphNode[MaxNodeNum];
+}
+
+MTGraph::~MTGraph()
+{
+	SafeDeleteArray(nodes);
+}
+
+void MTGraph::Add( MTMapStyle* curMap )
+{
+
+	MTGraphNode* table[32][32];
+	//加入图节点
+	for(int y = 0; y &lt; curMap-&gt;m_size.y; y++)
+	{
+		for(int x = 0; x &lt; curMap-&gt;m_size.x; x++)
+		{
+			MTMapStyle::Block* pBlock = curMap-&gt;GetBlock(vec2I(x, y));
+
+			int block = pBlock-&gt;block;
+			if (block!=-1 &amp;&amp; dynamic_cast&lt;MTWallStyle*&gt;(pBlock-&gt;style)==NULL)
+			{
+				MTGraphNode* node = &amp;nodes[nodeNum];
+				node-&gt;index = nodeNum;
+				node-&gt;block = block;
+				nodeNum++;
+
+				if(pBlock-&gt;style)
+				{
+					node-&gt;blockStyle = pBlock-&gt;style;
+				}
+				node-&gt;floor   = curMap-&gt;ID;
+				node-&gt;blockPos = vec2I(x,y);
+				node-&gt;drawPos = vec2(x*32+16,352-(y*32+16));
+
+				table[y][x] = node; 
+			}
+		}
+	}
+
+	//构造邻居
+	std::vector&lt;MTGraphNode*&gt; neighbours;
+	std::vector&lt;vec2I&gt; search;
+	neighbours.reserve(32);
+	search.reserve(32);
+	bool  flags[32][32];
+	vec2I dir[] = {vec2I(-1,0),vec2I(1,0),vec2I(0,-1),vec2I(0,1)};
+	for(int n=0;n&lt;nodeNum;++n)
+	{
+		MTGraphNode* node = &amp;nodes[n];
+		neighbours.clear();
+		search.clear();
+		memset(flags,0,sizeof(flags));
+
+		vec2I itn;
+
+		search.push_back(node-&gt;blockPos);
+		flags[node-&gt;blockPos.y][node-&gt;blockPos.x] = true;
+		while(search.empty()==false)
+		{
+			vec2I it = search.back();
+			search.pop_back();
+			//遍历四个邻居
+			for (int k=0;k&lt;4;++k)
+			{
+				itn = it + dir[k];
+				if (itn.x&gt;=0 &amp;&amp; itn.x&lt;curMap-&gt;m_size.x
+					&amp;&amp;itn.y&gt;=0 &amp;&amp; itn.y&lt;curMap-&gt;m_size.y
+					&amp;&amp; flags[itn.y][itn.x]==false)
+				{
+					MTMapStyle::Block* pBlock = &amp;curMap-&gt;m_blocks[itn.y*curMap-&gt;m_size.x+itn.x];
+					if (pBlock-&gt;block==-1)
+					{
+						search.push_back(itn);
+					}
+					else if(dynamic_cast&lt;MTWallStyle*&gt;(pBlock-&gt;style)==NULL)
+					{
+						neighbours.push_back(table[itn.y][itn.x]);
+					}
+					flags[itn.y][itn.x] = true;
+				}
+			}
+		}
+
+		//
+		node-&gt;neighborNum = neighbours.size();
+		if(node-&gt;neighborNum&gt;0)
+		{
+			node-&gt;neighbors = new MTGraphNode*[node-&gt;neighborNum];
+			for(int n=0;n&lt;node-&gt;neighborNum;++n)
+			{
+				node-&gt;neighbors[n] = neighbours[n];
+			}
+		}
+	}
+}
+
+void MTGraph::RendToTexture( TextureData&amp; finalImage )
+{
+	Color color(0.6f,0.8f,1,1);
+	finalImage.AllocTexture(32*11,32*11,RS_RGBA,&amp;color);
+	Color colorLine(0,0,0,0.5f);
+
+	for(int n=0;n&lt;nodeNum;++n)
+	{
+		MTGraphNode* node = &amp;nodes[n];
+		if (node-&gt;blockStyle)
+		{
+			finalImage.SubCopy(node-&gt;blockStyle-&gt;m_texture,node-&gt;drawPos.x-16,node-&gt;drawPos.y-16,32,32,0,0);
+		}
+		finalImage.Circle(node-&gt;drawPos.x-3,node-&gt;drawPos.y-3, 6,6,1,colorLine);
+
+		for(int k=0;k&lt;node-&gt;neighborNum;++k)
+		{
+			MTGraphNode* nodeN = node-&gt;neighbors[k];
+			finalImage.Line(node-&gt;drawPos.x,node-&gt;drawPos.y, nodeN-&gt;drawPos.x,nodeN-&gt;drawPos.y
+				, 1,colorLine); 
+		}
+	}
+}
+
+void MTGraph::Arrange()
+{
+	//无需排版
+}
+
+typedef std::list&lt;MTGraphNode*&gt; NodeList;
+class MTState
+{
+public:
+	bool      nodeFlags[256];  //各node是否被访问过
+	NodeList  nodeList;       //前锋边 接下来可以转换的状态
+	int       parentIndex;    //父状态中的索引，用于输出最终路径
+	TowerRole towerRole;      //主角状态
+	bool PushSubState(std::list&lt;MTState*&gt;&amp; stateList)
+	{
+		int index = 0;
+		for (NodeList::iterator it=nodeList.begin();it!=nodeList.end();++it,++index)
+		{
+			MTGraphNode*  node = *it;
+			MTGhostStyle* monster = dynamic_cast&lt;MTGhostStyle*&gt;(node-&gt;blockStyle);
+			MTItemStyle*  item    = dynamic_cast&lt;MTItemStyle*&gt;(node-&gt;blockStyle);
+			if (nodeFlags[node-&gt;index]==false)
+			{
+				continue;//节点已经被访问 怪被清 奖励被捡取
+			}
+			if (monster &amp;&amp; towerRole.IsWin(monster)==false)
+			{
+				continue;//无法战胜 不能访问
+			}
+			if (node-&gt;blockStyle-&gt;ID==TB_UpStairs)//已合并多个楼层为一张大图
+			{
+				return true;
+			}
+
+			//新状态 
+			MTState* newState = new MTState(*this);
+			newState-&gt;parentIndex = index;
+			newState-&gt;nodeFlags[node-&gt;index] = false;//清怪
+			//newState-&gt;nodeList.erase(); flags will skip it.
+			for(int k=0;k&lt;node-&gt;neighborNum;++k)
+			{
+				MTGraphNode* neighbor = node-&gt;neighbors[k];
+				if (nodeFlags[neighbor-&gt;index])
+				{
+					newState-&gt;nodeList.push_back(neighbor);
+				}
+			}
+			if (monster)
+			{
+				newState-&gt;towerRole.m_life -= newState-&gt;towerRole.GetLost(monster);
+			}
+			else if (item)
+			{
+				newState-&gt;towerRole.UseItem(item);
+			}
+
+			//
+			stateList.push_back(newState);
+
+		}
+		return false;
+	}
+
+};
+int  MTGraph::Score()
+{
+	//动规算法？
+
+
+	//搜索深度太大，和地图上所有非空节点数差不多，有的节点还要访问多次。深度可能达到数千。
+	//随着步数的深入，可选的下一步节点集迅速增大，最大节点集不会超过数十？，o(10的1000次方) 这已经是一个np难题了。 大约是不可能完成的任务。
+	//在搜索失败回退时要同时回退n个邻节点。	bool*    neighborOpens; 
+	//剪枝方法，当节点集中出现奖励物品时，可以优先访问。当商店节点打通后，会优先频繁访问商店。
+
+	MTState* state = new MTState;
+	std::list&lt;MTState*&gt; stateList;
+	//state-&gt;tryIndex = 0;
+	state-&gt;nodeList.push_back(nodes);
+	state-&gt;nodeFlags;
+
+	stateList.push_back(state);
+
+	while(!stateList.empty())
+	{
+		//避免内存超大，使用深度优先搜索
+		MTState* state = stateList.back();
+		stateList.pop_back();
+		//加入所有子状态
+		bool res = state-&gt;PushSubState(stateList);
+
+		delete state;
+		if (res)
+		{
+			break;//到达终点 结束
+		}
+	}
+
+	MTState* endState = stateList.back();
+	//统计endState中未访问的节点数，越小越好
+	int num = 0;
+	for(int k=0;k&lt;nodeNum;++k)
+	{
+		if (endState-&gt;nodeFlags[k]==true)
+		{
+			num++;
+		}
+	}
+
+	//清除
+	while(!stateList.empty())
+	{
+		MTState* state = stateList.back();
+		stateList.pop_back();
+		delete state;
+	}
+
+
+	return 0;
+}
+
+void RandMTMap1()
+{
+	return;
+
+	int floorNum = 21;
+	//生成
+	{
+		int num = 0;
+		StyleGroupRef styles(Enum_Style(MTMapStyle));
+		Style* it = styles.GetFirst();
+		while (it)
+		{
+			MTMapStyle* curMap = (MTMapStyle*)it;
+			Maze maze;
+			if (num&lt;4 || (Rand()%3))
+			{
+				maze.GeneratePrimNatureMaze(curMap-&gt;m_size.x,curMap-&gt;m_size.y);
+			}
+			else
+			{
+				maze.GeneratePrimTrunkMaze(curMap-&gt;m_size.x,curMap-&gt;m_size.y);
+			}
+
+			//楼梯口
+			vec2I upStair(RandRange(0,curMap-&gt;m_size.x-1),RandRange(0,curMap-&gt;m_size.y-1)); 
+			vec2I downStair;
+			while(1)
+			{
+				downStair = vec2I(RandRange(0,curMap-&gt;m_size.x-1),RandRange(0,curMap-&gt;m_size.y-1));
+				if ((upStair-downStair).Length()&gt;1)
+				{
+					break;
+				}
+			}
+			maze.MakePath(upStair,downStair);
+			curMap-&gt;m_entryUP   = upStair;
+			curMap-&gt;m_entryDown = downStair;
+			curMap-&gt;SetBlock(upStair,TB_UpStairs);
+			curMap-&gt;SetBlock(downStair,TB_DownStairs);
+
+			int roadNum = 0;
+			//墙
+			for(int y = 0; y &lt; curMap-&gt;m_size.y; y++)
+			{
+				for(int x = 0; x &lt; curMap-&gt;m_size.x; x++)
+				{
+					MTMapStyle::Block* pBlock = curMap-&gt;GetBlock(vec2I(x, y));
+					if(maze.mazeBlockType(x,y)==Maze::Wall)
+					{
+						pBlock-&gt;block = 114014;//TB_WallMin + rand;
+					}
+					else
+					{
+						pBlock-&gt;block = -1;
+						roadNum++;
+					}
+				}
+			}
+
+			vec2I posI;
+			//门
+			{
+				int tryCount = 0;
+				int num = roadNum * RandRange(0.1f,0.13f);
+				for (int i=0;i&lt;num;++i)
+				{
+					while(1)
+					{
+						if (tryCount&gt;1000)
+						{
+							break;
+						}
+
+						posI.x = RandRange(1,curMap-&gt;m_size.x-2);
+						posI.y = RandRange(1,curMap-&gt;m_size.y-2);
+
+						if (curMap-&gt;GetBlock(posI)-&gt;block==-1
+							&amp;&amp;(
+							( curMap-&gt;GetBlock(posI+vec2I(0,1))-&gt;block==-1&amp;&amp;curMap-&gt;GetBlock(posI+vec2I(0,-1))-&gt;block==-1)
+							||( curMap-&gt;GetBlock(posI+vec2I(1,0))-&gt;block==-1&amp;&amp;curMap-&gt;GetBlock(posI+vec2I(-1,0))-&gt;block==-1)
+							)
+							)
+						{
+							int ID = 3004 + RandRange(0,3);
+							curMap-&gt;SetBlock(posI,ID);
+							break;
+						}
+					}
+				}
+			}
+
+
+			//怪 boss
+			{
+				int tryCount = 0;
+				int monsterNum = G_StyleMgr-&gt;GetStyleNum&lt;MTGhostStyle&gt;();
+				int num = roadNum * RandRange(0.1f,0.13f);
+				for (int i=0;i&lt;num;++i)
+				{
+					while(1)
+					{
+						if (tryCount&gt;1000)
+						{
+							break;
+						}
+
+						posI.x = RandRange(0,curMap-&gt;m_size.x-1);
+						posI.y = RandRange(0,curMap-&gt;m_size.y-1);
+
+						if (curMap-&gt;GetBlock(posI)-&gt;block==-1)
+						{
+							int IDMin = 2001 + (curMap-&gt;ID-111000)*2;
+							int IDMax = IDMin + RandRange(-3,3);
+							Clamp(IDMin,0,monsterNum);
+							Clamp(IDMax,0,monsterNum);
+							curMap-&gt;SetBlock(posI,RandRange(IDMin,IDMax));
+							break;
+						}
+					}
+				}
+			}
+			//shop
+			{
+				int tryCount = 0;
+				int shopNum = G_StyleMgr-&gt;GetStyleNum&lt;MTShopStyle&gt;();
+				StyleGroupRef styles(Enum_Style(MTShopStyle));
+				Style* it = styles.GetFirst();
+				while (it)
+				{
+					MTShopStyle* style = (MTShopStyle*)it;
+					int floor = (style-&gt;ID-117001)*3 +RandRange(0,3);
+					Clamp(floor,0,floorNum);
+					MTMapStyle* curMap = G_StyleMgr-&gt;GetStyle&lt;MTMapStyle&gt;(111001+floor);
+
+					while(1)
+					{
+						if (tryCount&gt;1000)
+						{
+							break;
+						}
+
+						posI.x = RandRange(0,curMap-&gt;m_size.x-1);
+						posI.y = RandRange(0,curMap-&gt;m_size.y-1);
+
+						if (curMap-&gt;GetBlock(posI)-&gt;block==-1)
+						{
+							curMap-&gt;SetBlock(posI,style-&gt;ID);
+							break;
+						}
+					}
+					it = styles.GetNext();
+				}
+			}
+
+			//npc
+			{
+				int tryCount = 0;
+				int shopNum = G_StyleMgr-&gt;GetStyleNum&lt;MTNpcStyle&gt;();
+				StyleGroupRef styles(Enum_Style(MTNpcStyle));
+				Style* it = styles.GetFirst();
+				while (it)
+				{
+					MTNpcStyle* style = (MTNpcStyle*)it;
+					int floor = (style-&gt;ID-115001)*3 +RandRange(0,3);
+					Clamp(floor,0,floorNum);
+					MTMapStyle* curMap = G_StyleMgr-&gt;GetStyle&lt;MTMapStyle&gt;(111001+floor);
+
+					while(1)
+					{
+						if (tryCount&gt;1000)
+						{
+							break;
+						}
+
+						posI.x = RandRange(0,curMap-&gt;m_size.x-1);
+						posI.y = RandRange(0,curMap-&gt;m_size.y-1);
+
+						if (curMap-&gt;GetBlock(posI)-&gt;block==-1)
+						{
+							curMap-&gt;SetBlock(posI,style-&gt;ID);
+							break;
+						}
+					}
+					it = styles.GetNext();
+				}
+			}
+
+			//道具
+			{
+				//普通道具多个
+
+				//关键道具只有一个
+				int tryCount = 0;
+				int shopNum = G_StyleMgr-&gt;GetStyleNum&lt;MTItemStyle&gt;();
+				StyleGroupRef styles(Enum_Style(MTItemStyle));
+				Style* it = styles.GetFirst();
+				while (it)
+				{
+					MTItemStyle* style = (MTItemStyle*)it;
+					int floor = (style-&gt;ID-113001)*3 +RandRange(0,3);
+					Clamp(floor,0,floorNum);
+					MTMapStyle* curMap = G_StyleMgr-&gt;GetStyle&lt;MTMapStyle&gt;(111001+floor);
+
+					while(1)
+					{
+						if (tryCount&gt;1000)
+						{
+							break;
+						}
+
+						posI.x = RandRange(0,curMap-&gt;m_size.x-1);
+						posI.y = RandRange(0,curMap-&gt;m_size.y-1);
+
+						if (curMap-&gt;GetBlock(posI)-&gt;block==-1)
+						{
+							curMap-&gt;SetBlock(posI,style-&gt;ID);
+							break;
+						}
+					}
+					it = styles.GetNext();
+				}
+			}
+
+			it = styles.GetNext();
+			if (num++&gt;2)
+			{
+				break;
+			}
+		}
+	}
+
+	//判别
+	{
+		MTGraph graph;
+		int num = 0;
+		StyleGroupRef styles(Enum_Style(MTMapStyle));
+		Style* it = styles.GetFirst();
+		while (it)
+		{
+			MTMapStyle* curMap = (MTMapStyle*)it;
+			graph.Add(curMap);
+		}
+		graph.Score();
+	}
+
+	//打印
+	if(0)
+	{
+		int num = 0;
+		TextureData finalImage;
+
+		StyleGroupRef styles(Enum_Style(MTMapStyle));
+		Style* it = styles.GetFirst();
+		while (it)
+		{
+			MTMapStyle* curMap = (MTMapStyle*)it;
+
+			curMap-&gt;RendToTexture(finalImage);
+			finalImage.SaveToFile(StrFormat("data/test/magictower/map_%d.png",curMap-&gt;ID));
+
+			MTGraph graph;
+			graph.Add(curMap);
+			graph.Arrange();
+			graph.RendToTexture(finalImage);
+			finalImage.SaveToFile(StrFormat("data/test/magictower/graph_%d.png",curMap-&gt;ID));
+
+			it = styles.GetNext();
+			if (num++&gt;2)
+			{
+				break;
+			}
+		}
+	}
+}
+
+
+void RandMTMap2()
+{
+
+	//方案二，先生成路径，先考虑最简单的情况，一张大图，没有楼梯口（楼梯口可以最后将大图切割成小的楼层时再添加），也先不考虑npc和商店。
+	//	定好主角在每个阶段的属性值，根据属性值是可以倒推出怪物和奖励道具的。
+
+	//先生成迷宫大地图，分割路径为一段段的小胡同，计算胡同邻接关系，使用随机算法遍历胡同，根据遍历顺序生成到达胡同末端时的战力值，
+	//因为战力值的限制，玩家游戏时只能按照遍历顺序清关，否则会卡关失败
+	//然后根据起点和终点战力值在每条胡同上布置怪物和奖励
+
+	return;
+
+	MTMapStyle __curMap;
+	MTMapStyle* curMap = &amp;__curMap;
+
+	//生成
+	{
+		//先生成迷宫大地图
+		curMap-&gt;m_size = vec2I(11,220);
+		int blockNum = curMap-&gt;m_size.x * curMap-&gt;m_size.y;
+		curMap-&gt;m_blocks = new MTMapStyle::Block[blockNum];
+		Maze maze;
+		maze.GeneratePrimNatureMaze(curMap-&gt;m_size.x,curMap-&gt;m_size.y);
+
+		//分割路径为一段段的小胡同
+        //。。。
+
+		int roadNum = 0;
+		//墙
+		for(int y = 0; y &lt; curMap-&gt;m_size.y; y++)
+		{
+			for(int x = 0; x &lt; curMap-&gt;m_size.x; x++)
+			{
+				MTMapStyle::Block* pBlock = curMap-&gt;GetBlock(vec2I(x, y));
+				if(maze.mazeBlockType(x,y)==Maze::Wall)
+				{
+					pBlock-&gt;block = 114014;//TB_WallMin + rand;
+				}
+				else
+				{
+					pBlock-&gt;block = -1;
+					roadNum++;
+				}
+			}
+		}
+	}
+
+	//判别
+	{
+		MTGraph graph;
+		graph.Add(curMap);
+		graph.Score();
+	}
+
+	//打印
+	if(0)
+	{
+		TextureData finalImage;
+
+		curMap-&gt;RendToTexture(finalImage);
+		finalImage.SaveToFile(StrFormat("data/test/magictower/map_%d.png",curMap-&gt;ID));
+
+		MTGraph graph;
+		graph.Add(curMap);
+		graph.Arrange();
+		graph.RendToTexture(finalImage);
+		finalImage.SaveToFile(StrFormat("data/test/magictower/graph_%d.png",curMap-&gt;ID));
+
+	}
+}
+
+</code></pre> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/fe3940e0f7a39ad3209b227549334646/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">敢为人先，华为不惧C语言开发仓颉汉语编程，中文编程迎来新生态</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/7a3561528890a912b46887c519f32fb1/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">tensorflow kears转pb</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

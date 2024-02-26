@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Spring的事件监听机制 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Spring的事件监听机制" />
+<meta property="og:description" content="这里写自定义目录标题 1. 概述（重点）2. ApplicationEventMulticaster2.1 SimpleApplicationEventMulticaster2.2 AbstractApplicationEventMulticaster 3. ApplicationListener3.1 注册监听器3.2 自定义 4. SpringApplicationRunListeners 1. 概述（重点） 事件监听机制是观察者模式的一种，Spring的事件监听机制有几个重要的顶层接口，分别是：
+ApplicationEventMulticaster 主要看 AbstractApplicationEventMulticasterApplicationListenerApplicationEvent 它们三哥们的关系可以用下面的图来概括
+AbstractApplicationEventMulticaster维护了 源类型和事件类型 作为KEY 跟 监听器的关系，在下面 2.1 SimpleApplicationEventMulticaster有代码的实现解读。
+2. ApplicationEventMulticaster AbstractApplicationEventMulticaster «Interface» ApplicationEventMulticaster «Interface» Aware «Interface» BeanClassLoaderAware «Interface» BeanFactoryAware SimpleApplicationEventMulticaster 目前就只有一个实现类SimpleApplicationEventMulticaster和一个抽象类AbstractApplicationEventMulticaster。
+2.1 SimpleApplicationEventMulticaster 发布和广播事件，主要注意一下getApplicationListeners方法就行了，会根据事件类型和源类型找监听器。
+@Override public void multicastEvent(ApplicationEvent event) { multicastEvent(event, resolveDefaultEventType(event)); } @Override public void multicastEvent(final ApplicationEvent event, @Nullable ResolvableType eventType) { ResolvableType type = (eventType != null ? eventType : resolveDefaultEventType(event)); Executor executor = getTaskExecutor(); for (ApplicationListener&lt;?" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/a18d2ea7c7f117d7294892242070802b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-31T17:51:02+08:00" />
+<meta property="article:modified_time" content="2024-01-31T17:51:02+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Spring的事件监听机制</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>这里写自定义目录标题</h4> 
+ <ul><li><a href="#1__3" rel="nofollow">1. 概述（重点）</a></li><li><a href="#2_ApplicationEventMulticaster_14" rel="nofollow">2. ApplicationEventMulticaster</a></li><li><ul><li><a href="#21_SimpleApplicationEventMulticaster_47" rel="nofollow">2.1 SimpleApplicationEventMulticaster</a></li><li><a href="#22_AbstractApplicationEventMulticaster_70" rel="nofollow">2.2 AbstractApplicationEventMulticaster</a></li></ul> 
+  </li><li><a href="#3_ApplicationListener_184" rel="nofollow">3. ApplicationListener</a></li><li><ul><li><a href="#31__186" rel="nofollow">3.1 注册监听器</a></li><li><a href="#32__202" rel="nofollow">3.2 自定义</a></li></ul> 
+  </li><li><a href="#4_SpringApplicationRunListeners_216" rel="nofollow">4. SpringApplicationRunListeners</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="1__3"></a>1. 概述（重点）</h2> 
+<p>事件监听机制是观察者模式的一种，Spring的事件监听机制有几个重要的顶层接口，分别是：</p> 
+<ol><li>ApplicationEventMulticaster 主要看 AbstractApplicationEventMulticaster</li><li>ApplicationListener</li><li>ApplicationEvent</li></ol> 
+<p>它们三哥们的关系可以用下面的图来概括</p> 
+<p><img src="https://images2.imgbox.com/24/ef/hj81PnOK_o.png" alt="在这里插入图片描述"><br> AbstractApplicationEventMulticaster维护了 源类型和事件类型 作为KEY 跟 监听器的关系，在下面 <a href="#2.1-SimpleApplicationEventMulticaster" rel="nofollow">2.1 SimpleApplicationEventMulticaster</a>有代码的实现解读。</p> 
+<h2><a id="2_ApplicationEventMulticaster_14"></a>2. ApplicationEventMulticaster</h2> 
+<div class="mermaid"> 
+ <svg id="mermaid-svg-x92gJqQ3cnbt9K69" width="683.066650390625" xmlns="http://www.w3.org/2000/svg" height="486" viewbox="0 0 683.066650390625 486" class="mermaid-svg"> 
+  <style>#mermaid-svg-x92gJqQ3cnbt9K69 {font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}#mermaid-svg-x92gJqQ3cnbt9K69 .error-icon{fill:#552222;}#mermaid-svg-x92gJqQ3cnbt9K69 .error-text{fill:#552222;stroke:#552222;}#mermaid-svg-x92gJqQ3cnbt9K69 .edge-thickness-normal{stroke-width:2px;}#mermaid-svg-x92gJqQ3cnbt9K69 .edge-thickness-thick{stroke-width:3.5px;}#mermaid-svg-x92gJqQ3cnbt9K69 .edge-pattern-solid{stroke-dasharray:0;}#mermaid-svg-x92gJqQ3cnbt9K69 .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-svg-x92gJqQ3cnbt9K69 .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-svg-x92gJqQ3cnbt9K69 .marker{fill:#333333;stroke:#333333;}#mermaid-svg-x92gJqQ3cnbt9K69 .marker.cross{stroke:#333333;}#mermaid-svg-x92gJqQ3cnbt9K69 svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#mermaid-svg-x92gJqQ3cnbt9K69 g.classGroup text{fill:#9370DB;fill:#131300;stroke:none;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:10px;}#mermaid-svg-x92gJqQ3cnbt9K69 g.classGroup text .title{font-weight:bolder;}#mermaid-svg-x92gJqQ3cnbt9K69 .nodeLabel,#mermaid-svg-x92gJqQ3cnbt9K69 .edgeLabel{color:#131300;}#mermaid-svg-x92gJqQ3cnbt9K69 .edgeLabel .label rect{fill:#ECECFF;}#mermaid-svg-x92gJqQ3cnbt9K69 .label text{fill:#131300;}#mermaid-svg-x92gJqQ3cnbt9K69 .edgeLabel .label span{background:#ECECFF;}#mermaid-svg-x92gJqQ3cnbt9K69 .classTitle{font-weight:bolder;}#mermaid-svg-x92gJqQ3cnbt9K69 .node rect,#mermaid-svg-x92gJqQ3cnbt9K69 .node circle,#mermaid-svg-x92gJqQ3cnbt9K69 .node ellipse,#mermaid-svg-x92gJqQ3cnbt9K69 .node polygon,#mermaid-svg-x92gJqQ3cnbt9K69 .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid-svg-x92gJqQ3cnbt9K69 .divider{stroke:#9370DB;stroke:1;}#mermaid-svg-x92gJqQ3cnbt9K69 g.clickable{cursor:pointer;}#mermaid-svg-x92gJqQ3cnbt9K69 g.classGroup rect{fill:#ECECFF;stroke:#9370DB;}#mermaid-svg-x92gJqQ3cnbt9K69 g.classGroup line{stroke:#9370DB;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 .classLabel .box{stroke:none;stroke-width:0;fill:#ECECFF;opacity:0.5;}#mermaid-svg-x92gJqQ3cnbt9K69 .classLabel .label{fill:#9370DB;font-size:10px;}#mermaid-svg-x92gJqQ3cnbt9K69 .relation{stroke:#333333;stroke-width:1;fill:none;}#mermaid-svg-x92gJqQ3cnbt9K69 .dashed-line{stroke-dasharray:3;}#mermaid-svg-x92gJqQ3cnbt9K69 #compositionStart,#mermaid-svg-x92gJqQ3cnbt9K69 .composition{fill:#333333!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 #compositionEnd,#mermaid-svg-x92gJqQ3cnbt9K69 .composition{fill:#333333!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 #dependencyStart,#mermaid-svg-x92gJqQ3cnbt9K69 .dependency{fill:#333333!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 #dependencyStart,#mermaid-svg-x92gJqQ3cnbt9K69 .dependency{fill:#333333!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 #extensionStart,#mermaid-svg-x92gJqQ3cnbt9K69 .extension{fill:#333333!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 #extensionEnd,#mermaid-svg-x92gJqQ3cnbt9K69 .extension{fill:#333333!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 #aggregationStart,#mermaid-svg-x92gJqQ3cnbt9K69 .aggregation{fill:#ECECFF!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 #aggregationEnd,#mermaid-svg-x92gJqQ3cnbt9K69 .aggregation{fill:#ECECFF!important;stroke:#333333!important;stroke-width:1;}#mermaid-svg-x92gJqQ3cnbt9K69 .edgeTerminals{font-size:11px;}#mermaid-svg-x92gJqQ3cnbt9K69 :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style> 
+  <g transform="translate(0, 0)"> 
+   <defs> 
+    <marker id="classDiagram-aggregationStart" class="marker aggregation classDiagram" refx="0" refy="7" markerwidth="190" markerheight="240" orient="auto"> 
+     <path d="M 18,7 L9,13 L1,7 L9,1 Z"></path> 
+    </marker> 
+   </defs> 
+   <defs> 
+    <marker id="classDiagram-aggregationEnd" class="marker aggregation classDiagram" refx="19" refy="7" markerwidth="20" markerheight="28" orient="auto"> 
+     <path d="M 18,7 L9,13 L1,7 L9,1 Z"></path> 
+    </marker> 
+   </defs> 
+   <defs> 
+    <marker id="classDiagram-extensionStart" class="marker extension classDiagram" refx="0" refy="7" markerwidth="190" markerheight="240" orient="auto"> 
+     <path d="M 1,7 L18,13 V 1 Z"></path> 
+    </marker> 
+   </defs> 
+   <defs> 
+    <marker id="classDiagram-extensionEnd" class="marker extension classDiagram" refx="19" refy="7" markerwidth="20" markerheight="28" orient="auto"> 
+     <path d="M 1,1 V 13 L18,7 Z"></path> 
+    </marker> 
+   </defs> 
+   <defs> 
+    <marker id="classDiagram-compositionStart" class="marker composition classDiagram" refx="0" refy="7" markerwidth="190" markerheight="240" orient="auto"> 
+     <path d="M 18,7 L9,13 L1,7 L9,1 Z"></path> 
+    </marker> 
+   </defs> 
+   <defs> 
+    <marker id="classDiagram-compositionEnd" class="marker composition classDiagram" refx="19" refy="7" markerwidth="20" markerheight="28" orient="auto"> 
+     <path d="M 18,7 L9,13 L1,7 L9,1 Z"></path> 
+    </marker> 
+   </defs> 
+   <defs> 
+    <marker id="classDiagram-dependencyStart" class="marker dependency classDiagram" refx="0" refy="7" markerwidth="190" markerheight="240" orient="auto"> 
+     <path d="M 5,7 L9,13 L1,7 L9,1 Z"></path> 
+    </marker> 
+   </defs> 
+   <defs> 
+    <marker id="classDiagram-dependencyEnd" class="marker dependency classDiagram" refx="19" refy="7" markerwidth="20" markerheight="28" orient="auto"> 
+     <path d="M 18,7 L9,13 L14,7 L9,1 Z"></path> 
+    </marker> 
+   </defs> 
+   <g class="root"> 
+    <g class="clusters"></g> 
+    <g class="edgePaths"> 
+     <path d="M233.1750030517578,298.258181900372L214.41805775960287,294.04848491697663C195.6611124674479,289.83878793358133,158.14722188313803,281.41939396679066,139.39027659098306,273.0430303167287C120.63333129882812,264.6666666666667,120.63333129882812,256.3333333333333,120.63333129882812,252.16666666666666L120.63333129882812,248" id="id1" class="  edge-pattern-dashed relation" style="fill:none" marker-end="url(#classDiagram-dependencyEnd)"></path> 
+     <path d="M376.8333282470703,298L376.8333282470703,293.8333333333333C376.8333282470703,289.6666666666667,376.8333282470703,281.3333333333333,376.8333282470703,273C376.8333282470703,264.6666666666667,376.8333282470703,256.3333333333333,376.8333282470703,252.16666666666666L376.8333282470703,248" id="id2" class="  edge-pattern-dashed relation" style="fill:none" marker-end="url(#classDiagram-dependencyEnd)"></path> 
+     <path d="M501.68985084865403,298L517.6970973360366,293.8333333333333C533.7043438234191,289.6666666666667,565.7188367981842,281.3333333333333,581.7260832855667,273C597.7333297729492,264.6666666666667,597.7333297729492,256.3333333333333,597.7333297729492,252.16666666666666L597.7333297729492,248" id="id3" class="  edge-pattern-dashed relation" style="fill:none" marker-end="url(#classDiagram-dependencyEnd)"></path> 
+     <path d="M376.8333282470703,153L376.8333282470703,148.83333333333334C376.8333282470703,144.66666666666666,376.8333282470703,136.33333333333334,387.13888359069824,125.40204233663474C397.4444389343262,114.47075133993614,418.05554962158203,100.9415026798723,428.36110496520996,94.17687834984036L438.6666603088379,87.41225401980844" id="id4" class="  edge-pattern-solid relation" style="fill:none" marker-end="url(#classDiagram-dependencyEnd)"></path> 
+     <path d="M597.7333297729492,153L597.7333297729492,148.83333333333334C597.7333297729492,144.66666666666666,597.7333297729492,136.33333333333334,587.4277744293213,125.40204233663474C577.1222190856934,114.47075133993614,556.5111083984375,100.9415026798723,546.2055530548096,94.17687834984036L535.8999977111816,87.41225401980844" id="id5" class="  edge-pattern-solid relation" style="fill:none" marker-end="url(#classDiagram-dependencyEnd)"></path> 
+     <path d="M376.8333282470703,413L376.8333282470703,408.8333333333333C376.8333282470703,404.6666666666667,376.8333282470703,396.3333333333333,376.8333282470703,388C376.8333282470703,379.6666666666667,376.8333282470703,371.3333333333333,376.8333282470703,367.1666666666667L376.8333282470703,363" id="id6" class="  edge-pattern-solid relation" style="fill:none" marker-end="url(#classDiagram-dependencyEnd)"></path> 
+    </g> 
+    <g class="edgeLabels"> 
+     <g class="edgeLabel"> 
+      <g class="label" transform="translate(0, 0)"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="edgeLabel"></span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="edgeLabel"> 
+      <g class="label" transform="translate(0, 0)"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="edgeLabel"></span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="edgeLabel"> 
+      <g class="label" transform="translate(0, 0)"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="edgeLabel"></span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="edgeLabel"> 
+      <g class="label" transform="translate(0, 0)"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="edgeLabel"></span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="edgeLabel"> 
+      <g class="label" transform="translate(0, 0)"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="edgeLabel"></span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="edgeLabel"> 
+      <g class="label" transform="translate(0, 0)"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="edgeLabel"></span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+    </g> 
+    <g class="nodes"> 
+     <g class="node default" id="classid-AbstractApplicationEventMulticaster-48" transform="translate(376.8333282470703, 330.5)"> 
+      <rect class="outer title-state" x="-143.6583251953125" y="-32.5" width="287.316650390625" height="65"></rect> 
+      <line class="divider" x1="-143.6583251953125" x2="143.6583251953125" y1="5.5" y2="5.5"></line> 
+      <line class="divider" x1="-143.6583251953125" x2="143.6583251953125" y1="21.5" y2="21.5"></line> 
+      <g class="label"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel"></span> 
+        </div> 
+       </foreignobject> 
+       <foreignobject class="classTitle" width="272.316650390625" height="26" transform="translate( -136.1583251953125, -25)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">AbstractApplicationEventMulticaster</span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="node default" id="classid-ApplicationEventMulticaster-49" transform="translate(120.63333129882812, 200.5)"> 
+      <rect class="outer title-state" x="-112.63333129882812" y="-47.5" width="225.26666259765625" height="95"></rect> 
+      <line class="divider" x1="-112.63333129882812" x2="112.63333129882812" y1="20.5" y2="20.5"></line> 
+      <line class="divider" x1="-112.63333129882812" x2="112.63333129882812" y1="36.5" y2="36.5"></line> 
+      <g class="label"> 
+       <foreignobject width="82.23333740234375" height="26" transform="translate( -41.116668701171875, -40)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">«Interface»</span> 
+        </div> 
+       </foreignobject> 
+       <foreignobject class="classTitle" width="210.26666259765625" height="26" transform="translate( -105.13333129882812, -10)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">ApplicationEventMulticaster</span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="node default" id="classid-Aware-50" transform="translate(487.28332901000977, 55.5)"> 
+      <rect class="outer title-state" x="-48.616668701171875" y="-47.5" width="97.23333740234375" height="95"></rect> 
+      <line class="divider" x1="-48.616668701171875" x2="48.616668701171875" y1="20.5" y2="20.5"></line> 
+      <line class="divider" x1="-48.616668701171875" x2="48.616668701171875" y1="36.5" y2="36.5"></line> 
+      <g class="label"> 
+       <foreignobject width="82.23333740234375" height="26" transform="translate( -41.116668701171875, -40)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">«Interface»</span> 
+        </div> 
+       </foreignobject> 
+       <foreignobject class="classTitle" width="46.93333435058594" height="26" transform="translate( -23.46666717529297, -10)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">Aware</span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="node default" id="classid-BeanClassLoaderAware-51" transform="translate(376.8333282470703, 200.5)"> 
+      <rect class="outer title-state" x="-93.56666564941406" y="-47.5" width="187.13333129882812" height="95"></rect> 
+      <line class="divider" x1="-93.56666564941406" x2="93.56666564941406" y1="20.5" y2="20.5"></line> 
+      <line class="divider" x1="-93.56666564941406" x2="93.56666564941406" y1="36.5" y2="36.5"></line> 
+      <g class="label"> 
+       <foreignobject width="82.23333740234375" height="26" transform="translate( -41.116668701171875, -40)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">«Interface»</span> 
+        </div> 
+       </foreignobject> 
+       <foreignobject class="classTitle" width="172.13333129882812" height="26" transform="translate( -86.06666564941406, -10)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">BeanClassLoaderAware</span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="node default" id="classid-BeanFactoryAware-52" transform="translate(597.7333297729492, 200.5)"> 
+      <rect class="outer title-state" x="-77.33333587646484" y="-47.5" width="154.6666717529297" height="95"></rect> 
+      <line class="divider" x1="-77.33333587646484" x2="77.33333587646484" y1="20.5" y2="20.5"></line> 
+      <line class="divider" x1="-77.33333587646484" x2="77.33333587646484" y1="36.5" y2="36.5"></line> 
+      <g class="label"> 
+       <foreignobject width="82.23333740234375" height="26" transform="translate( -41.116668701171875, -40)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">«Interface»</span> 
+        </div> 
+       </foreignobject> 
+       <foreignobject class="classTitle" width="139.6666717529297" height="26" transform="translate( -69.83333587646484, -10)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">BeanFactoryAware</span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+     <g class="node default" id="classid-SimpleApplicationEventMulticaster-53" transform="translate(376.8333282470703, 445.5)"> 
+      <rect class="outer title-state" x="-137.60000610351562" y="-32.5" width="275.20001220703125" height="65"></rect> 
+      <line class="divider" x1="-137.60000610351562" x2="137.60000610351562" y1="5.5" y2="5.5"></line> 
+      <line class="divider" x1="-137.60000610351562" x2="137.60000610351562" y1="21.5" y2="21.5"></line> 
+      <g class="label"> 
+       <foreignobject width="0" height="0"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel"></span> 
+        </div> 
+       </foreignobject> 
+       <foreignobject class="classTitle" width="260.20001220703125" height="26" transform="translate( -130.10000610351562, -25)"> 
+        <div style="display: inline-block; white-space: nowrap;"> 
+         <span class="nodeLabel">SimpleApplicationEventMulticaster</span> 
+        </div> 
+       </foreignobject> 
+      </g> 
+     </g> 
+    </g> 
+   </g> 
+  </g> 
+ </svg> 
+</div> 
+<p>目前就只有一个实现类<code>SimpleApplicationEventMulticaster</code>和一个抽象类<code>AbstractApplicationEventMulticaster</code>。</p> 
+<h3><a id="21_SimpleApplicationEventMulticaster_47"></a>2.1 SimpleApplicationEventMulticaster</h3> 
+<p>发布和广播事件，主要注意一下getApplicationListeners方法就行了，会根据<code>事件类型</code>和<code>源类型</code>找监听器。</p> 
+<pre><code class="prism language-java"><span class="token annotation punctuation">@Override</span>
+<span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">multicastEvent</span><span class="token punctuation">(</span><span class="token class-name">ApplicationEvent</span> event<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token function">multicastEvent</span><span class="token punctuation">(</span>event<span class="token punctuation">,</span> <span class="token function">resolveDefaultEventType</span><span class="token punctuation">(</span>event<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token annotation punctuation">@Override</span>
+<span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">multicastEvent</span><span class="token punctuation">(</span><span class="token keyword">final</span> <span class="token class-name">ApplicationEvent</span> event<span class="token punctuation">,</span> <span class="token annotation punctuation">@Nullable</span> <span class="token class-name">ResolvableType</span> eventType<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token class-name">ResolvableType</span> type <span class="token operator">=</span> <span class="token punctuation">(</span>eventType <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">?</span> eventType <span class="token operator">:</span> <span class="token function">resolveDefaultEventType</span><span class="token punctuation">(</span>event<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token class-name">Executor</span> executor <span class="token operator">=</span> <span class="token function">getTaskExecutor</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">ApplicationListener</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span></span> listener <span class="token operator">:</span> <span class="token function">getApplicationListeners</span><span class="token punctuation">(</span>event<span class="token punctuation">,</span> type<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>executor <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            executor<span class="token punctuation">.</span><span class="token function">execute</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">-&gt;</span> <span class="token function">invokeListener</span><span class="token punctuation">(</span>listener<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token function">invokeListener</span><span class="token punctuation">(</span>listener<span class="token punctuation">,</span> event<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="22_AbstractApplicationEventMulticaster_70"></a>2.2 AbstractApplicationEventMulticaster</h3> 
+<p><code>getApplicationListeners</code>方法就是根据Class&lt;?&gt;、ResolvableType两个对象作为一个缓存key，这个key与一堆监听器`ApplicationListener`做映射，也就是说通过Class&lt;?&gt;、ResolvableType两个对象可以找到监听器，在用法上可以从<code>SimpleApplicationEventMuticaster</code>的 <code>multicastEvent</code> 方法去看。</p> 
+<blockquote> 
+ <p>看看getApplicationListeners方法的代码实现</p> 
+</blockquote> 
+<pre><code class="prism language-java"><span class="token keyword">protected</span> <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationListener</span><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> <span class="token function">getApplicationListeners</span><span class="token punctuation">(</span>
+	    <span class="token class-name">ApplicationEvent</span> event<span class="token punctuation">,</span> <span class="token class-name">ResolvableType</span> eventType<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token class-name">Object</span> source <span class="token operator">=</span> event<span class="token punctuation">.</span><span class="token function">getSource</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span></span> sourceType <span class="token operator">=</span> <span class="token punctuation">(</span>source <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">?</span> source<span class="token punctuation">.</span><span class="token function">getClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">:</span> <span class="token keyword">null</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token class-name">ListenerCacheKey</span> cacheKey <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ListenerCacheKey</span><span class="token punctuation">(</span>eventType<span class="token punctuation">,</span> sourceType<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token class-name">CachedListenerRetriever</span> newRetriever <span class="token operator">=</span> <span class="token keyword">null</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// 这个cacheKey就是ApplicationEvent,ResolvableType两个对象。</span>
+    <span class="token comment">// 根据cacheKey找监听器，找不到就把cacheKey作为key，创建一个什么都么有的CachedListenerRetriever对象作为值缓存到retrieverCache中。</span>
+    <span class="token comment">// 这里有一些细节我没搞明白，putIfAbsent总是返回null。</span>
+    <span class="token class-name">CachedListenerRetriever</span> existingRetriever <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span>retrieverCache<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>cacheKey<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>existingRetriever <span class="token operator">==</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>beanClassLoader <span class="token operator">==</span> <span class="token keyword">null</span> <span class="token operator">||</span>
+            <span class="token punctuation">(</span><span class="token class-name">ClassUtils</span><span class="token punctuation">.</span><span class="token function">isCacheSafe</span><span class="token punctuation">(</span>event<span class="token punctuation">.</span><span class="token function">getClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token keyword">this</span><span class="token punctuation">.</span>beanClassLoader<span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span>
+            <span class="token punctuation">(</span>sourceType <span class="token operator">==</span> <span class="token keyword">null</span> <span class="token operator">||</span> <span class="token class-name">ClassUtils</span><span class="token punctuation">.</span><span class="token function">isCacheSafe</span><span class="token punctuation">(</span>sourceType<span class="token punctuation">,</span> <span class="token keyword">this</span><span class="token punctuation">.</span>beanClassLoader<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            newRetriever <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">CachedListenerRetriever</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            existingRetriever <span class="token operator">=</span> <span class="token keyword">this</span><span class="token punctuation">.</span>retrieverCache<span class="token punctuation">.</span><span class="token function">putIfAbsent</span><span class="token punctuation">(</span>cacheKey<span class="token punctuation">,</span> newRetriever<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>existingRetriever <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                newRetriever <span class="token operator">=</span> <span class="token keyword">null</span><span class="token punctuation">;</span>  <span class="token comment">// no need to populate it in retrieveApplicationListeners</span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>existingRetriever <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationListener</span><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> result <span class="token operator">=</span> existingRetriever<span class="token punctuation">.</span><span class="token function">getApplicationListeners</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>result <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">return</span> result<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// 假设上面cacheKey对应的值没有监听器，那这个方面就找 给定事件类型和源类型 的监听器。</span>
+    <span class="token keyword">return</span> <span class="token function">retrieveApplicationListeners</span><span class="token punctuation">(</span>eventType<span class="token punctuation">,</span> sourceType<span class="token punctuation">,</span> newRetriever<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// 从默认的 defaultRetriever 和 我们注入的bean 中找监听器。</span>
+<span class="token keyword">private</span> <span class="token class-name">Collection</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationListener</span><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> <span class="token function">retrieveApplicationListeners</span><span class="token punctuation">(</span>
+        <span class="token class-name">ResolvableType</span> eventType<span class="token punctuation">,</span> <span class="token annotation punctuation">@Nullable</span> <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span></span> sourceType<span class="token punctuation">,</span> <span class="token annotation punctuation">@Nullable</span> <span class="token class-name">CachedListenerRetriever</span> retriever<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationListener</span><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> allListeners <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationListener</span><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> filteredListeners <span class="token operator">=</span> <span class="token punctuation">(</span>retriever <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">?</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashSet</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">:</span> <span class="token keyword">null</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> filteredListenerBeans <span class="token operator">=</span> <span class="token punctuation">(</span>retriever <span class="token operator">!=</span> <span class="token keyword">null</span> <span class="token operator">?</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashSet</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">:</span> <span class="token keyword">null</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationListener</span><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span><span class="token punctuation">&gt;</span></span> listeners<span class="token punctuation">;</span>
+    <span class="token class-name">Set</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">String</span><span class="token punctuation">&gt;</span></span> listenerBeans<span class="token punctuation">;</span>
+    <span class="token keyword">synchronized</span> <span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>defaultRetriever<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    listeners <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashSet</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>defaultRetriever<span class="token punctuation">.</span>applicationListeners<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    listenerBeans <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashSet</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token keyword">this</span><span class="token punctuation">.</span>defaultRetriever<span class="token punctuation">.</span>applicationListenerBeans<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// 从defaultRetriever中找监听器</span>
+    <span class="token comment">// 这里的supportsEvent有点看不懂，不过只要理解通过事件类型和源类型判断监听器是否符合 事件要求就得了。</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">ApplicationListener</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span></span> listener <span class="token operator">:</span> listeners<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">supportsEvent</span><span class="token punctuation">(</span>listener<span class="token punctuation">,</span> eventType<span class="token punctuation">,</span> sourceType<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">if</span> <span class="token punctuation">(</span>retriever <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                filteredListeners<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            allListeners<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// 根据bean名字去找监听器</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>listenerBeans<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">ConfigurableBeanFactory</span> beanFactory <span class="token operator">=</span> <span class="token function">getBeanFactory</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token class-name">String</span> listenerBeanName <span class="token operator">:</span> listenerBeans<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token keyword">try</span> <span class="token punctuation">{<!-- --></span>
+                <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">supportsEvent</span><span class="token punctuation">(</span>beanFactory<span class="token punctuation">,</span> listenerBeanName<span class="token punctuation">,</span> eventType<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token class-name">ApplicationListener</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span></span> listener <span class="token operator">=</span>
+                        beanFactory<span class="token punctuation">.</span><span class="token function">getBean</span><span class="token punctuation">(</span>listenerBeanName<span class="token punctuation">,</span> <span class="token class-name">ApplicationListener</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>allListeners<span class="token punctuation">.</span><span class="token function">contains</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> <span class="token function">supportsEvent</span><span class="token punctuation">(</span>listener<span class="token punctuation">,</span> eventType<span class="token punctuation">,</span> sourceType<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                        <span class="token keyword">if</span> <span class="token punctuation">(</span>retriever <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                            <span class="token keyword">if</span> <span class="token punctuation">(</span>beanFactory<span class="token punctuation">.</span><span class="token function">isSingleton</span><span class="token punctuation">(</span>listenerBeanName<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                                filteredListeners<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            <span class="token punctuation">}</span>
+                            <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+                                filteredListenerBeans<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>listenerBeanName<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                            <span class="token punctuation">}</span>
+                        <span class="token punctuation">}</span>
+                        allListeners<span class="token punctuation">.</span><span class="token function">add</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    <span class="token punctuation">}</span>
+                <span class="token punctuation">}</span>
+                <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+                    <span class="token class-name">Object</span> listener <span class="token operator">=</span> beanFactory<span class="token punctuation">.</span><span class="token function">getSingleton</span><span class="token punctuation">(</span>listenerBeanName<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    <span class="token keyword">if</span> <span class="token punctuation">(</span>retriever <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+                        filteredListeners<span class="token punctuation">.</span><span class="token function">remove</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    <span class="token punctuation">}</span>
+                    allListeners<span class="token punctuation">.</span><span class="token function">remove</span><span class="token punctuation">(</span>listener<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">}</span>
+                <span class="token punctuation">}</span>
+            <span class="token keyword">catch</span> <span class="token punctuation">(</span><span class="token class-name">NoSuchBeanDefinitionException</span> ex<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token comment">// 把找到的监听器都放到CachedListenerRetriever中。</span>
+    <span class="token class-name">AnnotationAwareOrderComparator</span><span class="token punctuation">.</span><span class="token function">sort</span><span class="token punctuation">(</span>allListeners<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>retriever <span class="token operator">!=</span> <span class="token keyword">null</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>filteredListenerBeans<span class="token punctuation">.</span><span class="token function">isEmpty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+            retriever<span class="token punctuation">.</span>applicationListeners <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashSet</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span>allListeners<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            retriever<span class="token punctuation">.</span>applicationListenerBeans <span class="token operator">=</span> filteredListenerBeans<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        <span class="token keyword">else</span> <span class="token punctuation">{<!-- --></span>
+            retriever<span class="token punctuation">.</span>applicationListeners <span class="token operator">=</span> filteredListeners<span class="token punctuation">;</span>
+            retriever<span class="token punctuation">.</span>applicationListenerBeans <span class="token operator">=</span> filteredListenerBeans<span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword">return</span> allListeners<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h2><a id="3_ApplicationListener_184"></a>3. ApplicationListener</h2> 
+<blockquote> 
+ <p>主要是了解如何注册和自定义监听器就行了</p> 
+</blockquote> 
+<h3><a id="31__186"></a>3.1 注册监听器</h3> 
+<p>通过<code>META-INF/spring.factories</code>注册监听器。</p> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token class-name">SpringApplication</span><span class="token punctuation">(</span><span class="token class-name">ResourceLoader</span> resourceLoader<span class="token punctuation">,</span> <span class="token class-name">Class</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token operator">?</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span> primarySources<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">this</span><span class="token punctuation">.</span>resourceLoader <span class="token operator">=</span> resourceLoader<span class="token punctuation">;</span>
+    <span class="token class-name">Assert</span><span class="token punctuation">.</span><span class="token function">notNull</span><span class="token punctuation">(</span>primarySources<span class="token punctuation">,</span> <span class="token string">"PrimarySources must not be null"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">this</span><span class="token punctuation">.</span>primarySources <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">LinkedHashSet</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span><span class="token class-name">Arrays</span><span class="token punctuation">.</span><span class="token function">asList</span><span class="token punctuation">(</span>primarySources<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">this</span><span class="token punctuation">.</span>webApplicationType <span class="token operator">=</span> <span class="token class-name">WebApplicationType</span><span class="token punctuation">.</span><span class="token function">deduceFromClasspath</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">this</span><span class="token punctuation">.</span>bootstrapRegistryInitializers <span class="token operator">=</span> <span class="token keyword">new</span> <span class="token class-name">ArrayList</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token punctuation">&gt;</span></span><span class="token punctuation">(</span>
+        <span class="token function">getSpringFactoriesInstances</span><span class="token punctuation">(</span><span class="token class-name">BootstrapRegistryInitializer</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">setInitializers</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">Collection</span><span class="token punctuation">)</span> <span class="token function">getSpringFactoriesInstances</span><span class="token punctuation">(</span><span class="token class-name">ApplicationContextInitializer</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token comment">// 这里就是注册ApplicationListener的代码了，通过META-INF/spring.factories注册。</span>
+    <span class="token function">setListeners</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">Collection</span><span class="token punctuation">)</span> <span class="token function">getSpringFactoriesInstances</span><span class="token punctuation">(</span><span class="token class-name">ApplicationListener</span><span class="token punctuation">.</span><span class="token keyword">class</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">this</span><span class="token punctuation">.</span>mainApplicationClass <span class="token operator">=</span> <span class="token function">deduceMainApplicationClass</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h3><a id="32__202"></a>3.2 自定义</h3> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">MyApplicationPreparedListener</span> <span class="token keyword">implements</span> <span class="token class-name">ApplicationListener</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationPreparedEvent</span><span class="token punctuation">&gt;</span></span> <span class="token punctuation">{<!-- --></span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">onApplicationEvent</span><span class="token punctuation">(</span><span class="token class-name">ApplicationPreparedEvent</span> event<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span><span class="token string">"开始填充上下文。。。。"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><code>MATE-INF/spring.factories</code></p> 
+<pre><code class="prism language-txt">org.springframework.context.ApplicationListener=sample.config.MyApplicationPreparedListener
+</code></pre> 
+<h2><a id="4_SpringApplicationRunListeners_216"></a>4. SpringApplicationRunListeners</h2> 
+<p><code>SpringApplicationRunListeners</code>管理了多个<code>EventPublishingRunListener</code>，EventPublishingRunListener里面包含了事件监听器模型<a href="#" rel="nofollow">#1.概述（重点）</a>中描述的部分。</p> 
+<pre><code class="prism language-java"><span class="token keyword">class</span> <span class="token class-name">SpringApplicationRunListeners</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">Log</span> log<span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">List</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">SpringApplicationRunListener</span><span class="token punctuation">&gt;</span></span> listeners<span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">ApplicationStartup</span> applicationStartup<span class="token punctuation">;</span>
+
+    <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">EventPublishingRunListener</span> <span class="token keyword">implements</span> <span class="token class-name">SpringApplicationRunListener</span><span class="token punctuation">,</span> <span class="token class-name">Ordered</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">SpringApplication</span> application<span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">String</span><span class="token punctuation">[</span><span class="token punctuation">]</span> args<span class="token punctuation">;</span>
+
+    <span class="token keyword">private</span> <span class="token keyword">final</span> <span class="token class-name">SimpleApplicationEventMulticaster</span> initialMulticaster<span class="token punctuation">;</span>
+
+    <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><code>EventPublishingRunListener</code>中定义了Spring整个启动过程中会触发的事件，下面对触发位置进行大概的描述，更具体的内容还有待研究。</p> 
+<ul><li>starting<br> 在SpringApplication#run，事件<code>ApplicationStartingEvent</code></li><li>environmentPrepared<br> 在SpringApplication#prepareEnvironment，事件<code>ApplicationEnvironmentPreparedEvent</code></li><li>contextPrepared<br> 在SpringApplication#prepareContext，事件<code>ApplicationContextInitializedEvent</code></li><li>contextLoaded<br> 在SpringApplication#prepareContext，事件<code>ApplicationPreparedEvent</code></li><li>started<br> 在SpringApplication#run，事件<code>ApplicationStartedEvent</code></li><li>ready<br> 在SpringApplication#run，事件<code>ApplicationReadyEvent</code></li><li>failed<br> 在SpringApplication#handleRunFailure，事件<code>ApplicationFailedEvent</code></li></ul> 
+<p>我们也可以利用上面的事件，自己创建一个监听器，然后放到spring.factories，比如现在注册一个<code>ApplicationPreparedEvent</code>的监听器。</p> 
+<pre><code class="prism language-java"><span class="token keyword">public</span> <span class="token keyword">class</span> <span class="token class-name">MyApplicationPreparedListener</span> <span class="token keyword">implements</span> <span class="token class-name">ApplicationListener</span><span class="token generics"><span class="token punctuation">&lt;</span><span class="token class-name">ApplicationPreparedEvent</span><span class="token punctuation">&gt;</span></span> <span class="token punctuation">{<!-- --></span>
+    <span class="token annotation punctuation">@Override</span>
+    <span class="token keyword">public</span> <span class="token keyword">void</span> <span class="token function">onApplicationEvent</span><span class="token punctuation">(</span><span class="token class-name">ApplicationPreparedEvent</span> event<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+        <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span><span class="token string">"开始填充上下文。。。。"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<p><code>MATE-INF/spring.factories</code></p> 
+<pre><code class="prism language-txt">org.springframework.context.ApplicationListener=sample.config.MyApplicationPreparedListener
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/1fa5cc343e75cab6e7d1947c9b44fc9a/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Typora导出word</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/744a8fe48b4966b8006cb3360238de15/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">IntelliJ 负责人 Kirill Skrygan 成为 JetBrains 新任 CEO</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

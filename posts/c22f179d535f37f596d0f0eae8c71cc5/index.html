@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>matlab中dzdx,MatConvnet工具箱使用手册翻译理解一 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="matlab中dzdx,MatConvnet工具箱使用手册翻译理解一" />
+<meta property="og:description" content="概述
+MatConvNet是用于MATLAB的卷积神经网络(CNN)的实现。工具箱的设计注重简单性和灵活性。它将CNN的构建块暴露为易于使用的MATLAB函数，提供用于计算具有过滤器组的线性卷积，特征池化等的例程。以这种方式，MatConvNet允许新的CNN快速原型架构;同时，它支持CPU和GPU上的有效计算，允许在大型数据集(如ImageNet ILSVRC)上训练复杂模型。本文档概述了CNN及其在MatConvNet中的实现，并给出了工具箱中每个计算模块的技术细节。
+第一章 MatConvNet简介
+MatConvNet是一个实现卷积神经网络(CNN)的MATLAB工具箱，被应用于计算机视觉。 自从[8]的突破性工作以来，CNN已经在计算机视觉领域产生重要影响，特别是在图像理解上，基本上取代了传统的图像表示。例如在我们自己的VLFeat [11]开源库中实现的图像表示。
+虽然大多数CNN是通过组合简单的线性和非线性滤波操作获得的，诸如卷积和整形，它们的却并非微不足道。原因是CNN需要从大量的数据，通常是数百万的图像中学习，需要非常有效的实现。 作为大多数CNN库，MatConvNet通过使用各种优化，主要是通过支持GPU上的计算来实现这一点。
+存在许多其他机器学习，深度学习和CNN开源库。引用一些最流行的：像CudaConvNet，Torch，Theano，Caffe。 许多这些库得到很好的支持，有几十个积极的贡献者和大量的用户基础。 因此，为什么要创建另一个库？
+开发MatConvNet的关键动机是为研究人员提供一个特别友好和有效的环境，以便在其研究中使用。MatConvNet通过其在MATLAB环境中的深度集成实现了这一点，MATLAB环境是计算机视觉研究以及许多其他领域中最受欢迎的开发环境之一。特别地，MatConvNet公开了简单的MATLAB命令CNN构建块，如卷积，归一化和合并(第4章); 这些可以组合和扩展以轻松创建CNN架构。虽然有许多这样的模块，使用用C &#43;&#43;和CUDA(第1.4节)编写优化的CPU和GPU实现，但是MATLAB本身支持GPU计算意味着通常可以在保持计算效率的同时在MATLAB中直接写入新的块。与使用低级语言编写新的CNN组件相比，这是一个重要的简化，可以显着加速测试新的想法的速度。使用MATLAB还提供了一个连接到其他领域的桥梁;例如，MatConvNet最近被亚利桑那大学用于行星科学，正如NVIDIA的博客文章中所总结的。
+MatConvNet可以从数以百万计的图像学习大型CNN模型，如AlexNet [7]和非常深的网络[9]。这些强大模型中的几个的预训练版本可以从MatConvNet主页下载。虽然功能强大，MatConvNet仍易于使用和安装。 实现是完全独立的，只需要MATLAB和兼容的C &#43;&#43;编译器(使用GPU代码需要免费提供的CUDA DevKit和合适的NVIDIA GPU)。可以使用三个MATLAB命令下载，编译和安装MatConvNet。其包括了几个完整功能的示例，演示如何可以学习小型和大型网络。重要的是，几个标准的预训练网络可以立即下载并在应用程序中使用。有一与工具箱一起保留了具有完整的工具箱技术描述的手册[8]。这些特性使MatConvNet在教育背景下非常有用。
+MatConvNet是根据BSD类似许可证的开放源代码。 它可以从http://www.vlfeat.org/matconvnet以及从GitHub.10下载。
+1.1入门
+MatConvNet易于安装和使用。fig1.1提供了一个完整的例子，使用最新一代深卷积神经网络分类图像。 该示例包括下载MatConvNet，编译包，下载预训练的CNN模型，并在MATLAB的一个图像上评估该模型。
+在这个例子中的key命令是vl_simplenn，一个用CNN网络和预处理图像im_的包装器作为输入，并且产生结果的结构res作为输出。
+该特定包装器可以用于对具有简单结构，即操作链的网络建模。
+检查vl_simplenn(在MatConvNet中编辑vl_simplenn)的代码，我们注意到包装器顺序地转换数据，应用由网络配置指定的一些MATLAB函数。这些功能，在第4章中详细讨论，称为“构建块”，并构成MatConvNet的骨干。
+虽然大多数块实现简单操作，但他们效率使之不平凡(第1.4节)，它们以及支持反向传播(第2.3节)以允许学习CNN。接下来，我们演示如何直接使用这样的构建块之一。 为了该示例考虑使用线性滤波器组对图像进行卷积。首先在MATLAB中读取图像，比如说使用
+im=single(imread(&#39;peppers.png&#39;))
+得到H*W*D矩阵im，其中D = 3是图像中的颜色通道的数量。然后用
+f=randn(3,3,3,16,&#39;single&#39;)
+来创建一个K = 16个随机字母大小为3 * 3的数组。
+最后，使用命令
+y=vl_nnconv(x,f,[])
+将图像与过滤器卷积。 这将产生一个数组y带有K个通道，每个通道用于bank中的每一个。
+总代码如下：
+% install and compile MatConvNet (run once)
+untar([&#39;http://www.vlfeat.org/matconvnet/download/&#39;... &#39;matconvnet1.0beta24.tar.gz&#39;]) ;
+cd matconvnet1.0beta24
+run matlab/vl_compilenn
+% download a pretrained CNN from the web (run once)" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/c22f179d535f37f596d0f0eae8c71cc5/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-03-17T01:29:29+08:00" />
+<meta property="article:modified_time" content="2021-03-17T01:29:29+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">matlab中dzdx,MatConvnet工具箱使用手册翻译理解一</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <div style="font-size:16px;"> 
+ <p>概述</p> 
+ <p>MatConvNet是用于MATLAB的卷积神经网络(CNN)的实现。工具箱的设计注重简单性和灵活性。它将CNN的构建块暴露为易于使用的MATLAB函数，提供用于计算具有过滤器组的线性卷积，特征池化等的例程。以这种方式，MatConvNet允许新的CNN快速原型架构;同时，它支持CPU和GPU上的有效计算，允许在大型数据集(如ImageNet ILSVRC)上训练复杂模型。本文档概述了CNN及其在MatConvNet中的实现，并给出了工具箱中每个计算模块的技术细节。</p> 
+ <p>第一章 MatConvNet简介</p> 
+ <p>MatConvNet是一个实现卷积神经网络(CNN)的MATLAB工具箱，被应用于计算机视觉。 自从[8]的突破性工作以来，CNN已经在计算机视觉领域产生重要影响，特别是在图像理解上，基本上取代了传统的图像表示。例如在我们自己的VLFeat [11]开源库中实现的图像表示。</p> 
+ <p>虽然大多数CNN是通过组合简单的线性和非线性滤波操作获得的，诸如卷积和整形，它们的却并非微不足道。原因是CNN需要从大量的数据，通常是数百万的图像中学习，需要非常有效的实现。 作为大多数CNN库，MatConvNet通过使用各种优化，主要是通过支持GPU上的计算来实现这一点。</p> 
+ <p>存在许多其他机器学习，深度学习和CNN开源库。引用一些最流行的：像CudaConvNet，Torch，Theano，Caffe。 许多这些库得到很好的支持，有几十个积极的贡献者和大量的用户基础。 因此，为什么要创建另一个库？</p> 
+ <p>开发MatConvNet的关键动机是为研究人员提供一个特别友好和有效的环境，以便在其研究中使用。MatConvNet通过其在MATLAB环境中的深度集成实现了这一点，MATLAB环境是计算机视觉研究以及许多其他领域中最受欢迎的开发环境之一。特别地，MatConvNet公开了简单的MATLAB命令CNN构建块，如卷积，归一化和合并(第4章); 这些可以组合和扩展以轻松创建CNN架构。虽然有许多这样的模块，使用用C ++和CUDA(第1.4节)编写优化的CPU和GPU实现，但是MATLAB本身支持GPU计算意味着通常可以在保持计算效率的同时在MATLAB中直接写入新的块。与使用低级语言编写新的CNN组件相比，这是一个重要的简化，可以显着加速测试新的想法的速度。使用MATLAB还提供了一个连接到其他领域的桥梁;例如，MatConvNet最近被亚利桑那大学用于行星科学，正如NVIDIA的博客文章中所总结的。</p> 
+ <p>MatConvNet可以从数以百万计的图像学习大型CNN模型，如AlexNet [7]和非常深的网络[9]。这些强大模型中的几个的预训练版本可以从MatConvNet主页下载。虽然功能强大，MatConvNet仍易于使用和安装。 实现是完全独立的，只需要MATLAB和兼容的C ++编译器(使用GPU代码需要免费提供的CUDA DevKit和合适的NVIDIA GPU)。可以使用三个MATLAB命令下载，编译和安装MatConvNet。其包括了几个完整功能的示例，演示如何可以学习小型和大型网络。重要的是，几个标准的预训练网络可以立即下载并在应用程序中使用。有一与工具箱一起保留了具有完整的工具箱技术描述的手册[8]。这些特性使MatConvNet在教育背景下非常有用。</p> 
+ <p>MatConvNet是根据BSD类似许可证的开放源代码。 它可以从http://www.vlfeat.org/matconvnet以及从GitHub.10下载。</p> 
+ <p>1.1入门</p> 
+ <p>MatConvNet易于安装和使用。fig1.1提供了一个完整的例子，使用最新一代深卷积神经网络分类图像。 该示例包括下载MatConvNet，编译包，下载预训练的CNN模型，并在MATLAB的一个图像上评估该模型。</p> 
+ <p>在这个例子中的key命令是vl_simplenn，一个用CNN网络和预处理图像im_的包装器作为输入，并且产生结果的结构res作为输出。</p> 
+ <p>该特定包装器可以用于对具有简单结构，即操作链的网络建模。</p> 
+ <p>检查vl_simplenn(在MatConvNet中编辑vl_simplenn)的代码，我们注意到包装器顺序地转换数据，应用由网络配置指定的一些MATLAB函数。这些功能，在第4章中详细讨论，称为“构建块”，并构成MatConvNet的骨干。</p> 
+ <p>虽然大多数块实现简单操作，但他们效率使之不平凡(第1.4节)，它们以及支持反向传播(第2.3节)以允许学习CNN。接下来，我们演示如何直接使用这样的构建块之一。 为了该示例考虑使用线性滤波器组对图像进行卷积。首先在MATLAB中读取图像，比如说使用</p> 
+ <p>im=single(imread('peppers.png'))</p> 
+ <p>得到H*W*D矩阵im，其中D = 3是图像中的颜色通道的数量。然后用</p> 
+ <p>f=randn(3,3,3,16,'single')</p> 
+ <p>来创建一个K = 16个随机字母大小为3 * 3的数组。</p> 
+ <p>最后，使用命令</p> 
+ <p>y=vl_nnconv(x,f,[])</p> 
+ <p>将图像与过滤器卷积。 这将产生一个数组y带有K个通道，每个通道用于bank中的每一个。</p> 
+ <p>总代码如下：</p> 
+ <p>% install and compile MatConvNet (run once)</p> 
+ <p>untar(['http://www.vlfeat.org/matconvnet/download/'... 'matconvnet1.0beta24.tar.gz']) ;</p> 
+ <p>cd matconvnet1.0beta24</p> 
+ <p>run matlab/vl_compilenn</p> 
+ <p>% download a pretrained CNN from the web (run once)</p> 
+ <p>urlwrite(... 'http://www.vlfeat.org/matconvnet/models/imagenetvggf.mat', ... 'imagenetvggf.mat') ;</p> 
+ <p>% setup MatConvNet</p> 
+ <p>run matlab/vl_setupnn</p> 
+ <p>% load the pretrained CNN</p> 
+ <p>net= load('imagenetvggf.mat') ;</p> 
+ <p>% load and preprocess an image</p> 
+ <p>im=imread('peppers.png') ; im_=imresize(single(im),net.meta.normalization.imageSize(1:2)) ;</p> 
+ <p>im_=im_net.meta.normalization.averageImage;</p> 
+ <p>% run the CNN</p> 
+ <p>res=vl_simplenn(net,im_) ;</p> 
+ <p>% show theclassi cation result</p> 
+ <p>scores=squeeze(gather(res(end).x)) ;</p> 
+ <p>[bestScore,best] = max(scores) ;</p> 
+ <p>figure(1) ; clf ; imagesc(im) ;</p> 
+ <p>title(sprintf('%s (%d), score%.3f',net.classes.descriptionfbestg,best,bestScore)) ;</p> 
+ <p>结果如下：</p> 
+ <p align="center"><img src="https://images2.imgbox.com/5b/0d/BcL9FiUu_o.png" alt="0818b9ca8b590ca3270a3433284dd417.png"></p> 
+ <p>虽然鼓励用户直接使用块来创建新的架构，但MATLAB提供了包装器，如用于标准CNN架构的vl_simplenn，如AlexNet [7]或Network-in-Network [8]。 此外，库提供了大量示例(在examples /子目录中)，包括在MNIST，CIFAR和ImageNet数据集上学习各种模型的代码。</p> 
+ <p>所有这些示例使用examples / cnn_train训练代码，它是随机梯度下降的实现(第3.3节)。虽然这个训练代码是完全可维护的和相当灵活，它仍然在examples /子目录，因为它有点问题特定。 欢迎用户实施他们的优化器。</p> 
+ <p>1.2 MatConvNet一目了然</p> 
+ <p>MatConvNet具有简单的设计理念。 它不是将CNN包裹在软件的复杂层上，而是暴露了直接作为MATLAB命令的计算CNN构造块的简单函数，例如线性卷积和ReLU运算符。这些构建块易于组合成完整的CNN，并且可以用于实现复杂的学习算法。虽然提供了小型和大型CNN架构和培训例程的几个现实例子，但是总是可以回到基础并构建自己的网络，利用MATLAB在原型中的效率。通常不需要C编码来尝试新的体系结构。 因此，MatConvNet是计算机视觉和CNNs研究的理想操练场。</p> 
+ <p>MatConvNet包含以下元素：</p> 
+ <p>CNN计算块</p> 
+ <p>一组计算CNN的基本构建块的优化例程。</p> 
+ <p>例如，卷积块由</p> 
+ <p>y=vl_nnconv(x,f,b)</p> 
+ <p>实现，其中x是图像，f是过滤器组，b是偏移矢量(第4.1节)。</p> 
+ <p>导数计算为</p> 
+ <p>[dzdx,dzdf,dzdb]=vl_nnconv(x,f,b,dzdy)</p> 
+ <p>其中dzdy是CNN输出w.r.t y的导数(第4.1节)，第四章详细描述所有块。</p> 
+ <p>CNN封装</p> 
+ <p>MatConvNet提供了一个简单的包装器，由vl_simplenn调用，实现具有线性拓扑(一个块链)的CNN。</p> 
+ <p>它还提供了一个更加灵活的包装器，支持具有任意拓扑的网络，封装在dagnn，DagNN MATLAB类中。</p> 
+ <p>示例应用程序</p> 
+ <p>MatConvNet提供了几个在MNIST，CIFAR10和ImageNet数据上学习具有随机梯度下降和CPU或GPU的CNN的示例。</p> 
+ <p>预训练模型</p> 
+ <p>MatConvNet提供了几种先进的预先训练的CNN模型，可以用于现成的，用于分类图像或在Caffe或DeCAF的精神下产生的图像编码。</p> 
+ <p>1.3 文档和示例</p> 
+ <p>有关MatConvNet的三个主要信息来源。</p> 
+ <p>第一，网站包含所有功能的描述和几个例子和教程。</p> 
+ <p>第二，有一个PDF手册，其中包含大量有关工具箱的技术细节，包括构建块的详细数学描述。</p> 
+ <p>第三，MatConvNet附有几个例子(第1.1节)。</p> 
+ <p>大多数示例是完全自包含的。</p> 
+ <p>例如，为了运行MNIST示例，它将MATLAB指向MatConvNet根目录，并键入addpath </p> 
+ <p>由于问题大小，ImageNet ILSVRC示例需要一些更多准备，包括下载和预处理图像(使用捆绑脚本utils /preprocess)</p> 
+ <p>1.5 致谢</p> 
+ <p>MatConvNet是一个社区项目，因此感谢所有贡献者。我们衷心感谢NVIDIA支持这个项目，为我们提供了顶级的GPU和MathWorks，以进行关于如何改进库的讨论。</p> 
+ <p>在这个库中的几个CNN计算的实现是受到Caffe库的启发[5](然而，Caffe不是依赖)，几个示例网络已经由Karen Simonyan作为[1]和[10]的一部分训练。</p> 
+ <p>手册中给出的参考文献如下：</p> 
+ <p>[1] K. Chat eld, K. Simonyan, A. Vedaldi, and A. Zisserman. Return of the devil in the</p> 
+ <p>details: Delving deep into convolutional nets. In Proc. BMVC, 2014.</p> 
+ <p>[2] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei. ImageNet: A Large-Scale</p> 
+ <p>Hierarchical Image Database. In Proc. CVPR, 2009.</p> 
+ <p>[3] R. Girshick. Fast R-CNN. In arXiv, number arXiv:1504.08083, 2015.</p> 
+ <p>[4] S. Ioe and C. Szegedy. Batch normalization: Accelerating deep network training by</p> 
+ <p>reducing internal covariate shift. CoRR, 2015.</p> 
+ <p>[5] S. Ioe and C. Szegedy. Batch Normalization: Accelerating Deep Network Training by</p> 
+ <p>Reducing Internal Covariate Shift. ArXiv e-prints, 2015.</p> 
+ <p>[6] Yangqing Jia. Cae: An open source convolutional architecture for fast feature embed-</p> 
+ <p>ding. http://caffe.berkeleyvision.org/, 2013. [7] D. B. Kinghorn. Integrals and derivatives for correlated gaussian fuctions using matrix dierential calculus. International Journal of Quantum Chemestry, 57:141{155, 1996. [8] A. Krizhevsky, I. Sutskever, and G. E. Hinton. Imagenet classi cation with deep convo- lutional neural networks. In Proc. NIPS, 2012. [9] Min Lin, Qiang Chen, and Shuicheng Yan. Network in network. CoRR, abs/1312.4400, 2013. [10] G. Marsaglia and W. W. Tsang. The ziggurat method for generating random variables. Journal of statistical software, 5(8):1{7, 2000. [11] K. Simonyan, A. Vedaldi, and A. Zisserman. Deep inside convolutional networks: Visu- alising image classi cation models and saliency maps. In Proc. ICLR, 2014. [12] K. Simonyan and A. Zisserman. Very deep convolutional networks for large-scale image recognition. 2015. [13] A. Vedaldi and B. Fulkerson. VLFeat { An open and portable library of computer vision algorithms. In Proc. ACM Int. Conf. on Multimedia, 2010. [14] M. D. Zeiler and R. Fergus. Visualizing and understanding convolutional networks. In Proc. ECCV, 2014.</p> 
+</div>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/cff63275bdb84c32112ea20eb9c1f9f3/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">SpringToolsSuite 导入官方教程的方法</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/cc5dc6b820c8f30844e37c6372f20b2a/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">JVM从入门到精通-JVM工具命令行篇</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

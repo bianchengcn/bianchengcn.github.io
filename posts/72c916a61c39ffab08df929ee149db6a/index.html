@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Win7x64系统过TP的一些尝试和目前遇到的问题 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Win7x64系统过TP的一些尝试和目前遇到的问题" />
+<meta property="og:description" content="其实渣新学内核编程不过半个月时间，帖中难免有幼稚的想法和错误，遇到的问题我会用蓝色文字表述，还请各位前辈指正，感激不尽！ 我把自己目前的进展和遇到的问题一起说说吧： x64系统过TP大概分两步，首先要过双机调试，然后要过应用层调试。 1、过双机调试，这里也分两步 (1)首先要保证debug模式下启动游戏不蓝屏。 我也是第一次研究TP，对这之前的保护不了解，不过看网上所说这个启动蓝屏似乎是最近几个月新加的。 要过这个需要对内核调试引擎有一定的了解，不过还好我们是站在巨♂人♀的肩膀上，在看雪找到了篇帖子，比较详细的分析了系统启动时内核调试引擎初始化的几个标志。 TP只是检测了其中一个(待定)， KdEnteredDebugger，它通过MDL映射来判断这个标志是不是True，如果是就蓝屏，解决方法我照抄了那篇帖子，直接在Hook一下IoAllocateMdl， 把判断的地址改到一个恒为False的地方这样就可以绕过了 [C&#43;&#43;] 纯文本查看 复制代码 ? 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 PMDL newIoAllocateMdl( __in_opt PVOID VirtualAddress, __in ULONG Length, __in BOOLEAN SecondaryBuffer, __in BOOLEAN ChargeQuota, __inout_opt PIRP Irp OPTIONAL) { if (VirtualAddress == KdEnteredDebugger) { //DbgPrint(&#34;[KdEnteredDebugger] address: %p\n&#34;, KdEnteredDebugger); VirtualAddress = ( PUCHAR )KdEnteredDebugger &#43; 0x30; //据观察，&#43;0x30 的位置恒为0 } return oldIoAllocateMdl(VirtualAddress, Length, SecondaryBuffer, ChargeQuota, Irp); } 不过这样做带来一个问题，蓝屏是不蓝屏了，TP的驱动模块也能加载，但只能启动登陆客户端Client." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/72c916a61c39ffab08df929ee149db6a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2015-04-08T15:02:59+08:00" />
+<meta property="article:modified_time" content="2015-04-08T15:02:59+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Win7x64系统过TP的一些尝试和目前遇到的问题</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    其实渣新学内核编程不过半个月时间，帖中难免有幼稚的想法和错误，遇到的问题我会用蓝色文字表述，还请各位前辈指正，感激不尽！ 
+<br> 
+<br> 我把自己目前的进展和遇到的问题一起说说吧： 
+<br> x64系统过TP大概分两步，首先要过双机调试，然后要过应用层调试。 
+<br> 
+<br> 
+<span style="color:Purple"><strong>1、过双机调试，这里也分两步</strong></span> 
+<br> 
+<span style="color:SeaGreen">(1)首先要保证debug模式下启动游戏不蓝屏。</span> 
+<br> 
+<br> 我也是第一次研究TP，对这之前的保护不了解，不过看网上所说这个启动蓝屏似乎是最近几个月新加的。 
+<br> 要过这个需要对内核调试引擎有一定的了解，不过还好我们是站在巨♂人♀的肩膀上，在看雪找到了篇帖子，比较详细的分析了系统启动时内核调试引擎初始化的几个标志。 
+<br> TP只是检测了其中一个(待定)， 
+<span style="color:Red">KdEnteredDebugger</span>，它通过MDL映射来判断这个标志是不是True，如果是就蓝屏，解决方法我照抄了那篇帖子，直接在Hook一下IoAllocateMdl， 
+<br> 把判断的地址改到一个恒为False的地方这样就可以绕过了 
+<br> 
+<div style="padding:15px 0"> 
+ <div style="font-size:12px">
+   [C++] 
+  <em class="viewsource" style="font-size:12px; color:#369!important"> 纯文本查看 复制代码</em> 
+ </div> 
+ <div> 
+  <div id="highlighter_99031" class="syntaxhighlighter notranslate cpp"> 
+   <div class="toolbar"> 
+    <a target="_blank" href="http://www.52pojie.cn/#" rel="nofollow noopener noreferrer" class="toolbar_item command_help help">?</a> 
+   </div> 
+   <table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td class="gutter"> 
+       <div class="line number1 index0 alt2">
+         01 
+       </div> 
+       <div class="line number2 index1 alt1">
+         02 
+       </div> 
+       <div class="line number3 index2 alt2">
+         03 
+       </div> 
+       <div class="line number4 index3 alt1">
+         04 
+       </div> 
+       <div class="line number5 index4 alt2">
+         05 
+       </div> 
+       <div class="line number6 index5 alt1">
+         06 
+       </div> 
+       <div class="line number7 index6 alt2">
+         07 
+       </div> 
+       <div class="line number8 index7 alt1">
+         08 
+       </div> 
+       <div class="line number9 index8 alt2">
+         09 
+       </div> 
+       <div class="line number10 index9 alt1">
+         10 
+       </div> 
+       <div class="line number11 index10 alt2">
+         11 
+       </div> 
+       <div class="line number12 index11 alt1">
+         12 
+       </div> 
+       <div class="line number13 index12 alt2">
+         13 
+       </div> 
+       <div class="line number14 index13 alt1">
+         14 
+       </div> 
+       <div class="line number15 index14 alt2">
+         15 
+       </div> 
+       <div class="line number16 index15 alt1">
+         16 
+       </div> </td><td class="code"> 
+       <div class="container"> 
+        <div class="line number1 index0 alt2"> 
+         <code class="cpp plain">PMDL newIoAllocateMdl(</code> 
+        </div> 
+        <div class="line number2 index1 alt1"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">__in_opt </code> 
+         <code class="cpp color1 bold">PVOID</code>  
+         <code class="cpp plain">VirtualAddress,</code> 
+        </div> 
+        <div class="line number3 index2 alt2"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">__in </code> 
+         <code class="cpp color1 bold">ULONG</code>  
+         <code class="cpp plain">Length,</code> 
+        </div> 
+        <div class="line number4 index3 alt1"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">__in </code> 
+         <code class="cpp color1 bold">BOOLEAN</code>  
+         <code class="cpp plain">SecondaryBuffer,</code> 
+        </div> 
+        <div class="line number5 index4 alt2"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">__in </code> 
+         <code class="cpp color1 bold">BOOLEAN</code>  
+         <code class="cpp plain">ChargeQuota,</code> 
+        </div> 
+        <div class="line number6 index5 alt1"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">__inout_opt PIRP  Irp  OPTIONAL)</code> 
+        </div> 
+        <div class="line number7 index6 alt2"> 
+         <code class="cpp plain">{<!-- --></code> 
+        </div> 
+        <div class="line number8 index7 alt1">
+            
+        </div> 
+        <div class="line number9 index8 alt2"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp keyword bold">if</code> 
+         <code class="cpp plain">(VirtualAddress == KdEnteredDebugger)</code> 
+        </div> 
+        <div class="line number10 index9 alt1"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">{<!-- --></code> 
+        </div> 
+        <div class="line number11 index10 alt2"> 
+         <code class="cpp spaces">                </code> 
+         <code class="cpp comments">//DbgPrint("[KdEnteredDebugger] address: %p\n", KdEnteredDebugger);</code> 
+        </div> 
+        <div class="line number12 index11 alt1"> 
+         <code class="cpp spaces">                </code> 
+         <code class="cpp plain">VirtualAddress = (</code> 
+         <code class="cpp color1 bold">PUCHAR</code> 
+         <code class="cpp plain">)KdEnteredDebugger + 0x30;  </code> 
+         <code class="cpp comments">//据观察，+0x30 的位置恒为0</code> 
+        </div> 
+        <div class="line number13 index12 alt2"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">}</code> 
+        </div> 
+        <div class="line number14 index13 alt1">
+            
+        </div> 
+        <div class="line number15 index14 alt2"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp keyword bold">return</code> 
+         <code class="cpp plain">oldIoAllocateMdl(VirtualAddress, Length, SecondaryBuffer, ChargeQuota, Irp);</code> 
+        </div> 
+        <div class="line number16 index15 alt1"> 
+         <code class="cpp plain">}</code> 
+        </div> 
+       </div> </td></tr></tbody></table> 
+  </div> 
+ </div> 
+</div> 
+<br> 
+<span style="color:Blue">不过这样做带来一个问题，蓝屏是不蓝屏了，TP的驱动模块也能加载，但只能启动登陆客户端Client.exe，在登陆后启动DNF.exe时TP会再进行一次检测，<br> 这次就会造成虚拟机卡死，估计还是和调试模式的检测有关。</span> 
+<br> 
+<br> 我用了个折中的解决办法，就是用户态调试的时候不进入Debug模式，这样就能启动DNF.exe了，不过实在是不方便 
+<br> 
+<br> 
+<span style="color:SeaGreen">(2)使双机调试能下断点</span> 
+<br> 关于双机调试中断点原理和异常的处理流程，我是看了《软件调试》这本书和http://www.xfocus.net/articles/200412/765.html这片帖子，有了些了解。 
+<br> 
+<span style="color:Red">对于TP来说，他是不断调用KdDisableDebuger()这个函数来清零KdDebuggerEnabled</span>，调试引擎就是在KeUpdateSystemTime()这个函数里不断检测这个标志来确定异常处理的流程 
+<br> 
+<br> 解决方法，一开始我是直接HooK KdDisableDebuger()，开头 
+<br> 
+<div style="padding:15px 0"> 
+ <div style="font-size:12px">
+   [Asm] 
+  <em class="viewsource" style="font-size:12px; color:#369!important"> 纯文本查看 复制代码</em> 
+ </div> 
+ <div> 
+  <div id="highlighter_49223" class="syntaxhighlighter notranslate asm"> 
+   <div class="toolbar"> 
+    <a target="_blank" href="http://www.52pojie.cn/#" rel="nofollow noopener noreferrer" class="toolbar_item command_help help">?</a> 
+   </div> 
+   <table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td class="gutter"> 
+       <div class="line number1 index0 alt2">
+         1 
+       </div> 
+       <div class="line number2 index1 alt1">
+         2 
+       </div> </td><td class="code"> 
+       <div class="container"> 
+        <div class="line number1 index0 alt2"> 
+         <code class="asm functions bold">xor</code> 
+         <code class="asm plain">rax, rax</code> 
+        </div> 
+        <div class="line number2 index1 alt1"> 
+         <code class="asm functions bold">ret</code> 
+        </div> 
+       </div> </td></tr></tbody></table> 
+  </div> 
+ </div> 
+</div> 直接STATUS_SUCCESS然后返回，不让它做其他处理， 
+<span style="color:Blue">但是毫无效果，还是下不了断点，不知道是怎么回事……</span> 
+<br> 
+<br> 后来想了个办法，直接修改KeUpdateSystemTime()里面检测的地方，和上面一样，让它检测其它地址…… 
+<br> 
+<div style="padding:15px 0"> 
+ <div style="font-size:12px">
+   [C++] 
+  <em class="viewsource" style="font-size:12px; color:#369!important"> 纯文本查看 复制代码</em> 
+ </div> 
+ <div> 
+  <div id="highlighter_422016" class="syntaxhighlighter notranslate cpp"> 
+   <div class="toolbar"> 
+    <a target="_blank" href="http://www.52pojie.cn/#" rel="nofollow noopener noreferrer" class="toolbar_item command_help help">?</a> 
+   </div> 
+   <table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td class="gutter"> 
+       <div class="line number1 index0 alt2">
+         01 
+       </div> 
+       <div class="line number2 index1 alt1">
+         02 
+       </div> 
+       <div class="line number3 index2 alt2">
+         03 
+       </div> 
+       <div class="line number4 index3 alt1">
+         04 
+       </div> 
+       <div class="line number5 index4 alt2">
+         05 
+       </div> 
+       <div class="line number6 index5 alt1">
+         06 
+       </div> 
+       <div class="line number7 index6 alt2">
+         07 
+       </div> 
+       <div class="line number8 index7 alt1">
+         08 
+       </div> 
+       <div class="line number9 index8 alt2">
+         09 
+       </div> 
+       <div class="line number10 index9 alt1">
+         10 
+       </div> </td><td class="code"> 
+       <div class="container"> 
+        <div class="line number1 index0 alt2"> 
+         <code class="cpp comments">//替换KeUpdateSystemTime函数中两个KdDebuggerEnabled变量地址为DummyKdDebuggerEnabled</code> 
+        </div> 
+        <div class="line number2 index1 alt1"> 
+         <code class="cpp plain">KUSTPatchAddr1 = SearchAddressBySig((</code> 
+         <code class="cpp color1 bold">PUCHAR</code> 
+         <code class="cpp plain">)KeUpdateSystemTimeAddr + 0x100, 0x100, UPSig1, </code> 
+         <code class="cpp keyword bold">sizeof</code> 
+         <code class="cpp plain">(UPSig1)) ;</code> 
+        </div> 
+        <div class="line number3 index2 alt2"> 
+         <code class="cpp keyword bold">if</code> 
+         <code class="cpp plain"> (KUSTPatchAddr1 != NULL)</code> 
+        </div> 
+        <div class="line number4 index3 alt1"> 
+         <code class="cpp plain">{<!-- --></code> 
+        </div> 
+        <div class="line number5 index4 alt2"> 
+         <code class="cpp spaces">    </code> 
+         <code class="cpp plain">KUSTPatchAddr1 += </code> 
+         <code class="cpp keyword bold">sizeof</code> 
+         <code class="cpp plain">(UPSig1);</code> 
+        </div> 
+        <div class="line number6 index5 alt1"> 
+         <code class="cpp spaces">    </code> 
+         <code class="cpp comments">//64位汇编，变量均为相对rip地址，下同</code> 
+        </div> 
+        <div class="line number7 index6 alt2"> 
+         <code class="cpp spaces">    </code> 
+         <code class="cpp plain">DisableWriteProtect64();</code> 
+        </div> 
+        <div class="line number8 index7 alt1"> 
+         <code class="cpp spaces">    </code> 
+         <code class="cpp plain">*(</code> 
+         <code class="cpp color1 bold">PULONG</code> 
+         <code class="cpp plain">)KUSTPatchAddr1 = (</code> 
+         <code class="cpp color1 bold">PUCHAR</code> 
+         <code class="cpp plain">)pDummyKdDebuggerEnabled - ((</code> 
+         <code class="cpp color1 bold">PUCHAR</code> 
+         <code class="cpp plain">)KUSTPatchAddr1 - 2) - 6; </code> 
+         <code class="cpp comments">//指令长度为6</code> 
+        </div> 
+        <div class="line number9 index8 alt2"> 
+         <code class="cpp spaces">    </code> 
+         <code class="cpp plain">EnableWriteProtect64();</code> 
+        </div> 
+        <div class="line number10 index9 alt1"> 
+         <code class="cpp plain">}</code> 
+        </div> 
+       </div> </td></tr></tbody></table> 
+  </div> 
+ </div> 
+</div> 
+<br> 要改的地方有3处，我只贴了一处的代码。这样就能下各种断点了。 
+<br> 
+<br> 
+<span style="color:Purple"><strong>2、双机调试之后就是用户态调试了<br> </strong><span style="color:Black">x64系统上TP目前做的保护还不是特别多，这也是我选x64入手的原因之一<br> <span style="color:Red">TP修改了</span></span></span> 
+<span style="color:Red">DebugObject中</span> 
+<font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><span style="color:Purple"><span style="color:Black"><span style="color:Red">Val<a target="_blank" href="http://www.52pojie.cn/thread-319763-1-1.html" rel="nofollow noopener noreferrer" class="relatedlink">IDA</a>ccessMask一项</span>，这个就是调试权限，代码中我们恢复下就可以了。<br> <br> windbg下输入以下命令就可以定位到</span></span></font></font></font></font> 
+<font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Purple"><span style="color:Black">ValidAccessMask，下硬件断点就能找到</span></span></span></font></font></font></font></font></font></font></font></font> 
+<font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Purple"><span style="color:Black">ValidAccessMask清零的地方。<br> 至于如何在自己的代码中定位这个变量，我是通过SSDT表查找NtCreateDebugObject这个内核函数地址，里面定位</span></span></span></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font> 
+<font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Purple"><span style="color:Black">DbgkDebugObjectType<br> 再根据下面的结构体加几个偏移地址(</span></span></span></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font> 
+<font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Purple"><span style="color:Black">+0x040 + </span></span></span></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font> 
+<font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Purple"><span style="color:Black">0x01c</span></span></span></font>)来找到</font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font> 
+<font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Purple"><span style="color:Black">ValidAccessMask。应该有更好的定位方法……<br> <br> </span></span></span></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font></font> 
+<div style="padding:15px 0"> 
+ <div style="font-size:12px">
+   [Asm] 
+  <em class="viewsource" style="font-size:12px; color:#369!important"> 纯文本查看 复制代码</em> 
+ </div> 
+ <div> 
+  <div id="highlighter_12147" class="syntaxhighlighter notranslate asm"> 
+   <div class="toolbar"> 
+    <a target="_blank" href="http://www.52pojie.cn/#" rel="nofollow noopener noreferrer" class="toolbar_item command_help help">?</a> 
+   </div> 
+   <table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td class="gutter"> 
+       <div class="line number1 index0 alt2">
+         01 
+       </div> 
+       <div class="line number2 index1 alt1">
+         02 
+       </div> 
+       <div class="line number3 index2 alt2">
+         03 
+       </div> 
+       <div class="line number4 index3 alt1">
+         04 
+       </div> 
+       <div class="line number5 index4 alt2">
+         05 
+       </div> 
+       <div class="line number6 index5 alt1">
+         06 
+       </div> 
+       <div class="line number7 index6 alt2">
+         07 
+       </div> 
+       <div class="line number8 index7 alt1">
+         08 
+       </div> 
+       <div class="line number9 index8 alt2">
+         09 
+       </div> 
+       <div class="line number10 index9 alt1">
+         10 
+       </div> 
+       <div class="line number11 index10 alt2">
+         11 
+       </div> 
+       <div class="line number12 index11 alt1">
+         12 
+       </div> 
+       <div class="line number13 index12 alt2">
+         13 
+       </div> 
+       <div class="line number14 index13 alt1">
+         14 
+       </div> 
+       <div class="line number15 index14 alt2">
+         15 
+       </div> 
+       <div class="line number16 index15 alt1">
+         16 
+       </div> 
+       <div class="line number17 index16 alt2">
+         17 
+       </div> 
+       <div class="line number18 index17 alt1">
+         18 
+       </div> 
+       <div class="line number19 index18 alt2">
+         19 
+       </div> 
+       <div class="line number20 index19 alt1">
+         20 
+       </div> 
+       <div class="line number21 index20 alt2">
+         21 
+       </div> 
+       <div class="line number22 index21 alt1">
+         22 
+       </div> 
+       <div class="line number23 index22 alt2">
+         23 
+       </div> 
+       <div class="line number24 index23 alt1">
+         24 
+       </div> 
+       <div class="line number25 index24 alt2">
+         25 
+       </div> 
+       <div class="line number26 index25 alt1">
+         26 
+       </div> 
+       <div class="line number27 index26 alt2">
+         27 
+       </div> 
+       <div class="line number28 index27 alt1">
+         28 
+       </div> 
+       <div class="line number29 index28 alt2">
+         29 
+       </div> 
+       <div class="line number30 index29 alt1">
+         30 
+       </div> 
+       <div class="line number31 index30 alt2">
+         31 
+       </div> 
+       <div class="line number32 index31 alt1">
+         32 
+       </div> 
+       <div class="line number33 index32 alt2">
+         33 
+       </div> 
+       <div class="line number34 index33 alt1">
+         34 
+       </div> 
+       <div class="line number35 index34 alt2">
+         35 
+       </div> 
+       <div class="line number36 index35 alt1">
+         36 
+       </div> 
+       <div class="line number37 index36 alt2">
+         37 
+       </div> 
+       <div class="line number38 index37 alt1">
+         38 
+       </div> 
+       <div class="line number39 index38 alt2">
+         39 
+       </div> 
+       <div class="line number40 index39 alt1">
+         40 
+       </div> 
+       <div class="line number41 index40 alt2">
+         41 
+       </div> 
+       <div class="line number42 index41 alt1">
+         42 
+       </div> 
+       <div class="line number43 index42 alt2">
+         43 
+       </div> 
+       <div class="line number44 index43 alt1">
+         44 
+       </div> 
+       <div class="line number45 index44 alt2">
+         45 
+       </div> 
+       <div class="line number46 index45 alt1">
+         46 
+       </div> 
+       <div class="line number47 index46 alt2">
+         47 
+       </div> 
+       <div class="line number48 index47 alt1">
+         48 
+       </div> 
+       <div class="line number49 index48 alt2">
+         49 
+       </div> 
+       <div class="line number50 index49 alt1">
+         50 
+       </div> 
+       <div class="line number51 index50 alt2">
+         51 
+       </div> 
+       <div class="line number52 index51 alt1">
+         52 
+       </div> 
+       <div class="line number53 index52 alt2">
+         53 
+       </div> 
+       <div class="line number54 index53 alt1">
+         54 
+       </div> 
+       <div class="line number55 index54 alt2">
+         55 
+       </div> 
+       <div class="line number56 index55 alt1">
+         56 
+       </div> 
+       <div class="line number57 index56 alt2">
+         57 
+       </div> 
+       <div class="line number58 index57 alt1">
+         58 
+       </div> 
+       <div class="line number59 index58 alt2">
+         59 
+       </div> 
+       <div class="line number60 index59 alt1">
+         60 
+       </div> 
+       <div class="line number61 index60 alt2">
+         61 
+       </div> 
+       <div class="line number62 index61 alt1">
+         62 
+       </div> 
+       <div class="line number63 index62 alt2">
+         63 
+       </div> 
+       <div class="line number64 index63 alt1">
+         64 
+       </div> 
+       <div class="line number65 index64 alt2">
+         65 
+       </div> 
+       <div class="line number66 index65 alt1">
+         66 
+       </div> 
+       <div class="line number67 index66 alt2">
+         67 
+       </div> 
+       <div class="line number68 index67 alt1">
+         68 
+       </div> 
+       <div class="line number69 index68 alt2">
+         69 
+       </div> 
+       <div class="line number70 index69 alt1">
+         70 
+       </div> 
+       <div class="line number71 index70 alt2">
+         71 
+       </div> 
+       <div class="line number72 index71 alt1">
+         72 
+       </div> 
+       <div class="line number73 index72 alt2">
+         73 
+       </div> 
+       <div class="line number74 index73 alt1">
+         74 
+       </div> 
+       <div class="line number75 index74 alt2">
+         75 
+       </div> 
+       <div class="line number76 index75 alt1">
+         76 
+       </div> 
+       <div class="line number77 index76 alt2">
+         77 
+       </div> 
+       <div class="line number78 index77 alt1">
+         78 
+       </div> 
+       <div class="line number79 index78 alt2">
+         79 
+       </div> 
+       <div class="line number80 index79 alt1">
+         80 
+       </div> 
+       <div class="line number81 index80 alt2">
+         81 
+       </div> 
+       <div class="line number82 index81 alt1">
+         82 
+       </div> </td><td class="code"> 
+       <div class="container"> 
+        <div class="line number1 index0 alt2"> 
+         <code class="asm keyword bold">dq</code> 
+         <code class="asm plain"> DbgkDebugObjectType</code> 
+        </div> 
+        <div class="line number2 index1 alt1"> 
+         <code class="asm keyword bold">dt</code> 
+         <code class="asm plain"> _OBJECT_TYPE fffffa80`24e33250</code> 
+        </div> 
+        <div class="line number3 index2 alt2">
+            
+        </div> 
+        <div class="line number4 index3 alt1"> 
+         <code class="asm plain">清零前：</code> 
+        </div> 
+        <div class="line number5 index4 alt2">
+            
+        </div> 
+        <div class="line number6 index5 alt1"> 
+         <code class="asm plain">1: kd&gt; </code> 
+         <code class="asm keyword bold">dt</code> 
+         <code class="asm plain">_OBJECT_TYPE_INITIALIZER fffffa80`24e33250+0x040</code> 
+        </div> 
+        <div class="line number7 index6 alt2"> 
+         <code class="asm plain">nt!_OBJECT_TYPE_INITIALIZER</code> 
+        </div> 
+        <div class="line number8 index7 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x000 </code> 
+         <code class="asm keyword bold">Length</code>           
+         <code class="asm plain"> : 0x70</code> 
+        </div> 
+        <div class="line number9 index8 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 ObjectTypeFlags  : 0x8 </code> 
+         <code class="asm string">''</code> 
+        </div> 
+        <div class="line number10 index9 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 CaseInsensitive  : 0y0</code> 
+        </div> 
+        <div class="line number11 index10 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 UnnamedObjectsOnly : 0y0</code> 
+        </div> 
+        <div class="line number12 index11 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 UseDefaultObject : 0y0</code> 
+        </div> 
+        <div class="line number13 index12 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 SecurityRequired : 0y1</code> 
+        </div> 
+        <div class="line number14 index13 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 MaintainHandleCount : 0y0</code> 
+        </div> 
+        <div class="line number15 index14 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 MaintainTypeList : 0y0</code> 
+        </div> 
+        <div class="line number16 index15 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 SupportsObjectCallbacks : 0y0</code> 
+        </div> 
+        <div class="line number17 index16 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x004 ObjectTypeCode   : 0</code> 
+        </div> 
+        <div class="line number18 index17 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x008 InvalidAttributes : 0</code> 
+        </div> 
+        <div class="line number19 index18 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x00c GenericMapping   : _GENERIC_MAPPING</code> 
+        </div> 
+        <div class="line number20 index19 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x01c ValidAccessMask  : 0x1f000f</code> 
+        </div> 
+        <div class="line number21 index20 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x020 RetainAccess     : 0</code> 
+        </div> 
+        <div class="line number22 index21 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x024 PoolType         : 0 ( NonPagedPool )</code> 
+        </div> 
+        <div class="line number23 index22 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x028 DefaultPagedPoolCharge : 0</code> 
+        </div> 
+        <div class="line number24 index23 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x02c DefaultNonPagedPoolCharge : 0x58</code> 
+        </div> 
+        <div class="line number25 index24 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x030 DumpProcedure    : (null) </code> 
+        </div> 
+        <div class="line number26 index25 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x038 OpenProcedure    : (null) </code> 
+        </div> 
+        <div class="line number27 index26 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x040 CloseProcedure   : 0xfffff800`01f0ddb0     void  nt!DbgkpCloseObject+0</code> 
+        </div> 
+        <div class="line number28 index27 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x048 DeleteProcedure  : 0xfffff800`01d66fe0     void  nt!CmpConfigureProcessors+0</code> 
+        </div> 
+        <div class="line number29 index28 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x050 ParseProcedure   : (null) </code> 
+        </div> 
+        <div class="line number30 index29 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x058 SecurityProcedure : 0xfffff800`01dd25f0     long  nt!SeDefaultObjectMethod+0</code> 
+        </div> 
+        <div class="line number31 index30 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x060 QueryNameProcedure : (null) </code> 
+        </div> 
+        <div class="line number32 index31 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x068 OkayToCloseProcedure : (null) </code> 
+        </div> 
+        <div class="line number33 index32 alt2">
+            
+        </div> 
+        <div class="line number34 index33 alt1">
+            
+        </div> 
+        <div class="line number35 index34 alt2"> 
+         <code class="asm plain">清零后：</code> 
+        </div> 
+        <div class="line number36 index35 alt1"> 
+         <code class="asm plain">0: kd&gt; </code> 
+         <code class="asm keyword bold">dt</code> 
+         <code class="asm plain">_OBJECT_TYPE_INITIALIZER fffffa80`24e51250+0x040</code> 
+        </div> 
+        <div class="line number37 index36 alt2"> 
+         <code class="asm plain">nt!_OBJECT_TYPE_INITIALIZER</code> 
+        </div> 
+        <div class="line number38 index37 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x000 </code> 
+         <code class="asm keyword bold">Length</code>           
+         <code class="asm plain"> : 0x70</code> 
+        </div> 
+        <div class="line number39 index38 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 ObjectTypeFlags  : 0x8 </code> 
+         <code class="asm string">''</code> 
+        </div> 
+        <div class="line number40 index39 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 CaseInsensitive  : 0y0</code> 
+        </div> 
+        <div class="line number41 index40 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 UnnamedObjectsOnly : 0y0</code> 
+        </div> 
+        <div class="line number42 index41 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 UseDefaultObject : 0y0</code> 
+        </div> 
+        <div class="line number43 index42 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 SecurityRequired : 0y1</code> 
+        </div> 
+        <div class="line number44 index43 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 MaintainHandleCount : 0y0</code> 
+        </div> 
+        <div class="line number45 index44 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 MaintainTypeList : 0y0</code> 
+        </div> 
+        <div class="line number46 index45 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x002 SupportsObjectCallbacks : 0y0</code> 
+        </div> 
+        <div class="line number47 index46 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x004 ObjectTypeCode   : 0</code> 
+        </div> 
+        <div class="line number48 index47 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x008 InvalidAttributes : 0</code> 
+        </div> 
+        <div class="line number49 index48 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x00c GenericMapping   : _GENERIC_MAPPING</code> 
+        </div> 
+        <div class="line number50 index49 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x01c ValidAccessMask  : 0</code> 
+        </div> 
+        <div class="line number51 index50 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x020 RetainAccess     : 0</code> 
+        </div> 
+        <div class="line number52 index51 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x024 PoolType         : 0 ( NonPagedPool )</code> 
+        </div> 
+        <div class="line number53 index52 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x028 DefaultPagedPoolCharge : 0</code> 
+        </div> 
+        <div class="line number54 index53 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x02c DefaultNonPagedPoolCharge : 0x58</code> 
+        </div> 
+        <div class="line number55 index54 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x030 DumpProcedure    : (null) </code> 
+        </div> 
+        <div class="line number56 index55 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x038 OpenProcedure    : (null) </code> 
+        </div> 
+        <div class="line number57 index56 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x040 CloseProcedure   : 0xfffff800`01eb5db0     void  nt!DbgkpCloseObject+0</code> 
+        </div> 
+        <div class="line number58 index57 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x048 DeleteProcedure  : 0xfffff800`01d0efe0     void  nt!CmpConfigureProcessors+0</code> 
+        </div> 
+        <div class="line number59 index58 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x050 ParseProcedure   : (null) </code> 
+        </div> 
+        <div class="line number60 index59 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x058 SecurityProcedure : 0xfffff800`01d7a5f0     long  nt!SeDefaultObjectMethod+0</code> 
+        </div> 
+        <div class="line number61 index60 alt2"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x060 QueryNameProcedure : (null) </code> 
+        </div> 
+        <div class="line number62 index61 alt1"> 
+         <code class="asm spaces">   </code> 
+         <code class="asm plain">+0x068 OkayToCloseProcedure : (null) </code> 
+        </div> 
+        <div class="line number63 index62 alt2">
+            
+        </div> 
+        <div class="line number64 index63 alt1"> 
+         <code class="asm plain">清零代码：</code> 
+        </div> 
+        <div class="line number65 index64 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4cc 54              </code> 
+         <code class="asm functions bold">push</code>    
+         <code class="asm plain">rsp</code> 
+        </div> 
+        <div class="line number66 index65 alt1"> 
+         <code class="asm plain">fffff880`0bcdc4cd 33c0            </code> 
+         <code class="asm functions bold">xor</code>     
+         <code class="asm color1 bold"> eax</code> 
+         <code class="asm plain">,</code> 
+         <code class="asm color1 bold">eax</code> 
+        </div> 
+        <div class="line number67 index66 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4cf 87434c          </code> 
+         <code class="asm functions bold">xchg</code>    
+         <code class="asm color1 bold"> eax</code> 
+         <code class="asm plain">,</code> 
+         <code class="asm keyword bold">dword</code> 
+         <code class="asm keyword bold">ptr</code> 
+         <code class="asm plain">[rbx+4Ch]</code> 
+        </div> 
+        <div class="line number68 index67 alt1"> 
+         <code class="asm plain">fffff880`0bcdc4d2 33c0            </code> 
+         <code class="asm functions bold">xor</code>     
+         <code class="asm color1 bold"> eax</code> 
+         <code class="asm plain">,</code> 
+         <code class="asm color1 bold">eax</code> 
+        </div> 
+        <div class="line number69 index68 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4d4 874350          </code> 
+         <code class="asm functions bold">xchg</code>    
+         <code class="asm color1 bold"> eax</code> 
+         <code class="asm plain">,</code> 
+         <code class="asm keyword bold">dword</code> 
+         <code class="asm keyword bold">ptr</code> 
+         <code class="asm plain">[rbx+50h]</code> 
+        </div> 
+        <div class="line number70 index69 alt1"> 
+         <code class="asm plain">fffff880`0bcdc4d7 33c0            </code> 
+         <code class="asm functions bold">xor</code>     
+         <code class="asm color1 bold"> eax</code> 
+         <code class="asm plain">,</code> 
+         <code class="asm color1 bold">eax</code> 
+        </div> 
+        <div class="line number71 index70 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4d9 87435c          </code> 
+         <code class="asm functions bold">xchg</code>    
+         <code class="asm color1 bold"> eax</code> 
+         <code class="asm plain">,</code> 
+         <code class="asm keyword bold">dword</code> 
+         <code class="asm keyword bold">ptr</code> 
+         <code class="asm plain">[rbx+5Ch] // ValidAccessMask  </code> 
+        </div> 
+        <div class="line number72 index71 alt1"> 
+         <code class="asm plain">fffff880`0bcdc4dc 833d9585000000  </code> 
+         <code class="asm functions bold">cmp</code>     
+         <code class="asm keyword bold"> dword</code> 
+         <code class="asm keyword bold">ptr</code> 
+         <code class="asm plain">[fffff880`0bce4a78],0</code> 
+        </div> 
+        <div class="line number73 index72 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4e3 0f8544feffff    </code> 
+         <code class="asm functions bold">jne</code>     
+         <code class="asm plain">fffff880`0bcdc32d</code> 
+        </div> 
+        <div class="line number74 index73 alt1"> 
+         <code class="asm plain">fffff880`0bcdc4e9 33c9            </code> 
+         <code class="asm functions bold">xor</code>     
+         <code class="asm color1 bold"> ecx</code> 
+         <code class="asm plain">,</code> 
+         <code class="asm color1 bold">ecx</code> 
+        </div> 
+        <div class="line number75 index74 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4eb ff15df6b0000    </code> 
+         <code class="asm functions bold">call</code>    
+         <code class="asm keyword bold"> qword</code> 
+         <code class="asm keyword bold">ptr</code> 
+         <code class="asm plain">[fffff880`0bce30d0]</code> 
+        </div> 
+        <div class="line number76 index75 alt1"> 
+         <code class="asm plain">fffff880`0bcdc4f1 488b4c2440      </code> 
+         <code class="asm functions bold">mov</code>     
+         <code class="asm plain">rcx,</code> 
+         <code class="asm keyword bold">qword</code> 
+         <code class="asm keyword bold">ptr</code> 
+         <code class="asm plain">[rsp+40h]</code> 
+        </div> 
+        <div class="line number77 index76 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4f6 4833cc          </code> 
+         <code class="asm functions bold">xor</code>     
+         <code class="asm plain">rcx,rsp</code> 
+        </div> 
+        <div class="line number78 index77 alt1"> 
+         <code class="asm plain">fffff880`0bcdc4f9 e822570000      </code> 
+         <code class="asm functions bold">call</code>    
+         <code class="asm plain">fffff880`0bce1c20</code> 
+        </div> 
+        <div class="line number79 index78 alt2"> 
+         <code class="asm plain">fffff880`0bcdc4fe 488b5c2468      </code> 
+         <code class="asm functions bold">mov</code>     
+         <code class="asm plain">rbx,</code> 
+         <code class="asm keyword bold">qword</code> 
+         <code class="asm keyword bold">ptr</code> 
+         <code class="asm plain">[rsp+68h]</code> 
+        </div> 
+        <div class="line number80 index79 alt1"> 
+         <code class="asm plain">fffff880`0bcdc503 4883c450        </code> 
+         <code class="asm functions bold">add</code>     
+         <code class="asm plain">rsp,50h</code> 
+        </div> 
+        <div class="line number81 index80 alt2"> 
+         <code class="asm plain">fffff880`0bcdc507 5f              </code> 
+         <code class="asm functions bold">pop</code>     
+         <code class="asm plain">rdi</code> 
+        </div> 
+        <div class="line number82 index81 alt1"> 
+         <code class="asm plain">fffff880`0bcdc508 c3              </code> 
+         <code class="asm functions bold">ret</code> 
+        </div> 
+       </div> </td></tr></tbody></table> 
+  </div> 
+ </div> 
+</div> 
+<br> 
+<br> 
+<span style="color:Blue">从清零代码那里的windbg信息来看，没有地址标号的提示(TesSafe+xxxx)，这代码似乎不是在一个驱动模块里？</span> 
+<br> 关于恢复的方法，大体上能想到3种： 
+<br> 1、开一个IoTimer或者DpcTimer或者干脆开个线程，不断对 
+<font color="Purple"><span style="color:Black"><span style="color:Red"><span style="color:Black">ValidAccessMask地址写入它原来的值<br> 2、自己代码内利用调试寄存器下硬件断点，然后hook IDT 1号中断服务子程，在里面恢复</span></span></span></font> 
+<font color="Purple"><font color="Black"><font color="Red"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Red"><span style="color:Black">ValidAccessMask<br> 3、</span></span></span></font></font></font></font></font> 
+<font color="Purple"><font color="Black"><font color="Red"><font color="Black"><font color="Purple"><font color="Black"><font color="Red"><font color="Black"><font color="Purple"><span style="color:Black"><span style="color:Red"><span style="color:Black">自己代码内利用调试寄存器下硬件断点，定位到上面的清零代码，nop之(我在windbg里直接nop掉是可以的，没有模块自校验)<br> 目前我尝试了第一种方法，开了个IoTimer，虽说1s一次会造成一些概率问题，但测试而已，简单粗暴就好。<br> </span></span></span></font></font></font></font></font></font></font></font></font> 
+<div style="padding:15px 0"> 
+ <div style="font-size:12px">
+   [C++] 
+  <em class="viewsource" style="font-size:12px; color:#369!important"> 纯文本查看 复制代码</em> 
+ </div> 
+ <div> 
+  <div id="highlighter_882052" class="syntaxhighlighter notranslate cpp"> 
+   <div class="toolbar"> 
+    <a target="_blank" href="http://www.52pojie.cn/#" rel="nofollow noopener noreferrer" class="toolbar_item command_help help">?</a> 
+   </div> 
+   <table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td class="gutter"> 
+       <div class="line number1 index0 alt2">
+         1 
+       </div> 
+       <div class="line number2 index1 alt1">
+         2 
+       </div> 
+       <div class="line number3 index2 alt2">
+         3 
+       </div> 
+       <div class="line number4 index3 alt1">
+         4 
+       </div> 
+       <div class="line number5 index4 alt2">
+         5 
+       </div> 
+       <div class="line number6 index5 alt1">
+         6 
+       </div> </td><td class="code"> 
+       <div class="container"> 
+        <div class="line number1 index0 alt2"> 
+         <code class="cpp color1 bold">VOID</code> 
+         <code class="cpp plain"> OnTimer(DEVICE_OBJECT  *DeviceObject, </code> 
+         <code class="cpp color1 bold">PVOID</code>  
+         <code class="cpp plain">Context)</code> 
+        </div> 
+        <div class="line number2 index1 alt1"> 
+         <code class="cpp plain">{<!-- --></code> 
+        </div> 
+        <div class="line number3 index2 alt2"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">DisableWriteProtect64();</code> 
+        </div> 
+        <div class="line number4 index3 alt1"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">*g_pValidAccessMask = 0x1f000f;</code> 
+        </div> 
+        <div class="line number5 index4 alt2"> 
+         <code class="cpp spaces">        </code> 
+         <code class="cpp plain">EnableWriteProtect64();</code> 
+        </div> 
+        <div class="line number6 index5 alt1"> 
+         <code class="cpp plain">}</code> 
+        </div> 
+       </div> </td></tr></tbody></table> 
+  </div> 
+ </div> 
+</div> 
+<br> 至于为什么会有后两种想法，是因为我觉得其作用不仅仅在于次，通过调试寄存器和1号中断应该还可以作很多事情，不仅仅是写个0x1f000f而已…… 
+<br> 不过虽说想法很好，我还没开始实践……这中间似乎涉及到多核CPU还有用户栈内核栈切换的许多知识…… 
+<br> 
+<br> 好了，现在可以开OD附加了，那么问题来了，学挖掘……哦不………… 
+<br> 还是先请前辈们看看效果图： 
+<br> 这是开另一个任意程序调试的OD，一切正常： 
+<br> 
+<img id="aimg_334084" src="https://images2.imgbox.com/b4/72/a7afZg7U_o.png" class="zoom" width="720" alt="" style=""> 
+<br> 
+<span style="color:Blue">这是附加了DNF.exe，反汇编窗口基本全是0，右键看不到模块信息……<br> 这个就是传说中的DebugPort清零吗？如果是的话，我在自己研究下恢复，如果不是，哪是什么问题造成了这种现象？</span> 
+<br> 
+<img id="aimg_334085" src="https://images2.imgbox.com/4a/a3/LGSlVnaK_o.png" class="zoom" width="720" alt="" style=""> 
+<br> 另外从图上游戏界面可以看到，DNF检测到了非法模块，这个不知道会有什么影响…… 
+<br>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/859b429980701826e2f2fbca0b4c1dc3/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">C&#43;&#43;学习：使用libssh2实现交互式shell的ssh2，linux和windows通用</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/61002d662b20fd3ab9d0c34a54e377e8/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Java位运算总结</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

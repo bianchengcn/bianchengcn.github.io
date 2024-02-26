@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MySQL进阶【二】—— 一文讲清楚为什么MySQL选择B&#43;树索引 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MySQL进阶【二】—— 一文讲清楚为什么MySQL选择B&#43;树索引" />
+<meta property="og:description" content=" MySQL的几种索引结构 https://www.cs.usfca.edu/~galles/visualization/BST.html 数据结构的一个学习网站 传送门：
+MySQL进阶【一】—— 一条SQL是如何执行的 https://blog.csdn.net/shehuinidaye/article/details/108690037
+MySQL进阶【三】—— Explain详解与实战https://blog.csdn.net/shehuinidaye/article/details/108692631
+MySQL进阶【四】—— MySQL索引优化实战https://blog.csdn.net/shehuinidaye/article/details/108782534
+B树 B树在MySQL的结构
+1、叶子节点具有相同的深度，叶子阶段的指针都为空
+2、叶子节点和跟节点，均挂有数据块（因所有节点都挂有数据块，大大降低了索引树存储索引的数量）
+3、所有索引不重复
+4、节点从左到右是递增的
+Hash 1、数组&#43;链表的实现方式（与Java中的hashmap类似）
+2、对索引key进行一次hash运算就可以定位到数据的存储位置
+3、查询性能搞，但不支持范围查询，只能满足 等值查询和in查询
+4、hash冲突后，链表过长会导致索引搜索性能下降
+B&#43;树 MySQL中最常用和最好用的索引结构
+1、非叶子节点不存储数据，只存储索引，可以存放更多的索引
+2、叶子节点包含所有索引字段，并且叶子节点存储左右两侧数据库的指针，提高范围查询的性能
+Innodb和Myisam引擎的索引结构区别 Innodb 的索引结构 1、主键索引是聚簇索引，叶子节点存储主键索引和数据集
+2、二级索引是非聚簇索引，叶子只存储索引字段和主键
+3、Innodb的数据文件有两个，.frm是表结构文件，.ibd是索引和数据存储的文件
+主键索引结构
+二级索引机构
+联合索引结构
+Myisam的索引结构 1、主键索引是非聚簇索引，叶子节点存储主键索引和数据集的地址
+2、二级索引是非聚簇索引，叶子节点存储索引字段和主键
+3、Myisam的数据文件有3个，.frm是表结构，.myi是索引文件，.myd是数据文件
+结语 MySQL的数据查询过程，二级索引需要回表到主键索引才可以查询出数据MySQL加载索引时，按页加载，一个索引页16K，所以三层索引树，可以支持2000万左右的数据查询。索引是一个有序的数据结构，当有序性被打破时，索引不生效。例如在字段上加函数、左侧模糊查询、联合索引不符合最左前缀等，皆是无法找到有序的索引树。（左侧模糊匹配时，无法知道字段左侧还存在多少字符，无法利用已知的索引去匹配，只能全表扫描） " />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/70df71bc3253caa42e7c9f28326882eb/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-09-20T12:15:46+08:00" />
+<meta property="article:modified_time" content="2020-09-20T12:15:46+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MySQL进阶【二】—— 一文讲清楚为什么MySQL选择B&#43;树索引</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h3><a id="MySQL_0"></a>MySQL的几种索引结构</h3> 
+<pre><code>https://www.cs.usfca.edu/~galles/visualization/BST.html 数据结构的一个学习网站
+</code></pre> 
+<blockquote> 
+ <p>传送门：<br> MySQL进阶【一】—— 一条SQL是如何执行的 <a href="https://blog.csdn.net/shehuinidaye/article/details/108690037">https://blog.csdn.net/shehuinidaye/article/details/108690037</a><br> MySQL进阶【三】—— Explain详解与实战<a href="https://blog.csdn.net/shehuinidaye/article/details/108692631">https://blog.csdn.net/shehuinidaye/article/details/108692631</a><br> MySQL进阶【四】—— MySQL索引优化实战<a href="https://blog.csdn.net/shehuinidaye/article/details/108782534">https://blog.csdn.net/shehuinidaye/article/details/108782534</a></p> 
+</blockquote> 
+<h4><a id="B_8"></a>B树</h4> 
+<ul><li>B树在MySQL的结构<br> <img src="https://images2.imgbox.com/9d/5c/6apzDaec_o.png" alt="在这里插入图片描述"></li></ul> 
+<blockquote> 
+ <p>1、叶子节点具有相同的深度，叶子阶段的指针都为空<br> 2、叶子节点和跟节点，均挂有数据块（因所有节点都挂有数据块，大大降低了索引树存储索引的数量）<br> 3、所有索引不重复<br> 4、节点从左到右是递增的</p> 
+</blockquote> 
+<h4><a id="Hash_16"></a>Hash</h4> 
+<p><img src="https://images2.imgbox.com/56/27/2l892U8g_o.png" alt="在这里插入图片描述"></p> 
+<blockquote> 
+ <p>1、数组+链表的实现方式（与Java中的hashmap类似）<br> 2、对索引key进行一次hash运算就可以定位到数据的存储位置<br> 3、查询性能搞，但不支持范围查询，只能满足 等值查询和in查询<br> 4、hash冲突后，链表过长会导致索引搜索性能下降</p> 
+</blockquote> 
+<h4><a id="B_22"></a>B+树</h4> 
+<ul><li>MySQL中最常用和最好用的索引结构<br> <img src="https://images2.imgbox.com/49/aa/3roow8Jh_o.png" alt="在这里插入图片描述"></li></ul> 
+<blockquote> 
+ <p>1、非叶子节点不存储数据，只存储索引，可以存放更多的索引<br> 2、叶子节点包含所有索引字段，并且叶子节点存储左右两侧数据库的指针，提高范围查询的性能</p> 
+</blockquote> 
+<h3><a id="InnodbMyisam_27"></a>Innodb和Myisam引擎的索引结构区别</h3> 
+<h4><a id="Innodb__28"></a>Innodb 的索引结构</h4> 
+<blockquote> 
+ <p>1、主键索引是聚簇索引，叶子节点存储主键索引和数据集<br> 2、二级索引是非聚簇索引，叶子只存储索引字段和主键<br> 3、Innodb的数据文件有两个，.frm是表结构文件，.ibd是索引和数据存储的文件<br> 主键索引结构<img src="https://images2.imgbox.com/00/00/bZ2FldJs_o.png" alt="在这里插入图片描述"><br> 二级索引机构<img src="https://images2.imgbox.com/e0/09/YUC7MdO8_o.png" alt="在这里插入图片描述"><br> 联合索引结构<img src="https://images2.imgbox.com/95/b8/Y9vHtQke_o.png" alt="在这里插入图片描述"></p> 
+</blockquote> 
+<h4><a id="Myisam_38"></a>Myisam的索引结构</h4> 
+<blockquote> 
+ <p>1、主键索引是非聚簇索引，叶子节点存储主键索引和数据集的地址<br> 2、二级索引是非聚簇索引，叶子节点存储索引字段和主键<br> 3、Myisam的数据文件有3个，.frm是表结构，.myi是索引文件，.myd是数据文件<br> <img src="https://images2.imgbox.com/21/02/uSr6of2X_o.png" alt="在这里插入图片描述"></p> 
+</blockquote> 
+<h6><a id="_43"></a>结语</h6> 
+<ul><li>MySQL的数据查询过程，二级索引需要回表到主键索引才可以查询出数据</li><li>MySQL加载索引时，按页加载，一个索引页16K，所以三层索引树，可以支持2000万左右的数据查询。</li><li>索引是一个<strong>有序</strong>的数据结构，当有序性被打破时，索引不生效。例如在字段上加函数、左侧模糊查询、联合索引不符合最左前缀等，皆是无法找到有序的索引树。（左侧模糊匹配时，无法知道字段左侧还存在多少字符，无法利用已知的索引去匹配，只能全表扫描）</li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/85f8bd292a40a064e568a970655941e1/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">9月8日凌晨，字节跳动全员收到邮件！因为这件事，所有人多发半个月工资！字节沸腾！网友酸了！...</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/9815bdf12ea0699ab24dbbeca0e0ef39/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">ckeditor5使用</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

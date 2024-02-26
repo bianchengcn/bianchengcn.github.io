@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>K8S搭建（centos）完整版 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="K8S搭建（centos）完整版" />
+<meta property="og:description" content="天行健，君子以自强不息；地势坤，君子以厚德载物。
+每个人都有惰性，但不断学习是好好生活的根本，共勉！
+文章均为学习整理笔记，分享记录为主，如有错误请指正，共同学习进步。
+文章目录 一、环境准备1. 服务器要求2. 服务器参数3. 服务器配置4. 软件参数 二、服务器设置1. 基础参数查看1.1 查看本机ip1.2 查看系统参数1.3 查看内核参数1.4 查看mac address和product_uuid1.5 主机参数查看1.6 端口查看 2. 基础参数设置（每个节点）2.1 防火墙关闭2.2 交换内存swap分区关闭2.3 禁用SELinux2.4 节点互通配置2.4.1 修改主机名称2.4.2 主机名与ip绑定 2.5 时间同步设置2.6 可信列表配置（可跳过，本篇跳过） 三、安装Docker（每个节点）1. 卸载docker2. 安装docker3. 配置docker4. 验证docker版本5. 用户组添加（可跳过，本篇跳过）6 网络模块开机自动加载（可跳过，本篇执行）7. 使桥接流量对iptables可见（可跳过，本篇执行） 四、安装k8s（每个节点）1. 添加kubernetes的镜像仓库2. 安装k8s组件2.1 指定版本安装（本篇执行）2.2 默认安装最新版 3. 设置开机自启4. 查看kubelet状态5. 版本验证6. 配置自动补全命令（可跳过，本篇未执行） 五、初始化（master节点）1. 镜像预拉取1.1 查看所需要镜像1.2 查看镜像仓库地址中的版本列表1.3 拉取镜像 2. 初始化操作3. 重置kubeadm 六、搭建集群（master节点）1. 配置.kube2. 配置.bash_profile3. 配置网络3.1 kube-flannel.yml3.2 网段确认3.3 部署flannel3.4 查看kube-flannel服务状态 4. 查看kubernetes系统状态5. 主节点状态获取6. 集群节点查看 七、节点加入集群1. 加入集群命令获取（主节点）2. 加入集群（从节点）3." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/bf6f78db6acc2d12f8ab727f53028c8f/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-30T13:21:56+08:00" />
+<meta property="article:modified_time" content="2024-01-30T13:21:56+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">K8S搭建（centos）完整版</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-tomorrow-night">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p><code> 天行健，君子以自强不息；地势坤，君子以厚德载物。</code></p> 
+<hr> 
+<p>每个人都有惰性，但不断学习是好好生活的根本，共勉！</p> 
+<hr> 
+<p><code>文章均为学习整理笔记，分享记录为主，如有错误请指正，共同学习进步。</code></p> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_13" rel="nofollow">一、环境准备</a></li><li><ul><li><a href="#1__17" rel="nofollow">1. 服务器要求</a></li><li><a href="#2__25" rel="nofollow">2. 服务器参数</a></li><li><a href="#3__36" rel="nofollow">3. 服务器配置</a></li><li><a href="#4__44" rel="nofollow">4. 软件参数</a></li></ul> 
+  </li><li><a href="#_53" rel="nofollow">二、服务器设置</a></li><li><ul><li><a href="#1__54" rel="nofollow">1. 基础参数查看</a></li><li><ul><li><a href="#11_ip_55" rel="nofollow">1.1 查看本机ip</a></li><li><a href="#12__59" rel="nofollow">1.2 查看系统参数</a></li><li><a href="#13__63" rel="nofollow">1.3 查看内核参数</a></li><li><a href="#14_mac_addressproduct_uuid_67" rel="nofollow">1.4 查看mac address和product_uuid</a></li><li><a href="#15__89" rel="nofollow">1.5 主机参数查看</a></li><li><a href="#16__93" rel="nofollow">1.6 端口查看</a></li></ul> 
+   </li><li><a href="#2__111" rel="nofollow">2. 基础参数设置（每个节点）</a></li><li><ul><li><a href="#21__113" rel="nofollow">2.1 防火墙关闭</a></li><li><a href="#22_swap_137" rel="nofollow">2.2 交换内存swap分区关闭</a></li><li><a href="#23_SELinux_171" rel="nofollow">2.3 禁用SELinux</a></li><li><a href="#24__192" rel="nofollow">2.4 节点互通配置</a></li><li><ul><li><a href="#241__193" rel="nofollow">2.4.1 修改主机名称</a></li><li><a href="#242_ip_213" rel="nofollow">2.4.2 主机名与ip绑定</a></li></ul> 
+    </li><li><a href="#25__242" rel="nofollow">2.5 时间同步设置</a></li><li><a href="#26__287" rel="nofollow">2.6 可信列表配置（可跳过，本篇跳过）</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#Docker_306" rel="nofollow">三、安装Docker（每个节点）</a></li><li><ul><li><a href="#1_docker_341" rel="nofollow">1. 卸载docker</a></li><li><a href="#2_docker_343" rel="nofollow">2. 安装docker</a></li><li><a href="#3_docker_354" rel="nofollow">3. 配置docker</a></li><li><a href="#4_docker_411" rel="nofollow">4. 验证docker版本</a></li><li><a href="#5__422" rel="nofollow">5. 用户组添加（可跳过，本篇跳过）</a></li><li><a href="#6__434" rel="nofollow">6 网络模块开机自动加载（可跳过，本篇执行）</a></li><li><a href="#7_iptables_454" rel="nofollow">7. 使桥接流量对iptables可见（可跳过，本篇执行）</a></li></ul> 
+  </li><li><a href="#k8s_479" rel="nofollow">四、安装k8s（每个节点）</a></li><li><ul><li><a href="#1_kubernetes_488" rel="nofollow">1. 添加kubernetes的镜像仓库</a></li><li><a href="#2_k8s_526" rel="nofollow">2. 安装k8s组件</a></li><li><ul><li><a href="#21__535" rel="nofollow">2.1 指定版本安装（本篇执行）</a></li><li><a href="#22__541" rel="nofollow">2.2 默认安装最新版</a></li></ul> 
+   </li><li><a href="#3__548" rel="nofollow">3. 设置开机自启</a></li><li><a href="#4_kubelet_554" rel="nofollow">4. 查看kubelet状态</a></li><li><a href="#5__559" rel="nofollow">5. 版本验证</a></li><li><a href="#6__571" rel="nofollow">6. 配置自动补全命令（可跳过，本篇未执行）</a></li></ul> 
+  </li><li><a href="#master_586" rel="nofollow">五、初始化（master节点）</a></li><li><ul><li><a href="#1__588" rel="nofollow">1. 镜像预拉取</a></li><li><ul><li><a href="#11__591" rel="nofollow">1.1 查看所需要镜像</a></li><li><a href="#12__603" rel="nofollow">1.2 查看镜像仓库地址中的版本列表</a></li><li><a href="#13__609" rel="nofollow">1.3 拉取镜像</a></li></ul> 
+   </li><li><a href="#2__615" rel="nofollow">2. 初始化操作</a></li><li><a href="#3_kubeadm_662" rel="nofollow">3. 重置kubeadm</a></li></ul> 
+  </li><li><a href="#master_672" rel="nofollow">六、搭建集群（master节点）</a></li><li><ul><li><a href="#1_kube_674" rel="nofollow">1. 配置.kube</a></li><li><a href="#2_bash_profile_689" rel="nofollow">2. 配置.bash_profile</a></li><li><a href="#3__710" rel="nofollow">3. 配置网络</a></li><li><ul><li><a href="#31_kubeflannelyml_716" rel="nofollow">3.1 kube-flannel.yml</a></li><li><a href="#32__727" rel="nofollow">3.2 网段确认</a></li><li><a href="#33_flannel_745" rel="nofollow">3.3 部署flannel</a></li><li><a href="#34_kubeflannel_751" rel="nofollow">3.4 查看kube-flannel服务状态</a></li></ul> 
+   </li><li><a href="#4_kubernetes_765" rel="nofollow">4. 查看kubernetes系统状态</a></li><li><a href="#5__771" rel="nofollow">5. 主节点状态获取</a></li><li><a href="#6__776" rel="nofollow">6. 集群节点查看</a></li></ul> 
+  </li><li><a href="#_784" rel="nofollow">七、节点加入集群</a></li><li><ul><li><a href="#1__786" rel="nofollow">1. 加入集群命令获取（主节点）</a></li><li><a href="#2__803" rel="nofollow">2. 加入集群（从节点）</a></li><li><a href="#3__806" rel="nofollow">3. 查看集群节点（主节点）</a></li></ul> 
+  </li><li><a href="#kubectl_812" rel="nofollow">八、从节点中使用kubectl命令（可选，本篇执行）</a></li><li><ul><li><a href="#1__817" rel="nofollow">1. 查看文件（主节点）</a></li><li><a href="#2__823" rel="nofollow">2. 复制文件（主节点）</a></li><li><a href="#3__830" rel="nofollow">3. 工作节点查看（从节点）</a></li><li><a href="#4__839" rel="nofollow">4. 配置环境变量（从节点）</a></li><li><a href="#5__853" rel="nofollow">5. 再次查看集群节点（从节点）</a></li></ul> 
+  </li><li><a href="#_862" rel="nofollow">九、集群节点的删除</a></li><li><ul><li><a href="#1__865" rel="nofollow">1. 释放节点（主节点）</a></li><li><a href="#2__871" rel="nofollow">2. 删除节点（主节点）</a></li><li><a href="#3__876" rel="nofollow">3. 重置配置（从节点）</a></li><li><a href="#4__881" rel="nofollow">4. 删除文件（从节点）</a></li></ul> 
+  </li><li><a href="#Dashboard_897" rel="nofollow">十、Dashboard配置（任意节点，自选，此部分无法实现，部署后无法登录）</a></li><li><ul><li><a href="#1_KubePi_902" rel="nofollow">1. 部署KubePi</a></li><li><ul><li><a href="#11__906" rel="nofollow">1.1 拉取镜像</a></li><li><a href="#12__912" rel="nofollow">1.2 运行容器</a></li><li><a href="#13__919" rel="nofollow">1.3 查看容器</a></li></ul> 
+   </li><li><a href="#2_KubePi_925" rel="nofollow">2. 登录KubePi服务</a></li></ul> 
+  </li><li><a href="#Dashboard_935" rel="nofollow">十、Dashboard配置（主节点）</a></li><li><ul><li><a href="#1_dashboard_937" rel="nofollow">1. 下载并安装dashboard</a></li><li><a href="#2__943" rel="nofollow">2. 添加用户</a></li><li><a href="#3_token_975" rel="nofollow">3. 获取token</a></li><li><a href="#4_dashboard_989" rel="nofollow">4. 访问dashboard（需要跳板机，不适用当前服务器环境）</a></li><li><a href="#4_dashboard_1000" rel="nofollow">4. 访问dashboard</a></li><li><ul><li><a href="#41__1001" rel="nofollow">4.1 查看端口</a></li><li><a href="#42_type_1013" rel="nofollow">4.2 修改type的值</a></li><li><a href="#43__1020" rel="nofollow">4.3 再次查看端口</a></li><li><a href="#44_IP_1023" rel="nofollow">4.4 IP获取</a></li><li><a href="#45_dashboard_1031" rel="nofollow">4.5 访问dashboard</a></li></ul> 
+  </li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<hr> 
+<h2><a id="_13"></a>一、环境准备</h2> 
+<p>本文使用三台阿里云服务器，通过yum安装k8s<br> 环境要求参考官网文档：<a href="https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/" rel="nofollow">kubernetes官网文档</a></p> 
+<h3><a id="1__17"></a>1. 服务器要求</h3> 
+<p>如自己本地虚拟机搭建，则要求如下：</p> 
+<ul><li>每台虚拟机运行内存不低于2G、cpu不低于两个、磁盘大小不低于20G</li><li>每个节点之间网络互通，即ping成功</li><li>主机名称、设备mac地址、产品id即product_uuid均唯一</li><li>端口开放</li></ul> 
+<p>后面会有命令进行验证</p> 
+<h3><a id="2__25"></a>2. 服务器参数</h3> 
+<p>阿里云服务器的系统选取为centos，因其使用yum作为软件管理包<br> 由于服务器是阿里云官方自改的系统，所以查看到的系统内核参数并不是常见的参数</p> 
+<table><thead><tr><th>服务器参数</th><th>参数值</th></tr></thead><tbody><tr><td>服务器类型名称</td><td>阿里云PAM服务器（Alibaba Cloud Privileged Access Management）</td></tr><tr><td>操作系统</td><td>Alibaba Cloud Linux 3 (Soaring Falcon)</td></tr><tr><td>系统内核版本</td><td>Linux 5.10.134-15.al8.x86_64</td></tr></tbody></table> 
+<h3><a id="3__36"></a>3. 服务器配置</h3> 
+<p>本次使用的服务器配置如下：</p> 
+<table><thead><tr><th>节点</th><th>ip地址</th><th>hostname主机名</th><th>运行内存mem</th><th>磁盘内存disk</th></tr></thead><tbody><tr><td>控制台节点master</td><td>172.30.0.224</td><td>k8s-master</td><td>15G</td><td>150G</td></tr><tr><td>工作节点worker1</td><td>172.30.0.223</td><td>k8s-worker1</td><td>15G</td><td>150G</td></tr><tr><td>工作节点worker2</td><td>172.30.0.222</td><td>k8s-worker2</td><td>15G</td><td>150G</td></tr></tbody></table> 
+<h3><a id="4__44"></a>4. 软件参数</h3> 
+<p>软件方面，需要安装Docker和Kubernetes，以及网络组建Flannel</p> 
+<table><thead><tr><th>软件software</th><th>版本version</th><th>作用function</th></tr></thead><tbody><tr><td>Docker</td><td>20.10.4</td><td>作为k8s的容器运行时环境</td></tr><tr><td>Kubernetes</td><td>1.23.0</td><td>包含了kubectl、kubeadm、kubelet，是k8s所需的组件</td></tr><tr><td>Flannel</td><td>0.24.0</td><td>网络组件，构建pod之间建立连接互通</td></tr></tbody></table> 
+<h2><a id="_53"></a>二、服务器设置</h2> 
+<h3><a id="1__54"></a>1. 基础参数查看</h3> 
+<h4><a id="11_ip_55"></a>1.1 查看本机ip</h4> 
+<pre><code class="prism language-l">ifconfig
+</code></pre> 
+<h4><a id="12__59"></a>1.2 查看系统参数</h4> 
+<pre><code class="prism language-l">uname -a
+</code></pre> 
+<h4><a id="13__63"></a>1.3 查看内核参数</h4> 
+<pre><code class="prism language-l">cat /proc/version
+</code></pre> 
+<h4><a id="14_mac_addressproduct_uuid_67"></a>1.4 查看mac address和product_uuid</h4> 
+<p><code>需要确保每个机器的mac地址和product_uuid唯一，如果不唯一，安装k8s可能会失败</code><br> mac address为软件地址<br> product_uuid为硬件地址<br> 正常硬件设备会拥有唯一的地址，但是有些虚拟机的地址可能会重复。<br> Kubernetes 使用这些值来唯一确定集群中的节点。 如果这些值在每个节点上不唯一，可能会导致安装 失败。<br> 查看mac address</p> 
+<pre><code class="prism language-l">ip link
+</code></pre> 
+<p>或</p> 
+<pre><code class="prism language-l">ifconfig -a
+</code></pre> 
+<p>查看product_uuid</p> 
+<pre><code class="prism language-l">cat /sys/class/dmi/id/product_uuid
+</code></pre> 
+<p>或</p> 
+<pre><code class="prism language-l">dmidecode -s system-uuid
+</code></pre> 
+<h4><a id="15__89"></a>1.5 主机参数查看</h4> 
+<pre><code class="prism language-l">hostnamectl status
+</code></pre> 
+<h4><a id="16__93"></a>1.6 端口查看</h4> 
+<p>确保以下对应端口可用（没被别的程序占用）<br> master节点端口</p> 
+<table><thead><tr><th>协议</th><th>方向</th><th>端口（范围）</th><th>作用</th><th>使用者</th></tr></thead><tbody><tr><td>TCP</td><td>入站</td><td>6443</td><td>kubernetes API server</td><td>所有组件</td></tr><tr><td>TCP</td><td>入站</td><td>10250</td><td>kubelet API</td><td>kubelet、控制平面组件</td></tr><tr><td>TCP</td><td>入站</td><td>10251</td><td>kube-scheduler</td><td>kube-scheduler</td></tr><tr><td>TCP</td><td>入站</td><td>10252</td><td>kube-controller-manager</td><td>kube-controller-manager</td></tr><tr><td>TCP</td><td>入站</td><td>2379-2380</td><td>etcd</td><td>服务器客户端API</td></tr></tbody></table> 
+<p>work节点端口</p> 
+<table><thead><tr><th>协议</th><th>方向</th><th>端口（范围）</th><th>作用</th><th>使用者</th></tr></thead><tbody><tr><td>TCP</td><td>入站</td><td>10250</td><td>kubelet API</td><td>kubelet、控制平面组件</td></tr><tr><td>TCP</td><td>入站</td><td>30000-32767</td><td>NodePort服务</td><td>所有组件</td></tr></tbody></table> 
+<h3><a id="2__111"></a>2. 基础参数设置（每个节点）</h3> 
+<p><code>以下操作每个节点都要来一遍</code></p> 
+<h4><a id="21__113"></a>2.1 防火墙关闭</h4> 
+<p>为了能正常进行k8s的安装配置，建议关闭防火墙<br> 查看防火墙状态</p> 
+<pre><code class="prism language-l">systemctl status firewalld
+</code></pre> 
+<p>执行命令后输出的内容如下则表示防火墙已关闭，即Active值为inactive（dead）<br> <img src="https://images2.imgbox.com/0a/84/bhjOxHw0_o.png" alt="在这里插入图片描述"><br> 如未关闭则用以下命令关闭防火墙</p> 
+<pre><code class="prism language-l">systemctl disable --now firewalld
+</code></pre> 
+<p>或</p> 
+<pre><code class="prism language-l">systemctl stop firewalld
+systemctl disable firewalld
+</code></pre> 
+<p><code> 重启机器后生效</code></p> 
+<p>后续如需开启防火墙可用命令</p> 
+<pre><code class="prism language-l">systemctl start firewalld
+systemctl enable firewalld
+</code></pre> 
+<h4><a id="22_swap_137"></a>2.2 交换内存swap分区关闭</h4> 
+<p>kubelet 在 1.8 版本以后强制要求 swap 必须关闭。要不然kubelet 无法正常启动<br> 当内存不够时，swap会使用硬盘块充当额外内存，硬盘io较内存差异较大，严重影响性能，故每个节点都需禁用<br> 查看交换内存使用情况</p> 
+<pre><code class="prism language-l">swapon -s
+</code></pre> 
+<pre><code class="prism language-l">sudo free -m
+</code></pre> 
+<p>如果没被使用则swap那一行的值均为0<br> <img src="https://images2.imgbox.com/0b/8f/q3RuR95p_o.png" alt="在这里插入图片描述"></p> 
+<p>临时禁用Swap</p> 
+<pre><code class="prism language-l">sudo swapoff -a
+</code></pre> 
+<p>永久禁用swap，将fstab文件中的swap参数注释掉</p> 
+<pre><code class="prism language-l">sed -i 's/.*swap.*/#&amp;/' /etc/fstab
+</code></pre> 
+<p>或使用vim命令修改</p> 
+<pre><code class="prism language-l">vim /etc/fstab
+</code></pre> 
+<p><code>重启机器后生效</code><br> swapoff命令只能临时禁用，重启后会失效<br> 想要永久禁用，则需要用sed那行命令修改配置文件内容，修改/etc/fstab文件中的swap那一行，将其注释<br> 但可能阿里云服务器与常规centos系统有所差异，查看fstab内容如下</p> 
+<pre><code class="prism language-l">cat /etc/fstab
+</code></pre> 
+<p><img src="https://images2.imgbox.com/3e/09/432XtNze_o.png" alt="在这里插入图片描述"><br> 此处看上去并无swap内容，暂时不管，接着进行</p> 
+<h4><a id="23_SELinux_171"></a>2.3 禁用SELinux</h4> 
+<p>kubelet挂载目录时会受SELinux影响，可能会报Permission denied<br> 查看SELinux状态</p> 
+<pre><code class="prism language-l">sestatus
+</code></pre> 
+<p><img src="https://images2.imgbox.com/6c/4e/q5mt8XUu_o.png" alt="在这里插入图片描述"><br> 如未关闭则执行以下命令关闭，将值设为disabled或permissive<br> 临时关闭</p> 
+<pre><code class="prism language-l">setenforce 0
+</code></pre> 
+<p>永久禁用</p> 
+<pre><code class="prism language-l">sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/seliux/config
+</code></pre> 
+<p>或</p> 
+<pre><code class="prism language-l">sed -i 's/enforcing/disabled/' /etc/selinux/config
+</code></pre> 
+<p><code>重启机器后生效</code></p> 
+<h4><a id="24__192"></a>2.4 节点互通配置</h4> 
+<h5><a id="241__193"></a>2.4.1 修改主机名称</h5> 
+<p>查看主机名称</p> 
+<pre><code class="prism language-l">cat /etc/hostname
+</code></pre> 
+<p>或者</p> 
+<pre><code class="prism language-l">hostnamectl status
+</code></pre> 
+<p>修改主机名称，使用以下命令<br> 将master主节点命名为<code>k8s-master</code>、工作节点worker1命名为<code>k8s-worker1</code>、工作节点worker2命名为<code>k8s-worker2</code><br> 以master节点为例</p> 
+<pre><code class="prism language-l">hostnamectl set-hostname k8s-master
+</code></pre> 
+<p>或者使用vim进行修改文件内容</p> 
+<pre><code class="prism language-l">vim /etc/hostname
+</code></pre> 
+<p>针对服务器可以使用<code>shutdown -r</code>来安全重启机器，对于本地虚拟机则手动关机重启即可</p> 
+<h5><a id="242_ip_213"></a>2.4.2 主机名与ip绑定</h5> 
+<p>以master节点节点为例，其余两个节点相同操作<br> 查看主机与ip配置信息</p> 
+<pre><code class="prism language-l">cat /etc/hosts
+</code></pre> 
+<p><img src="https://images2.imgbox.com/63/a2/EDZTdbaB_o.png" alt="在这里插入图片描述"><br> 如本机ip已存在，则先删掉或注掉再进行添加，如上图最后一行<br> 添加参数，将主机与ip绑定</p> 
+<pre><code class="prism language-l">cat &gt;&gt; /etc/hosts &lt;&lt;EOF
+172.30.0.224 k8s-master
+172.30.0.223 k8s-worker1
+172.30.0.222 k8s-worker2
+EOF
+</code></pre> 
+<p>或者使用vim命令修改文件，将ip与名称参数填入</p> 
+<pre><code class="prism language-l">vim /etc/hosts
+</code></pre> 
+<p>或者使用echo</p> 
+<pre><code class="prism language-l">echo "172.30.0.224 k8s-master" &gt;&gt; /etc/hosts
+echo "172.30.0.223 k8s-worker1" &gt;&gt; /etc/hosts
+echo "172.30.0.222 k8s-worker2" &gt;&gt; /etc/hosts
+</code></pre> 
+<p>添加后查看如下<br> <img src="https://images2.imgbox.com/e4/cc/g2ah39aK_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/b7/61/bgyoJxPA_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="25__242"></a>2.5 时间同步设置</h4> 
+<p>先查看同步状态</p> 
+<pre><code class="prism language-l">timedatectl status
+</code></pre> 
+<p><img src="https://images2.imgbox.com/4c/e4/NDFTRDcG_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>时区参数<br> <code>Time zone: Asia/Shanghai(CST, +0800)</code><br> Asia/Shanghai表示上海时区</li><li>时钟是否同步参数<br> <code>System clock synchronized: yes</code><br> yes为同步</li><li>时钟同步服务是否开启<br> <code>NTP service: active</code><br> active为已开启</li></ul> 
+<p>如未同步，则执行以下命令设置<br> 设置时区（上海时区）</p> 
+<pre><code class="prism language-l">timedatectl set-timezone Asia/Shanghai
+</code></pre> 
+<p>设置时间同步</p> 
+<pre><code class="prism language-l">systemctl enable --now chronyd
+</code></pre> 
+<p>或</p> 
+<pre><code class="prism language-l">systemctl start chronyd
+systemctl enable chronyd
+</code></pre> 
+<p>然后输入date命令查看时间验证</p> 
+<pre><code class="prism language-l">date
+</code></pre> 
+<p><img src="https://images2.imgbox.com/fc/53/jFgHEby2_o.png" alt="在这里插入图片描述"></p> 
+<p>如果是本地创建的虚拟机则还需执行以下命令，如果是云服务器则可忽略<br> 当前UTC时间写入硬件时钟</p> 
+<pre><code class="prism language-l">timedatectl set-local-rtc 0
+</code></pre> 
+<p>重启系统时间服务</p> 
+<pre><code class="prism language-l">systemctl restart rsyslog &amp;&amp; systemctl restart crond
+</code></pre> 
+<h4><a id="26__287"></a>2.6 可信列表配置（可跳过，本篇跳过）</h4> 
+<p>将三台服务器互相加入可信列表，互信互通无障碍<br> 在主节点master中生成ssh秘钥，分发到每个节点<br> 生成ssh秘钥</p> 
+<pre><code class="prism language-l">ssh-keygen -t rsa
+</code></pre> 
+<p>一路回车即可<br> 输出如下<br> <img src="https://images2.imgbox.com/f6/f3/GQ5yNzTs_o.png" alt="在这里插入图片描述"><br> 复制生成的秘钥（SHA开头的那一串）到各个节点的可信列表中</p> 
+<pre><code class="prism language-l">ssh-copy-id root@k8s-master
+ssh-copy-id root@k8s-worker1
+ssh-copy-id root@k8s-worker2
+</code></pre> 
+<p><img src="https://images2.imgbox.com/4b/d2/ACzYR2Tm_o.png" alt="在这里插入图片描述"><br> 由于适应的是阿里云的服务器，已经有自己的秘钥，故无法覆盖重写，如遇此情况，可跳过该小节，无影响</p> 
+<h2><a id="Docker_306"></a>三、安装Docker（每个节点）</h2> 
+<p><code>以下操作每个节点都要来一遍</code></p> 
+<p>以下为运行时的小短文，可选读</p> 
+<p>为什么要安装docker：<br> k8s需要再每个pod中运行容器，所以需要容器运行时，k8s默认使用容器运行时接口（Container Runtime Interface，CRI）与所安装的容器运行时进行交互</p> 
+<p>在不指定运行时的情况下，kubeadm自动扫描一组Unix域套接字来判定系统已安装的运行时<br> 容器运行时与其对应的套接字路径如下：</p> 
+<table><thead><tr><th>容器运行时</th><th>域套接字</th></tr></thead><tbody><tr><td>Docker</td><td>/var/run/dockershim.sock</td></tr><tr><td>containerd</td><td>/run/containerd/containerd.sock</td></tr><tr><td>CRI-O</td><td>/var/run/crio/crio.sock</td></tr></tbody></table> 
+<p>如果同时安装了docker和containerd，优先选择docker，原因是docker附带了containerd。除此之外，只要安装docker，就会检测到docker和containerd，当安装了两个或者多个运行时的时候，kubeadm会报错并退出。kubelet通过内置dockershim CRI实现与docker集成。<br> 当安装docker后，则域套接字只会保留一个containerd的，所以默认k8s也会使用containerd作为运行时</p> 
+<p>containerd是一个工业级标准的容器运行时，它强调简单性、健壮性和可移植性。containerd可以在宿主机中管理完整的容器生命周期，包括容器镜像的传输和存储、容器的执行和管理、存储和网络等。</p> 
+<p>docker和containerd的对比：<br> containerd是从Docker中分离出来的一个项目，可以作为一个底层容器运行时，现在它成了Kubernete容器运行时更好的选择。</p> 
+<p>k8s移除dockershim集成，推荐使用containerd，其原因大致如下：<br> 当使用docker作为容器运行时，kubelet需要先要通过 dockershim 去调用Docker，再通过Docker去调用containerd。<br> 当使用containerd作为容器运行时，由于containerd内置了 CRI (Container Runtime Interface：容器运行时接口)插件，kubelet可以直接调用containerd。</p> 
+<p>docker为k8s提供运行时容器引擎，用来运行k8s相关容器<br> k8s的1.24版本之前，都集成了docker的运行时环境组件，故，只需安装docker，即可使用运行时环境运行k8s的容器组件<br> 在k8s的1.24版本开始kubelet移除了自带的容器运行时的支持，1.24开始就需要自己安装额外的容器运行时支持<br> 本篇k8s以1.23.0版本为例，只需安装docker即可</p> 
+<p>如非root用户下，需在命令前加sudo前缀获取权限，后续都是如此<br> 本篇docker版本选取为当前最新版本<code>24.0.7-1.el8</code></p> 
+<h3><a id="1_docker_341"></a>1. 卸载docker</h3> 
+<p>参考：<a href="https://blog.csdn.net/mo_sss/article/details/135131011">docker（yum）卸载</a></p> 
+<h3><a id="2_docker_343"></a>2. 安装docker</h3> 
+<p>参考：<a href="https://blog.csdn.net/mo_sss/article/details/135132093">docker（yum）安装</a><br> 安装后，<br> 查看docker状态</p> 
+<pre><code class="prism language-l">systemctl status docker
+</code></pre> 
+<p>启动docker，</p> 
+<pre><code class="prism language-l">systemctl start docker
+</code></pre> 
+<h3><a id="3_docker_354"></a>3. 配置docker</h3> 
+<p>本篇仅配置cgroup驱动，其余不做配置<br> 如需配置镜像加速，参考：<a href="https://blog.csdn.net/mo_sss/article/details/131860249">配置阿里云镜像加速器</a><br> 创建docker文件夹，-p参数表示如果存在则不创建</p> 
+<pre><code class="prism language-l">mkdir -p /etc/docker
+</code></pre> 
+<p>修改cgroup驱动为systemd，这是k8s官方推荐，且不使用这个后续可能会出现一些问题</p> 
+<pre><code class="prism language-l">cat &gt; /etc/docker/daemon.json &lt;&lt;EOF
+{
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c5/51/hltyXZem_o.png" alt="在这里插入图片描述"><br> 然后查看</p> 
+<pre><code class="prism language-l">cat /etc/docker/daemon.json
+</code></pre> 
+<p><img src="https://images2.imgbox.com/12/29/CsbH3UrP_o.png" alt="在这里插入图片描述"><br> 也可用vim进行修改添加<br> <img src="https://images2.imgbox.com/21/47/49enxj0f_o.png" alt="在这里插入图片描述"><br> 重启docker，<code>一定要重启docker，不重启这个配置无法生效会导致后续kubeadm初始化报错</code></p> 
+<pre><code class="prism language-l">systemctl restart docker
+</code></pre> 
+<p>最后设置docker开机自启动，立即生效</p> 
+<pre><code class="prism language-l">systemctl enable --now docker
+</code></pre> 
+<p>查看状态</p> 
+<pre><code class="prism language-l">systemctl status docker
+</code></pre> 
+<p><strong>拓展（可跳过，本篇跳过）：</strong><br> 除了修改驱动外，还可以添加其它参数来配置docker<br> 如限制容器日志大小、修改存储类型、docker配置目录可修改等</p> 
+<pre><code class="prism language-l">cat &gt; /etc/docker/daemon.json &lt;&lt;EOF
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2",
+  "storage-opts": [
+    "overlay2.override_kernel_check=true"
+  ],
+  "registry-mirrors": ["https://vj4iipoo.mirror.aliyuncs.com"],
+  "data-root": "/data/docker"
+}
+EOF
+</code></pre> 
+<p>其中最重要的就是cgroup驱动的修改，官方推荐使用systemd，具体原因可参考官网</p> 
+<h3><a id="4_docker_411"></a>4. 验证docker版本</h3> 
+<p>查看docker版本信息</p> 
+<pre><code class="prism language-l">docker -v
+或
+docker --version
+</code></pre> 
+<p>查看docker详细信息</p> 
+<pre><code class="prism language-l">docker info
+</code></pre> 
+<h3><a id="5__422"></a>5. 用户组添加（可跳过，本篇跳过）</h3> 
+<p>如果使用的是非root用户，则可以执行以下操作将用户添加到docker组，后续使用docker相关命令无需加sudo前缀<br> 当然也可以不配置，看你心情</p> 
+<p>添加用户到 docker 组</p> 
+<pre><code class="prism language-l">usermod -aG docker &lt;USERNAME&gt; 
+</code></pre> 
+<p>立即更新 docker 组，使之生效</p> 
+<pre><code class="prism language-l">newgrp docker
+</code></pre> 
+<h3><a id="6__434"></a>6 网络模块开机自动加载（可跳过，本篇执行）</h3> 
+<p>确保网络模块开机自动加载<br> 执行命令</p> 
+<pre><code class="prism language-l">lsmod | grep overlay
+lsmod | grep br_netfilter
+</code></pre> 
+<p>输出如下<br> <img src="https://images2.imgbox.com/f2/94/SdQqA4Un_o.png" alt="在这里插入图片描述"></p> 
+<p>若无输出或文件不存在则需创建文件如下</p> 
+<pre><code class="prism language-l">cat &gt; /etc/modules-load.d/docker.conf &lt;&lt;EOF
+overlay
+br_netfilter
+EOF
+modprobe overlay
+modprobe br_netfilter
+</code></pre> 
+<h3><a id="7_iptables_454"></a>7. 使桥接流量对iptables可见（可跳过，本篇执行）</h3> 
+<p>所有节点添加网络桥接过滤和地址转发功能</p> 
+<pre><code class="prism language-l">cat &gt; /etc/sysctl.d/kubernetes.conf &lt;&lt; EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+</code></pre> 
+<p><img src="https://images2.imgbox.com/13/0b/D4vMGFGx_o.png" alt="在这里插入图片描述"></p> 
+<p>执行命令，立即生效</p> 
+<pre><code class="prism language-l">sysctl --system
+</code></pre> 
+<p><img src="https://images2.imgbox.com/f3/2e/oXZT1AyE_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/7d/fb/AWedW5q7_o.png" alt="在这里插入图片描述"></p> 
+<p>验证是否生效，执行以下命令，返回1则表示生效</p> 
+<pre><code class="prism language-l">sysctl -n net.bridge.bridge-nf-call-iptables
+sysctl -n net.bridge.bridge-nf-call-ip6tables
+sysctl -n net.ipv4.ip_forward
+</code></pre> 
+<p><img src="https://images2.imgbox.com/27/7c/Rf91vkgd_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="k8s_479"></a>四、安装k8s（每个节点）</h2> 
+<p><code>以下操作每个节点都要来一遍</code><br> 理论上每个节点都安装kubeadm、kubectl、kubelet是没问题的<br> 但有些人认为对于kubectl仅需在主节点master上安装即可，因为一般来说只会在master主节点操作命令<br> 在主节点操作kubectl命令无需多余配置，但想在从节点操作命令，则需要在从节点也安装kubectl，且配置admin.conf文件</p> 
+<p>本篇文章以每个节点都需要安装kubectl并配置admin.conf来实现在每个节点上都可以操作kubectl命令</p> 
+<p>初始化失败需要执行kubeadm reset命令</p> 
+<h3><a id="1_kubernetes_488"></a>1. 添加kubernetes的镜像仓库</h3> 
+<p>添加国内的镜像源，此处为阿里云的kubernetes对应的镜像仓库（本篇执行第一个）</p> 
+<pre><code class="prism language-l">cat &gt; /etc/yum.repos.d/kubernetes.repo &lt;&lt; EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+EOF
+</code></pre> 
+<p>或</p> 
+<pre><code class="prism language-l">cat &gt; /etc/yum.repos.d/kubernetes.repo &lt;&lt; EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+EOF
+</code></pre> 
+<p><img src="https://images2.imgbox.com/de/1a/R405CcCI_o.png" alt="在这里插入图片描述"></p> 
+<p>查看已添加的内容</p> 
+<pre><code class="prism language-l">cat /etc/yum.repos.d/kubernetes.repo
+</code></pre> 
+<p><img src="https://images2.imgbox.com/84/32/w8fcpRW4_o.png" alt="在这里插入图片描述"></p> 
+<p>更新yum资源包</p> 
+<pre><code class="prism language-l">yum makecache
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c7/f1/riZKNERy_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="2_k8s_526"></a>2. 安装k8s组件</h3> 
+<p>安装kubeadm、kubectl、kubelet</p> 
+<p>kubeadm：用来初始化集群的指令。<br> kubelet：在集群中的每个节点上用来启动 Pod 和容器等。<br> kubectl：用来与集群通信的命令行工具。<br> kubeadm 不能 帮你安装或者管理 kubelet 或 kubectl，所以你需要 确保它们与通过 kubeadm 安装的控制平面的版本相匹配。 如果不这样做，则存在发生版本偏差的风险，可能会导致一些预料之外的错误和问题。</p> 
+<h4><a id="21__535"></a>2.1 指定版本安装（本篇执行）</h4> 
+<pre><code class="prism language-l">yum install -y kubelet-1.23.0 kubeadm-1.23.0 kubectl-1.23.0
+</code></pre> 
+<p>安装后输出如下，可看到最下面的五个组件已经安装完毕<br> <img src="https://images2.imgbox.com/10/a2/9zzLYYS4_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="22__541"></a>2.2 默认安装最新版</h4> 
+<p>如不指定版本则默认安装最新版本</p> 
+<pre><code class="prism language-l">sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+</code></pre> 
+<p><code>disableexcludes=kubernetes：禁掉除了这个kubernetes之外的别的仓库</code></p> 
+<h3><a id="3__548"></a>3. 设置开机自启</h3> 
+<p>安装完成后，设置开机自动启动，–now表示立即生效，不加则需重启后生效</p> 
+<pre><code class="prism language-l">systemctl enable --now kubelet
+</code></pre> 
+<p><img src="https://images2.imgbox.com/e4/3e/F9Lh9GjR_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="4_kubelet_554"></a>4. 查看kubelet状态</h3> 
+<pre><code class="prism language-l">systemctl status kubelet
+</code></pre> 
+<p><img src="https://images2.imgbox.com/96/5c/FJATH8FR_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="5__559"></a>5. 版本验证</h3> 
+<p>验证kubectl版本</p> 
+<pre><code class="prism language-l">kubectl version
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ee/f0/sVKUFnDN_o.png" alt="在这里插入图片描述"></p> 
+<p>验证kubeadm版本</p> 
+<pre><code class="prism language-l">yum info kubeadm
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ac/39/AfvBzuzg_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="6__571"></a>6. 配置自动补全命令（可跳过，本篇未执行）</h3> 
+<p>安装bash自动补全插件</p> 
+<pre><code class="prism language-l">yum install bash-completion -y
+</code></pre> 
+<p><img src="https://images2.imgbox.com/b5/24/3eFtBoBD_o.png" alt="在这里插入图片描述"></p> 
+<p>设置kubectl命令补全，下次login生效</p> 
+<pre><code class="prism language-l">kubectl completion bash &gt;/etc/bash_completion.d/kubectl
+</code></pre> 
+<p>设置kubeadm命令补全，下次login生效</p> 
+<pre><code class="prism language-l">kubeadm completion bash &gt; /etc/bash_completion.d/kubeadm
+</code></pre> 
+<h2><a id="master_586"></a>五、初始化（master节点）</h2> 
+<p>只在master节点（k8s-master）执行以下操作</p> 
+<h3><a id="1__588"></a>1. 镜像预拉取</h3> 
+<p>由于网络限制，k8s镜像拉取受限（要么无法访问，要么速度极慢），需将仓库地址设为国内的仓库地址或者dockerhub用户推送的地址</p> 
+<h4><a id="11__591"></a>1.1 查看所需要镜像</h4> 
+<p>加上版本号拉取对应版本</p> 
+<pre><code class="prism language-l">kubeadm config images list --kubernetes-version v1.23.0
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d7/2a/DwgAR3Nk_o.png" alt="在这里插入图片描述"></p> 
+<p>或这里不指定版本</p> 
+<pre><code class="prism language-l">kubeadm config images list
+</code></pre> 
+<p><img src="https://images2.imgbox.com/5a/0d/OlAvBwX5_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="12__603"></a>1.2 查看镜像仓库地址中的版本列表</h4> 
+<p>查看阿里云镜像仓库地址中的镜像列表</p> 
+<pre><code class="prism language-l">kubeadm config images list  --image-repository registry.aliyuncs.com/google_containers
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c2/70/0xeOCYJO_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="13__609"></a>1.3 拉取镜像</h4> 
+<p>拉起阿里云镜像仓库地址中的镜像，（当然也可以去docker官网拉取，需要确保docker配置了国内镜像地址）</p> 
+<pre><code class="prism language-l">kubeadm config images pull  --image-repository registry.aliyuncs.com/google_containers
+</code></pre> 
+<p><img src="https://images2.imgbox.com/f4/4d/jMevreuu_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="2__615"></a>2. 初始化操作</h3> 
+<p>初始化命令，执行相关参数，包含网络地址段和镜像地址</p> 
+<pre><code class="prism language-l">kubeadm init \
+  --apiserver-advertise-address=172.30.0.224 \
+  --image-repository registry.aliyuncs.com/google_containers \
+  --kubernetes-version v1.23.0 \
+  --service-cidr=10.96.0.0/12 \
+  --pod-network-cidr=10.244.0.0/16 \
+  --ignore-preflight-errors=all
+</code></pre> 
+<p><code>–apiserver-advertise-address</code> 集群通告地址(master 机器IP，这里用的万兆网)<br> <code>–image-repository</code> 由于默认拉取镜像地址k8s.gcr.io国内无法访问，这里指定阿里云镜像仓库地址<br> <code>–kubernetes-version</code> K8s版本，与上面安装的一致<br> <code>–service-cidr</code> 集群内部虚拟网络，Pod统一访问入口，可以不用更改，直接用上面的参数<br> <code>–pod-network-cidr</code> Pod网络，与下面部署的CNI网络组件yaml中保持一致，可以不用更改，直接用上面的参数</p> 
+<p>初始化成功后会输出如下内容<br> <img src="https://images2.imgbox.com/72/cf/bnravnNu_o.png" alt="在这里插入图片描述"><br> 后续会根据输出的命令进行操作<br> 请先将最后一个命令即kubeadm join命令（包含一长串字符）的内容复制保存下来，后续会用</p> 
+<pre><code class="prism language-l">Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 172.30.0.224:6443 --token 4uhwg7.ldccrwsxmplqahbc \
+        --discovery-token-ca-cert-hash sha256:cf6e896414b3d3169774b38f435d7789a1466c83064c173fc56537ba7e949e81
+</code></pre> 
+<p>注：在初始化之前，重启后kubelet会关闭切已被设置为自动重启，初始化之后查看状态才是激活运行状态<br> <img src="https://images2.imgbox.com/95/55/fT5UeK5x_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/95/f1/3SThOIGj_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="3_kubeadm_662"></a>3. 重置kubeadm</h3> 
+<p>如果初始化失败，或者需要重新初始化，可执行以下命令进行重置<br> 重置adm</p> 
+<pre><code class="prism language-l">kubeadm reset
+</code></pre> 
+<p>移除相关文件</p> 
+<pre><code class="prism language-l">sudo rm -fr ~/.kube/  /etc/kubernetes/* var/lib/etcd/*
+</code></pre> 
+<h2><a id="master_672"></a>六、搭建集群（master节点）</h2> 
+<p>根据第五步初始化完成后输出的内容进行集群创建，以下操作在主节点k8s-master上进行</p> 
+<h3><a id="1_kube_674"></a>1. 配置.kube</h3> 
+<p>创建kube文件</p> 
+<pre><code class="prism language-l">mkdir -p $HOME/.kube
+</code></pre> 
+<p>将admin.conf文件复制到kube文件夹下的congfig</p> 
+<pre><code class="prism language-l">sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+</code></pre> 
+<p>修改文件权限，从文件所有者修改为文件所有者所在的组中的其他用户，user–&gt;group</p> 
+<pre><code class="prism language-l">sudo chown $(id -u):$(id -g) $HOME/.kube/config
+</code></pre> 
+<p><img src="https://images2.imgbox.com/42/e1/uvJHNDAA_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="2_bash_profile_689"></a>2. 配置.bash_profile</h3> 
+<p>编辑文件</p> 
+<pre><code class="prism language-l">vim /root/.bash_profile
+</code></pre> 
+<p>将以下内容加入（后两行内容可选，本篇加上）</p> 
+<pre><code class="prism language-l">export KUBECONFIG=/etc/kubernetes/admin.conf
+alias k=kubectl
+source &lt;(kubectl completion bash)
+</code></pre> 
+<p>参数详情：<br> <code>export KUBECONFIG=/etc/kubernetes/admin.conf</code>超级用户变量配置<br> <code>alias k=kubectl</code>设置别名，可用k代替kubectl<br> <code>source &lt;(kubectl completion bash)</code>设置kubectl命令补全功能<br> <img src="https://images2.imgbox.com/21/ee/1smqXfdb_o.png" alt="在这里插入图片描述"><br> 激活.bash_profile</p> 
+<pre><code class="prism language-l">source /root/.bash_profile
+</code></pre> 
+<p><img src="https://images2.imgbox.com/de/01/zA3GARBq_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="3__710"></a>3. 配置网络</h3> 
+<p>在将节点加入集群之前需要先配置网络，这里配置的是Flannel<br> 部署容器网络，CNI网络插件(在Master上执行，)，这里使用Flannel实现。<br> 拓展：<br> 著名的CNI网络插件有flannel、calico、canal和kube-router等，简单易用的实现是为CoreOS提供的flannel项目</p> 
+<h4><a id="31_kubeflannelyml_716"></a>3.1 kube-flannel.yml</h4> 
+<p>如未安装wget工具可先安装</p> 
+<pre><code class="prism language-l">yum install -y wget
+</code></pre> 
+<p>下载kube-flannel.yml（会下载到当前位置，可用ls查看）</p> 
+<pre><code class="prism language-l">wget https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c0/86/3LS6qxbG_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="32__727"></a>3.2 网段确认</h4> 
+<p>查看配置文件kube-flannel.yml中net-config.json部分的参数</p> 
+<pre><code class="prism language-l">cat kube-flannel.yml
+</code></pre> 
+<p>往下翻找到net-config.json部分<br> 确保Newwork参数的网段值与执行kubeadm init 输入的网段一致</p> 
+<pre><code class="prism language-l">net-conf.json: |
+  {
+    "Network": "10.244.0.0/16",
+    "Backend"": {
+      "Type": "vxlan"
+  }
+}
+</code></pre> 
+<p><img src="https://images2.imgbox.com/17/87/P7fm83Ln_o.png" alt="在这里插入图片描述"><br> 如果不一致请使用vim命令手动修改一致即可</p> 
+<h4><a id="33_flannel_745"></a>3.3 部署flannel</h4> 
+<p>部署命令（如果部署的时候卡在pull镜像的时候，试一试手动用docker将镜像拉取下来）：</p> 
+<pre><code class="prism language-l">kubectl apply -f kube-flannel.yml
+</code></pre> 
+<p><img src="https://images2.imgbox.com/9f/b0/cLa10ki9_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="34_kubeflannel_751"></a>3.4 查看kube-flannel服务状态</h4> 
+<p>确保flannel对应的pod状态为Running才可正常使用<br> 查看所有pod状态，其中包含kube-flannel</p> 
+<pre><code class="prism language-l">kubectl get pod --all-namespaces
+</code></pre> 
+<p><img src="https://images2.imgbox.com/e3/50/68aflizV_o.png" alt="在这里插入图片描述"><br> 确保所有容器正常运行，即Running状态<br> 如果有容器没正常启动，可使用如下命令进行查看日志，然后百度搜索解决方案即可</p> 
+<pre><code class="prism language-l">kubectl describe pod NAME -n NAMESPACE
+</code></pre> 
+<p>NAME就是容器的全称，如kube-flannel-ds-67521<br> NAMESPACE就是容器的命名空间，如kube-flannel</p> 
+<h3><a id="4_kubernetes_765"></a>4. 查看kubernetes系统状态</h3> 
+<p>查看系统容器状态</p> 
+<pre><code class="prism language-l">kubectl get pod -n kube-system
+</code></pre> 
+<p><img src="https://images2.imgbox.com/12/1c/oFz0PgyZ_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="5__771"></a>5. 主节点状态获取</h3> 
+<pre><code class="prism language-l">kubectl get cs
+</code></pre> 
+<p><img src="https://images2.imgbox.com/58/de/rkFIrBkP_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="6__776"></a>6. 集群节点查看</h3> 
+<p>查看集群中的节点信息</p> 
+<pre><code class="prism language-l">kubectl get nodes
+</code></pre> 
+<p><img src="https://images2.imgbox.com/43/c8/qays9ilq_o.png" alt="在这里插入图片描述"><br> 目前节点只有k8s-master一个</p> 
+<h2><a id="_784"></a>七、节点加入集群</h2> 
+<p>将每个从节点（工作节点）加入集群，以下操作在从节点（k8s-worker1、k8s-worker2）中执行</p> 
+<h3><a id="1__786"></a>1. 加入集群命令获取（主节点）</h3> 
+<p><code>注：此命令需在master主节点中执行</code><br> 初始化完成后输出的join命令，即第五章第2节，将其复制下来</p> 
+<pre><code class="prism language-l">kubeadm join 172.30.0.224:6443 --token 4uhwg7.ldccrwsxmplqahbc \
+        --discovery-token-ca-cert-hash sha256:cf6e896414b3d3169774b38f435d7789a1466c83064c173fc56537ba7e949e81
+</code></pre> 
+<p><code>注：token参数有效期24小时，过期则不可用请重新获取</code><br> 如果忘记保存命令或者token过期，可通过以下命令重新生成加入集群的命令</p> 
+<pre><code class="prism language-l">kubeadm token create --print-join-command
+</code></pre> 
+<p>每次获取的命令中token会变，但sha不会变<br> <img src="https://images2.imgbox.com/dc/e8/C6z9AkrZ_o.png" alt="在这里插入图片描述"></p> 
+<pre><code class="prism language-l">kubeadm join 172.30.0.224:6443 --token p1cfv3.g2pftg0svd2aprgs --discovery-token-ca-cert-hash sha256:cf6e896414b3d3169774b38f435d7789a1466c83064c173fc56537ba7e949e81
+</code></pre> 
+<h3><a id="2__803"></a>2. 加入集群（从节点）</h3> 
+<p>在工作节点中执行上面生成的join命令即可将工作节点添加到集群中，这里只以k8s-worker1节点为例，worker2操作相同<br> <img src="https://images2.imgbox.com/13/91/Ik4j4bCb_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="3__806"></a>3. 查看集群节点（主节点）</h3> 
+<p>在主节点k8s-master中查看集群</p> 
+<pre><code class="prism language-l">kubectl get nodes
+</code></pre> 
+<p><img src="https://images2.imgbox.com/98/57/FAOACAoH_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="kubectl_812"></a>八、从节点中使用kubectl命令（可选，本篇执行）</h2> 
+<p>此时在主节点中kubectl相关命令可正常使用，但在从节点中使用kubectl会报端口问题，如下<br> <img src="https://images2.imgbox.com/64/83/IEKOZ45I_o.png" alt="在这里插入图片描述"><br> 原因是从节点中没有admin.conf文件，此文件授权kubectl命令的使用<br> 而该文件只有初始化时在主节点中生成了，从节点中并无，故需要将其复制到从节点并配置环境变量使之生效即可</p> 
+<h3><a id="1__817"></a>1. 查看文件（主节点）</h3> 
+<p>在主节点中查看admin.conf文件</p> 
+<pre><code class="prism language-l">ls /etc/kubernetes/
+</code></pre> 
+<p><img src="https://images2.imgbox.com/25/f9/A7whPt1t_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="2__823"></a>2. 复制文件（主节点）</h3> 
+<p>在主节点中执行命令，将admin.conf文件复制到从节点相同目录下</p> 
+<pre><code class="prism language-l">sudo scp /etc/kubernetes/admin.conf root@k8s-worker1:/etc/kubernetes/
+</code></pre> 
+<p>k8s-worker2执行相同操作<br> <img src="https://images2.imgbox.com/c6/be/OtCICmXI_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="3__830"></a>3. 工作节点查看（从节点）</h3> 
+<p>到工作节点中查看文件是否已存在</p> 
+<pre><code class="prism language-l">ls /etc/kubernetes
+</code></pre> 
+<p>k8s-worker1中已存在admin.conf<br> <img src="https://images2.imgbox.com/dc/67/LuAQUjUJ_o.png" alt="在这里插入图片描述"><br> k8s-worker2中已存在admin.conf<br> <img src="https://images2.imgbox.com/03/07/cyLiwj8F_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="4__839"></a>4. 配置环境变量（从节点）</h3> 
+<p>到工作节点中配置环境变量，使admin.conf文件生效，以下命令k8s-worker1和k8s-worker2都执行一遍</p> 
+<pre><code class="prism language-l">sudo vim  /etc/profile
+</code></pre> 
+<p>将以下内容复制粘贴进去</p> 
+<pre><code class="prism language-l">export KUBECONFIG=/etc/kubernetes/admin.conf
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a5/3d/CZJP1lyZ_o.png" alt="在这里插入图片描述"><br> 执行命令使环境变量生效</p> 
+<pre><code class="prism language-l">source /etc/profile
+</code></pre> 
+<h3><a id="5__853"></a>5. 再次查看集群节点（从节点）</h3> 
+<p>在从节点中使用kubectl命令查看集群节点</p> 
+<pre><code class="prism language-l">kubectl get nodes
+</code></pre> 
+<p>k8s-worker1可用<br> <img src="https://images2.imgbox.com/1d/ee/JuJyTfOD_o.png" alt="在这里插入图片描述"><br> k8s-worker2可用<br> <img src="https://images2.imgbox.com/ad/b0/1UZCjU8H_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="_862"></a>九、集群节点的删除</h2> 
+<p>当集群中不再需要某个节点时，可用以下操作删除该节点<br> 以k8s-worker2节点为例</p> 
+<h3><a id="1__865"></a>1. 释放节点（主节点）</h3> 
+<p>删除节点本地数据释放节点资源，命令如下</p> 
+<pre><code class="prism language-l">kubectl drain k8s-worker2 --delete-local-data --force --ignore-daemonsets
+</code></pre> 
+<p><code>k8s-worker2</code> 为kubectl get nodes查询到的节点名称</p> 
+<h3><a id="2__871"></a>2. 删除节点（主节点）</h3> 
+<p>删除节点</p> 
+<pre><code class="prism language-l">kubectl delete node k8s-worker2
+</code></pre> 
+<h3><a id="3__876"></a>3. 重置配置（从节点）</h3> 
+<p>在所删除的节点k8s-worker2中执行命令重置k8s配置</p> 
+<pre><code class="prism language-l">kubeadm reset
+</code></pre> 
+<h3><a id="4__881"></a>4. 删除文件（从节点）</h3> 
+<p>在所删除的节点k8s-worker2中执行命令删除相关配置文件（k8s相关配置、flannel网络配置和网口）</p> 
+<pre><code class="prism language-l">sudo rm -rf /etc/cni/net.d/
+sudo rm -rf /root/.kube/config
+</code></pre> 
+<p>删除CNI</p> 
+<pre><code class="prism language-l">ifconfig cni0 down
+home]# ip link delete cni0
+</code></pre> 
+<p>删除fannel</p> 
+<pre><code class="prism language-l">ifconfig flannel.1 down
+ip link delete flannel.1
+</code></pre> 
+<h2><a id="Dashboard_897"></a>十、Dashboard配置（任意节点，自选，此部分无法实现，部署后无法登录）</h2> 
+<p>使用Kubepi进行k8s集群的日常管理<br> 拓展：<br> Kubepi是一个简单高效的k8s集群图形化管理工具，方便日常管理K8S集群，高效快速的查询日志定位问题的工具</p> 
+<h3><a id="1_KubePi_902"></a>1. 部署KubePi</h3> 
+<p><a href="https://zhuanlan.zhihu.com/p/627310856?utm_id=0" rel="nofollow">https://zhuanlan.zhihu.com/p/627310856?utm_id=0</a><br> 部署的位置可选任意节点，本篇以k8s-worker1节点部署为例<br> 到k8s-worker1节点中操作</p> 
+<h4><a id="11__906"></a>1.1 拉取镜像</h4> 
+<p>将kubepi的镜像拉取到节点</p> 
+<pre><code class="prism language-l">sudo docker pull kubeoperator/kubepi-server
+</code></pre> 
+<p><img src="https://images2.imgbox.com/1e/44/Gzn3hKN1_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="12__912"></a>1.2 运行容器</h4> 
+<p>运行容器以开启服务</p> 
+<pre><code class="prism language-l">sudo docker run --privileged -itd --restart=unless-stopped --name dashboard_kubepi \
+-v /home/docker-mount/kubepi/:/var/lib/kubepi/ -p 8000:80 kubeoperator/kubepi-server
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ed/df/PFZrLWI7_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="13__919"></a>1.3 查看容器</h4> 
+<p>查看运行的容器，kubepi-server容器已运行</p> 
+<pre><code class="prism language-l">sudo docker ps
+</code></pre> 
+<p><img src="https://images2.imgbox.com/11/3e/zySpaMZI_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="2_KubePi_925"></a>2. 登录KubePi服务</h3> 
+<p>根据服务所在节点的ip和运行容器时的映射端口登录<br> 如本篇在k8s-worker2上部署的kubepi，k8s-worker2的ip为172.30.0.223<br> 故登录地址为：</p> 
+<pre><code class="prism language-h">http://172.30.0.223:8000
+</code></pre> 
+<p>默认用户名为<code>admin</code><br> 默认密码为<code>kubepi</code></p> 
+<h2><a id="Dashboard_935"></a>十、Dashboard配置（主节点）</h2> 
+<p>使用dashboard作为可视化界面管理k8s集群</p> 
+<h3><a id="1_dashboard_937"></a>1. 下载并安装dashboard</h3> 
+<p>在主节点k8s-master中下载dashboard的配置文件安装dashboard</p> 
+<pre><code class="prism language-l">kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+</code></pre> 
+<p><img src="https://images2.imgbox.com/8e/80/tXTSieRa_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="2__943"></a>2. 添加用户</h3> 
+<p>创建用户文件dash.yml</p> 
+<pre><code class="prism language-l">vim dash-user.yml
+</code></pre> 
+<p>然后将以下内容复制到文件中</p> 
+<pre><code class="prism language-yaml"><span class="token key atrule">apiVersion</span><span class="token punctuation">:</span> v1
+<span class="token key atrule">kind</span><span class="token punctuation">:</span> ServiceAccount
+<span class="token key atrule">metadata</span><span class="token punctuation">:</span>
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> admin<span class="token punctuation">-</span>user
+  <span class="token key atrule">namespace</span><span class="token punctuation">:</span> kubernetes<span class="token punctuation">-</span>dashboard
+<span class="token punctuation">---</span>
+<span class="token key atrule">apiVersion</span><span class="token punctuation">:</span> rbac.authorization.k8s.io/v1
+<span class="token key atrule">kind</span><span class="token punctuation">:</span> ClusterRoleBinding
+<span class="token key atrule">metadata</span><span class="token punctuation">:</span>
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> admin<span class="token punctuation">-</span>user
+<span class="token key atrule">roleRef</span><span class="token punctuation">:</span>
+  <span class="token key atrule">apiGroup</span><span class="token punctuation">:</span> rbac.authorization.k8s.io
+  <span class="token key atrule">kind</span><span class="token punctuation">:</span> ClusterRole
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> cluster<span class="token punctuation">-</span>admin
+<span class="token key atrule">subjects</span><span class="token punctuation">:</span>
+<span class="token punctuation">-</span> <span class="token key atrule">kind</span><span class="token punctuation">:</span> ServiceAccount
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> admin<span class="token punctuation">-</span>user
+  <span class="token key atrule">namespace</span><span class="token punctuation">:</span> kubernetes<span class="token punctuation">-</span>dashboard
+</code></pre> 
+<p>如果上方的文件内容复制后格式发生变化，建议将格式手动校准，不然可能应用时会报错<br> 应用文件，生效</p> 
+<pre><code class="prism language-l">kubectl apply -f dash-user.yaml
+</code></pre> 
+<p><img src="https://images2.imgbox.com/41/66/gJWntUzQ_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="3_token_975"></a>3. 获取token</h3> 
+<p>访问所需的token用以下命令生成</p> 
+<pre><code class="prism language-l">kubectl -n kubernetes-dashboard describe secret $(kubectl -n kubernetes-dashboard get secret | grep admin-user | awk '{print $1}')
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ed/5f/2l5egaU8_o.png" alt="在这里插入图片描述"><br> 或用以下命令，不过下方这个命令的token内容与用户名挤在一起，还是用上面那个命令吧</p> 
+<pre><code class="prism language-l">kubectl -n kubernetes-dashboard get secret $(kubectl -n kubernetes-dashboard get sa/admin-user -o jsonpath="{.secrets[0].name}") -o go-template="{<!-- -->{.data.token | base64decode}}"
+</code></pre> 
+<p>token内容：</p> 
+<pre><code class="prism language-text">eyJhbGciOiJSUzI1NiIsImtpZCI6Im1MSmVsZGdNWlBaLVlMM180eXp3WXpuMDhOZ1YzV0s2RUNEYzJzT0R0QWsifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJhZG1pbi11c2VyLXRva2VuLWh0Nm5wIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFkbWluLXVzZXIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiJjMjg3OTIwZi1iYjMzLTQxNzQtOWE4NS1kYTJjODAzYzhhZTYiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6a3ViZXJuZXRlcy1kYXNoYm9hcmQ6YWRtaW4tdXNlciJ9.dNKHA0x-Vh8i31USt-IhP5PNRnghpCEVrnw6EoL_L1I_Xt2pPQ40kGoAA3WRjKOr6RzxhiYIbx2Jfnd8aZpgo6RgFNzjKHXtk7h2zJ2RjZ8yuEk8RmpzpZqbOc_qBCeuNG9h5gL_xDOGa7zyg6CMkm7yuTI7rYjhMwapIw_SrdMYaQsZqj3BE0nIfiFzBHdp4y10Tukk4K2hE74FobHqyHyQp3exrz8SbGsCW7sw4Bun6-CAhRlwHiy5LoYoVSj-cuVldCmhD9jdNzeD0b3KsOmcGXnDTVxBqcH_u3OoMriRVQ-KCNfixnb9_x43G94NqvW6CKuA0x1ac520Cv6oUw
+</code></pre> 
+<h3><a id="4_dashboard_989"></a>4. 访问dashboard（需要跳板机，不适用当前服务器环境）</h3> 
+<p>因为本篇为生产环境搭建，所以使用代理方式访问，不暴露ip和端口<br> 参考：<a href="https://segmentfault.com/a/1190000023130407" rel="nofollow">https://segmentfault.com/a/1190000023130407</a></p> 
+<p>k8s-master主节点上启动kube-proxy</p> 
+<pre><code class="prism language-l">kubectl proxy --address='0.0.0.0' --accept-hosts='^\*$' &amp;
+</code></pre> 
+<p>本地跳板机</p> 
+<h3><a id="4_dashboard_1000"></a>4. 访问dashboard</h3> 
+<h4><a id="41__1001"></a>4.1 查看端口</h4> 
+<p>首先查看dashboard服务的端口</p> 
+<pre><code class="prism language-l">kubectl get svc -n kubernetes-dashboard
+</code></pre> 
+<p>或</p> 
+<pre><code class="prism language-l">kubectl get service kubernetes-dashboard -n kubernetes-dashboard
+</code></pre> 
+<p><img src="https://images2.imgbox.com/eb/f3/fkl1uR8w_o.png" alt="在这里插入图片描述"><br> 此时只有443，且只能集群内部访问，由于三台服务器均为server版，只有黑窗口，无法访问可视化界面<br> 故需要将其端口映射到别的端口，并将权限改为其他地址可访问</p> 
+<h4><a id="42_type_1013"></a>4.2 修改type的值</h4> 
+<p>修改service的type为NodePort，暴露到外部进行访问</p> 
+<pre><code class="prism language-l">kubectl -n kubernetes-dashboard edit service kubernetes-dashboard
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d5/9c/RgS7Ocsy_o.png" alt="在这里插入图片描述"><br> 找到如图位置，将type的值改为<code>NodePort</code></p> 
+<h4><a id="43__1020"></a>4.3 再次查看端口</h4> 
+<p>然后再次查看端口，可以看到端口号已经被映射到新的端口，32353<br> <img src="https://images2.imgbox.com/9e/80/snaHYiy5_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="44_IP_1023"></a>4.4 IP获取</h4> 
+<p>获取服务所在的节点的IP地址</p> 
+<pre><code class="prism language-l">kubectl get pods -n kubernetes-dashboard -o wide | grep kubernetes-dashboard
+</code></pre> 
+<p><img src="https://images2.imgbox.com/e8/d5/um2Nxe9S_o.png" alt="在这里插入图片描述"><br> 如图可知服务运行在k8s-worker2节点上，ifconfig命令查看该节点的ip该节点的ip，为172.30.0.222</p> 
+<h4><a id="45_dashboard_1031"></a>4.5 访问dashboard</h4> 
+<p>根据以上查询到的端口号和服务运行所在节点的ip地址<br> 访问dashboard的地址为ip+端口号</p> 
+<pre><code>https://172.30.0.222:32353
+</code></pre> 
+<p><code>注：</code>一定要加上<code>https://</code>前缀，不然可能只会返回一串字符<code>Client sent an HTTP request to an HTTP server.</code></p> 
+<p>访问链接后提示您的连接不是私密连接，可选高级，然后继续前往连接即可<br> 出现如下界面<br> <img src="https://images2.imgbox.com/ac/6b/chngKKnb_o.png" alt="在这里插入图片描述"><br> 将token复制粘贴进去<br> <img src="https://images2.imgbox.com/d0/c6/IXOilYPv_o.png" alt="在这里插入图片描述"><br> 登录成功后可正常使用<br> 在集群中找到Nodes可查看集群节点相关信息<br> <img src="https://images2.imgbox.com/4c/ef/mekKckSF_o.png" alt="在这里插入图片描述"></p> 
+<hr> 
+<p><code>感谢阅读，祝君暴富！</code></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/cb9996d6bd72709e23f6df3d7683948c/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【Linux】进程间通信概念 | 匿名管道</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/81e0a871de8e8fb235e304776b6b4e05/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">【Linux】System V 共享内存</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

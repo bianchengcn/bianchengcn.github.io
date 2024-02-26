@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>k8s pod 一直重启 code 137 排查记录 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="k8s pod 一直重启 code 137 排查记录" />
+<meta property="og:description" content="现象 k8s pod一直在重启，调度不起来
+排查 1. 首先看状态 这个比较简单，我直接在页面上的(rancher查看api、查看/编辑yaml等都能看)
+如图，找到containerStatuses，里面有个exitCode：137
+网上搜了下错误码的意思：
+退出代码 0：一般为容器正常退出退出代码 1：由于容器中 pid 为 1 的进程错误而失败退出代码 137：由于容器收到 SIGKILL 信号而失败（手动执行或“oom-killer” [OUT-OF-MEMORY]）
+= 退出代码 139：由于容器收到 SIGSEGV 信号而失败退出代码 143：由于容器收到 SIGTERM 信号而失败 网上对137的解释：一般为pod容器内存达到资源限制（resources.limits）或者宿主机本身内存不够了。
+我们知道，oom被kill是可以在系统日志里看到的：
+ubuntu 的系统日志在 /var/log/syslog，centos 的系统日志在 /var/log/messages
+2. 登录机器排查 大致判断可能是OOM导致之后，需要进机器看下真实情况
+首先看下pod所在的node [superuser@server2558 ~]$ sudo kubectl get pod -n mynamespace -o wide NAME READY STATUS RESTARTS AGE IP NODE NOMINATED NODE READINESS GATES elasticsearch-568889b5f-h482t 0/1 CrashLoopBackOff 8 23m 10.x.x.x a2617 &lt;none&gt; &lt;none&gt; &lt;none&gt; &lt;none&gt; 如图，这个异常的pod被调度到了a2617节点" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/4108f0360cce5d75bc2317790e0b8e90/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-02-10T17:10:36+08:00" />
+<meta property="article:modified_time" content="2022-02-10T17:10:36+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">k8s pod 一直重启 code 137 排查记录</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-github-gist">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h4><a id="_0"></a>现象</h4> 
+<p>k8s pod一直在重启，调度不起来</p> 
+<h4><a id="_3"></a>排查</h4> 
+<h5><a id="1__5"></a>1. 首先看状态</h5> 
+<p>这个比较简单，我直接在页面上的(rancher查看api、查看/编辑yaml等都能看)<br> <img src="https://images2.imgbox.com/e6/14/gMl46fbM_o.png" alt="在这里插入图片描述"></p> 
+<p>如图，找到containerStatuses，里面有个exitCode：137<br> 网上搜了下错误码的意思：</p> 
+<ul><li>退出代码 0：一般为容器正常退出</li><li>退出代码 1：由于容器中 pid 为 1 的进程错误而失败</li><li>退出代码 137：由于容器收到 SIGKILL 信号而失败（手动执行或“oom-killer” [OUT-OF-MEMORY]）<br> = 退出代码 139：由于容器收到 SIGSEGV 信号而失败</li><li>退出代码 143：由于容器收到 SIGTERM 信号而失败</li></ul> 
+<p>网上对137的解释：一般为pod容器内存达到资源限制（resources.limits）或者宿主机本身内存不够了。</p> 
+<p>我们知道，oom被kill是可以在系统日志里看到的：<br> ubuntu 的系统日志在 <code>/var/log/syslog</code>，centos 的系统日志在 <code>/var/log/messages</code></p> 
+<h5><a id="2__22"></a>2. 登录机器排查</h5> 
+<p>大致判断可能是OOM导致之后，需要进机器看下真实情况</p> 
+<ol><li>首先看下pod所在的node</li></ol> 
+<pre><code>[superuser@server2558 ~]$ sudo kubectl get pod -n mynamespace -o wide
+NAME                                           READY   STATUS             RESTARTS   AGE   IP               NODE               NOMINATED NODE   READINESS GATES
+elasticsearch-568889b5f-h482t   0/1     CrashLoopBackOff   8          23m   10.x.x.x    a2617              &lt;none&gt;           &lt;none&gt;          &lt;none&gt;           &lt;none&gt;
+</code></pre> 
+<p>如图，这个异常的pod被调度到了a2617节点</p> 
+<ol start="2"><li>找到节点ip</li></ol> 
+<pre><code>[superuser@server2558 ~]$ sudo kubectl describe node a2617
+Name:               a2617
+Roles:              &lt;none&gt;
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    jindi.com/group=xxx
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=s2678-daben
+                    kubernetes.io/os=linux
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: /var/run/dockershim.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    projectcalico.org/IPv4Address: 172.x.x.5/16
+......
+</code></pre> 
+<p>如图，ip为172.x.x.5<br> 3. 查看节点剩余内存</p> 
+<pre><code>[superuser@server2558 ~]$ sudo kubectl top nodes
+NAME               CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+a2617              194m         4%     19869Mi         62%  
+......
+</code></pre> 
+<p>32G的机器，内存还剩10来个G…</p> 
+<ol start="4"><li>登录节点机器，查看日志</li></ol> 
+<pre><code>[superuser@server2558 ~]$ sudo tail -n 100 /var/log/messages
+Feb 10 16:07:47 a2617 kernel: [17948]  1000 17948  3990899  3029423    5957        0           802 java
+Feb 10 16:07:47 a2617 kernel: Out of memory: Kill process 17948 (java) score 1184 or sacrifice child
+Feb 10 16:07:47 a2617 kernel: Killed process 17948 (java), UID 1000, total-vm:15963596kB, anon-rss:12117692kB, file-rss:0kB, shmem-rss:0kB
+Feb 10 16:07:47 a2617 kernel: calico-node invoked oom-killer: gfp_mask=0x201da, order=0, oom_score_adj=-998
+Feb 10 16:07:47 a2617 kernel: calico-node cpuset=docker-70e0f5934f06de65ae596cc16b1b467b14fc9842796a01e8ae9eda42fe1b6431.scope mems_allowed=0
+
+</code></pre> 
+<p>比较关键都信息<code>Killed process 17948 (java), UID 1000, total-vm:15963596kB, anon-rss:12117692kB, file-rss:0kB, shmem-rss:0kB</code></p> 
+<ul><li>total-vm 进程总共使用的虚拟内存；</li><li>anon-rss：虚拟内存实际占用的物理内存；</li></ul> 
+<p>所以，可以看到，这个应用一下子申请了12G的无力内存，而节点内存没有那么多了，所以oom。</p> 
+<h5><a id="3__75"></a>3. 处理</h5> 
+<p>要么调度到其他节点上，要么给内存做下限制。</p> 
+<p>我是给pod加了资源限制, 再重启就好了。</p> 
+<pre><code>resources:
+  limits:
+    cpu: "1"
+    memory: 6Gi
+  requests:
+    cpu: 100m
+    memory: 6Gi
+</code></pre> 
+<p>问题：咨询我们运维，他表示pod的limit不会影响服务申请多少内存，只会在服务申请大于limit的内存时，直接异常。如果程序真的需要12G的内存，这么配置应该是无效的，可能是我改了参数，调度到了其他正常的节点，所以启动成功了。</p> 
+<p>但，观察两次调度的节点，第二次的节点内存比第一次的节点内存更小。如果还申请了12G内存，肯定会启动不成功。所以我感觉可能跟配置还是有点关系。大致是考虑服务可以申请12G内存，也可以申请更小的内存，如果我们没限制，他会申请更大的内存，导致oom, 限制了，申请小的内存，也能保证正常启动。</p> 
+<p>知道的朋友请帮忙解答下，谢谢</p> 
+<hr> 
+<p>[1] https://www.bookstack.cn/read/kubernetes-practice-guide/troubleshooting-trick-analysis-exitcode.md<br> [2] https://www.xtplayer.cn/kubernetes/pod-container-restart-reason-check/#%E6%A3%80%E6%9F%A5%E5%AE%B9%E5%99%A8%E9%80%80%E5%87%BA%E5%8E%9F%E5%9B%A0%EF%BC%88reason%EF%BC%89%E5%92%8C%E7%8A%B6%E6%80%81%E7%A0%81</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/079c90a36d5602f13fc5c35422fde08d/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Markdown常用样式</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/2abb6265b5c30b07402b2c30792bb8ba/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">威胁建模主流框架</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

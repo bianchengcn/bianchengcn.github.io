@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>DUF:Deep Video Super-Resolution Network Using Dynamic Upsampling Filters ...阅读笔记 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="DUF:Deep Video Super-Resolution Network Using Dynamic Upsampling Filters ...阅读笔记" />
+<meta property="og:description" content="DUF:Deep Video Super-Resolution Network Using Dynamic Upsampling Filters Without Explicit Motion Compensation
+DUF：无需显式运动补偿的动态上采样滤波器的深视频超分辨率网络
+论文：https://openaccess.thecvf.com/content_cvpr_2018/papers/Jo_Deep_Video_Super-Resolution_CVPR_2018_paper.pdf
+代码：https://github.com/yhjo09/VSR-DUF
+个人复现(pytorch)：GitHub - gedulding/VSR_DUF_pytorch: According to the author&#39;s paper and code, it is converted to pytorch implementation. This code can be used as the basis for reproducing this paper. And the code content can be used as a template
+本篇笔记主要对整篇论文从头到尾进行阅读分析，本文内容有点多，主要是对不同部分的总结以及图例解释，如果只对模型原理部分有兴趣，可直接观看第四部分。
+本文为了详细说明各图、公式在各组件中的情况，所以对原文图片、公式做了切割和拼接，保证该内容是在该组件中生效的。
+目录
+（1）摘要
+（2）引言
+（3）相关工作
+（4）本文方法介绍
+（4.1）动态上采样filter
+（4.2）残差学习
+（4.3）网络结构的设计
+（4.4）时间增强
+（5）实验
+（5.1）学习运动的可视化：
+（5.1.1）合成运动测试
+（5.1.2）滤波器是否有效测试
+（5.1.3）动态上采样滤波器" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/778ec126599cab0339c5e90e7b8ee34d/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-06-09T22:08:39+08:00" />
+<meta property="article:modified_time" content="2022-06-09T22:08:39+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">DUF:Deep Video Super-Resolution Network Using Dynamic Upsampling Filters ...阅读笔记</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>DUF:Deep Video Super-Resolution Network Using Dynamic Upsampling Filters Without Explicit Motion Compensation</p> 
+<p style="text-align:center;">DUF：无需显式运动补偿的动态上采样滤波器的深视频超分辨率网络</p> 
+<p><br> 论文：<a href="https://openaccess.thecvf.com/content_cvpr_2018/papers/Jo_Deep_Video_Super-Resolution_CVPR_2018_paper.pdf" rel="nofollow" title="https://openaccess.thecvf.com/content_cvpr_2018/papers/Jo_Deep_Video_Super-Resolution_CVPR_2018_paper.pdf">https://openaccess.thecvf.com/content_cvpr_2018/papers/Jo_Deep_Video_Super-Resolution_CVPR_2018_paper.pdf</a></p> 
+<p>代码：<a href="https://github.com/yhjo09/VSR-DUF" title="https://github.com/yhjo09/VSR-DUF">https://github.com/yhjo09/VSR-DUF</a></p> 
+<p>个人复现(pytorch)：<a href="https://github.com/gedulding/VSR_DUF_pytorch" title="GitHub - gedulding/VSR_DUF_pytorch: According to the author's paper and code, it is converted to pytorch implementation. This code can be used as the basis for reproducing this paper. And the code content can be used as a template">GitHub - gedulding/VSR_DUF_pytorch: According to the author's paper and code, it is converted to pytorch implementation. This code can be used as the basis for reproducing this paper. And the code content can be used as a template</a></p> 
+<p><strong>本篇笔记主要对整篇论文从头到尾进行阅读分析，本文内容有点多，主要是对不同部分的总结以及图例解释，如果只对模型原理部分有兴趣，可直接观看第四部分。</strong></p> 
+<p><strong>本文为了详细说明各图、公式在各组件中的情况，所以对原文图片、公式做了切割和拼接，保证该内容是在该组件中生效的。</strong></p> 
+<p id="main-toc"><strong>目录</strong></p> 
+<p id="%EF%BC%881%EF%BC%89%E6%91%98%E8%A6%81-toc" style="margin-left:0px;"><a href="#%EF%BC%881%EF%BC%89%E6%91%98%E8%A6%81" rel="nofollow">（1）摘要</a></p> 
+<p id="%EF%BC%882%EF%BC%89%E5%BC%95%E8%A8%80-toc" style="margin-left:0px;"><a href="#%EF%BC%882%EF%BC%89%E5%BC%95%E8%A8%80" rel="nofollow">（2）引言</a></p> 
+<p id="%EF%BC%883%EF%BC%89%E7%9B%B8%E5%85%B3%E5%B7%A5%E4%BD%9C-toc" style="margin-left:0px;"><a href="#%EF%BC%883%EF%BC%89%E7%9B%B8%E5%85%B3%E5%B7%A5%E4%BD%9C" rel="nofollow">（3）相关工作</a></p> 
+<p id="%EF%BC%884%EF%BC%89%E6%9C%AC%E6%96%87%E6%96%B9%E6%B3%95%E4%BB%8B%E7%BB%8D-toc" style="margin-left:0px;"><a href="#%EF%BC%884%EF%BC%89%E6%9C%AC%E6%96%87%E6%96%B9%E6%B3%95%E4%BB%8B%E7%BB%8D" rel="nofollow">（4）本文方法介绍</a></p> 
+<p id="%C2%A0%EF%BC%884.1%EF%BC%89%E5%8A%A8%E6%80%81%E4%B8%8A%E9%87%87%E6%A0%B7filter-toc" style="margin-left:40px;"><a href="#%C2%A0%EF%BC%884.1%EF%BC%89%E5%8A%A8%E6%80%81%E4%B8%8A%E9%87%87%E6%A0%B7filter" rel="nofollow">（4.1）动态上采样filter</a></p> 
+<p id="%C2%A0%EF%BC%884.2%EF%BC%89%E6%AE%8B%E5%B7%AE%E5%AD%A6%E4%B9%A0-toc" style="margin-left:40px;"><a href="#%C2%A0%EF%BC%884.2%EF%BC%89%E6%AE%8B%E5%B7%AE%E5%AD%A6%E4%B9%A0" rel="nofollow">（4.2）残差学习</a></p> 
+<p id="%C2%A0%EF%BC%884.3%EF%BC%89%E7%BD%91%E7%BB%9C%E7%BB%93%E6%9E%84%E7%9A%84%E8%AE%BE%E8%AE%A1-toc" style="margin-left:40px;"><a href="#%C2%A0%EF%BC%884.3%EF%BC%89%E7%BD%91%E7%BB%9C%E7%BB%93%E6%9E%84%E7%9A%84%E8%AE%BE%E8%AE%A1" rel="nofollow">（4.3）网络结构的设计</a></p> 
+<p id="%EF%BC%884.4%EF%BC%89%E6%97%B6%E9%97%B4%E5%A2%9E%E5%BC%BA-toc" style="margin-left:40px;"><a href="#%EF%BC%884.4%EF%BC%89%E6%97%B6%E9%97%B4%E5%A2%9E%E5%BC%BA" rel="nofollow">（4.4）时间增强</a></p> 
+<p id="%EF%BC%885%EF%BC%89%E5%AE%9E%E9%AA%8C-toc" style="margin-left:0px;"><a href="#%EF%BC%885%EF%BC%89%E5%AE%9E%E9%AA%8C" rel="nofollow">（5）实验</a></p> 
+<p id="%EF%BC%885.1%EF%BC%89Basic%E5%92%8CIcon%E7%9A%84%E7%9B%B8%E6%AF%94%E8%BE%83%E5%85%B6%E4%BB%96%E6%A8%A1%E5%9E%8B%E7%9A%84%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A-toc" style="margin-left:40px;"><a href="#%EF%BC%885.1%EF%BC%89Basic%E5%92%8CIcon%E7%9A%84%E7%9B%B8%E6%AF%94%E8%BE%83%E5%85%B6%E4%BB%96%E6%A8%A1%E5%9E%8B%E7%9A%84%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A" rel="nofollow">（5.1）学习运动的可视化：</a></p> 
+<p id="%EF%BC%885.1.1%EF%BC%89%E5%90%88%E6%88%90%E8%BF%90%E5%8A%A8%E6%B5%8B%E8%AF%95-toc" style="margin-left:80px;"><a href="#%EF%BC%885.1.1%EF%BC%89%E5%90%88%E6%88%90%E8%BF%90%E5%8A%A8%E6%B5%8B%E8%AF%95" rel="nofollow">（5.1.1）合成运动测试</a></p> 
+<p id="%C2%A0%EF%BC%885.2%EF%BC%89Basic%E5%92%8CIcon%E7%9A%84%E6%B6%88%E8%9E%8D%E5%AE%9E%E9%AA%8C%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A-toc" style="margin-left:80px;"><a href="#%C2%A0%EF%BC%885.2%EF%BC%89Basic%E5%92%8CIcon%E7%9A%84%E6%B6%88%E8%9E%8D%E5%AE%9E%E9%AA%8C%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A" rel="nofollow">（5.1.2）滤波器是否有效测试</a></p> 
+<p id="%C2%A0%C2%A0%EF%BC%885.1.3%EF%BC%89%E5%8A%A8%E6%80%81%E4%B8%8A%E9%87%87%E6%A0%B7%E6%BB%A4%E6%B3%A2%E5%99%A8-toc" style="margin-left:80px;"><a href="#%C2%A0%C2%A0%EF%BC%885.1.3%EF%BC%89%E5%8A%A8%E6%80%81%E4%B8%8A%E9%87%87%E6%A0%B7%E6%BB%A4%E6%B3%A2%E5%99%A8" rel="nofollow">（5.1.3）动态上采样滤波器</a></p> 
+<p id="%EF%BC%885.2%EF%BC%89%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A-toc" style="margin-left:40px;"><a href="#%EF%BC%885.2%EF%BC%89%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A" rel="nofollow">（5.2）实验结果：</a></p> 
+<p id="%E6%80%BB%E7%BB%93%20%EF%BC%9A-toc" style="margin-left:0px;"><a href="#%E6%80%BB%E7%BB%93%20%EF%BC%9A" rel="nofollow">总结 ：</a></p> 
+<hr id="hr-toc"> 
+<p></p> 
+<h2 id="%EF%BC%881%EF%BC%89%E6%91%98%E8%A6%81">（1）摘要</h2> 
+<p>        目前基于深度学习的VSR方法大多依赖显示运动补偿的精度，也就是运动估计和运动补偿的精度。而本文提出的一种端到端的网络，网络中包含动态上采样filter和残差图像处理，利用隐式信息进行动态上采样filter的生成(隐式运动补偿不需要进行复杂的运动估计，利用帧之间的互补信息进行帧补偿)，通过残差网络进行时空领域的细节补充，再通过上采样filter重建HR图像，辅助一种数据增强的技术生成HR视频。</p> 
+<p>（我用一下我的BasicVSR中的比较图进行对比，可以从DUF的参数，运动时间以及PSNR看出这个算法的基本效果，让大家对这个算法有个大致感官）</p> 
+<p class="img-center"><img alt="" height="325" src="https://images2.imgbox.com/5a/29/3DZfILo6_o.png" width="540"></p> 
+<p></p> 
+<h2 id="%EF%BC%882%EF%BC%89%E5%BC%95%E8%A8%80">（2）引言</h2> 
+<p>        现有的硬件设备4K和8K的屏幕往往没有合适该分辨率的内容，进行图片超分就是对视频的每一帧进行不关联的超分，但是这种超分会导致各个图像之间没有考虑时空关系出现伪影和闪烁的问题。传统的VSR算法是通过计算亚像素运动，计算两个LR图像之间的<strong>亚像素之间的位移(如下图)</strong>，后续的基于深度学习的方法基于上述思想，进行显示运动补偿，通过进行运动估计和运动补偿进行帧之间的细节对齐和补充，然后通过上采样获得HR视频，<strong>但是这种方式存在两个问题：1，严重依赖运动估计和补偿的精度。2，混合来自多个LR帧的目标帧恢复的图像会模糊。 </strong></p> 
+<p class="img-center"><img alt="" height="232" src="https://images2.imgbox.com/4f/50/HqYVQhQX_o.png" width="248"></p> 
+<p style="text-align:center;">(LR图之间亚像素之间的关系，进行亚像素位移实际上就是通过计算两个LR图像之间亚像素之间的位置关系进行位移对齐，然后补充目标帧没有的细节信息) </p> 
+<p>        本文设计的方法中，如下图所示，<strong>通过对输入的多个视频帧进行隐式的运动补偿计算，生成相应的动态上采样filter，然后直接对输入的目标帧的某个像素进行局部滤波，生成高分辨率的图像</strong>。<strong>生成filter 的大小和想要进行超分的分辨率有关，超分4倍，则生成filter为5*5*4*4(图中3,3,3,3，前两个3,3表示放大坐标，后两个3,3，从0开始表示放大后的pixel的位置)，filter的通道数16，可以为一个像素块进行16次计算，也就是平铺成高宽为4倍的图像。</strong></p> 
+<p style="text-align:center;"><img alt="" height="511" src="https://images2.imgbox.com/c1/b2/h2BRxNqg_o.png" width="522"></p> 
+<p>         本文的方法与最新方法的简单对比。(18年的文章)</p> 
+<p class="img-center"><img alt="" height="508" src="https://images2.imgbox.com/4d/f2/vSKyrNpl_o.png" width="514"></p> 
+<h2 id="%EF%BC%883%EF%BC%89%E7%9B%B8%E5%85%B3%E5%B7%A5%E4%BD%9C">（3）相关工作</h2> 
+<p>                对图片超分以及视频超分进行了解释，以为当前对于视频超分提出的算法和解决方案。</p> 
+<h2 id="%EF%BC%884%EF%BC%89%E6%9C%AC%E6%96%87%E6%96%B9%E6%B3%95%E4%BB%8B%E7%BB%8D">（4）本文方法介绍</h2> 
+<blockquote> 
+ <p><strong>GT帧是什么？GT帧实际上是指高分辨率、未经处理的图像。处理是指：下采样，模糊、噪声、压缩等图像处理手段。</strong></p> 
+</blockquote> 
+<p>        首先从<strong>GT帧中进行下采样提取出低分辨率LR帧组，作为网络的输入</strong>。然后使用动态上采样filter生成放大后的图像，使用残差网络对输入的LR帧进行高频特征提取补充到放大后的图片中，生成最后的HR图像。网络结构如下图所示。整体逻辑公式如公式(1)所示：N是输入LR帧的时间半径，G是网络，θ是网络参数。网络的<strong>输入张量为T*H*W*C</strong>，T=2*N+1为输入参考帧和支持帧的数量，H和W是输入LR帧的高度和宽度，C是颜色通道数量。<strong>输出结果张量为：1*rH*rW*C，r是放大因子</strong>。</p> 
+<p class="img-center"><img alt="" height="51" src="https://images2.imgbox.com/d5/c4/qLSMfMpW_o.png" width="429"></p> 
+<p class="img-center"><img alt="" height="450" src="https://images2.imgbox.com/a1/c8/spaHOfjt_o.png" width="1041"></p> 
+<h3 id="%C2%A0%EF%BC%884.1%EF%BC%89%E5%8A%A8%E6%80%81%E4%B8%8A%E9%87%87%E6%A0%B7filter"><strong>（4.1）动态上采样filter</strong></h3> 
+<p>        传统的上采样filter使用的是固定的filter内容，随着像素的移动对动态的对局部特征进行过滤，使用n*n(n一般为3、5)的固定内核，<strong>内部内容相同进行上采样</strong>。并没有根据图像不同位置和不同时间的信息采用更适合的filter，<strong>所以本文动态生成上采样filter，根据像素的运动生成filter，就可以避免显示的运动补偿，不需要进行额外的运动估计的操作。</strong></p> 
+<p>        如下图，根据下方图和下方的公式(2)，首先输入的帧为<img alt="" height="25" src="https://images2.imgbox.com/26/1f/t3LtCBdb_o.png" width="95">为输入的LR帧组，对输入参考的<strong>2*N+1个帧</strong>，<span style="color:#fe2c24;">(若无声明，本文的图像放大倍数统一为4倍)</span>，对不同位置的像素生成不同的filter，所有的filter组成<img alt="" height="25" src="https://images2.imgbox.com/75/52/CuaH3VHq_o.png" width="19">，<strong>橘色部分的大小就是5*5*4*4，</strong>生成了动态上采样滤波器。然后对输入的目标图像，使用上采样滤波器，某个区域像素就放大了四倍，生成输出图像<img alt="" height="26" src="https://images2.imgbox.com/31/aa/QLx5L13M_o.png" width="17">。</p> 
+<p>        <strong>公式(2)表示的则是，原图像大小是y*x，使用网格表示每个像素在网格中的位置。v,u，则代表使用filter滤波器生成的4*4个像素块的位置，例如(0,0)，(0,1)等等，生成的HR像素为</strong><img alt="" height="26" src="https://images2.imgbox.com/83/b7/eAXvFxqI_o.png" width="179">，其中<img alt="" height="29" src="https://images2.imgbox.com/16/59/ar9lcOCp_o.png" width="66">是不同区域的滤波器。</p> 
+<p class="img-center"><img alt="" height="517" src="https://images2.imgbox.com/5a/7a/Fqqz138b_o.png" width="511"></p> 
+<h3 id="%C2%A0%EF%BC%884.2%EF%BC%89%E6%AE%8B%E5%B7%AE%E5%AD%A6%E4%B9%A0"><strong>（4.2）残差学习</strong></h3> 
+<p>        残差模块的应用在，<strong>基线的动态上采样滤波器生成的HR图像不清晰，缺乏高频和细节信息，所以使用残差网络对输入的帧信息进行高频信息的提取，并且和上采样后的信息进行融合</strong>，生成富含高频信息的HR图像 。</p> 
+<p class="img-center"><img alt="" height="303" src="https://images2.imgbox.com/8c/ab/Tje7pJLK_o.png" width="672"></p> 
+<h3 id="%C2%A0%EF%BC%884.3%EF%BC%89%E7%BD%91%E7%BB%9C%E7%BB%93%E6%9E%84%E7%9A%84%E8%AE%BE%E8%AE%A1"><strong>（4.3）网络结构的设计</strong></h3> 
+<p>        网络结构的设计主要还是如上图所示，网路不复杂，具体结构中的卷积也标注了。</p> 
+<h3 id="%EF%BC%884.4%EF%BC%89%E6%97%B6%E9%97%B4%E5%A2%9E%E5%BC%BA"><strong>（4.4）时间增强</strong></h3> 
+<p>        这部分内容，是在数据处理之前的数据采集工作，为了该网络训练出可以适应真实世界的效果，生成相应质量的数据集，使用变量TA来决定进行时间增强的时间间隔，然后进行视频帧的采样，TA为负值是生成反向视频样本。如下图所示。 </p> 
+<p class="img-center"><img alt="" height="347" src="https://images2.imgbox.com/f7/87/xLwU1B5M_o.png" width="507"></p> 
+<h2 id="%EF%BC%885%EF%BC%89%E5%AE%9E%E9%AA%8C">（5）实验</h2> 
+<p>        训练数据集：Val4(为该算法收集处理的数据)</p> 
+<p>        测试数据集：Vid4</p> 
+<p>        迭代优化器：Adam optimizer</p> 
+<p>        学习率：特征提取10^-3，每10个epoch，rate*0.1</p> 
+<p>        输入LR尺寸:32*32</p> 
+<p>        BatchSize：16</p> 
+<p>        损失函数：huber loss(如下图)</p> 
+<p class="img-center"><img alt="" height="102" src="https://images2.imgbox.com/52/44/X9iu7C5y_o.png" width="519"></p> 
+<h3 id="%EF%BC%885.1%EF%BC%89Basic%E5%92%8CIcon%E7%9A%84%E7%9B%B8%E6%AF%94%E8%BE%83%E5%85%B6%E4%BB%96%E6%A8%A1%E5%9E%8B%E7%9A%84%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A"><strong>（5.1）</strong>学习运动的可视化<strong>：</strong></h3> 
+<h4 id="%EF%BC%885.1.1%EF%BC%89%E5%90%88%E6%88%90%E8%BF%90%E5%8A%A8%E6%B5%8B%E8%AF%95"><strong>（5.1.1）合成运动测试</strong></h4> 
+<p></p> 
+<blockquote> 
+ <p>         这个测试根据我的理解来看，首先该部分实验是为了证明在没有显示运动估计的情况下也可以正常根据帧之间的隐式运动补偿获取相应的信息。如下图所示：作者在GT帧中合成了一个竖条块用来验证，<strong><span style="color:#fe2c24;">首先无论是向左还是向右移动，如果我们输入的目标帧相同，那么就应该得到相同的HR帧，如果HR帧相同，那么用于上采样的滤波器，就应该也是相同的！然后就可以正常理解，下图中Filters的图案是相同的，但是对于向左和向右运动，是不同方向的运动，那么根据输入的一组帧的运动估计来看，计算的补偿值是不同的，所以activation map就应该是不同的，因为运动估计信息不同，所以作者通过做合成图进行比较相同块的向左和向右运动，得到不同的激活图，但是仍可以得到相同目标帧的滤波器，所以本实验证明本算法在没有显示运动补偿的作用下也是可以使用的。</span></strong></p> 
+</blockquote> 
+<p class="img-center"><img alt="" height="712" src="https://images2.imgbox.com/4b/3c/WpQ3MqdQ_o.png" width="429"></p> 
+<h4 id="%C2%A0%EF%BC%885.2%EF%BC%89Basic%E5%92%8CIcon%E7%9A%84%E6%B6%88%E8%9E%8D%E5%AE%9E%E9%AA%8C%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A"><strong>（5.1.2）滤波器是否有效测试</strong></h4> 
+<blockquote> 
+ <p>        列举文中使用的3*3*3滤波器，对其卷积后的结果进行可视化展示，我们可以看到<strong>不同层学习的滤波器，在不同时刻的提取到的信息是不同的，并且可以均匀采集数据没有大规模的黑影，不同层之间提取到的信息不同，证明该滤波器是产生了作用的。</strong></p> 
+</blockquote> 
+<p class="img-center"><img alt="" height="434" src="https://images2.imgbox.com/05/46/tHtGon5N_o.png" width="518"></p> 
+<h4 id="%C2%A0%C2%A0%EF%BC%885.1.3%EF%BC%89%E5%8A%A8%E6%80%81%E4%B8%8A%E9%87%87%E6%A0%B7%E6%BB%A4%E6%B3%A2%E5%99%A8"><strong>（5.1.3）动态上采样滤波器</strong></h4> 
+<blockquote> 
+ <p><strong>如下图所示，对于同一个日历的不同位置，我们使用生成的不同的上采样滤波器，可以看Filters图中块的权重不同，生成的Filters是不同的，对不同的部分和切面进行超分中，可以实现精准的输出。证明我们的动态上采样滤波器是有用的。</strong></p> 
+</blockquote> 
+<p><img alt="" height="379" src="https://images2.imgbox.com/32/43/4oGl1DBH_o.png" width="1007"></p> 
+<h3 id="%EF%BC%885.2%EF%BC%89%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C%EF%BC%9A"><strong>（5.2）实验结果：</strong></h3> 
+<p>        不同放大比例的本文算法与之前的算法相比，具有更良好的PSNR和SSIM值，实现细节也够精细。</p> 
+<p class="img-center"><img alt="" height="285" src="https://images2.imgbox.com/df/6f/MkSyWon2_o.png" width="1028"></p> 
+<p class="img-center"><img alt="" height="411" src="https://images2.imgbox.com/20/e9/Q30yo3qY_o.png" width="1001"></p> 
+<p class="img-center"><img alt="" height="537" src="https://images2.imgbox.com/5b/d1/PMJ9T0l4_o.png" width="994"></p> 
+<h2 id="%E6%80%BB%E7%BB%93%20%EF%BC%9A">总结 ：</h2> 
+<p>这篇文章整体思想上并没有很难，直接使用上采样滤波器输入HR图像，使用残差进行细节补充，不用进行额外的显示运动估计等复杂计算，该算法虽然参数少，相比较现在的算法而言，参算也算少的，但是运行时间上太慢了，在1s左右，而我复现的，生成HR的速度在2s左右，这是没办法满足实时性要求的，可能用于预处理一些视频。没办法进行工业落地，需要进一步进行优化加速。但是该算法作为18年进行深度学习的VSR而言，还是一篇值得读和理解的论文。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/7a3561528890a912b46887c519f32fb1/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">tensorflow kears转pb</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/77c59972660002c70792872d2275a0fd/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">使用Token进行身份验证</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

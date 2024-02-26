@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>设备驱动中的ioctl函数详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="设备驱动中的ioctl函数详解" />
+<meta property="og:description" content="ioctl是iocontrol的缩写，就是IO控制。
+行为上
+简单来说，如果你在写驱动程序时候，碰到一些IO操作，在逻辑上不能归类到read，不能归类到write，那就可以认为是ioctl的部分。
+read和write应该是写入和读出数据的，应该是作为单纯的数据交换的方式来处理。而ioctl则是控制read和write一些选项的。
+比如：你做了一个通用的读写IO端口的驱动模块。read和write是从端口读写数据的，但是更改读写的端口，这个操作应该如何处理呢？显然用ioctl来实现比较合理。
+比如你的read和write是可以阻塞的，或者不能阻塞的，或者对设备文件的读写是可以并发的，或者是不可以并发的，这些都可以写成可以用ioctl来配置的情况。后面为了可以用ioctl来实现模块不同的IO特点。
+参数上
+ioctl的一般参数格式就是命令字（常量）&#43;命令参数的方式。
+read和write的参数格式都是数据缓冲区&#43;数据目的地指针&#43;长度。
+一、 什么是ioctl ioctl是设备驱动程序中对设备的I/O通道进行管理的函数。所谓对I/O通道进行管理，就是对设备的一些特性进行控制，例如串口的传输波特率、马达的转速等等。下面是其源代码定义：
+函数名: ioctl
+功 能: 控制I/O设备
+用 法: int ioctl(int handle, int cmd,[int *argdx, int argcx]);
+参数：fd是用户程序打开设备时使用open函数返回的文件标示符，cmd是用户程序对设备的控制命令，后面是一些补充参数，一般最多一个，这个参数的有无和cmd的意义相关。
+include/asm/ioctl.h中定义的宏的注释：
+#define _IOC_NRBITS 8 //序数（number）字段的字位宽度，8bits #define _IOC_TYPEBITS 8 //幻数（type）字段的字位宽度，8bits #define _IOC_SIZEBITS 14 //大小（size）字段的字位宽度，14bits #define _IOC_DIRBITS 2 //方向（direction）字段的字位宽度，2bits #define _IOC_NRMASK ((1 &lt;&lt; _IOC_NRBITS)-1) //序数字段的掩码，0x000000FF #define _IOC_TYPEMASK ((1 &lt;&lt; _IOC_TYPEBITS)-1) //幻数字段的掩码，0x000000FF #define _IOC_SIZEMASK ((1 &lt;&lt; _IOC_SIZEBITS)-1) //大小字段的掩码，0x00003FFF #define _IOC_DIRMASK ((1 &lt;&lt; _IOC_DIRBITS)-1) //方向字段的掩码，0x00000003 #define _IOC_NRSHIFT 0 //序数字段在整个字段中的位移，0 #define _IOC_TYPESHIFT (_IOC_NRSHIFT&#43;_IOC_NRBITS) //幻数字段的位移，8 #define _IOC_SIZESHIFT (_IOC_TYPESHIFT&#43;_IOC_TYPEBITS) //大小字段的位移，16 #define _IOC_DIRSHIFT (_IOC_SIZESHIFT&#43;_IOC_SIZEBITS) //方向字段的位移，30 #define _IOC_NONE 0U //没有数据传输 #define _IOC_WRITE 1U //向设备写入数据，驱动程序必须从用户空间读入数据 #define _IOC_READ 2U //从设备中读取数据，驱动程序必须向用户空间写入数据 #define _IOC(dir,type,nr,size) \ (((dir) &lt;&lt; _IOC_DIRSHIFT) | \ ((type) &lt;&lt; _IOC_TYPESHIFT) | \ ((nr) &lt;&lt; _IOC_NRSHIFT) | \ ((size) &lt;&lt; _IOC_SIZESHIFT)) //构造无参数的命令编号 #define _IO(type,nr) _IOC(_IOC_NONE,(type),(nr),0) //构造从驱动程序中读取数据的命令编号 #define _IOR(type,nr,size) _IOC(_IOC_READ,(type),(nr),sizeof(size)) //用于向驱动程序写入数据命令 #define _IOW(type,nr,size) _IOC(_IOC_WRITE,(type),(nr),sizeof(size)) //用于双向传输 #define _IOWR(type,nr,size) _IOC(_IOC_READ|_IOC_WRITE,(type),(nr),sizeof(size)) //从命令参数中解析出数据方向，即写进还是读出 #define _IOC_DIR(nr) (((nr) &gt;&gt; _IOC_DIRSHIFT) &amp; _IOC_DIRMASK) //从命令参数中解析出幻数type #define _IOC_TYPE(nr) (((nr) &gt;&gt; _IOC_TYPESHIFT) &amp; _IOC_TYPEMASK) //从命令参数中解析出序数number #define _IOC_NR(nr) (((nr) &gt;&gt; _IOC_NRSHIFT) &amp; _IOC_NRMASK) //从命令参数中解析出用户数据大小 #define _IOC_SIZE(nr) (((nr) &gt;&gt; _IOC_SIZESHIFT) &amp; _IOC_SIZEMASK) #define IOC_IN (_IOC_WRITE &lt;&lt; _IOC_DIRSHIFT) #define IOC_OUT (_IOC_READ &lt;&lt; _IOC_DIRSHIFT) #define IOC_INOUT ((_IOC_WRITE|_IOC_READ) &lt;&lt; _IOC_DIRSHIFT) #define IOCSIZE_MASK (_IOC_SIZEMASK &lt;&lt; _IOC_SIZESHIFT) #define IOCSIZE_SHIFT (_IOC_SIZESHIFT) 二、ioctl的必要性 如果不用ioctl的话，也可以实现对设备I/O通道的控制。例如，我们可以在驱动程序中实现write的时候检查一下是否有特殊约定的数据流通过，如果有的话，那么后面就跟着控制命令（一般在socket编程中常常这样做）。但是如果这样做的话，会导致代码分工不明，程序结构混乱，程序员自己也会头昏眼花的。所以，我们就使用ioctl来实现控制的功能。要记住，用户程序所作的只是通过命令码(cmd)告诉驱动程序它想做什么，至于怎么解释这些命令和怎么实现这些命令，这都是驱动程序要做的事情。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/37fa2cdd9a822517dd64a462b91299ab/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-10-09T16:59:36+08:00" />
+<meta property="article:modified_time" content="2021-10-09T16:59:36+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">设备驱动中的ioctl函数详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>        ioctl是iocontrol的缩写，就是IO控制。</p> 
+<p><strong>        行为上</strong></p> 
+<p>        简单来说，如果你在写驱动程序时候，碰到一些IO操作，在逻辑上不能归类到read，不能归类到write，那就可以认为是ioctl的部分。</p> 
+<p>        read和write应该是写入和读出数据的，应该是作为单纯的数据交换的方式来处理。而ioctl则是控制read和write一些选项的。</p> 
+<p>        比如：你做了一个通用的读写IO端口的驱动模块。read和write是从端口读写数据的，但是更改读写的端口，这个操作应该如何处理呢？显然用ioctl来实现比较合理。</p> 
+<p>        比如你的read和write是可以阻塞的，或者不能阻塞的，或者对设备文件的读写是可以并发的，或者是不可以并发的，这些都可以写成可以用ioctl来配置的情况。后面为了可以用ioctl来实现模块不同的IO特点。</p> 
+<p>        <strong>参数上</strong></p> 
+<p>        ioctl的一般参数格式就是命令字（常量）+命令参数的方式。</p> 
+<p>        read和write的参数格式都是数据缓冲区+数据目的地指针+长度。</p> 
+<h4>一、 什么是ioctl</h4> 
+<p>         ioctl是设备驱动程序中对设备的I/O通道进行管理的函数。所谓对I/O通道进行管理，就是对设备的一些特性进行控制，例如串口的传输波特率、马达的转速等等。下面是其源代码定义：</p> 
+<blockquote> 
+ <p>函数名: ioctl</p> 
+ <p>功 能: 控制I/O设备</p> 
+ <p>用 法: int ioctl(int handle, int cmd,[int *argdx, int argcx]);<br> 参数：fd是用户程序打开设备时使用open函数返回的文件标示符，cmd是用户程序对设备的控制命令，后面是一些补充参数，一般最多一个，这个参数的有无和cmd的意义相关。</p> 
+</blockquote> 
+<p>include/asm/ioctl.h中定义的宏的注释：</p> 
+<pre><code class="language-cpp">#define   _IOC_NRBITS        8                               //序数（number）字段的字位宽度，8bits
+#define   _IOC_TYPEBITS      8                               //幻数（type）字段的字位宽度，8bits
+#define   _IOC_SIZEBITS      14                              //大小（size）字段的字位宽度，14bits
+#define   _IOC_DIRBITS       2                               //方向（direction）字段的字位宽度，2bits
+#define   _IOC_NRMASK       ((1 &lt;&lt; _IOC_NRBITS)-1)    //序数字段的掩码，0x000000FF
+#define   _IOC_TYPEMASK     ((1 &lt;&lt; _IOC_TYPEBITS)-1)  //幻数字段的掩码，0x000000FF
+#define   _IOC_SIZEMASK     ((1 &lt;&lt; _IOC_SIZEBITS)-1)   //大小字段的掩码，0x00003FFF
+#define   _IOC_DIRMASK      ((1 &lt;&lt; _IOC_DIRBITS)-1)    //方向字段的掩码，0x00000003
+#define   _IOC_NRSHIFT     0                                //序数字段在整个字段中的位移，0
+#define   _IOC_TYPESHIFT   (_IOC_NRSHIFT+_IOC_NRBITS)       //幻数字段的位移，8
+#define   _IOC_SIZESHIFT   (_IOC_TYPESHIFT+_IOC_TYPEBITS)   //大小字段的位移，16
+#define   _IOC_DIRSHIFT    (_IOC_SIZESHIFT+_IOC_SIZEBITS)   //方向字段的位移，30
+#define _IOC_NONE    0U     //没有数据传输
+#define _IOC_WRITE   1U     //向设备写入数据，驱动程序必须从用户空间读入数据
+#define _IOC_READ    2U     //从设备中读取数据，驱动程序必须向用户空间写入数据
+#define _IOC(dir,type,nr,size) \
+       (((dir)  &lt;&lt; _IOC_DIRSHIFT) | \
+        ((type) &lt;&lt; _IOC_TYPESHIFT) | \
+        ((nr)   &lt;&lt; _IOC_NRSHIFT) | \
+        ((size) &lt;&lt; _IOC_SIZESHIFT))
+ 
+//构造无参数的命令编号
+#define _IO(type,nr)             _IOC(_IOC_NONE,(type),(nr),0)
+//构造从驱动程序中读取数据的命令编号
+#define _IOR(type,nr,size)     _IOC(_IOC_READ,(type),(nr),sizeof(size))
+//用于向驱动程序写入数据命令
+#define _IOW(type,nr,size)    _IOC(_IOC_WRITE,(type),(nr),sizeof(size))
+//用于双向传输
+#define _IOWR(type,nr,size) _IOC(_IOC_READ|_IOC_WRITE,(type),(nr),sizeof(size))
+ 
+//从命令参数中解析出数据方向，即写进还是读出
+#define _IOC_DIR(nr)          (((nr) &gt;&gt; _IOC_DIRSHIFT) &amp; _IOC_DIRMASK)
+//从命令参数中解析出幻数type
+#define _IOC_TYPE(nr)              (((nr) &gt;&gt; _IOC_TYPESHIFT) &amp; _IOC_TYPEMASK)
+//从命令参数中解析出序数number
+#define _IOC_NR(nr)           (((nr) &gt;&gt; _IOC_NRSHIFT) &amp; _IOC_NRMASK)
+//从命令参数中解析出用户数据大小
+#define _IOC_SIZE(nr)         (((nr) &gt;&gt; _IOC_SIZESHIFT) &amp; _IOC_SIZEMASK)
+ 
+ 
+#define IOC_IN            (_IOC_WRITE &lt;&lt; _IOC_DIRSHIFT)
+#define IOC_OUT           (_IOC_READ &lt;&lt; _IOC_DIRSHIFT)
+#define IOC_INOUT         ((_IOC_WRITE|_IOC_READ) &lt;&lt; _IOC_DIRSHIFT)
+#define IOCSIZE_MASK      (_IOC_SIZEMASK &lt;&lt; _IOC_SIZESHIFT)
+#define IOCSIZE_SHIFT     (_IOC_SIZESHIFT)</code></pre> 
+<h4>二、ioctl的必要性 </h4> 
+<p>       如果不用ioctl的话，也可以实现对设备I/O通道的控制。例如，我们可以在驱动程序中实现write的时候检查一下是否有特殊约定的数据流通过，如果有的话，那么后面就跟着控制命令（一般在socket编程中常常这样做）。但是如果这样做的话，会导致代码分工不明，程序结构混乱，程序员自己也会头昏眼花的。所以，我们就使用ioctl来实现控制的功能。要记住，<strong>用户程序所作的只是通过命令码(cmd)告诉驱动程序它想做什么，至于怎么解释这些命令和怎么实现这些命令，这都是驱动程序要做的事情。</strong></p> 
+<h4>三、 ioctl如何实现</h4> 
+<p>        在驱动程序中实现的ioctl函数体内，实际上是有一个switch{case}结构，每一个case对应一个命令码，做出一些相应的操作。怎么实现这些操作，这是每一个程序员自己的事情。因为设备都是特定的，这里也没法说。关键在于怎样组织命令码，因为<strong>在ioctl中命令码是唯一联系用户程序命令和驱动程序支持的途径</strong>。</p> 
+<p>        命令码的组织是有一些讲究的，因为我们一定要做到命令和设备是一一对应的，这样才不会将正确的命令发给错误的设备，或者是把错误的命令发给正确的设备，或者是把错误的命令发给错误的设备。这些错误都会导致不可预料的事情发生，而当程序员发现了这些奇怪的事情的时候，再来调试程序查找错误，那将是非常困难的事情。所以在Linux核心中是这样定义一个<strong>命令码</strong>的： </p> 
+<p>| 设备类型 | 序列号 | 方向 |数据尺寸|</p> 
+<p>|-------------|----------|-------|------------|</p> 
+<p>|     8 bit    |   8 bit  | 2 bit | 8~14 bit|</p> 
+<p>|-------------|----------|-------|------------|</p> 
+<p>     这样一来，一个命令就变成了一个整数形式的命令码；但是命令码非常的不直观，所以Linux Kernel中提供了一些宏。这些宏可根据便于理解的字符串生成命令码，或者是从命令码得到一些用户可以理解的字符串以标明这个命令对应的设备类型、设备序列号、数据传送方向和数据传输尺寸。</p> 
+<p>比如上面展现的：</p> 
+<pre><code class="language-cpp">//构造无参数的命令编号
+#define _IO(type,nr)             _IOC(_IOC_NONE,(type),(nr),0)
+//构造从驱动程序中读取数据的命令编号
+#define _IOR(type,nr,size)     _IOC(_IOC_READ,(type),(nr),sizeof(size))
+//用于向驱动程序写入数据命令
+#define _IOW(type,nr,size)    _IOC(_IOC_WRITE,(type),(nr),sizeof(size))
+//用于双向传输
+#define _IOWR(type,nr,size) _IOC(_IOC_READ|_IOC_WRITE,(type),(nr),sizeof(size))</code></pre> 
+<p>    我们在前面PWM驱动程序中也定义了命令宏：</p> 
+<pre><code class="language-cpp">#define   MAGIC_NUMBER    'k'
+#define   BEEP_ON    _IO(MAGIC_NUMBER    ,0)
+#define   BEEP_OFF   _IO(MAGIC_NUMBER    ,1)
+#define   BEEP_FREQ  _IO(MAGIC_NUMBER    ,2)</code></pre> 
+<p>     这里必须要提一下的，就是"幻数"MAGIC_NUMBER， "幻数"是一个字母，数据长度也是8位，用一个特定的字母来标明设备类型，这和用一个数字是一样的，只是更加利于记忆和理解。</p> 
+<h4>四、 cmd参数如何得出 </h4> 
+<p>    这里确实要说一说，cmd参数在用户程序端由一些宏根据设备类型、序列号、传送方向、数据尺寸等生成，这个整数通过系统调用传递到内核中的驱动程序，再由驱动程序使用解码宏从这个整数中得到设备的类型、序列号、传送方向、数据尺寸等信息，然后通过switch{case}结构进行相应的操作。</p> 
+<p>以下为一个示例的部分代码：</p> 
+<pre><code class="language-cpp">#define  MAGIC_NUMBER    'k'
+#define  BEEP_ON    _IO(MAGIC_NUMBER    ,0)
+#define  BEEP_OFF   _IO(MAGIC_NUMBER    ,1)
+#define  BEEP_FREQ  _IO(MAGIC_NUMBER    ,2)
+#define  BEPP_IN_FREQ 100000
+ 
+static void beep_freq(unsigned long arg)
+{
+    writel(BEPP_IN_FREQ/arg, timer_base +TCNTB0  );
+    writel(BEPP_IN_FREQ/(2*arg), timer_base +TCMPB0 );
+}
+ 
+static long beep_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
+{
+    switch(cmd)
+    {
+        case BEEP_ON:
+            fs4412_beep_on();
+            break;
+        case BEEP_OFF:
+            fs4412_beep_off();
+            break;
+        case BEEP_FREQ:
+            beep_freq( arg );
+            break;
+        default :
+            return -EINVAL;
+    }
+}</code></pre> 
+<p><br> 测试代码如下：</p> 
+<pre><code class="language-cpp">#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;sys/ioctl.h&gt;
+ 
+#define  MAGIC_NUMBER    'k'
+#define   BEEP_ON    _IO(MAGIC_NUMBER    ,0)
+#define   BEEP_OFF   _IO(MAGIC_NUMBER    ,1)
+#define   BEEP_FREQ   _IO(MAGIC_NUMBER    ,2)
+ 
+main()
+{
+    int fd;
+ 
+    fd = open("/dev/beep",O_RDWR);
+    if(fd&lt;0)
+    {
+        perror("open fail \n");
+        return ;
+    }
+ 
+    ioctl(fd,BEEP_ON);
+ 
+    sleep(6);
+    ioctl(fd,BEEP_OFF);    
+ 
+    close(fd);
+}</code></pre> 
+<p><br> 原文链接：https://blog.csdn.net/zqixiao_09/article/details/50859302</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/5084716817f1a0b78405d3f837b5fa4e/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">这个牛逼了，基于 SpringBoot &#43; Vue 实现的可视化拖拽编辑的大屏项目</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/ecf6febbe2da5d0d9382828f3e79e869/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Win10系统设置在开机,关机,登录时执行脚本</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

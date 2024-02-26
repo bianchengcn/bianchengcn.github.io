@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Linux 下孤儿进程与僵尸进程详解 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Linux 下孤儿进程与僵尸进程详解" />
+<meta property="og:description" content="引言：前面的系列文章介绍了进程的基础概念和相关常用的 API，本文将介绍两种比较特殊进程：孤儿进程与僵尸进程，进一步加深对进程的了解，避免进程使用过程中的一些坑点。
+文章目录 孤儿进程僵尸进程僵尸进程介绍僵尸进程解决办法 总结 孤儿进程 什么是孤儿进程？
+父进程运行结束，但子进程还在运行（未运行结束），这样的子进程就称为孤儿进程（Orphan Process）
+每当出现一个孤儿进程的时候，内核就把孤儿进程的父进程设置为 init ，而 init 进程会循环地 wait() 它的已经退出的子进程。这样，当一个孤儿进程凄凉地结束了其生命周期的时候，init 进程就会代表党和政府出面处理它的一切善后工作。 因此孤儿进程并不会有什么危害。
+总之：孤儿进程就是父进程退出了，但子进程还在执行。
+示例：
+#include &lt;sys/types.h&gt; #include &lt;unistd.h&gt; #include &lt;stdio.h&gt; #include &lt;stdlib.h&gt; int main() { pid_t pid = -1; // 创建子进程 pid = fork(); if (pid &lt; 0) // 没有创建成功 { perror(&#34;fork&#34;); return 1; } // 父进程 if (pid &gt; 0) { printf(&#34;父进程休息3秒后退出。。。\n&#34;); printf(&#34;父进程： pid:%d\n&#34;, getpid()); sleep(1); printf(&#34;父进程等太累了，现退出了。。。\n&#34;); exit(0); } while (1) { printf(&#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/544c9c8ceee8ac5664eca67cf59f8bb0/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-08-02T09:49:35+08:00" />
+<meta property="article:modified_time" content="2022-08-02T09:49:35+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Linux 下孤儿进程与僵尸进程详解</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <blockquote> 
+ <p>引言：前面的系列文章介绍了<a href="https://blog.csdn.net/weixin_45004203/article/details/125871271?spm=1001.2014.3001.5501">进程的基础概念</a>和<a href="https://blog.csdn.net/weixin_45004203/article/details/126037125?spm=1001.2014.3001.5501">相关常用的 API</a>，本文将介绍两种比较特殊进程：孤儿进程与僵尸进程，进一步加深对进程的了解，避免进程使用过程中的一些坑点。</p> 
+</blockquote> 
+<p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><ul><li><a href="#_3" rel="nofollow">孤儿进程</a></li><li><a href="#_76" rel="nofollow">僵尸进程</a></li><li><ul><li><a href="#_78" rel="nofollow">僵尸进程介绍</a></li><li><a href="#_159" rel="nofollow">僵尸进程解决办法</a></li></ul> 
+   </li><li><a href="#_189" rel="nofollow">总结</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h3><a id="_3"></a>孤儿进程</h3> 
+<p><strong>什么是孤儿进程？</strong></p> 
+<p>父进程运行结束，但子进程还在运行（未运行结束），这样的子进程就称为孤儿进程（Orphan Process）</p> 
+<p>每当出现一个孤儿进程的时候，内核就把孤儿进程的父进程设置为 init ，而 init 进程会循环地 <code>wait()</code> 它的已经退出的子进程。这样，当一个孤儿进程凄凉地结束了其生命周期的时候，init 进程就会代表党和政府出面处理它的一切善后工作。 因此孤儿进程并不会有什么危害。</p> 
+<p>总之：<strong>孤儿进程就是父进程退出了，但子进程还在执行。</strong></p> 
+<p><strong>示例</strong>：</p> 
+<pre><code class="prism language-c++">#include &lt;sys/types.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+
+int main()
+{
+   pid_t pid = -1;
+   
+   // 创建子进程
+   pid = fork();
+   if (pid &lt; 0)  // 没有创建成功  
+   {   
+       perror("fork");
+       return 1;
+   }
+   
+   // 父进程
+   if (pid &gt; 0)
+   {
+       printf("父进程休息3秒后退出。。。\n");
+       printf("父进程： pid:%d\n", getpid());
+       sleep(1);
+       printf("父进程等太累了，现退出了。。。\n");
+       exit(0);
+   }
+   
+   while (1)
+   {
+       printf("子进程不停的工作，子进程：pid:%d，父进程：ppid:%d\n", getpid(), getppid());
+       sleep(1);
+   }
+   
+   return 0;
+}
+</code></pre> 
+<p><strong>运行结果</strong>：</p> 
+<pre><code class="prism language-shell">yxm@192:~$ gcc test.c -o <span class="token builtin class-name">test</span>
+yxm@192:~$ ./test
+父进程休息3秒后退出。。。
+父进程： pid:32075
+子进程不停的工作，子进程：pid:32076，父进程：ppid:32075
+父进程等太累了，现退出了。。。
+子进程不停的工作，子进程：pid:32076，父进程：ppid:32075
+yxm@192:~$ 子进程不停的工作，子进程：pid:32076，父进程：ppid:1 <span class="token comment"># 终端可以输入，同时有数据在输出</span>
+子进程不停的工作，子进程：pid:32076，父进程：ppid:1
+子进程不停的工作，子进程：pid:32076，父进程：ppid:1
+</code></pre> 
+<ul><li> <p>一般情况下，运行一个程序时，默认会切换到后台运行，当有输出的时候再切换到前台。</p> <p>如上面的运行结果所示：创建子进程后，子进程复制了父进程内核部分的某些数据（比如标准输入、标准输出、标准错误），所以父进程和子进程的标准输出都是当前终端。又因为父进程是前台进程，所以会占用当前终端，但是父进程死亡后，终端占用被解除，但是子进程（变成孤儿进程）没有死亡，其标准输出依旧是当前终端。最终形成了，终端可以输入，同时有数据在输出的特殊情况。</p> </li><li> <p>【注意】ubuntu 系统中，字节界面中，产生的孤儿进程会被 1 号（ 即 init 进程）进程收养，但是在图形界面中孤儿进程会被非1号进程收养。</p> </li></ul> 
+<h3><a id="_76"></a>僵尸进程</h3> 
+<h4><a id="_78"></a>僵尸进程介绍</h4> 
+<p>每个进程结束之后, 都会释放自己地址空间中的用户区数据，内核区的 PCB 没有办法自己释放掉（子进程残留资源（PCB）存放于内核中），需要父进程去释放，进程终止时，父进程尚未回收，子进程残留资源（PCB）存放于内核中，变成僵尸（Zombie）进程。</p> 
+<p>僵尸进程不能被 kill -9 杀死，这样就会导致一个问题，如果父进程不调用 <code>wait()</code> 或 <code>waitpid()</code> 的话，那么保留的那段信息就不会释放，其进程号就会一直被占用，但是系统所能使用的进程号是有限的，如果大量的产生僵尸进程，将因为没有可用的进程号而导致系统不能产生新的进程，此即为僵尸进程的危害，应当避免。</p> 
+<p>总之：<strong>僵尸进程就是子进程结束了，但父进程没有回收其资源。</strong></p> 
+<pre><code class="prism language-c++">#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;unistd.h&gt;
+
+int main()
+{
+   int i = 0;
+   pid_t pid = -1;
+   
+   // 创建子进程
+   pid = fork();
+   if (-1 == pid)  // 没有创建成功  
+   {   
+       perror("fork");
+       return 1;
+   }
+   
+   // 子进程
+   if (0 == pid)
+   {
+       for (int i = 0; i &lt; 5; i++)
+       {
+           printf("子进程做事%d\n", i);
+           sleep(1);
+       }
+       printf("子进程想不开，结束了自己。。。。\n");
+       exit(0);
+   }
+   else if (pid &gt; 0) 
+   {
+       while(1) 
+       {
+           printf("父进程休眠了, pid : %d, ppid : %d\n", getpid(), getppid());
+           sleep(1);
+       }
+
+   }
+   return 0;
+}
+</code></pre> 
+<pre><code class="prism language-shell">yxm@192:~$ gcc test.c -o <span class="token builtin class-name">test</span>
+yxm@192:~$ ./test 
+父进程休眠了, pid <span class="token builtin class-name">:</span> <span class="token number">33087</span>, ppid <span class="token builtin class-name">:</span> <span class="token number">30344</span>
+子进程做事0
+父进程休眠了, pid <span class="token builtin class-name">:</span> <span class="token number">33087</span>, ppid <span class="token builtin class-name">:</span> <span class="token number">30344</span>
+子进程做事1
+子进程做事2
+父进程休眠了, pid <span class="token builtin class-name">:</span> <span class="token number">33087</span>, ppid <span class="token builtin class-name">:</span> <span class="token number">30344</span>
+父进程休眠了, pid <span class="token builtin class-name">:</span> <span class="token number">33087</span>, ppid <span class="token builtin class-name">:</span> <span class="token number">30344</span>
+子进程做事3
+子进程做事4
+父进程休眠了, pid <span class="token builtin class-name">:</span> <span class="token number">33087</span>, ppid <span class="token builtin class-name">:</span> <span class="token number">30344</span>
+父进程休眠了, pid <span class="token builtin class-name">:</span> <span class="token number">33087</span>, ppid <span class="token builtin class-name">:</span> <span class="token number">30344</span>
+子进程想不开，结束了自己。。。。
+父进程休眠了, pid <span class="token builtin class-name">:</span> <span class="token number">33087</span>, ppid <span class="token builtin class-name">:</span> <span class="token number">30344</span>
+^C
+yxm@192:~$ <span class="token function">ps</span> -aux
+<span class="token punctuation">..</span>.
+<span class="token punctuation">..</span>.
+yxm       <span class="token number">33087</span>  <span class="token number">0.0</span>  <span class="token number">0.0</span>   <span class="token number">4516</span>   <span class="token number">756</span> pts/0    S+   00:10   <span class="token number">0</span>:00 ./test
+yxm       <span class="token number">33088</span>  <span class="token number">0.0</span>  <span class="token number">0.0</span>      <span class="token number">0</span>     <span class="token number">0</span> pts/0    Z+   00:10   <span class="token number">0</span>:00 <span class="token punctuation">[</span>test<span class="token punctuation">]</span> <span class="token operator">&lt;</span>defunct<span class="token operator">&gt;</span><span class="token comment">#僵尸进程</span>
+yxm       <span class="token number">33125</span>  <span class="token number">0.0</span>  <span class="token number">0.0</span>   <span class="token number">7476</span>   <span class="token number">832</span> ?        S    00:10   <span class="token number">0</span>:00 <span class="token function">sleep</span> <span class="token number">180</span>
+yxm       <span class="token number">33180</span>  <span class="token number">0.0</span>  <span class="token number">0.1</span>  <span class="token number">37860</span>  <span class="token number">3420</span> pts/1    R+   00:10   <span class="token number">0</span>:00 <span class="token function">ps</span> -aux
+</code></pre> 
+<h4><a id="_159"></a>僵尸进程解决办法</h4> 
+<p>方式一：僵尸进程的产生是因为父进程没有 wait() 子进程。所以如果我们自己写程序的话一定要，<strong>最好在父进程中通过 <code>wait()</code> 和 <code>waitpid()</code> 来避免僵尸进程的产生</strong>。</p> 
+<p>方式二：当系统中出现了僵尸进程时，我们是<strong>无法通过 kill 命令把它清除掉的</strong>。但是我们可以<strong>杀死它的父进程，让它变成孤儿进程，并进一步被系统中管理孤儿进程的进程收养并清理</strong>。具体步骤如下：</p> 
+<ol><li> <p>首先，需要确定僵尸进程的相关信息，比如父进程 ppid、僵尸进程的 pid 以及命令行等信息。可以执行如下命令：</p> <pre><code class="prism language-shell"><span class="token function">ps</span> -e -o stat,ppid,pid,cmd <span class="token operator">|</span> <span class="token function">egrep</span> <span class="token string">'^[Zz]'</span>
+</code></pre> <p>参数说明：</p> 
+  <ul><li>-e：参数用于列出所有的进程；</li><li>-o：参数用于设定输出格式，这里只输出进程的stat（状态信息）、ppid（父进程pid）、pid（当前进程的pid），cmd（进程的可执行文件）；</li><li>egrep：是linux下的正则表达式工具： 
+    <ul><li>‘^’：这是正则表达式，表示第一个字符的位置</li><li>[Zz]，表示 z 或者大写的 Z 字母，即表示第一个字符为 Z 或者 z 开头的进程数据，因为僵尸进程的状态信息以 Z 或者 z 字母开头。</li></ul> </li></ul> </li><li> <p>然后，可以 <code>kill -9 父进程 pid</code>。kill 之后，僵尸进程将被 init 进程收养并清理</p> </li></ol> 
+<p>【补充】现在大多数 linux 系统，会将僵尸进程标识为 defunct，所以也可以通过如下命令来获取僵尸进程信息：</p> 
+<pre><code class="prism language-shell"><span class="token function">ps</span> -ef <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"defunct"</span>
+</code></pre> 
+<h3><a id="_189"></a>总结</h3> 
+<p>孤儿进程与僵尸进程是两种特殊的进程，一种是父进程先退出，子进程变成孤儿，这种进程没有危害；一种是子进程先退出，父进程没有回收资源导致子进程变成僵尸，会占用系统资源。他们都发生过在父子进程之间。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9ed507a010d7d4d8a5a868bd7e8271a8/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">ES2020-23简单易懂又实用的精选特性讲解 ✨✨日常开发必备干货！✨✨</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/bd0bba675f200d1753f6988a1f6ace39/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">win11壁纸被锁定更换不了 win11更换壁纸教程</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

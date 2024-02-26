@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Linux2.6.32驱动笔记（4）ioctl方法解析及mini2440-led驱动实现 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Linux2.6.32驱动笔记（4）ioctl方法解析及mini2440-led驱动实现" />
+<meta property="og:description" content="摘要： 介绍了字符设备驱动的控制方式——ioctl，同时利用该方式在mini2440上实现led驱动。
+驱动中，除了read,write,open,close之外，还有很多的访问方式，其中对于设备的控制，ioctl是一种重要的方式。
+一、ioctl函数
+int ioctl(int fd,unsigned long cmd,…)
+fd:要控制的设备文件描述符
+cmd:发送给设备的控制命令
+…:可选参数，依赖于第二个cmd参数
+当应用程序使用ioctl的时候，驱动程序将由如下驱动函数来响应：
+2.6.36内核以前：
+long(*ioctl)(struct inode *inode,struct file *filp,unsigned int cmd,unsigned longarg)
+2.6.36内核以后：
+long(*unlock_ioctl)( struct file *filp,unsigned int cmd,unsigned long arg)
+二、控制实现步骤
+1.定义命令
+命令其实是一个整数，但是为了可读性更好，分为四个段，分别是：类型（幻数）8位，序号8位，传送方向2位，参数大小14位。
+type(类型/幻数)：表明这是属于哪个设备的命令；
+number(序号)：用来区分同一个设备的不同命令；
+direction:参数传递方向，可能的值是没有传输方向，读或者写；
+size:参数长度。
+命令宏，Linux提供了一组宏来帮助定义命令:
+_IO(type,nr):不带参数的命令；
+_IOR(type,nr,datatype):从设备中读参数的命令；
+_IOW(type,nr,datatype):向设备写入参数的命令；
+_IOWR(type,nr,datatype)：双向传输。
+其中命令的type 和size是通过datatype中取对应位得来。
+2.实现操作
+这个模式就是switch case，我们给进去定义的命令，然后让switch去匹配，匹配到哪个就执行相应的操作，都没有匹配到就返回-EINVAL。
+switchcmd
+case命令A：
+//执行A对应的操作
+case命令B：
+//执行B对应的操作
+default:
+//return–EINVAL
+三、LED字符驱动实现
+首先，mini2440上和四个led相连接的gpio口分别是PORTB的5,6,7,8四个端口。那么就需要定义寄存器的基地址，并且使用ioremap把它映射到用户空间给我们使用。
+led.c如下：
+&lt;span style=&#34;font-size:18px;&#34;&gt;#include &lt;linux/module.h&gt; #include &lt;linux/init.h&gt; #include &lt;linux/cdev.h&gt; #include &lt;linux/fs.h&gt; #include &lt;linux/io.h&gt; //#include &lt;mach/gpio-bank-k." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/7a6e821979eb7155b393969bc4cffbbf/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2015-09-18T18:26:04+08:00" />
+<meta property="article:modified_time" content="2015-09-18T18:26:04+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Linux2.6.32驱动笔记（4）ioctl方法解析及mini2440-led驱动实现</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><span style="font-size:18px"><strong>摘要</strong>： 介绍了字符设备驱动的控制方式——ioctl，同时利用该方式在mini2440上实现led驱动。</span></p> 
+<p><br> </p> 
+<p><span style="font-size:18px">驱动中，除了read,write,open,close之外，还有很多的访问方式，其中对于设备的控制，ioctl是一种重要的方式。</span></p> 
+<p><br> </p> 
+<p><strong><span style="font-size:18px">一、ioctl函数</span></strong></p> 
+<p><span style="font-size:18px">    <span style="color:red">int ioctl(int fd,unsigned long cmd,…)</span></span></p> 
+<p><span style="font-size:18px">    fd:要控制的设备文件描述符</span></p> 
+<p><span style="font-size:18px">    cmd:发送给设备的控制命令</span></p> 
+<p><span style="font-size:18px">    …:可选参数，依赖于第二个cmd参数</span></p> 
+<p><span style="font-size:18px">    当应用程序使用ioctl的时候，驱动程序将由如下驱动函数来响应：</span></p> 
+<p><span style="font-size:18px">    2.6.36内核以前：</span></p> 
+<p><span style="font-size:18px">    long(*ioctl)(struct inode *inode,struct file *filp,unsigned int cmd,unsigned longarg)</span></p> 
+<p><span style="font-size:18px">    2.6.36内核以后：</span></p> 
+<p><span style="font-size:18px">    long(*unlock_ioctl)( struct file *filp,unsigned int cmd,unsigned long arg)</span></p> 
+<p><span style="font-size:18px"><br> </span></p> 
+<p><strong><span style="font-size:18px">二、控制实现步骤</span></strong></p> 
+<p><strong><span style="font-size:18px">1.定义命令</span></strong></p> 
+<p><span style="font-size:18px">命令其实是一个整数，但是为了可读性更好，分为四个段，分别是：类型（幻数）8位，序号8位，传送方向2位，参数大小14位。</span></p> 
+<p><span style="font-size:18px">type(类型/幻数)：表明这是属于哪个设备的命令；</span></p> 
+<p><span style="font-size:18px">number(序号)：用来区分同一个设备的不同命令；</span></p> 
+<p><span style="font-size:18px">direction:参数传递方向，可能的值是没有传输方向，读或者写；</span></p> 
+<p><span style="font-size:18px">size:参数长度。</span></p> 
+<p><br> </p> 
+<p><span style="font-size:18px">命令宏，Linux提供了一组宏来帮助定义命令:</span></p> 
+<p><span style="font-size:18px">_IO(type,nr):不带参数的命令；</span></p> 
+<p><span style="font-size:18px">_IOR(type,nr,datatype):从设备中读参数的命令；</span></p> 
+<p><span style="font-size:18px">_IOW(type,nr,datatype):向设备写入参数的命令；</span></p> 
+<p><span style="font-size:18px">_IOWR(type,nr,datatype)：双向传输。</span></p> 
+<p><span style="font-size:18px">其中命令的type 和size是通过datatype中取对应位得来。</span></p> 
+<p><br> </p> 
+<p><strong><span style="font-size:18px">2.实现操作</span></strong></p> 
+<p><span style="font-size:18px">    这个模式就是switch case，我们给进去定义的命令，然后让switch去匹配，匹配到哪个就执行相应的操作，都没有匹配到就返回-EINVAL。</span></p> 
+<p><span style="font-size:18px">    switchcmd</span></p> 
+<p><span style="font-size:18px">    case命令A：</span></p> 
+<p><span style="font-size:18px">       //执行A对应的操作</span></p> 
+<p><span style="font-size:18px">    case命令B：</span></p> 
+<p><span style="font-size:18px">       //执行B对应的操作</span></p> 
+<p><span style="font-size:18px">    default:</span></p> 
+<p><span style="font-size:18px">       //return–EINVAL</span></p> 
+<p><br> </p> 
+<p><strong><span style="font-size:18px">三、LED字符驱动实现</span></strong></p> 
+<p><span style="font-size:18px">    首先，mini2440上和四个led相连接的gpio口分别是PORTB的5,6,7,8四个端口。那么就需要定义寄存器的基地址，并且使用ioremap把它映射到用户空间给我们使用。</span></p> 
+<p><span style="font-size:18px"><strong>led.c如下</strong>：</span></p> 
+<p></p> 
+<pre><code class="language-cpp">&lt;span style="font-size:18px;"&gt;#include &lt;linux/module.h&gt;
+#include &lt;linux/init.h&gt;
+#include &lt;linux/cdev.h&gt;
+#include &lt;linux/fs.h&gt;
+#include &lt;linux/io.h&gt;
+//#include &lt;mach/gpio-bank-k.h&gt;
+#include "led.h"//step 1一些列需要的头文件
+ 
+#define LEDCON 0x56000010
+#define LEDDAT 0x56000014//GPB5,6,7,8，控制寄存器基地址，和数据寄存器基地址，一个用来设置端口模式，一个用来给数据
+ 
+unsigned int *led_config;
+unsigned int *led_data;//ioremap之后得到的虚拟地址赋给他们
+ 
+struct cdev cdev;//定义设备的结构体
+dev_t devno;//定义设备号
+ 
+int led_open(struct inode *inode,structfile *filep)//setp 6
+{
+    led_config= ioremap(LEDCON,4);//把LEDCON控制寄存器物理地址映射到用户空间，映射4个字节
+    writel(0x155555,led_config);//01对应输出模式，这里把所有i/o口配置成输出模式
+   
+    led_data= ioremap(LEDDAT,4);//数据寄存器的映射
+    return0;
+    }
+   
+long led_ioctl(struct file *filep,unsignedint cmd,unsigned long arg) //step 7
+{
+    switch(cmd)
+    {
+       caseLED_ON:
+           writel(0x1ff,led_data);//具体命令实现处，给LED点灯
+           return0;
+      
+       caseLED_OFF:
+           writel(0x000,led_data);//关灯
+           return0;
+      
+       default:
+           return-EINVAL;
+       }
+    }
+ 
+ 
+static struct file_operations led_fops=   //step 5 对应的对led的操作实现都在这里，一个打开，一个ioctl，所以下面我们就要去写实现函数
+{
+    .open= led_open,
+    .unlocked_ioctl= led_ioctl,
+    };
+ 
+static int led_init(void)//step 3
+{
+    cdev_init(&amp;cdev,&amp;led_fops);//字符设备初始化函数，将cdev和f_ops绑定起来
+    alloc_chrdev_region(&amp;devno,0,1,"myled");//次设备号为0，一个设备，设备名称为myled，把动态分配得到的设备号给devno
+    cdev_add(&amp;cdev,devno,1);//注册设备，devno为主设备号，设备数为1
+    return0;
+    }
+   
+static void led_exit(void)//step 4
+{
+    cdev_del(&amp;cdev);//删除驱动cdev
+    unregister_chrdev_region(devno,1);//释放设备号
+    }
+ 
+module_init(led_init);//step 2
+module_exit(led_exit);
+ &lt;/span&gt;</code></pre> 
+<br> 
+<p></p> 
+<p><strong><span style="font-size:18px">led_app.c如下：</span></strong></p> 
+<p></p> 
+<pre><code class="language-cpp">&lt;span style="font-size:18px;"&gt;#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;sys/ioctl.h&gt;
+#include "led.h" //open需要的一系列的头文件以及led.h
+ 
+int main(int argc,char *argv[])//主函数，argc保存主函数的参数个数，后面存放具体的参数
+{
+    intfd;//文件句柄
+    intcmd;//定义cmd
+    if(argc&lt;2)
+       {
+           printf("please enter the secondpara!\n");
+           return0;
+           }//这里判断小于2是因为我们输入的时候要输入进来是0还是1，使用方法是./ledapp 0或者./ledapp 1，需要第二个参数
+    cmd= atoi(argv[1]);//atoi用来把字符串转换成整形数，因为我们的cmd其实都是一个整形数
+    fd= open("/dev/myled",O_RDWR);//打开文件
+   
+    if(cmd==1)
+       ioctl(fd,LED_ON);
+    else
+       ioctl(fd,LED_OFF);
+       //具体ioctl操作，开关灯
+    return0;
+    }
+ &lt;/span&gt;</code></pre> 
+<br> 
+<p></p> 
+<p><strong><span style="font-size:18px">led.h如下：</span></strong></p> 
+<p></p> 
+<pre><code class="language-cpp">&lt;span style="font-size:18px;"&gt;#define LED_MAGIC 'L'
+#define LED_ON _IO(LED_MAGIC,0)
+#define LED_OFF _IO(LED_MAGIC,1)&lt;/span&gt;</code></pre> 
+<br> 
+<p></p> 
+<p><strong><span style="font-size:18px">Makefile如下：</span></strong></p> 
+<p></p> 
+<pre><code class="language-cpp">&lt;span style="font-size:18px;"&gt;obj-m := led.o
+ 
+KDIR :=/home/passionbird/project/test/linux-2.6.32.2
+ 
+all:
+    make-C $(KDIR) M=$(PWD) modules CROSS_COMPILE=arm-linux- ARCH=arm
+ 
+ 
+clean:
+    rm-f *.ko *.o *.mod.o *.mod.c *.symvers *.bak *.order&lt;/span&gt;</code></pre> 
+<br> 
+<br> 
+<p></p> 
+<p><span style="font-size:18px">虚拟机下按照以下步骤：</span></p> 
+<p><span style="color:red"><span style="font-size:18px">#make</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#chmod 777 led.ko</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#cp led.ko /opt/rootfs</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#arm-linux-gcc –static ledapp.c –oledapp</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#chmod 777 ledapp</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#cp ledapp /opt/rootfs</span></span></p> 
+<p><br> </p> 
+<p><span style="font-size:18px">开发板上电：</span></p> 
+<p><span style="color:red"><span style="font-size:18px">#boot</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#insmod led.ko</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#cat proc/devices</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#mknod /dev/myled c 251 0</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#./ledapp 1</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#./ledapp 0</span></span></p> 
+<p><span style="color:red"><span style="font-size:18px">#rmmod led</span></span></p> 
+<p><br> </p> 
+<p><span style="font-size:18px">这篇帖子就总结到这里吧，如有不正确的地方还请指出，大家共同进步！</span></p> 
+<p><span style="font-size:18px"> </span></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/d89c0fd0d8e03486069d8f99ab61f742/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">数据库优化之利用索引、避免全表扫描</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/0ee42f3f68cb3aa005f9d8632f918688/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Django&#43;Markdown&#43;Pygments 支持Markdown 实现代码高亮</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

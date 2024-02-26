@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MySQL进阶(三)——索引优化分析(性能分析) - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MySQL进阶(三)——索引优化分析(性能分析)" />
+<meta property="og:description" content="本篇文章主要是对MySQL学习时的一些总结，作为学习笔记记录
+性能分析 性能下降原因 对于某些sql语句来说，会导致执行时间长，等待时间长的后果，从而造成整个sql语句的性能下降。导致sql性能下降的原因主要有：
+查询数据过多：能不能拆分，降低过滤条件关联了太多的表，太多join：使用之前尽量先过滤没有利用到索引(单值，复合) 索引是针对列建立的，但并不可能对所有的数据列都建立索引同时索引也并不是越多越好，数据更新的同时，索引也会进行调整，因此过多的索引会降低性能而mysql也不会使用到所有的索引，只会根据其内部的算法找到一个合适的索引使用，因此索引需要建的准当条件比较多时候，可以使用复合索引，复合索引一般会首先使用而有些条件下，就算有索引在具体执行时也不会被使用服务器调优及各个参数设置(缓冲、线程数等)不合理 MySQL常见瓶颈 CPU SQL中对大量数据进行比较、关联、排序、分组。其中最大的压力在于比较
+IO 实际内存满足不了缓存数据或排序等需要，导致产生大量 物理 IO查询执行效率低，扫描过多数据行 锁 不适宜的锁的设置，导致线程阻塞，性能下降死锁，线程之间交叉调用资源，导致死锁，程序卡住 服务器硬件 由于服务器硬件导致的性能瓶颈，此时可以通过top、free、iostat和vmstat来查看系统的性能状态
+Explain Explain是什么 使用EXPLAIN关键字可以模拟优化器执行SQL查询语句，从而知道MySQL是如何处理SQL语句的，分析查询语句或是表结构的性能瓶颈，详情见官网。
+Explain能做什么 通过Explain查看sql语句执行计划，可以查看到：
+表的读取顺序哪些索引可以使用数据读取操作的操作类型哪些索引被实际使用表之间的引用每张表有多少行被优化器查询 Explain怎么使用 EXPLAIN SQL语句; Explain执行后包含的信息都有：
+Explain字段解释 建表 CREATE TABLE t1 ( id INT (10) AUTO_INCREMENT, content VARCHAR (100) NULL, PRIMARY KEY (id) ) ; CREATE TABLE t2 ( id INT (10) AUTO_INCREMENT, content VARCHAR (100) NULL, PRIMARY KEY (id) ) ; CREATE TABLE t3 ( id INT (10) AUTO_INCREMENT, content VARCHAR (100) NULL, PRIMARY KEY (id) ) ; CREATE TABLE t4 ( id INT (10) AUTO_INCREMENT, content VARCHAR (100) NULL, PRIMARY KEY (id) ) ; INSERT INTO t1 (content) VALUES (CONCAT(&#39;t1_&#39;, FLOOR(1&#43; RAND() * 1000))) ; INSERT INTO t2 (content) VALUES (CONCAT(&#39;t2_&#39;, FLOOR(1&#43; RAND() * 1000))) ; INSERT INTO t3 (content) VALUES (CONCAT(&#39;t3_&#39;, FLOOR(1&#43; RAND() * 1000))) ; INSERT INTO t4 (content) VALUES (CONCAT(&#39;t4_&#39;, FLOOR(1&#43; RAND() * 1000))) ; id select查询的序列号,包含一组数字，表示查询中执行select子句或操作表的顺序。总共存在三种情况：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/7792555ef9268a931a616032981e18a2/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-03-02T20:44:02+08:00" />
+<meta property="article:modified_time" content="2021-03-02T20:44:02+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MySQL进阶(三)——索引优化分析(性能分析)</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>本篇文章主要是对MySQL学习时的一些总结，作为学习笔记记录</p> 
+<h2>性能分析</h2> 
+<h3><strong>性能下降原因</strong></h3> 
+<p>对于某些sql语句来说，会导致执行时间长，等待时间长的后果，从而造成整个sql语句的性能下降。导致sql性能下降的原因主要有：</p> 
+<ul><li>查询数据过多：能不能拆分，降低过滤条件</li><li>关联了太多的表，太多join：使用之前尽量先过滤</li><li>没有利用到索引(单值，复合) 
+  <ul><li>索引是针对列建立的，但并不可能对所有的数据列都建立索引</li><li>同时索引也并不是越多越好，数据更新的同时，索引也会进行调整，因此过多的索引会降低性能</li><li>而mysql也不会使用到所有的索引，只会根据其内部的算法找到一个合适的索引使用，因此索引需要建的准</li><li>当条件比较多时候，可以使用复合索引，复合索引一般会首先使用</li><li>而有些条件下，就算有索引在具体执行时也不会被使用</li></ul></li><li>服务器调优及各个参数设置(缓冲、线程数等)不合理</li></ul> 
+<h3>MySQL常见瓶颈</h3> 
+<h4>CPU</h4> 
+<p>SQL中对大量数据进行比较、关联、排序、分组。其中最大的压力在于比较</p> 
+<h4>IO</h4> 
+<ul><li>实际内存满足不了缓存数据或排序等需要，导致产生大量 物理 IO</li><li>查询执行效率低，扫描过多数据行</li></ul> 
+<h4>锁</h4> 
+<ul><li>不适宜的锁的设置，导致线程阻塞，性能下降</li><li>死锁，线程之间交叉调用资源，导致死锁，程序卡住</li></ul> 
+<h4>服务器硬件</h4> 
+<p>由于服务器硬件导致的性能瓶颈，此时可以通过top、free、iostat和vmstat来查看系统的性能状态</p> 
+<h3>Explain</h3> 
+<h4>Explain是什么</h4> 
+<p>使用EXPLAIN关键字可以模拟优化器执行SQL查询语句，从而知道MySQL是如何处理SQL语句的，分析查询语句或是表结构的性能瓶颈，详情见<a href="http://dev.mysql.com/doc/refman/5.5/en/explain-output.html" rel="nofollow">官网</a>。</p> 
+<h4>Explain能做什么</h4> 
+<p>通过Explain查看sql语句执行计划，可以查看到：</p> 
+<ul><li>表的读取顺序</li><li>哪些索引可以使用</li><li>数据读取操作的操作类型</li><li>哪些索引被实际使用</li><li>表之间的引用</li><li>每张表有多少行被优化器查询</li></ul> 
+<h4>Explain怎么使用</h4> 
+<pre><code class="language-sql">EXPLAIN SQL语句;</code></pre> 
+<p>Explain执行后包含的信息都有：</p> 
+<p style="text-align:center;"><img alt="" height="125" src="https://images2.imgbox.com/e6/46/sVbIFFXe_o.png" width="916"></p> 
+<h3>Explain字段解释</h3> 
+<h4><strong>建表</strong></h4> 
+<pre><code class="language-sql">CREATE TABLE t1 (
+  id INT (10) AUTO_INCREMENT,
+  content VARCHAR (100) NULL,
+  PRIMARY KEY (id)
+) ;
+
+CREATE TABLE t2 (
+  id INT (10) AUTO_INCREMENT,
+  content VARCHAR (100) NULL,
+  PRIMARY KEY (id)
+) ;
+
+CREATE TABLE t3 (
+  id INT (10) AUTO_INCREMENT,
+  content VARCHAR (100) NULL,
+  PRIMARY KEY (id)
+) ;
+
+CREATE TABLE t4 (
+  id INT (10) AUTO_INCREMENT,
+  content VARCHAR (100) NULL,
+  PRIMARY KEY (id)
+) ;
+
+
+
+INSERT INTO t1 (content) 
+VALUES
+  (CONCAT('t1_', FLOOR(1+ RAND() * 1000))) ;
+
+ 
+INSERT INTO t2 (content) 
+VALUES
+  (CONCAT('t2_', FLOOR(1+ RAND() * 1000))) ;
+
+  
+INSERT INTO t3 (content) 
+VALUES
+  (CONCAT('t3_', FLOOR(1+ RAND() * 1000))) ;
+
+    
+INSERT INTO t4 (content) 
+VALUES
+  (CONCAT('t4_', FLOOR(1+ RAND() * 1000))) ;
+
+</code></pre> 
+<h4><strong>id</strong></h4> 
+<p>select查询的序列号,包含一组数字，表示查询中执行select子句或操作表的顺序。总共存在三种情况：</p> 
+<ul><li>id相同，执行顺序由上至下</li></ul> 
+<p style="text-align:center;"><img alt="" height="140" src="https://images2.imgbox.com/e5/d4/CHSL8hBh_o.png" width="733"></p> 
+<p style="text-indent:33px;">此例中 先执行where后的第一条语句t1.id = t2.id通过t1.id关联t2.id，而 t2.id的结果建立在t2.id=t3.id的基础之上。</p> 
+<ul><li>id不同，如果是子查询，id的序号会递增，id值越大优先级越高，越先被执行</li></ul> 
+<p style="text-align:center;"><img alt="" height="184" src="https://images2.imgbox.com/4e/9e/Ti5ITkm6_o.png" width="924"></p> 
+<p style="text-indent:33px;">id不同，如果是子查询，id的序号会递增，id值越大优先级越高，越先被执行。</p> 
+<ul><li>id相同又不同，同时存在 
+  <ul><li>id如果相同，可以认为是一组，从上往下顺序执行；</li><li>在所有组中，id值越大，优先级越高，越先执行</li><li>衍生表 = derived2 --&gt; derived + 2 （2 表示由 id =2 的查询衍生出来的表。type 肯定是 all ，因为衍生的表没有建立索引）</li></ul></li></ul> 
+<p style="text-align:center;"><img alt="" height="146" src="https://images2.imgbox.com/e1/da/H5wEwPEv_o.png" width="772"></p> 
+<h4><strong>select_type</strong></h4> 
+<p>查询的类型，主要是用于区别普通查询、联合查询、子查询等的复杂查询。主要有：</p> 
+<p style="text-align:center;"><img alt="" height="251" src="https://images2.imgbox.com/0c/ee/Ij9ywjZH_o.png" width="861"></p> 
+<p>对于各类型的解释为：</p> 
+<p><strong>SIMPLE：</strong></p> 
+<p>简单的 select 查询,查询中不包含子查询或者UNION</p> 
+<p style="text-align:center;"><img alt="" height="113" src="https://images2.imgbox.com/b4/ab/q9dsFsXG_o.png" width="650"></p> 
+<p><strong>PRIMARY</strong></p> 
+<p>查询中若包含任何复杂的子部分，最外层查询则被标记为Primary</p> 
+<p style="text-align:center;"><img alt="" height="132" src="https://images2.imgbox.com/c6/b8/EspslOIA_o.png" width="688"></p> 
+<p><strong>DERIVED</strong></p> 
+<p>在FROM列表中包含的子查询被标记为DERIVED(衍生)，MySQL会递归执行这些子查询, 把结果放在临时表里</p> 
+<p style="text-align:center;"><img alt="" height="132" src="https://images2.imgbox.com/15/ee/Z2yZe94O_o.jpg" width="688"></p> 
+<p><strong>SUBQUERY</strong></p> 
+<p>在SELECT或WHERE列表中包含了子查询</p> 
+<p style="text-align:center;"><img alt="" height="139" src="https://images2.imgbox.com/7c/13/fz4eI8fq_o.png" width="723"></p> 
+<p><strong>DEPENDENT SUBQUERY</strong></p> 
+<p>在SELECT或WHERE列表中包含了子查询,子查询基于外层</p> 
+<p style="text-align:center;"><img alt="" height="145" src="https://images2.imgbox.com/3d/86/CbLGAKwk_o.png" width="920"></p> 
+<p>dependent subquery 与 subquery 的区别</p> 
+<ul><li>dependent subquery ： 子查询结果为 多值</li><li>subquery：查询结果为 单值 </li></ul> 
+<p><strong>UNCACHEABLE SUBQUREY</strong></p> 
+<p>无法被缓存的子查询</p> 
+<p style="text-align:center;"><img alt="" height="126" src="https://images2.imgbox.com/b5/54/uOgF6Y3f_o.jpg" width="1035"></p> 
+<p>上图种的 @@ 表示查的环境参数 ，没办法缓存。</p> 
+<p style="text-align:center;"><img alt="" height="99" src="https://images2.imgbox.com/fb/f2/ZMHx564R_o.jpg" width="628"></p> 
+<p><strong>UNION</strong></p> 
+<ul><li>若第二个SELECT出现在UNION之后，则被标记为UNION；</li><li>若UNION包含在FROM子句的子查询中,外层SELECT将被标记为：DERIVED</li></ul> 
+<p style="text-align:center;"><img alt="" height="171" src="https://images2.imgbox.com/2a/b8/S7yevYJX_o.png" width="696"></p> 
+<p>UNION RESULT表示两个语句执行完后的结果</p> 
+<p><strong>UNION RESULT</strong></p> 
+<p>从UNION表获取结果的SELECT</p> 
+<p style="text-align:center;"><img alt="" height="171" src="https://images2.imgbox.com/c3/dd/M1GRq6Jw_o.png" width="696"></p> 
+<h4>table</h4> 
+<p>显示这一行的数据是关于哪张表的</p> 
+<h4>type</h4> 
+<p>type显示的是访问类型，是较为重要的一个指标，主要结果为：</p> 
+<p style="text-align:center;"><img alt="" height="77" src="https://images2.imgbox.com/e2/c7/KeFF3WYD_o.png" width="602"></p> 
+<p> </p> 
+<p><strong>访问类型排序</strong></p> 
+<p>结果值从最好到最坏依次是：</p> 
+<pre><code>system &gt; const &gt; eq_ref &gt; ref &gt; fulltext &gt; ref_or_null &gt; index_merge &gt; unique_subquery &gt; index_subquery &gt; range(尽量保证) &gt; index &gt; ALL</code></pre> 
+<p>一般可以简化为：</p> 
+<pre><code>system &gt; const &gt; eq_ref &gt; ref &gt; range &gt; index &gt; ALL</code></pre> 
+<p>一般说来，要保证查询至少达到range级别，最好能够达到ref。</p> 
+<p><strong>system</strong></p> 
+<p>表只有一行记录（等于系统表），这是const类型的特列，平时不会出现，这个也可以忽略不计</p> 
+<p><strong>const</strong></p> 
+<ul><li>表示通过索引一次就找到了,const用于比较primary key或者unique索引。</li><li>因为只匹配一行数据，所以很快。如将主键置于where列表中，MySQL就能将该查询转换为一个常量</li></ul> 
+<p style="text-align:center;"><img alt="" height="121" src="https://images2.imgbox.com/99/23/wuZLVI5P_o.png" width="729"></p> 
+<p><strong>eq_ref</strong></p> 
+<ul><li>唯一性索引扫描，对于每个索引键，表中只有一条记录与之匹配。</li><li>常见于主键或唯一索引扫描</li></ul> 
+<p><img alt="" height="129" src="https://images2.imgbox.com/70/39/pvex3nmJ_o.png" width="768"></p> 
+<p><strong>ref</strong></p> 
+<ul><li>非唯一性索引扫描，返回匹配某个单独值的所有行</li><li>本质上也是一种索引访问，它返回所有匹配某个单独值的行</li><li>但它可能会找到多个符合条件的行，所以ref应该属于查找和扫描的混合体</li></ul> 
+<p style="text-align:center;"><img alt="" height="131" src="https://images2.imgbox.com/ab/4c/AR5M7eWW_o.png" width="823"></p> 
+<p style="text-align:center;"><img alt="" height="197" src="https://images2.imgbox.com/a2/cf/TngqZHJK_o.png" width="901"></p> 
+<p><strong>range</strong></p> 
+<ul><li>只检索给定范围的行，使用一个索引来选择行。</li><li>key 列显示使用了哪个索引</li><li>一般就是在你的where语句中出现了between end、&lt;、&gt;、in等的查询</li><li>这种范围扫描索引扫描比全表扫描要好，因为它只需要开始于索引的某一点，而结束语另一点，不用扫描全部索引。</li></ul> 
+<p style="text-align:center;"><img alt="" height="108" src="https://images2.imgbox.com/de/0e/2vvTHRaU_o.png" width="715"></p> 
+<p style="text-align:center;"><img alt="" height="115" src="https://images2.imgbox.com/1d/bf/DaydyZdh_o.png" width="713"></p> 
+<p><strong>index</strong></p> 
+<ul><li>Full Index Scan，index与ALL区别为index类型只遍历索引树</li><li>这通常比ALL快，因为索引文件通常比数据文件小</li><li>也就是说虽然all和Index都是读全表，但index是从索引中读取的，而all是从硬盘中读的</li></ul> 
+<p style="text-align:center;"><img alt="" height="241" src="https://images2.imgbox.com/7e/7f/QUeftYa5_o.png" width="772"></p> 
+<p><strong>all</strong></p> 
+<p>Full Table Scan，将遍历全表以找到匹配的行</p> 
+<p style="text-align:center;"><img alt="" height="135" src="https://images2.imgbox.com/af/14/XmZNOXLE_o.png" width="830"></p> 
+<p style="text-align:center;"><img alt="" height="114" src="https://images2.imgbox.com/83/aa/GQ8tkTJz_o.png" width="987"></p> 
+<p><strong>index_merge</strong></p> 
+<p>在查询过程中需要多个索引组合使用，通常出现在有 or 的关键字的sql中</p> 
+<p style="text-align:center;"><img alt="" height="118" src="https://images2.imgbox.com/5e/04/zPednrwU_o.png" width="1066"></p> 
+<p><strong>ref_or_null</strong></p> 
+<ul><li>对于某个字段既需要关联条件，也需要null值的情况下</li><li>查询优化器会选择用ref_or_null连接查询</li></ul> 
+<p style="text-align:center;"><img alt="" height="104" src="https://images2.imgbox.com/87/4b/tku6n9yZ_o.png" width="877"></p> 
+<p><strong>index_subquery</strong></p> 
+<p>利用索引来关联子查询，不再全表扫描</p> 
+<p style="text-align:center;"><img alt="" height="155" src="https://images2.imgbox.com/4b/1a/memqPm5b_o.png" width="754"></p> 
+<p style="text-align:center;"><img alt="" height="58" src="https://images2.imgbox.com/4e/34/Wvt2i93e_o.png" width="339"></p> 
+<p style="text-align:center;"><img alt="" height="151" src="https://images2.imgbox.com/b3/76/NeAlfiX7_o.png" width="929"></p> 
+<p><strong>unique_subquery </strong></p> 
+<ul><li>该联接类型类似于index_subquery</li><li>子查询中的唯一索引</li></ul> 
+<p style="text-align:center;"><img alt="" height="152" src="https://images2.imgbox.com/90/e7/XhjnJMoB_o.png" width="854"></p> 
+<h4>possible_keys</h4> 
+<ul><li>显示可能应用在这张表中的索引，一个或多个。</li><li>查询涉及到的字段上若存在索引，则该索引将被列出，<strong>但不一定被查询实际使用</strong></li></ul> 
+<h4><strong>key</strong></h4> 
+<ul><li>实际使用的索引</li><li>如果为NULL，则没有使用索引</li><li>查询中若使用了覆盖索引，则该索引和查询的select字段重叠</li><li>对比下图两个sql语句和key的值：当查询具体某一字段时，且那个字段有索引时，key值会显示为索引</li></ul> 
+<p style="text-align:center;"><img alt="" height="241" src="https://images2.imgbox.com/15/0e/MfOxcFZg_o.jpg" width="772"></p> 
+<h4>key_len</h4> 
+<p>表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度</p> 
+<p style="text-align:center;"><img alt="" height="239" src="https://images2.imgbox.com/c8/dc/k6vNgNYK_o.png" width="912"></p> 
+<p>怎么计算？</p> 
+<p style="text-align:center;"><img alt="" height="417" src="https://images2.imgbox.com/db/93/ZXwxjhFQ_o.png" width="647"></p> 
+<p>上图中字符集为utf8格式，因此需要*3，动态类型包括varchar，detail text()截取字符串</p> 
+<p style="text-align:center;"><img alt="" height="197" src="https://images2.imgbox.com/98/6a/UY0ssNuf_o.png" width="554"></p> 
+<ul><li>第一组：key_len=deptno(int)+null + ename(varchar(20)*3+动态  =4+1+20*3+2= 67</li><li>第二组：key_len=deptno(int)+null=4+1=5</li></ul> 
+<p>同时key_len字段能够帮你检查是否充分的利用上了索引</p> 
+<p style="text-align:center;"><img alt="" height="222" src="https://images2.imgbox.com/f4/73/hzWShGkU_o.png" width="1196"></p> 
+<p>同样的使用了索引但是索引的涉及的字段却不同：</p> 
+<p style="text-align:center;"><img alt="" height="331" src="https://images2.imgbox.com/27/ec/VS5I41J5_o.png" width="1115"></p> 
+<p>由上图可知，充分利用了索引的查询效率会更高。</p> 
+<h4>ref</h4> 
+<ul><li>显示索引的哪一列被使用了，如果可能的话，是一个常数</li><li>哪些列或常量被用于查找索引列上的值</li></ul> 
+<p style="text-align:center;"><img alt="" height="137" src="https://images2.imgbox.com/37/34/4we6MQuD_o.png" width="932"></p> 
+<h4>rows</h4> 
+<ul><li>rows列显示MySQL认为它执行查询时必须检查的行数</li><li>越少越好</li><li>对于InnoDB来说，该值只是一个估计，并不一定总是精确</li></ul> 
+<p style="text-align:center;"><img alt="" height="137" src="https://images2.imgbox.com/6e/bf/8vWGGmsC_o.jpg" width="932"></p> 
+<p style="text-align:center;"><img alt="" height="106" src="https://images2.imgbox.com/35/f2/OQzBHSAP_o.png" width="703"></p> 
+<h4>Extra</h4> 
+<p>包含不适合在其他列中显示但十分重要的额外信息</p> 
+<p><strong>Using filesort </strong></p> 
+<ul><li>说明mysql会对数据使用一个外部的索引排序，而不是按照表内的索引顺序进行读取。</li><li>MySQL中无法利用索引完成的排序操作称为“文件排序”</li></ul> 
+<p>出现filesort的情况：</p> 
+<p style="text-align:center;"><img alt="" height="425" src="https://images2.imgbox.com/b5/b9/eV8JeChs_o.png" width="878"></p> 
+<p>优化后，不再出现filesort的情况(给 ename 加上了索引)：</p> 
+<p style="text-align:center;"><img alt="" height="429" src="https://images2.imgbox.com/64/0e/tBaw8h7B_o.jpg" width="898"></p> 
+<p> </p> 
+<ul><li>查询中排序的字段，排序字段若通过索引去访问将大大提高排序速度</li><li>当通过前面的查询语句筛选大部分条件后，只剩下很少的数据，using filesort 性能影响不大，此时需要综合考虑</li></ul> 
+<p><strong>Using temporary</strong></p> 
+<ul><li>使了用临时表保存中间结果,MySQL在对查询结果排序时使用临时表。</li><li>常见于排序order by和分组查询group by</li></ul> 
+<p>优化前存在using  temporary和using  filesort：</p> 
+<p style="text-align:center;"><img alt="" height="416" src="https://images2.imgbox.com/5f/48/2iEeZxzG_o.png" width="982"></p> 
+<p>create index idx_deptno_ename on emp(deptno,ename);后解决优化前存在的using  temporary和using  filesort问题，性能发生明显变化：</p> 
+<p style="text-align:center;"><img alt="" height="424" src="https://images2.imgbox.com/7b/44/cXhWw4PP_o.png" width="977"></p> 
+<p><strong>Using index</strong></p> 
+<ul><li>表示相应的select操作中使用了覆盖索引(Covering Index)，避免访问了表的数据行，效率不错</li><li>如果同时出现using where，表明索引被用来执行索引键值的查找</li><li>如果没有同时出现using where，表明索引只是用来读取数据而非利用索引执行查找</li></ul> 
+<blockquote> 
+ <p><strong>覆盖索引(Covering Index)</strong></p> 
+ <ul><li>索引是高效找到行的一个方法，而一般数据库也能使用索引找到一个列的数据，因此它不必读取整个行</li><li>毕竟索引叶子节点存储了它们索引的数据;当能通过读取索引就可以得到想要的数据，那就不需要读取行了</li><li><span style="color:#f33b45;"><strong>①一个索引 ②包含了(或覆盖了)[select子句]与查询条件[Where子句]中 ③所有需要的字段就叫做覆盖索引</strong></span></li></ul> 
+ <p> 如果有以下的sql语句：</p> 
+ <pre><code class="language-sql">select id , name from t_xxx where age=18;</code></pre> 
+ <p>若表中存在组合索引idx_id_name_age，此时该索引包含了(覆盖了)id、name、age三个字段，查询时直接读取建立了索引的列，而不需要查找所在行的其它数据，所以很高效。</p> 
+ <p><span style="color:#f33b45;"><strong>注意：</strong></span></p> 
+ <ul><li><span style="color:#f33b45;"><strong>在数据量较大，固定字段查询情况多时可以使用这种方法</strong></span></li><li><span style="color:#f33b45;"><strong>如果要使用覆盖索引，一定要注意select列表中只取出需要的列，不可select *，因为如果将所有字段一起做索引会导致索引文件过大，查询性能下降</strong></span></li></ul> 
+</blockquote> 
+<p><strong>Using where</strong></p> 
+<p>表明使用了where过滤</p> 
+<p><strong>using join buffer</strong></p> 
+<ul><li>使用了连接缓存</li><li>出现在当两个连接时</li><li>驱动表(被连接的表，left join 左边的表，inner join 中数据少的表) 没有索引的情况下</li><li>给驱动表建立索引可解决此问题，且 type 将改变成 ref</li></ul> 
+<p style="text-align:center;"><img alt="" height="132" src="https://images2.imgbox.com/e6/3f/PyqWNFrT_o.png" width="877"></p> 
+<p><strong>impossible where</strong></p> 
+<p>where子句的值总是false，不能用来获取任何元组</p> 
+<p style="text-align:center;"><img alt="" height="116" src="https://images2.imgbox.com/0e/ca/s1Xupgi3_o.png" width="999"></p> 
+<p><strong>select tables optimized away</strong></p> 
+<p>在没有GROUP BY子句的情况下，基于索引优化MIN/MAX操作或者对于MyISAM存储引擎优化COUNT(*)操作，不必等到执行阶段再进行计算，查询执行计划生成的阶段即完成优化</p> 
+<p>在innodb中：</p> 
+<p style="text-align:center;"><img alt="" height="114" src="https://images2.imgbox.com/61/30/KeYHLs3N_o.png" width="657"></p> 
+<p>在Myisam中：</p> 
+<p style="text-align:center;"><img alt="" height="113" src="https://images2.imgbox.com/af/c1/9f8jAQAh_o.jpg" width="829"></p> 
+<ul><li>myisam中会维护总行数 (还有其他参数)这个参数，所以在执行查询时不会进行全表扫描，而是直接读取这个数，但会对增删产生一定的影响，根据业务情况决定谁好谁坏</li><li>innodb 中没有这个机制</li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/14996549ccc48d9fdcd197d8ce9c6cf4/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">第五章-丛林跳跃（平台）</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1269232db6f2669277251fb9d68643ac/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">运维，关于监控的那些事，你有必要了解一下</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

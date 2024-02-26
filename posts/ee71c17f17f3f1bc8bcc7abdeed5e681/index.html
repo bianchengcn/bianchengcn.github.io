@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MySQL进阶-索引（复习笔记） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="MySQL进阶-索引（复习笔记）" />
+<meta property="og:description" content="2. 索引 2.1 索引概述 2.1.1 介绍 索引（index）是帮助MySQL高效获取数据的数据结构(有序)。在数据之外，数据库系统还维护着满足 特定查找算法的数据结构，这些数据结构以某种方式引用（指向）数据， 这样就可以在这些数据结构 上实现高级查找算法，这种数据结构就是索引。
+2.1.2 演示 表结构及其数据如下：
+假如我们要执行的SQL语句为 ：
+select * from user where age = 45; 1). 无索引情况
+在无索引情况下，就需要从第一行开始扫描，一直扫描到最后一行，我们称之为 全表扫描，性能很 低。
+2). 有索引情况
+如果我们针对于这张表建立了索引，假设索引结构就是二叉树，那么也就意味着，会对age这个字段建 立一个二叉树的索引结构。
+此时我们在进行查询时，只需要扫描三次就可以找到数据了，极大的提高的查询的效率。
+备注： 这里我们只是假设索引的结构是二叉树，介绍一下索引的大概原理，只是一个示意图，并 不是索引的真实结构，索引的真实结构，后面会详细介绍。
+2.1.3 特点 优势劣势提高数据检索的效率，降低数据库的IO成本索引列也是要占用空间的。通过索引列对数据进行排序，降低数据排序的成本，降低CPU的消耗。索引大大提高了查询效率，同时却也降低更新表的速度，如对表进行INSERT、UPDATE，DELETE时，效率降低。 2.2 索引结构 2.2.1 概述 MySQL的索引是在存储引擎层实现的，不同的存储引擎有不同的索引结构，主要包含以下几种：
+索引结构概述B&#43;Tree索引最常见的索引类型，大部分引擎都支持 B&#43; 树索引Hash索引底层数据结构是用哈希表实现的, 只有精确匹配索引列的查询才有效, 不支持范围查询R-tree(空间索引）空间索引是MyISAM引擎的一个特殊索引类型，主要用于地理空间数据类型，通常使用较少Full-text(全文索引)是一种通过建立倒排索引,快速匹配文档的方式。类似于Lucene,Solr,ES 上述是MySQL中所支持的所有的索引结构，接下来，我们再来看看不同的存储引擎对于索引结构的支持 情况。
+索引InnoDBMyISAMMemoryB&#43;tree索引支持支持支持Hash索引不支持不支持支持R-tree索引不支持支持不支持Full-text5.6版本以后支持支持不支持 注意： 我们平常所说的索引，如果没有特别指明，都是指B&#43;树结构组织的索引。
+2.2.2 二叉树 假如说MySQL的索引结构采用二叉树的数据结构，比较理想的结构如下：
+如果主键是顺序插入的，则会形成一个单向链表，结构如下：
+所以，如果选择二叉树作为索引结构，会存在以下缺点：
+顺序插入时，会形成一个链表，查询性能大大降低。大数据量情况下，层级较深，检索速度慢。 此时大家可能会想到，我们可以选择红黑树，红黑树是一颗自平衡二叉树，那这样即使是顺序插入数 据，最终形成的数据结构也是一颗平衡的二叉树,结构如下:
+但是，即使如此，由于红黑树也是一颗二叉树，所以也会存在一个缺点：
+大数据量情况下，层级较深，检索速度慢。 所以，在MySQL的索引结构中，并没有选择二叉树或者红黑树，而选择的是B&#43;Tree，那么什么是 B&#43;Tree呢？在详解B&#43;Tree之前，先来介绍一个B-Tree。
+2.2.3 B-Tree B-Tree，B树是一种多叉路衡查找树，相对于二叉树，B树每个节点可以有多个分支，即多叉。 以一颗最大度数（max-degree）为5(5阶)的b-tree为例，那这个B树每个节点最多存储4个key，5 个指针：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/ee71c17f17f3f1bc8bcc7abdeed5e681/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-03-22T17:49:33+08:00" />
+<meta property="article:modified_time" content="2023-03-22T17:49:33+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">MySQL进阶-索引（复习笔记）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<h3><a id="2__1"></a><strong>2. 索引</strong></h3> 
+<p></p> 
+<h4><a id="21__3"></a><strong>2.1 索引概述</strong></h4> 
+<p></p> 
+<h5><a id="211__5"></a><strong>2.1.1 介绍</strong></h5> 
+<p>索引（index）是<strong>帮助MySQL高效获取数据的数据结构(有序)</strong>。在数据之外，数据库系统还维护着满足 <br>特定查找算法的数据结构，这些数据结构以某种方式引用（指向）数据， 这样就可以在这些数据结构 <br>上实现高级查找算法，这种数据结构就是索引。</p> 
+<p></p> 
+<h5><a id="212__9"></a><strong>2.1.2 演示</strong></h5> 
+<p>表结构及其数据如下：<br><img src="https://images2.imgbox.com/c0/21/YoteeQu1_o.png" alt="image.png"><br>假如我们要执行的SQL语句为 ：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> <span class="token keyword">user</span> <span class="token keyword">where</span> age <span class="token operator">=</span> <span class="token number">45</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>1). 无索引情况<br>在无索引情况下，就需要从第一行开始扫描，一直扫描到最后一行，我们称之为 全表扫描，性能很 <br>低。<br><img src="https://images2.imgbox.com/dc/f6/avPvxqK1_o.png" alt="image.png"><br>2). 有索引情况<br>如果我们针对于这张表建立了索引，假设索引结构就是二叉树，那么也就意味着，会对age这个字段建 <br>立一个二叉树的索引结构。<br><img src="https://images2.imgbox.com/ee/2b/rXsuMwVu_o.png" alt="image.png"><br>此时我们在进行查询时，只需要扫描三次就可以找到数据了，极大的提高的查询的效率。</p> 
+<p>备注： 这里我们只是假设索引的结构是二叉树，介绍一下索引的大概原理，只是一个示意图，并 <br>不是索引的真实结构，索引的真实结构，后面会详细介绍。</p> 
+<p></p> 
+<h5><a id="213__19"></a>2.1.3 特点</h5> 
+<table><thead><tr><th>优势</th><th>劣势</th></tr></thead><tbody><tr><td>提高数据检索的效率，降低数据库的IO成本</td><td>索引列也是要占用空间的。</td></tr><tr><td>通过索引列对数据进行排序，降低数据排序的成本，降低CPU的消耗。</td><td>索引大大提高了查询效率，同时却也降低更新表的速度，如对表进行INSERT、UPDATE，DELETE时，效率降低。</td></tr></tbody></table> 
+<br> 
+<h4><a id="22__27"></a>2.2 索引结构</h4> 
+<h5><a id="221__29"></a><strong>2.2.1 概述</strong></h5> 
+<p>MySQL的索引是在存储引擎层实现的，不同的存储引擎有不同的索引结构，主要包含以下几种：</p> 
+<table><thead><tr><th>索引结构</th><th>概述</th></tr></thead><tbody><tr><td>B+Tree索引</td><td>最常见的索引类型，大部分引擎都支持 B+ 树索引</td></tr><tr><td>Hash索引</td><td>底层数据结构是用哈希表实现的, 只有精确匹配索引列的查询才有效, 不支持范围查询</td></tr><tr><td>R-tree(空间索引）</td><td>空间索引是MyISAM引擎的一个特殊索引类型，主要用于地理空间数据类型，通常使用较少</td></tr><tr><td>Full-text(全文索引)</td><td>是一种通过建立倒排索引,快速匹配文档的方式。类似于Lucene,Solr,ES</td></tr></tbody></table> 
+<p>上述是MySQL中所支持的所有的索引结构，接下来，我们再来看看不同的存储引擎对于索引结构的支持 <br>情况。</p> 
+<table><thead><tr><th>索引</th><th>InnoDB</th><th>MyISAM</th><th>Memory</th></tr></thead><tbody><tr><td>B+tree索引</td><td>支持</td><td>支持</td><td>支持</td></tr><tr><td>Hash索引</td><td>不支持</td><td>不支持</td><td>支持</td></tr><tr><td>R-tree索引</td><td>不支持</td><td>支持</td><td>不支持</td></tr><tr><td>Full-text</td><td>5.6版本以后支持</td><td>支持</td><td>不支持</td></tr></tbody></table> 
+<p>注意： 我们平常所说的索引，如果没有特别指明，都是指B+树结构组织的索引。</p> 
+<p></p> 
+<h5><a id="222__51"></a>2.2.2 二叉树</h5> 
+<p>假如说MySQL的索引结构采用二叉树的数据结构，比较理想的结构如下：<br><img src="https://images2.imgbox.com/ad/bc/sMPIyg0b_o.png" alt="image.png"><br>如果主键是顺序插入的，则会形成一个单向链表，结构如下：<br><img src="https://images2.imgbox.com/c6/44/ZqRHuryO_o.png" alt="image.png"><br>所以，如果选择二叉树作为索引结构，会存在以下缺点：</p> 
+<ul><li>顺序插入时，会形成一个链表，查询性能大大降低。</li><li>大数据量情况下，层级较深，检索速度慢。</li></ul> 
+<p>此时大家可能会想到，我们可以选择红黑树，红黑树是一颗自平衡二叉树，那这样即使是顺序插入数 <br>据，最终形成的数据结构也是一颗平衡的二叉树,结构如下:<br><img src="https://images2.imgbox.com/de/9e/j72CgycT_o.png" alt="image.png"><br>但是，即使如此，由于红黑树也是一颗二叉树，所以也会存在一个缺点：</p> 
+<ul><li>大数据量情况下，层级较深，检索速度慢。</li></ul> 
+<p>所以，在MySQL的索引结构中，并没有选择二叉树或者红黑树，而选择的是B+Tree，那么什么是 <br>B+Tree呢？在详解B+Tree之前，先来介绍一个B-Tree。</p> 
+<p></p> 
+<h5><a id="223_BTree_64"></a>2.2.3 B-Tree</h5> 
+<p>B-Tree，B树是一种多叉路衡查找树，相对于二叉树，B树每个节点可以有多个分支，即多叉。 <br>以一颗最大度数（max-degree）为5(5阶)的b-tree为例，那这个B树每个节点最多存储4个key，5 <br>个指针：<br><img src="https://images2.imgbox.com/68/d1/EdsMNJqi_o.png" alt="image.png"><br>知识小贴士: 树的度数指的是一个节点的子节点个数。<br>可以通过一个数据结构可视化的网站来简单演示一下。<br><a href="https://www.cs.usfca.edu/~galles/visualization/BTree.html" rel="nofollow">https://www.cs.usfca.edu/~galles/visualization/BTree.html</a><br><img src="https://images2.imgbox.com/ff/a4/QCdQkEL5_o.png" alt="image.png"><br>插入一组数据： 100 65 169 368 900 556 780 35 215 1200 234 888 158 90 1000 88 <br>120 268 250 。然后观察一些数据插入过程中，节点的变化情况。<br><img src="https://images2.imgbox.com/ee/d9/54hKRaoV_o.png" alt="image.png"><br>特点：</p> 
+<ul><li>5阶的B树，每一个节点最多存储4个key，对应5个指针。</li><li>一旦节点存储的key数量到达5，就会裂变，中间元素向上分裂。</li><li>在B树中，非叶子节点和叶子节点都会存放数据。<br> </li></ul> 
+<h5><a id="224_BTree_71"></a><strong>2.2.4 B+Tree</strong></h5> 
+<p>B+Tree是B-Tree的变种，我们以一颗最大度数（max-degree）为4（<br>4阶）的b+tree为例，来看一 下其结构示意图：<br><img src="https://images2.imgbox.com/81/37/mcNi3XEy_o.png" alt="image.png">我们可以看到，两部分：</p> 
+<ul><li>绿色框框起来的部分，是索引部分，仅仅起到索引数据的作用，不存储数据。</li><li>红色框框起来的部分，是数据存储部分，在其叶子节点中要存储具体的数据。</li></ul> 
+<p>我们可以通过一个数据结构可视化的网站来简单演示一下。<br>操作步骤同上<br>插入一组数据： 100 65 169 368 900 556 780 35 215 1200 234 888 158 90 1000 88 <br>120 268 250 。然后观察一些数据插入过程中，节点的变化情况。<br><img src="https://images2.imgbox.com/e9/9a/BaTaxZLV_o.png" alt="image.png"><br>最终我们看到，B+Tree 与 B-Tree相比，主要有以下三点区别：</p> 
+<ul><li>所有的数据都会出现在叶子节点。</li><li>叶子节点形成一个单向链表。</li><li>非叶子节点仅仅起到索引数据作用，具体的数据都是在叶子节点存放的。</li></ul> 
+<p>上述我们所看到的结构是标准的B+Tree的数据结构，接下来，我们再来看看MySQL中优化之后的 <br>B+Tree。</p> 
+<p>MySQL索引数据结构对经典的B+Tree进行了优化。在原B+Tree的基础上，增加一个指向相邻叶子节点 <br>的链表指针，就形成了带有顺序指针的B+Tree，提高区间访问的性能，利于排序。<br><img src="https://images2.imgbox.com/a7/09/4aCbpNFf_o.png" alt="image.png"></p> 
+<p></p> 
+<h5><a id="225_Hash_88"></a><strong>2.2.5 Hash</strong></h5> 
+<p>MySQL中除了支持B+Tree索引，还支持一种索引类型—Hash索引。</p> 
+<p>1). 结构<br>哈希索引就是采用一定的hash算法，将键值换算成新的hash值，映射到对应的槽位上，然后存储在 <br>hash表中。<br><img src="https://images2.imgbox.com/e2/e5/IOgjndG3_o.png" alt="image.png"><br>如果两个(或多个)键值，映射到一个相同的槽位上，他们就产生了hash冲突（也称为hash碰撞），可 <br>以通过链表来解决。<br><img src="https://images2.imgbox.com/e9/64/SfQKtliQ_o.png" alt="image.png"><br>2). 特点<br>A. Hash索引只能用于对等比较(=，in)，不支持范围查询（between，&gt;，&lt; ，…） <br>B. 无法利用索引完成排序操作 <br>C. 查询效率高，通常(不存在hash冲突的情况)只需要一次检索就可以了，效率通常要高于B+tree索 <br>引</p> 
+<p>3). 存储引擎支持<br>在MySQL中，支持hash索引的是Memory存储引擎。 而InnoDB中具有自适应hash功能，hash索引是 <br>InnoDB存储引擎根据B+Tree索引在指定条件下自动构建的。</p> 
+<p>思考题： 为什么InnoDB存储引擎选择使用B+tree索引结构?<br>A. 相对于二叉树，层级更少，搜索效率高； <br>B. 对于B-tree，无论是叶子节点还是非叶子节点，都会保存数据，这样导致一页中存储 <br>的键值减少，指针跟着减少，要同样保存大量数据，只能增加树的高度，导致性能降低； <br>C. 相对Hash索引，B+tree支持范围匹配及排序操作；</p> 
+<p></p> 
+<h4><a id="23__98"></a><strong>2.3 索引分类</strong></h4> 
+<p></p> 
+<h5><a id="231__100"></a><strong>2.3.1 索引分类</strong></h5> 
+<p>在MySQL数据库，将索引的具体类型主要分为以下几类：主键索引、唯一索引、常规索引、全文索引。</p> 
+<table><thead><tr><th>分类</th><th>含义</th><th>特点</th><th>关键字</th></tr></thead><tbody><tr><td>主键索引</td><td>针对于表中主键创建的索引</td><td>默认自动创建, 只能有一个</td><td>PRIMARY</td></tr><tr><td>唯一索引</td><td>避免同一个表中某数据列中的值重复</td><td>可以有多个</td><td>UNIQUE</td></tr><tr><td>常规索引</td><td>快速定位特定数据</td><td>可以有多个</td><td></td></tr><tr><td>全文索引</td><td>全文索引查找的是文本中的关键词，而不是比较索引中的值</td><td>可以有多个</td><td>FULLTEXT</td></tr></tbody></table> 
+<p></p> 
+<h5><a id="232__111"></a><strong>2.3.2 聚集索引&amp;二级索引</strong></h5> 
+<p>而在在InnoDB存储引擎中，根据索引的存储形式，又可以分为以下两种：</p> 
+<table><thead><tr><th>分类</th><th>含义</th><th>特点</th></tr></thead><tbody><tr><td>聚集索引(ClusteredIndex)</td><td>将数据存储与索引放到了一块，索引结构的叶子节点保存了行数据</td><td>必须有,而且只有一个</td></tr><tr><td>二级索引(SecondaryIndex)</td><td>将数据与索引分开存储，索引结构的叶子节点关联的是对应的主键</td><td>可以存在多个</td></tr></tbody></table> 
+<p>聚集索引选取规则:</p> 
+<ul><li>如果存在主键，主键索引就是聚集索引。</li><li>如果不存在主键，将使用第一个唯一（UNIQUE）索引作为聚集索引。</li><li>如果表没有主键，或没有合适的唯一索引，则InnoDB会自动生成一个rowid作为隐藏的聚集索</li></ul> 
+<p>引。</p> 
+<p>聚集索引和二级索引的具体结构如下：<br><img src="https://images2.imgbox.com/9a/04/dfe53iRX_o.png" alt="image.png"></p> 
+<ul><li>聚集索引的叶子节点下挂的是这一行的数据 。</li><li>二级索引的叶子节点下挂的是该字段值对应的主键值。</li></ul> 
+<p>接下来，我们来分析一下，当我们执行如下的SQL语句时，具体的查找过程是什么样子的。<br><img src="https://images2.imgbox.com/c4/10/uA747CnI_o.png" alt="image.png"><br>具体过程如下:<br>①. 由于是根据name字段进行查询，所以先根据name='Arm’到name字段的二级索引中进行匹配查 <br>找。但是在二级索引中只能查找到 Arm 对应的主键值 10。<br>②. 由于查询返回的数据是*，所以此时，还需要根据主键值10，到聚集索引中查找10对应的记录，最 <br>终找到10对应的行row。 <br>③. 最终拿到这一行的数据，直接返回即可。<br>回表查询： 这种先到二级索引中查找数据，找到主键值，然后再到聚集索引中根据主键值，获取 <br>数据的方式，就称之为回表查询。</p> 
+<p>思考题： <br>以下两条SQL语句，那个执行效率高? 为什么? <br>A. select * from user where id = 10 ; <br>B. select * from user where name = ‘Arm’ ; <br>备注: id为主键，name字段创建的有索引； <br>解答： <br>A 语句的执行性能要高于B 语句。 <br>因为A语句直接走聚集索引，直接返回数据。 而B语句需要先查询name字段的二级索引，然 <br>后再查询聚集索引，也就是需要进行回表查询。</p> 
+<p>思考题： <br>InnoDB主键索引的B+tree高度为多高呢?<br><img src="https://images2.imgbox.com/00/2f/U7950e85_o.png" alt="image.png"><br>假设: <br>一行数据大小为1k，一页中可以存储16行这样的数据。InnoDB的指针占用6个字节的空 <br>间，主键即使为bigint，占用字节数为8。 <br>高度为2： n为key的个数，n+1为指针数<br>n * 8 + (n + 1) * 6 = 16<em>1024 , 算出n约为 1170 <br>1171</em> 16 = 18736 <br>也就是说，如果树的高度为2，则可以存储 18000 多条记录。 <br>高度为3： <br>1171 * 1171 * 16 = 21939856 <br>也就是说，如果树的高度为3，则可以存储 2200w 左右的记录。</p> 
+<p></p> 
+<h4><a id="24__139"></a>2.4 索引语法</h4> 
+<p>1). 创建索引</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token punctuation">[</span> <span class="token keyword">UNIQUE</span> <span class="token operator">|</span> FULLTEXT <span class="token punctuation">]</span> <span class="token keyword">INDEX</span> index_name <span class="token keyword">ON</span> table_name <span class="token punctuation">(</span>
+index_col_name<span class="token punctuation">,</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span> <span class="token punctuation">)</span> <span class="token punctuation">;</span>
+</code></pre> 
+<p>2). 查看索引</p> 
+<pre><code class="prism language-sql"><span class="token keyword">SHOW</span> <span class="token keyword">INDEX</span> <span class="token keyword">FROM</span> table_name <span class="token punctuation">;</span>
+</code></pre> 
+<p>3). 删除索引</p> 
+<pre><code class="prism language-sql"><span class="token keyword">DROP</span> <span class="token keyword">INDEX</span> index_name <span class="token keyword">ON</span> table_name <span class="token punctuation">;</span>
+</code></pre> 
+<p><strong>案例演示:</strong><br>先来创建一张表 tb_user，并且查询测试数据。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">TABLE</span> tb_user <span class="token punctuation">(</span>
+	id <span class="token keyword">INT</span> <span class="token keyword">PRIMARY</span> <span class="token keyword">KEY</span> <span class="token keyword">auto_increment</span> <span class="token keyword">COMMENT</span> <span class="token string">'主键'</span><span class="token punctuation">,</span>
+	NAME <span class="token keyword">VARCHAR</span> <span class="token punctuation">(</span> <span class="token number">50</span> <span class="token punctuation">)</span> <span class="token operator">NOT</span> <span class="token boolean">NULL</span> <span class="token keyword">COMMENT</span> <span class="token string">'用户名'</span><span class="token punctuation">,</span>
+	phone <span class="token keyword">VARCHAR</span> <span class="token punctuation">(</span> <span class="token number">11</span> <span class="token punctuation">)</span> <span class="token operator">NOT</span> <span class="token boolean">NULL</span> <span class="token keyword">COMMENT</span> <span class="token string">'手机号'</span><span class="token punctuation">,</span>
+	email <span class="token keyword">VARCHAR</span> <span class="token punctuation">(</span> <span class="token number">100</span> <span class="token punctuation">)</span> <span class="token keyword">COMMENT</span> <span class="token string">'邮箱'</span><span class="token punctuation">,</span>
+	profession <span class="token keyword">VARCHAR</span> <span class="token punctuation">(</span> <span class="token number">11</span> <span class="token punctuation">)</span> <span class="token keyword">COMMENT</span> <span class="token string">'专业'</span><span class="token punctuation">,</span>
+	age <span class="token keyword">TINYINT</span> <span class="token keyword">UNSIGNED</span> <span class="token keyword">COMMENT</span> <span class="token string">'年龄'</span><span class="token punctuation">,</span>
+	gender <span class="token keyword">CHAR</span> <span class="token punctuation">(</span> <span class="token number">1</span> <span class="token punctuation">)</span> <span class="token keyword">COMMENT</span> <span class="token string">'性别 , 1: 男, 2: 女'</span><span class="token punctuation">,</span>
+	<span class="token keyword">STATUS</span> <span class="token keyword">CHAR</span> <span class="token punctuation">(</span> <span class="token number">1</span> <span class="token punctuation">)</span> <span class="token keyword">COMMENT</span> <span class="token string">'状态'</span><span class="token punctuation">,</span>
+	createtime <span class="token keyword">datetime</span> <span class="token keyword">COMMENT</span> <span class="token string">'创建时间'</span> 
+<span class="token punctuation">)</span> <span class="token keyword">COMMENT</span> <span class="token string">'系统用户表'</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'吕布'</span><span class="token punctuation">,</span> <span class="token string">'17799990000'</span><span class="token punctuation">,</span> <span class="token string">'lvbu666@163.com'</span><span class="token punctuation">,</span> <span class="token string">'软件工程'</span><span class="token punctuation">,</span> <span class="token number">23</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'6'</span><span class="token punctuation">,</span> <span class="token string">'2001-02-02 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'曹操'</span><span class="token punctuation">,</span> <span class="token string">'17799990001'</span><span class="token punctuation">,</span> <span class="token string">'caocao666@qq.com'</span><span class="token punctuation">,</span> <span class="token string">'通讯工程'</span><span class="token punctuation">,</span> <span class="token number">33</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-03-05 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'赵云'</span><span class="token punctuation">,</span> <span class="token string">'17799990002'</span><span class="token punctuation">,</span> <span class="token string">'17799990@139.com'</span><span class="token punctuation">,</span> <span class="token string">'英语'</span><span class="token punctuation">,</span> <span class="token number">34</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'2002-03-02 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'孙悟空'</span><span class="token punctuation">,</span> <span class="token string">'17799990003'</span><span class="token punctuation">,</span> <span class="token string">'17799990@sina.com'</span><span class="token punctuation">,</span> <span class="token string">'工程造价'</span><span class="token punctuation">,</span> <span class="token number">54</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-07-02 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'花木兰'</span><span class="token punctuation">,</span> <span class="token string">'17799990004'</span><span class="token punctuation">,</span> <span class="token string">'19980729@sina.com'</span><span class="token punctuation">,</span> <span class="token string">'软件工程'</span><span class="token punctuation">,</span> <span class="token number">23</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'2001-04-22 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'大乔'</span><span class="token punctuation">,</span> <span class="token string">'17799990005'</span><span class="token punctuation">,</span> <span class="token string">'daqiao666@sina.com'</span><span class="token punctuation">,</span> <span class="token string">'舞蹈'</span><span class="token punctuation">,</span> <span class="token number">22</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-02-07 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'露娜'</span><span class="token punctuation">,</span> <span class="token string">'17799990006'</span><span class="token punctuation">,</span> <span class="token string">'luna_love@sina.com'</span><span class="token punctuation">,</span> <span class="token string">'应用数学'</span><span class="token punctuation">,</span> <span class="token number">24</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-02-08 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'程咬金'</span><span class="token punctuation">,</span> <span class="token string">'17799990007'</span><span class="token punctuation">,</span> <span class="token string">'chengyaojin@163.com'</span><span class="token punctuation">,</span> <span class="token string">'化工'</span><span class="token punctuation">,</span> <span class="token number">38</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'5'</span><span class="token punctuation">,</span> <span class="token string">'2001-05-23 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'项羽'</span><span class="token punctuation">,</span> <span class="token string">'17799990008'</span><span class="token punctuation">,</span> <span class="token string">'xiaoyu666@qq.com'</span><span class="token punctuation">,</span> <span class="token string">'金属材料'</span><span class="token punctuation">,</span> <span class="token number">43</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-09-18 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'白起'</span><span class="token punctuation">,</span> <span class="token string">'17799990009'</span><span class="token punctuation">,</span> <span class="token string">'baiqi666@sina.com'</span><span class="token punctuation">,</span> <span class="token string">'机械工程及其自动
+	化'</span><span class="token punctuation">,</span> <span class="token number">27</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'2001-08-16 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'韩信'</span><span class="token punctuation">,</span> <span class="token string">'17799990010'</span><span class="token punctuation">,</span> <span class="token string">'hanxin520@163.com'</span><span class="token punctuation">,</span> <span class="token string">'无机非金属材料工
+	程'</span><span class="token punctuation">,</span> <span class="token number">27</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-06-12 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'荆轲'</span><span class="token punctuation">,</span> <span class="token string">'17799990011'</span><span class="token punctuation">,</span> <span class="token string">'jingke123@163.com'</span><span class="token punctuation">,</span> <span class="token string">'会计'</span><span class="token punctuation">,</span> <span class="token number">29</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-05-11 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'兰陵王'</span><span class="token punctuation">,</span> <span class="token string">'17799990012'</span><span class="token punctuation">,</span> <span class="token string">'lanlinwang666@126.com'</span><span class="token punctuation">,</span> <span class="token string">'工程造价'</span><span class="token punctuation">,</span> <span class="token number">44</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'2001-04-09 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'狂铁'</span><span class="token punctuation">,</span> <span class="token string">'17799990013'</span><span class="token punctuation">,</span> <span class="token string">'kuangtie@sina.com'</span><span class="token punctuation">,</span> <span class="token string">'应用数学'</span><span class="token punctuation">,</span> <span class="token number">43</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'2001-04-10 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'貂蝉'</span><span class="token punctuation">,</span> <span class="token string">'17799990014'</span><span class="token punctuation">,</span> <span class="token string">'84958948374@qq.com'</span><span class="token punctuation">,</span> <span class="token string">'软件工程'</span><span class="token punctuation">,</span> <span class="token number">40</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'3'</span><span class="token punctuation">,</span> <span class="token string">'2001-02-12 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'妲己'</span><span class="token punctuation">,</span> <span class="token string">'17799990015'</span><span class="token punctuation">,</span> <span class="token string">'2783238293@qq.com'</span><span class="token punctuation">,</span> <span class="token string">'软件工程'</span><span class="token punctuation">,</span> <span class="token number">31</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-01-30 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'芈月'</span><span class="token punctuation">,</span> <span class="token string">'17799990016'</span><span class="token punctuation">,</span> <span class="token string">'xiaomin2001@sina.com'</span><span class="token punctuation">,</span> <span class="token string">'工业经济'</span><span class="token punctuation">,</span> <span class="token number">35</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2000-05-03 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'嬴政'</span><span class="token punctuation">,</span> <span class="token string">'17799990017'</span><span class="token punctuation">,</span> <span class="token string">'8839434342@qq.com'</span><span class="token punctuation">,</span> <span class="token string">'化工'</span><span class="token punctuation">,</span> <span class="token number">38</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'2001-08-08 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'狄仁杰'</span><span class="token punctuation">,</span> <span class="token string">'17799990018'</span><span class="token punctuation">,</span> <span class="token string">'jujiamlm8166@163.com'</span><span class="token punctuation">,</span> <span class="token string">'国际贸易'</span><span class="token punctuation">,</span> <span class="token number">30</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2007-03-12 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'安琪拉'</span><span class="token punctuation">,</span> <span class="token string">'17799990019'</span><span class="token punctuation">,</span> <span class="token string">'jdodm1h@126.com'</span><span class="token punctuation">,</span> <span class="token string">'城市规划'</span><span class="token punctuation">,</span> <span class="token number">51</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2001-08-15 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'典韦'</span><span class="token punctuation">,</span> <span class="token string">'17799990020'</span><span class="token punctuation">,</span> <span class="token string">'ycaunanjian@163.com'</span><span class="token punctuation">,</span> <span class="token string">'城市规划'</span><span class="token punctuation">,</span> <span class="token number">52</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'2'</span><span class="token punctuation">,</span> <span class="token string">'2000-04-12 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'廉颇'</span><span class="token punctuation">,</span> <span class="token string">'17799990021'</span><span class="token punctuation">,</span> <span class="token string">'lianpo321@126.com'</span><span class="token punctuation">,</span> <span class="token string">'土木工程'</span><span class="token punctuation">,</span> <span class="token number">19</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'3'</span><span class="token punctuation">,</span> <span class="token string">'2002-07-18 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'后羿'</span><span class="token punctuation">,</span> <span class="token string">'17799990022'</span><span class="token punctuation">,</span> <span class="token string">'altycj2000@139.com'</span><span class="token punctuation">,</span> <span class="token string">'城市园林'</span><span class="token punctuation">,</span> <span class="token number">20</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'0'</span><span class="token punctuation">,</span> <span class="token string">'2002-03-10 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">INSERT</span> <span class="token keyword">INTO</span> tb_user <span class="token punctuation">(</span> NAME<span class="token punctuation">,</span> phone<span class="token punctuation">,</span> email<span class="token punctuation">,</span> profession<span class="token punctuation">,</span> age<span class="token punctuation">,</span> gender<span class="token punctuation">,</span> <span class="token keyword">STATUS</span><span class="token punctuation">,</span> createtime <span class="token punctuation">)</span>
+<span class="token keyword">VALUES</span>
+	<span class="token punctuation">(</span> <span class="token string">'姜子牙'</span><span class="token punctuation">,</span> <span class="token string">'17799990023'</span><span class="token punctuation">,</span> <span class="token string">'37483844@qq.com'</span><span class="token punctuation">,</span> <span class="token string">'工程造价'</span><span class="token punctuation">,</span> <span class="token number">29</span><span class="token punctuation">,</span> <span class="token string">'1'</span><span class="token punctuation">,</span> <span class="token string">'4'</span><span class="token punctuation">,</span> <span class="token string">'2003-05-26 00:00:00'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>表结构中插入的数据如下：<br><img src="https://images2.imgbox.com/06/73/J7Wi37Cw_o.png" alt="image.png"><br>数据准备好了之后，接下来，我们就来完成如下需求： <br>A. name字段为姓名字段，该字段的值可能会重复，为该字段创建索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">INDEX</span> idx_user_name <span class="token keyword">ON</span> tb_user<span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>B. phone手机号字段的值，是非空，且唯一的，为该字段创建唯一索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">UNIQUE</span> <span class="token keyword">INDEX</span> idx_user_phone <span class="token keyword">ON</span> tb_user<span class="token punctuation">(</span>phone<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>C. 为profession、age、status创建联合索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">INDEX</span> idx_user_pro_age_sta <span class="token keyword">ON</span> tb_user<span class="token punctuation">(</span>profession<span class="token punctuation">,</span>age<span class="token punctuation">,</span><span class="token keyword">status</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>D. 为email建立合适的索引来提升查询效率。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">INDEX</span> idx_email <span class="token keyword">ON</span> tb_user<span class="token punctuation">(</span>email<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>完成上述的需求之后，我们再查看tb_user表的所有的索引数据。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">show</span> <span class="token keyword">index</span> <span class="token keyword">from</span> tb_user<span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/0f/ed/0QsTd0w3_o.png" alt="image.png"><br> </p> 
+<h4><a id="25_SQL_263"></a><strong>2.5 SQL性能分析</strong></h4> 
+<p></p> 
+<h5><a id="251_SQL_265"></a>2.5.1 SQL执行频率</h5> 
+<p>MySQL 客户端连接成功后，通过 show [session|global] status 命令可以提供服务器状态信 <br>息。通过如下指令，可以查看当前数据库的INSERT、UPDATE、DELETE、SELECT的访问频次：</p> 
+<pre><code class="prism language-sql"><span class="token comment">-- session 是查看当前会话 ;</span>
+<span class="token comment">-- global 是查询全局数据 ;</span>
+<span class="token keyword">SHOW</span> <span class="token keyword">GLOBAL</span> <span class="token keyword">STATUS</span> <span class="token operator">LIKE</span> <span class="token string">'Com_______'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/fc/2b/CHHSITrg_o.png" alt="image.png"><br>Com_delete: 删除次数 <br>Com_insert: 插入次数 <br>Com_select: 查询次数 <br>Com_update: 更新次数<br>在当前数据库再执行几次查询操作，再次查看执行频次，Com_select 参数发生变化。<br>通过上述指令，我们可以查看到当前数据库到底是以查询为主，还是以增删改为主，从而为数据 <br>库优化提供参考依据。 如果是以增删改为主，我们可以考虑不对其进行索引的优化。 如果是以 <br>查询为主，那么就要考虑对数据库的索引进行优化了。<br> </p> 
+<h5><a id="252__274"></a><strong>2.5.2 慢查询日志</strong></h5> 
+<p>慢查询日志记录了所有执行时间超过指定参数（long_query_time，单位：秒，默认10秒）的所有 <br>SQL语句的日志。<br>MySQL的慢查询日志默认没有开启，我们可以查看一下系统变量 slow_query_log。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">SHOW</span> VARIABLES <span class="token operator">LIKE</span> <span class="token string">'slow_query_log'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/62/f8/5vZoen6O_o.png" alt="image.png"><br>1.开启慢查询日志,临时，重启mysql就会关闭</p> 
+<pre><code class="prism language-sql"><span class="token keyword">set</span> <span class="token keyword">global</span> slow_query_log<span class="token operator">=</span><span class="token string">'ON'</span><span class="token punctuation">;</span> 
+<span class="token keyword">set</span> <span class="token keyword">global</span> long_query_time<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span> <span class="token comment">//设置慢查询时间，执行时间超过1秒的SQL将记录到慢查询日志中</span>
+</code></pre> 
+<p>2.通过配置my.cnf（windows是my.ini）系统文件开启</p> 
+<pre><code class="prism language-sql"><span class="token comment"># 开启慢查询功能</span>
+slow_query_log<span class="token operator">=</span><span class="token keyword">ON</span>
+<span class="token comment"># 指定记录慢查询日志SQL执行时间得阈值</span>
+long_query_time<span class="token operator">=</span><span class="token number">1</span>
+<span class="token comment"># 选填，默认数据文件路径</span>
+<span class="token comment"># slow_query_log_file=/var/lib/mysql/localhost-slow.log</span>
+
+</code></pre> 
+<p>重启数据库后即持久化开启慢查询。<br>Linux下：<br>要开启慢查询日志，需要在MySQL的配置文件（/etc/my.cnf）中配置如下信息：</p> 
+<pre><code class="prism language-sql"><span class="token comment"># 开启MySQL慢日志查询开关</span>
+slow_query_log<span class="token operator">=</span><span class="token number">1</span>
+<span class="token comment"># 设置慢日志的时间为2秒，SQL语句执行时间超过2秒，就会视为慢查询，记录慢查询日志</span>
+long_query_time<span class="token operator">=</span><span class="token number">2</span>
+</code></pre> 
+<p>配置完毕之后，通过以下指令重新启动MySQL服务器进行测试，查看慢日志文件中记录的信息<br>/var/lib/mysql/localhost-slow.log。</p> 
+<pre><code class="prism language-sql">systemctl restart mysqld
+</code></pre> 
+<p>然后，再次查看开关情况，慢查询日志就已经打开了，SHOW VARIABLES LIKE ‘slow_query_log’;。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">show</span> variables <span class="token operator">like</span> <span class="token string">'%slow_query_log_file%'</span><span class="token punctuation">;</span><span class="token comment">--显示慢查询日志</span>
+</code></pre> 
+<p><strong>测试：</strong><br>A. 执行如下SQL语句 ：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user<span class="token punctuation">;</span> <span class="token comment">-- 这条SQL执行效率比较高, 执行耗时 0.00sec</span>
+<span class="token keyword">select</span> <span class="token function">count</span><span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span> <span class="token keyword">from</span> tb_sku<span class="token punctuation">;</span> <span class="token comment">-- 由于tb_sku表中, 预先存入了1000w的记录, count一次,耗时</span>
+<span class="token number">13.35</span>sec
+</code></pre> 
+<p><img src="https://images2.imgbox.com/0f/7f/PEXN3db3_o.png" alt="image.png"><br>B. 检查慢查询日志 ：<br>最终我们发现，在慢查询日志中，只会记录执行时间超多我们预设时间（2s）的SQL，执行较快的SQL <br>是不会记录的。<br><img src="https://images2.imgbox.com/99/01/TRt4r3tx_o.png" alt="image.png"><br>那这样，通过慢查询日志，就可以定位出执行效率比较低的SQL，从而有针对性的进行优化。</p> 
+<p></p> 
+<h5><a id="253_profile_319"></a>2.5.3 profile详情</h5> 
+<p>show profiles 能够在做SQL优化时帮助我们了解时间都耗费到哪里去了。通过have_profiling <br>参数，能够看到当前MySQL是否支持profile操作：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">SELECT</span> @<span class="token variable">@have_profiling</span><span class="token punctuation">;</span> <span class="token comment">//是否支持</span>
+<span class="token keyword">SELECT</span> @<span class="token variable">@profiling</span><span class="token punctuation">;</span> <span class="token comment">//查询是否开启</span>
+
+</code></pre> 
+<p>可以通过set语句在 session/global级别开启profiling：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">SET</span> profiling <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>开关已经打开了，接下来，我们所执行的SQL语句，都会被MySQL记录，并记录执行时间消耗到哪儿去 <br>了。 我们直接执行如下的SQL语句：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user<span class="token punctuation">;</span>
+<span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> id <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> name <span class="token operator">=</span> <span class="token string">'白起'</span><span class="token punctuation">;</span>
+<span class="token keyword">select</span> <span class="token function">count</span><span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span> <span class="token keyword">from</span> tb_sku<span class="token punctuation">;</span>
+</code></pre> 
+<p>执行一系列的业务SQL的操作，然后通过如下指令查看指令的执行耗时：</p> 
+<pre><code class="prism language-sql"><span class="token comment">-- 查看每一条SQL的耗时基本情况</span>
+<span class="token keyword">show</span> profiles<span class="token punctuation">;</span>
+<span class="token comment">-- 查看指定query_id的SQL语句各个阶段的耗时情况</span>
+<span class="token keyword">show</span> profile <span class="token keyword">for</span> query query_id<span class="token punctuation">;</span>
+<span class="token comment">-- 查看指定query_id的SQL语句CPU的使用情况</span>
+<span class="token keyword">show</span> profile cpu <span class="token keyword">for</span> query query_id<span class="token punctuation">;</span>
+</code></pre> 
+<p>查看每一条SQL的耗时情况:<br><img src="https://images2.imgbox.com/3f/f4/MevZlJ51_o.png" alt="image.png"><br>查看指定SQL各个阶段的耗时情况 :<br><img src="https://images2.imgbox.com/49/46/eKAEFc6M_o.png" alt="image.png"></p> 
+<p></p> 
+<h5><a id="254_explain_349"></a><strong>2.5.4 explain</strong></h5> 
+<p>EXPLAIN 或者 DESC命令获取 MySQL 如何执行 SELECT 语句的信息，包括在 SELECT 语句执行 <br>过程中表如何连接和连接的顺序。<br>语法:</p> 
+<pre><code class="prism language-sql"><span class="token comment">-- 直接在select语句之前加上关键字 explain / desc</span>
+<span class="token keyword">EXPLAIN</span> <span class="token keyword">SELECT</span> 字段列表 <span class="token keyword">FROM</span> 表名 <span class="token keyword">WHERE</span> 条件 <span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d5/56/yR6KojMg_o.png" alt="image.png">Explain 执行计划中各个字段的含义:</p> 
+<table><thead><tr><th>字段</th><th>含义</th></tr></thead><tbody><tr><td>id</td><td>select查询的序列号，表示查询中执行select子句或者是操作表的顺序(id相同，执行顺序从上到下；id不同，值越大，越先执行)。</td></tr><tr><td>select_type</td><td>表示 SELECT 的类型，常见的取值有 SIMPLE（简单表，即不使用表连接 或者子查询）、PRIMARY（主查询，即外层的查询）、UNION（UNION 中的第二个或者后面的查询语句）、SUBQUERY（SELECT/WHERE之后包含了子查询）等</td></tr><tr><td>type</td><td>表示连接类型，性能由好到差的连接类型为NULL、system、const、 <br>eq_ref、ref、range、 index、all 。</td></tr><tr><td>possible_key</td><td>显示可能应用在这张表上的索引，一个或多个</td></tr><tr><td>key</td><td>实际使用的索引，如果为NULL，则没有使用索引。</td></tr><tr><td>key_len</td><td>表示索引中使用的字节数， 该值为索引字段最大可能长度，并非实际使用长度，在不损失精确性的前提下， 长度越短越好 。</td></tr><tr><td>rows</td><td>MySQL认为必须要执行查询的行数，在innodb引擎的表中，是一个估计值，可能并不总是准确的。</td></tr><tr><td>filtered</td><td>表示返回结果的行数占需读取行数的百分比， filtered 的值越大越好。</td></tr></tbody></table> 
+<p></p> 
+<h4><a id="26__369"></a>2.6 索引使用</h4> 
+<p></p> 
+<h5><a id="261__371"></a><strong>2.6.1 验证索引效率</strong></h5> 
+<p>在讲解索引的使用原则之前，先通过一个简单的案例，来验证一下索引，看看是否能够通过索引来提升 <br>数据查询性能。在演示的时候，我们还是使用之前准备的一张表 tb_sku , 在这张表中准备了1000w <br>的记录。<br><img src="https://images2.imgbox.com/58/34/EdTDGHGI_o.png" alt="image.png"><br>这张表中id为主键，有主键索引，而其他字段是没有建立索引的。 我们先来查询其中的一条记录，看 <br>看里面的字段情况，执行如下SQL：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_sku <span class="token keyword">where</span> id <span class="token operator">=</span> <span class="token number">1</span>\G<span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/47/10/pR57cv2R_o.png" alt="image.png"><br>可以看到即使有1000w的数据,根据id进行数据查询,性能依然很快，因为主键id是有索引的。 那么接 <br>下来，我们再来根据 sn 字段进行查询，执行如下SQL：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">SELECT</span> <span class="token operator">*</span> <span class="token keyword">FROM</span> tb_sku <span class="token keyword">WHERE</span> sn <span class="token operator">=</span> <span class="token string">'100000003145001'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/3c/1d/Tho1hQN1_o.png" alt="image.png"><br>我们可以看到根据sn字段进行查询，查询返回了一条数据，结果耗时 20.78sec，就是因为sn没有索 <br>引，而造成查询效率很低。<br>那么我们可以针对于sn字段，建立一个索引，建立了索引之后，我们再次根据sn进行查询，再来看一 <br>下查询耗时情况。<br>创建索引：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">create</span> <span class="token keyword">index</span> idx_sku_sn <span class="token keyword">on</span> tb_sku<span class="token punctuation">(</span>sn<span class="token punctuation">)</span> <span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/b9/b6/LkC2SnRV_o.png" alt="image.png"><br>然后再次执行相同的SQL语句，再次查看SQL的耗时。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">SELECT</span> <span class="token operator">*</span> <span class="token keyword">FROM</span> tb_sku <span class="token keyword">WHERE</span> sn <span class="token operator">=</span> <span class="token string">'100000003145001'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/f6/4f/Cjxt5nkL_o.png" alt="image.png"><br>我们明显会看到，sn字段建立了索引之后，查询性能大大提升。建立索引前后，查询耗时都不是一个数 <br>量级的。</p> 
+<p></p> 
+<h5><a id="262__391"></a>2.6.2 最左前缀法则</h5> 
+<p>如果索引了多列（联合索引），要遵守最左前缀法则。最左前缀法则指的是查询从索引的最左列开始， <br>并且不跳过索引中的列。如果跳跃某一列，索引将会部分失效(后面的字段索引失效)。<br>以 tb_user 表为例，我们先来查看一下之前 tb_user 表所创建的索引。<br>show index from tb_user;<br><img src="https://images2.imgbox.com/dc/de/aeh251P4_o.png" alt="image.png"><br>在 tb_user 表中，有一个联合索引，这个联合索引涉及到三个字段，顺序分别为：profession， <br>age，status。<br>对于最左前缀法则指的是，查询时，最左变的列，也就是profession必须存在，否则索引全部失效。 <br>而且中间不能跳过某一列，否则该列后面的字段索引将失效。 接下来，我们来演示几组案例，看一下 <br>具体的执行计划：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">=</span> <span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span>
+<span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/fd/3a/tTC7kVX6_o.png" alt="image.png"></p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">=</span> <span class="token number">31</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/68/38/maB3yw01_o.png" alt="image.png"></p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/f1/78/OeLpxjtk_o.png" alt="image.png"><br>以上的这三组测试中，我们发现只要联合索引最左边的字段 profession存在，索引就会生效，只不 <br>过索引的长度不同。 而且由以上三组测试，我们也可以推测出profession字段索引长度为47、age <br>字段索引长度为2、status字段索引长度为5。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> age <span class="token operator">=</span> <span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span> <span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/cc/ed/fQrdzW7K_o.png" alt="image.png"></p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> <span class="token keyword">status</span> <span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/3a/66/lhbXeJgX_o.png" alt="image.png"><br>而通过上面的这两组测试，我们也可以看到索引并未生效，原因是因为不满足最左前缀法则，联合索引 <br>最左边的列profession不存在。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> <span class="token keyword">status</span> <span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/d2/5e/mEeoGWGv_o.png" alt="image.png"><br>上述的SQL查询时，存在profession字段，最左边的列是存在的，索引满足最左前缀法则的基本条 <br>件。但是查询时，跳过了age这个列，所以后面的列索引是不会使用的，也就是索引部分生效，所以索 <br>引的长度就是47。</p> 
+<p>思考题：<br>当执行SQL语句: explain select * from tb_user where age = 31 and <br>status = ‘0’ and profession = ‘软件工程’； 时，是否满足最左前缀法则，走不走 <br>上述的联合索引，索引长度？<img src="https://images2.imgbox.com/d6/13/CkZBBE3y_o.png" alt="image.png"><br>可以看到，是完全满足最左前缀法则的，索引长度54，联合索引是生效的。 <br>注意 ： 最左前缀法则中指的最左边的列，是指在查询时，联合索引的最左边的字段(即是 <br>第一个字段)必须存在，<strong>与我们编写SQL时，条件编写的先后顺序无关</strong>。</p> 
+<p></p> 
+<h5><a id="263__422"></a><strong>2.6.3 范围查询</strong></h5> 
+<p>联合索引中，出现范围查询(&gt;,&lt;)，范围查询右侧的列索引失效。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">&gt;</span> <span class="token number">30</span> <span class="token operator">and</span> <span class="token keyword">status</span>
+<span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/bc/cb/Et65NQBu_o.png" alt="image.png"><br>当范围查询使用&gt; 或 &lt; 时，走联合索引了，但是索引的长度为49，就说明范围查询右边的status字 <br>段是没有走索引的。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">&gt;=</span> <span class="token number">30</span> <span class="token operator">and</span>
+<span class="token keyword">status</span> <span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/c7/4e/mL8xCL8a_o.png" alt="image.png"><br>当范围查询使用&gt;= 或 &lt;= 时，走联合索引了，但是索引的长度为54，就说明所有的字段都是走索引 <br>的。<br>所以，在业务允许的情况下，尽可能的使用类似于 &gt;= 或 &lt;= 这类的范围查询，而避免使用 &gt; 或 &lt; 。</p> 
+<p></p> 
+<h5><a id="264__436"></a>2.6.4 索引失效情况</h5> 
+<p></p> 
+<h6><a id="2641__438"></a>2.6.4.1 索引列运算</h6> 
+<p>不要在索引列上进行运算操作， 索引将失效。<br>在tb_user表中，除了前面介绍的联合索引之外，还有一个索引，是phone字段的单列索引。<br><img src="https://images2.imgbox.com/58/6f/NT7RdbJo_o.png" alt="image.png"></p> 
+<p>A. 当根据phone字段进行等值匹配查询时, 索引生效。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> phone <span class="token operator">=</span> <span class="token string">'17799990015'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/2d/1b/fjnoJDTh_o.png" alt="image.png"><br>B. 当根据phone字段进行函数运算操作之后，索引失效。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> substring<span class="token punctuation">(</span>phone<span class="token punctuation">,</span><span class="token number">10</span><span class="token punctuation">,</span><span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token string">'15'</span><span class="token punctuation">;</span><span class="token comment">//从10，开始读两个字符</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/28/44/QqfiWV4p_o.png" alt="image.png"></p> 
+<p></p> 
+<h6><a id="2642__452"></a><strong>2.6.4.2 字符串不加引号</strong></h6> 
+<p>字符串类型字段使用时，不加引号，索引将失效。<br>接下来，我们通过两组示例，来看看对于字符串类型的字段，加单引号与不加单引号的区别：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">=</span> <span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span>
+<span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">=</span> <span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span>
+<span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ae/9c/7iBqPaEH_o.png" alt="image.png"></p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> phone <span class="token operator">=</span> <span class="token string">'17799990015'</span><span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> phone <span class="token operator">=</span> <span class="token number">17799990015</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/53/6a/m5kDaSYe_o.png" alt="image.png"><br>经过上面两组示例，我们会明显的发现，如果字符串不加单引号，对于查询结果，没什么影响，但是数 <br>据库存在隐式类型转换，索引将失效。<br> </p> 
+<h6><a id="2643__467"></a><strong>2.6.4.3 模糊查询</strong></h6> 
+<p>如果仅仅是尾部模糊匹配，索引不会失效。如果是头部模糊匹配，索引失效。 <br>接下来，我们来看一下这三条SQL语句的执行效果，查看一下其执行计划： <br>由于下面查询语句中，都是根据profession字段查询，符合最左前缀法则，联合索引是可以生效的， <br>我们主要看一下，模糊查询时，%加在关键字之前，和加在关键字之后的影响。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">like</span> <span class="token string">'软件%'</span><span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">like</span> <span class="token string">'%工程'</span><span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">like</span> <span class="token string">'%工%'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/6c/1d/fRpEh6lt_o.png" alt="image.png"><br>经过上述的测试，我们发现，在like模糊查询中，在关键字后面加%，索引可以生效。而如果在关键字 <br>前面加了%，索引将会失效。</p> 
+<p></p> 
+<h6><a id="2644_or_477"></a><strong>2.6.4.4 or连接条件</strong></h6> 
+<p>用or分割开的条件， 如果or前的条件中的列有索引，而后面的列中没有索引，那么涉及的索引都不会 <br>被用到。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> id <span class="token operator">=</span> <span class="token number">10</span> <span class="token operator">or</span> age <span class="token operator">=</span> <span class="token number">23</span><span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> phone <span class="token operator">=</span> <span class="token string">'17799990017'</span> <span class="token operator">or</span> age <span class="token operator">=</span> <span class="token number">23</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/b9/d6/xYMjs4js_o.png" alt="image.png"><br>由于age没有索引，所以即使id、phone有索引，索引也会失效。所以需要针对于age也要建立索引。</p> 
+<p>然后，我们可以对age字段建立索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">create</span> <span class="token keyword">index</span> idx_user_age <span class="token keyword">on</span> tb_user<span class="token punctuation">(</span>age<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>建立了索引之后，我们再次执行上述的SQL语句，看看前后执行计划的变化。<br><img src="https://images2.imgbox.com/89/5e/tI31c5s5_o.png" alt="image.png">最终，我们发现，当or连接的条件，左右两侧字段都有索引时，索引才会生效。<br> </p> 
+<h6><a id="2645__492"></a>2.6.4.5 数据分布影响</h6> 
+<p>如果MySQL评估使用索引比全表更慢，则不使用索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> phone <span class="token operator">&gt;=</span> <span class="token string">'17799990005'</span><span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> phone <span class="token operator">&gt;=</span> <span class="token string">'17799990015'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a5/11/phDKIsqH_o.png" alt="image.png"><br>经过测试我们发现，相同的SQL语句，只是传入的字段值不同，最终的执行计划也完全不一样，这是为 <br>什么呢？</p> 
+<p>就是因为MySQL在查询时，会评估使用索引的效率与走全表扫描的效率，如果走<strong>全表扫描更快</strong>，**则放弃 **<br><strong>索引</strong>，走全表扫描。 因为索引是用来索引少量数据的，如果通过索引查询返回大批量的数据，则还不 <br>如走全表扫描来的快，此时索引就会失效。</p> 
+<p>接下来，我们再来看看 is null 与 is not null 操作是否走索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">is</span> <span class="token boolean">null</span><span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">is</span> <span class="token operator">not</span> <span class="token boolean">null</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/90/99/HFwhrqTA_o.png" alt="image.png">接下来，我们做一个操作将profession字段值全部更新为null。<br><img src="https://images2.imgbox.com/8f/1c/yW1Uound_o.png" alt="image.png"><br>然后，再次执行上述的两条SQL，查看SQL语句的执行计划。<br><img src="https://images2.imgbox.com/f2/01/p3SKGFtf_o.png" alt="image.png">最终我们看到，一模一样的SQL语句，先后执行了两次，结果查询计划是不一样的，为什么会出现这种 <br>现象，这是和数据库的数据分布有关系。查询时MySQL会评估，走索引快，还是全表扫描快，如果全表 <br>扫描更快，则放弃索引走全表扫描。 因此，is null 、is not null是否走索引，得具体情况具体 <br>分析，并不是固定的。</p> 
+<p></p> 
+<h6><a id="265_SQL_511"></a>2.6.5 SQL提示</h6> 
+<p>目前tb_user表的数据情况如下:<img src="https://images2.imgbox.com/b5/2a/9CqQ8hFZ_o.png" alt="image.png"><br>索引情况如下:<br><img src="https://images2.imgbox.com/10/b8/tsLSJUJS_o.png" alt="image.png"><br>把上述的 idx_user_age, idx_email 这两个之前测试使用过的索引直接删除。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">drop</span> <span class="token keyword">index</span> idx_user_age <span class="token keyword">on</span> tb_user<span class="token punctuation">;</span>
+<span class="token keyword">drop</span> <span class="token keyword">index</span> idx_email <span class="token keyword">on</span> tb_user<span class="token punctuation">;</span>
+</code></pre> 
+<p>A. 执行SQL :</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/33/20/LtpwduRB_o.png" alt="image.png">查询走了联合索引。</p> 
+<p>B. 执行SQL，创建profession的单列索引：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">create</span> <span class="token keyword">index</span> idx_user_pro <span class="token keyword">on</span> tb_user<span class="token punctuation">(</span>profession<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/04/b4/RpAaH3UK_o.png" alt="image.png"><br>C. 创建单列索引后，再次执行A中的SQL语句，查看执行计划，看看到底走哪个索引。<br><img src="https://images2.imgbox.com/3c/a4/43L2SjVB_o.png" alt="image.png"><br>测试结果，我们可以看到，possible_keys中 idx_user_pro_age_sta,idx_user_pro 这两个 <br>索引都可能用到，最终MySQL选择了idx_user_pro_age_sta索引。这是MySQL自动选择的结果。</p> 
+<p>那么，我们能不能在查询的时候，自己来指定使用哪个索引呢？ 答案是肯定的，此时就可以借助于 <br>MySQL的SQL提示来完成。 接下来，介绍一下SQL提示。</p> 
+<p>SQL提示，是优化数据库的一个重要手段，简单来说，就是在SQL语句中加入一些人为的提示来达到优 <br>化操作的目的。<br>1). use index ： 建议MySQL使用哪一个索引完成此次查询（仅仅是建议，mysql内部还会再次进 <br>行评估）。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">use</span> <span class="token keyword">index</span><span class="token punctuation">(</span>idx_user_pro<span class="token punctuation">)</span> <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工
+程'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>2). ignore index ： 忽略指定的索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">ignore</span> <span class="token keyword">index</span><span class="token punctuation">(</span>idx_user_pro<span class="token punctuation">)</span> <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工
+程'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>3). force index ： 强制使用索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">force</span> <span class="token keyword">index</span><span class="token punctuation">(</span>idx_user_pro<span class="token punctuation">)</span> <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工
+程'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>示例演示：<br>A. use index</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">use</span> <span class="token keyword">index</span><span class="token punctuation">(</span>idx_user_pro<span class="token punctuation">)</span> <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工
+程'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/39/d0/BphjONrO_o.png" alt="image.png"><br>B. ignore index</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">ignore</span> <span class="token keyword">index</span><span class="token punctuation">(</span>idx_user_pro<span class="token punctuation">)</span> <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工
+程'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/21/75/hzxlIyDa_o.png" alt="image.png"></p> 
+<p>C. force index</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">force</span> <span class="token keyword">index</span><span class="token punctuation">(</span>idx_user_pro_age_sta<span class="token punctuation">)</span> <span class="token keyword">where</span> profession <span class="token operator">=</span>
+<span class="token string">'软件工程'</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/1d/c7/Wh3gUtwI_o.png" alt="image.png"><br> </p> 
+<h6><a id="266__565"></a><strong>2.6.6 覆盖索引</strong></h6> 
+<p>尽量使用覆盖索引，减少select *。 那么什么是覆盖索引呢？ 覆盖索引是指 查询使用了索引，并 <br>且需要返回的列，在该索引中已经全部能够找到 。</p> 
+<p>接下来，我们来看一组SQL的执行计划，看看执行计划的差别，然后再来具体做一个解析。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">explain</span> <span class="token keyword">select</span> id<span class="token punctuation">,</span> profession <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">=</span>
+<span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span> <span class="token operator">=</span> <span class="token string">'0'</span> <span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> id<span class="token punctuation">,</span>profession<span class="token punctuation">,</span>age<span class="token punctuation">,</span> <span class="token keyword">status</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span>
+<span class="token operator">and</span> age <span class="token operator">=</span> <span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span> <span class="token operator">=</span> <span class="token string">'0'</span> <span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> id<span class="token punctuation">,</span>profession<span class="token punctuation">,</span>age<span class="token punctuation">,</span> <span class="token keyword">status</span><span class="token punctuation">,</span> name <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软
+件工程'</span> <span class="token operator">and</span> age <span class="token operator">=</span> <span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span> <span class="token operator">=</span> <span class="token string">'0'</span> <span class="token punctuation">;</span>
+<span class="token keyword">explain</span> <span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> profession <span class="token operator">=</span> <span class="token string">'软件工程'</span> <span class="token operator">and</span> age <span class="token operator">=</span> <span class="token number">31</span> <span class="token operator">and</span> <span class="token keyword">status</span>
+<span class="token operator">=</span> <span class="token string">'0'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>上述这几条SQL的执行结果为:<br><img src="https://images2.imgbox.com/0c/6a/80lJx60i_o.png" alt="image.png"><br>从上述的执行计划我们可以看到，这四条SQL语句的执行计划前面所有的指标都是一样的，看不出来差 <br>异。但是此时，我们主要关注的是后面的Extra，前面两天SQL的结果为 Using where; Using <br>Index ; 而后面两条SQL的结果为: Using index condition 。</p> 
+<table><thead><tr><th><strong>Extra</strong></th><th><strong>含义</strong></th></tr></thead><tbody><tr><td>Using where; Using Index</td><td>查找使用了索引，但是需要的数据都在索引列中能找到，所以不需要回表查询数据</td></tr><tr><td>Using index condition</td><td>查找使用了索引，但是需要回表查询数据</td></tr></tbody></table> 
+<p>因为，在tb_user表中有一个联合索引 idx_user_pro_age_sta，该索引关联了三个字段 <br>profession、age、status，而这个索引也是一个二级索引，所以叶子节点下面挂的是这一行的主 <br>键id。 所以当我们查询返回的数据在 id、profession、age、status 之中，则直接走二级索引 <br>直接返回数据了。 如果超出这个范围，就需要拿到主键id，再去扫描聚集索引，再获取额外的数据<br>了，这个过程就是回表。 而我们如果一直使用select * 查询返回所有字段值，很容易就会造成回表 <br>查询（除非是根据主键查询，此时只会扫描聚集索引）。</p> 
+<p>为了大家更清楚的理解，什么是覆盖索引，什么是回表查询，我们一起再来看下面的这组SQL的执行过 <br>程。<br><img src="https://images2.imgbox.com/57/2c/qgVXYAdr_o.png" alt="image.png"><br>id是主键，是一个聚集索引。 name字段建立了普通索引，是一个二级索引（辅助索引）。</p> 
+<p>B. 执行SQL :</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> id <span class="token operator">=</span> <span class="token number">2</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/a0/86/QHxJuTS1_o.png" alt="image.png"><br>根据id查询，直接走聚集索引查询，一次索引扫描，直接返回数据，性能高。</p> 
+<p>C. 执行SQL：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> id<span class="token punctuation">,</span>name <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> name <span class="token operator">=</span> <span class="token string">'Arm'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/9e/b9/oxpOeVbb_o.png" alt="image.png"><br>虽然是根据name字段查询，查询二级索引，但是由于查询返回在字段为 id，name，在name的二级索 <br>引中，这两个值都是可以直接获取到的，因为覆盖索引，所以不需要回表查询，性能高。</p> 
+<p>D. 执行SQL：</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> id<span class="token punctuation">,</span>name<span class="token punctuation">,</span>gender <span class="token keyword">from</span> tb_user <span class="token keyword">where</span> name <span class="token operator">=</span> <span class="token string">'Arm'</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/ef/81/ntwgt13o_o.png" alt="image.png"><br>由于在name的二级索引中，不包含gender，所以，需要两次索引扫描，也就是需要回表查询，性能相 <br>对较差一点。<br>思考题： <br>一张表, 有四个字段(id, username, password, status), 由于数据量大, 需要对 <br>以下SQL语句进行优化, 该如何进行才是最优方案: <br>select id,username,password from tb_user where username = <br>‘itcast’; <br>答案: 针对于 username, password建立联合索引, sql为: create index <br>idx_user_name_pass on tb_user(username,password); <br>这样可以避免上述的SQL语句，在查询的过程中，出现回表查询。</p> 
+<p></p> 
+<h6><a id="267__609"></a>2.6.7 前缀索引</h6> 
+<p>当字段类型为字符串（varchar，text，longtext等）时，有时候需要索引很长的字符串，这会让 <br>索引变得很大，查询时，浪费大量的磁盘IO， 影响查询效率。此时可以只将字符串的一部分前缀，建 <br>立索引，这样可以大大节约索引空间，从而提高索引效率。</p> 
+<p>1). 语法</p> 
+<pre><code class="prism language-sql"><span class="token keyword">create</span> <span class="token keyword">index</span> idx_xxxx <span class="token keyword">on</span> table_name<span class="token punctuation">(</span><span class="token keyword">column</span><span class="token punctuation">(</span>n<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">;</span>
+</code></pre> 
+<p>示例: <br>为tb_user表的email字段，建立长度为5的前缀索引。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">create</span> <span class="token keyword">index</span> idx_email_5 <span class="token keyword">on</span> tb_user<span class="token punctuation">(</span>email<span class="token punctuation">(</span><span class="token number">5</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/b6/3b/tklTybP9_o.png" alt="image.png"><br>2). 前缀长度<br>可以根据索引的选择性来决定，而选择性是指不重复的索引值（基数）和数据表的记录总数的比值， <br>索引选择性越高则查询效率越高， 唯一索引的选择性是1，这是最好的索引选择性，性能也是最好的。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">select</span> <span class="token function">count</span><span class="token punctuation">(</span><span class="token keyword">distinct</span> email<span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token function">count</span><span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span> <span class="token keyword">from</span> tb_user <span class="token punctuation">;</span>
+<span class="token keyword">select</span> <span class="token function">count</span><span class="token punctuation">(</span><span class="token keyword">distinct</span> substring<span class="token punctuation">(</span>email<span class="token punctuation">,</span><span class="token number">1</span><span class="token punctuation">,</span><span class="token number">5</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">/</span> <span class="token function">count</span><span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span> <span class="token keyword">from</span> tb_user <span class="token punctuation">;</span>
+</code></pre> 
+<p>3). 前缀索引的查询流程<br><img src="https://images2.imgbox.com/16/71/4x9u44hC_o.png" alt="image.png"></p> 
+<p></p> 
+<h6><a id="268__628"></a>2.6.8 单列索引与联合索引</h6> 
+<p>单列索引：即一个索引只包含单个列。 <br>联合索引：即一个索引包含了多个列。</p> 
+<p>我们先来看看 tb_user 表中目前的索引情况:<br><img src="https://images2.imgbox.com/5b/b2/7mmcE9GM_o.png" alt="image.png"><br>在查询出来的索引中，既有单列索引，又有联合索引。<br>接下来，我们来执行一条SQL语句，看看其执行计划：<br><img src="https://images2.imgbox.com/1e/b1/65pX2Xue_o.png" alt="image.png"><br>通过上述执行计划我们可以看出来，在and连接的两个字段 phone、name上都是有单列索引的，但是 <br>最终mysql只会选择一个索引，也就是说，只能走一个字段的索引，此时是会回表查询的。</p> 
+<p>紧接着，我们再来创建一个phone和name字段的联合索引来查询一下执行计划。</p> 
+<pre><code class="prism language-sql"><span class="token keyword">create</span> <span class="token keyword">unique</span> <span class="token keyword">index</span> idx_user_phone_name <span class="token keyword">on</span> tb_user<span class="token punctuation">(</span>phone<span class="token punctuation">,</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p><img src="https://images2.imgbox.com/69/84/qgmbXZ4t_o.png" alt="image.png"><br>此时，查询时，就走了联合索引，而在联合索引中包含 phone、name的信息，在叶子节点下挂的是对 <br>应的主键id，所以查询是无需回表查询的。</p> 
+<p>在业务场景中，如果存在<strong>多个查询条件</strong>，考虑针对于查询字段建立索引时，建议建立联合索引， <br>而非单列索引。<br>如果查询使用的是联合索引，具体的结构示意图如下：<br><img src="https://images2.imgbox.com/e0/c7/iNMTxzug_o.png" alt="image.png"></p> 
+<p></p> 
+<h4><a id="27__642"></a>2.7 索引设计原则</h4> 
+<p>1). 针对于数据量较大，且查询比较频繁的表建立索引。<br>2). 针对于常作为查询条件（where）、排序（order by）、分组（group by）操作的字段建立索 <br>引。<br>3). 尽量选择区分度高的列作为索引，尽量建立唯一索引，区分度越高，使用索引的效率越高。<br>4). 如果是字符串类型的字段，字段的长度较长，可以针对于字段的特点，建立前缀索引。<br>5). 尽量使用联合索引，<strong>减少单列索引</strong>，查询时，联合索引很多时候可以覆盖索引，节省存储空间， <br>避免回表，提高查询效率。<br>6). 要控制索引的数量，索引并不是多多益善，索引越多，维护索引结构的代价也就越大，会影响增 <br>删改的效率。<br>7). 如果索引列不能存储NULL值，请在创建表时使用NOT NULL约束它。当优化器知道每列是否包含 <br>NULL值时，它可以更好地确定哪个索引最有效地用于查询。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/cbfa95e2f4f2e7c72995a02bd2ffcd81/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">将visio图粘贴到word，无视觉差异</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/24b160d21061831ab48a02cee81a9c65/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">通过字符设备驱动分布操作进行6个灯的操作（ioctl）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

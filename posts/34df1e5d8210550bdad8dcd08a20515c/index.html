@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>中文网页自动导航挑战赛——lora微调ChatGLM经验分享 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="中文网页自动导航挑战赛——lora微调ChatGLM经验分享" />
+<meta property="og:description" content="继续前一篇文章，ChatGLM-6B-int4模型精度稍低，效果不理想，需要微调更大的模型。为此，租了一台32GB的 TESLA V100，来完成这次比赛。本文记录ChatGLM的lora微调下的模型调优过程。 环境配置 本文使用的环境是：
+Miniconda-conda3-Python3.8(ubuntu18.04)-Cuda11.3安装必要的工具包 !pip install peft !pip install cpm_kernels !pip install icetk !git clone https://github.com/THUDM/ChatGLM-6B.git cd ChatGLM-6B !pip install -r requirements.txt 配置GPU import torch device = torch.device(&#39;cuda:0&#39;) 导入工具包 import os import torch import numpy as np import json from transformers import AutoTokenizer, AutoModel, AutoConfig, TrainingArguments, Trainer from peft import LoraConfig, get_peft_model, TaskType from torch.utils.data import Dataset 配置模型及微调参数 导入模型 checkpoint = &#34;THUDM/chatglm-6b&#34; tokenizer = AutoTokenizer.from_pretrained(checkpoint, trust_remote_code=True) model = AutoModel." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/34df1e5d8210550bdad8dcd08a20515c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-06-08T13:46:16+08:00" />
+<meta property="article:modified_time" content="2023-06-08T13:46:16+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">中文网页自动导航挑战赛——lora微调ChatGLM经验分享</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <ul><li>继续前一篇文章，ChatGLM-6B-int4模型精度稍低，效果不理想，需要微调更大的模型。</li><li>为此，租了一台32GB的 TESLA V100，来完成这次比赛。</li><li>本文记录ChatGLM的lora微调下的模型调优过程。</li></ul> 
+<h2><a id="_3"></a>环境配置</h2> 
+<ul><li>本文使用的环境是：<br> <code>Miniconda-conda3-Python3.8(ubuntu18.04)-Cuda11.3</code></li><li>安装必要的工具包</li></ul> 
+<pre><code class="prism language-python">!pip install peft
+!pip install cpm_kernels
+!pip install icetk
+</code></pre> 
+<pre><code class="prism language-python">!git clone https<span class="token punctuation">:</span><span class="token operator">//</span>github<span class="token punctuation">.</span>com<span class="token operator">/</span>THUDM<span class="token operator">/</span>ChatGLM<span class="token operator">-</span>6B<span class="token punctuation">.</span>git
+cd ChatGLM<span class="token operator">-</span>6B
+!pip install <span class="token operator">-</span>r requirements<span class="token punctuation">.</span>txt
+</code></pre> 
+<ul><li>配置GPU</li></ul> 
+<pre><code class="prism language-python"><span class="token keyword">import</span> torch
+device <span class="token operator">=</span> torch<span class="token punctuation">.</span>device<span class="token punctuation">(</span><span class="token string">'cuda:0'</span><span class="token punctuation">)</span>
+</code></pre> 
+<ul><li>导入工具包</li></ul> 
+<pre><code class="prism language-python"><span class="token keyword">import</span> os
+<span class="token keyword">import</span> torch
+<span class="token keyword">import</span> numpy <span class="token keyword">as</span> np
+<span class="token keyword">import</span> json
+<span class="token keyword">from</span> transformers <span class="token keyword">import</span> AutoTokenizer<span class="token punctuation">,</span> AutoModel<span class="token punctuation">,</span> AutoConfig<span class="token punctuation">,</span> TrainingArguments<span class="token punctuation">,</span> Trainer
+<span class="token keyword">from</span> peft <span class="token keyword">import</span> LoraConfig<span class="token punctuation">,</span> get_peft_model<span class="token punctuation">,</span> TaskType
+<span class="token keyword">from</span> torch<span class="token punctuation">.</span>utils<span class="token punctuation">.</span>data <span class="token keyword">import</span> Dataset
+</code></pre> 
+<h2><a id="_32"></a>配置模型及微调参数</h2> 
+<ul><li>导入模型</li></ul> 
+<pre><code class="prism language-python">checkpoint <span class="token operator">=</span> <span class="token string">"THUDM/chatglm-6b"</span>
+tokenizer <span class="token operator">=</span> AutoTokenizer<span class="token punctuation">.</span>from_pretrained<span class="token punctuation">(</span>checkpoint<span class="token punctuation">,</span> trust_remote_code<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+model <span class="token operator">=</span> AutoModel<span class="token punctuation">.</span>from_pretrained<span class="token punctuation">(</span>checkpoint<span class="token punctuation">,</span> trust_remote_code<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+</code></pre> 
+<ul><li>配置lora微调参数</li></ul> 
+<pre><code class="prism language-python"><span class="token keyword">def</span> <span class="token function">load_lora_config</span><span class="token punctuation">(</span>model<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># 设定 lora 微调参数，r=16层可训练参数</span>
+	config <span class="token operator">=</span> LoraConfig<span class="token punctuation">(</span>
+	    task_type<span class="token operator">=</span>TaskType<span class="token punctuation">.</span>CAUSAL_LM<span class="token punctuation">,</span> 
+	    inference_mode<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">,</span>
+	    r<span class="token operator">=</span><span class="token number">8</span><span class="token punctuation">,</span> 
+	    lora_alpha<span class="token operator">=</span><span class="token number">32</span><span class="token punctuation">,</span> 
+	    lora_dropout<span class="token operator">=</span><span class="token number">0.1</span><span class="token punctuation">,</span>
+	    target_modules<span class="token operator">=</span><span class="token punctuation">[</span><span class="token string">"query_key_value"</span><span class="token punctuation">]</span>
+	<span class="token punctuation">)</span>
+        
+	<span class="token keyword">return</span> get_peft_model<span class="token punctuation">(</span>model<span class="token punctuation">,</span> config<span class="token punctuation">)</span>
+</code></pre> 
+<ul><li>配置训练参数</li></ul> 
+<pre><code class="prism language-python">training_args <span class="token operator">=</span> TrainingArguments<span class="token punctuation">(</span>
+        output_dir <span class="token operator">=</span> <span class="token string">"./"</span><span class="token punctuation">,</span>
+        fp16 <span class="token operator">=</span> <span class="token boolean">True</span><span class="token punctuation">,</span>
+        save_steps <span class="token operator">=</span> <span class="token number">1000</span><span class="token punctuation">,</span>
+        save_total_limit <span class="token operator">=</span> <span class="token number">5</span><span class="token punctuation">,</span>
+        gradient_accumulation_steps <span class="token operator">=</span> <span class="token number">4</span><span class="token punctuation">,</span>
+        per_device_train_batch_size <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">,</span>
+        learning_rate <span class="token operator">=</span> <span class="token number">1e-4</span><span class="token punctuation">,</span>
+        max_steps<span class="token operator">=</span><span class="token number">3000</span><span class="token punctuation">,</span>
+        logging_steps<span class="token operator">=</span><span class="token number">100</span><span class="token punctuation">,</span>
+        remove_unused_columns<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">,</span>
+        seed<span class="token operator">=</span><span class="token number">500</span><span class="token punctuation">,</span>
+        data_seed<span class="token operator">=</span><span class="token number">500</span><span class="token punctuation">,</span>
+        group_by_length<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">,</span>
+        dataloader_pin_memory<span class="token operator">=</span><span class="token boolean">False</span>
+    <span class="token punctuation">)</span>
+    
+<span class="token comment"># 配置QADataset和Trainer实例</span>
+train_dataset <span class="token operator">=</span> QADataset<span class="token punctuation">(</span>train_data<span class="token punctuation">,</span> tokenizer<span class="token operator">=</span>tokenizer<span class="token punctuation">)</span>
+trainer <span class="token operator">=</span> ModifiedTrainer<span class="token punctuation">(</span>
+    model<span class="token operator">=</span>model<span class="token punctuation">,</span>
+    train_dataset<span class="token operator">=</span>train_dataset<span class="token punctuation">,</span>
+    args<span class="token operator">=</span>training_args<span class="token punctuation">,</span>
+    data_collator<span class="token operator">=</span>collate_fn<span class="token punctuation">,</span>
+    tokenizer<span class="token operator">=</span>tokenizer
+    <span class="token punctuation">)</span>
+</code></pre> 
+<ul><li>其中 <code>QADataset</code> 和 <code>ModifiedTrainer</code> 的构造可以参考文章：<br> <a href="https://blog.csdn.net/phycoding/article/details/129884586">对 ChatGLM-6B 做 LoRA Fine-tuning</a></li><li>模型训练</li></ul> 
+<pre><code class="prism language-python">trainer<span class="token punctuation">.</span>train<span class="token punctuation">(</span><span class="token punctuation">)</span>
+</code></pre> 
+<h2><a id="_90"></a>调优思路</h2> 
+<h4><a id="prompt_91"></a>prompt构建</h4> 
+<ul><li>由于数据集的 label 数据与自然语言的格式有很大差别，因此模型在参数微调过程中数据的分布变化较大。</li><li>我们对 label 重新进行构造，将其构造成自然语言的形式。</li><li>再对输出的结果进行解析，将其还原为 label 的形式。</li></ul> 
+<h4><a id="_96"></a>数据增广</h4> 
+<ul><li>官方提供的数据集，样本个数为2.4k，为了提高模型的精度和泛化能力，使用以下手段进行数据增广： 
+  <ul><li>同义词替换</li><li>回译</li><li>删改变换</li></ul> </li><li>进行交叉实验验证有效性，通过Bleu分数来评估结果，实验结论如下： 
+  <ul><li>对数据集填入词进行同义词替换，验证结果：替换1个&gt;替换0个&gt;替换5个</li><li>进行中英回译，验证结果：替换1个+回译&gt;替换1个</li><li>对输入句子进行小规模的删改变换，验证结果：不删改变换&gt;删1个+改1个+变换1个</li></ul> </li><li>验证结果分析： 
+  <ul><li>数据集中只有部分样本可以进行同义词替换，因此增加同义词的数量会改变数据集的样本分布，不利于模型的学习，因此只扩充1倍数据效果最优。</li><li>中英回译能够增加模型的泛化性，但受翻译效果的影响，对于本次比赛中的样本，没有显著提升。</li><li>删改变换降低了样本输入输出的匹配度，因此模型精度有所下降。</li></ul> </li></ul> 
+<h4><a id="_110"></a>超参数调优</h4> 
+<ul><li>通过调整学习率、batchsize、学习轮数，进行交叉验证，来选择更好的训练参数。</li><li>实验证明，微调8层lora参数与16层lora参数效果没有明显差距，说明8层参数量已经足够处理本次数据集规模的任务。</li></ul> 
+<h2><a id="_114"></a>生成结果</h2> 
+<ul><li>根据prompt构建方式，反向解析预测标签，生成对应的结果，进行提交。</li></ul> 
+<h2><a id="_117"></a>结果分析</h2> 
+<ul><li>整个ChatGLM-6B模型，在TESLA-V100的32G显卡单卡微调，对于10000个样本的数据集，跑15个epoch的时间大约为10小时。</li><li>训练效率的提升需要使用更多的技术，如DeepSpeed、多卡并行等。</li><li>训练能够达到80%的精度，想要进一步提升精度，有以下几个方向： 
+  <ul><li>使用付费API，进行高精度的回译数据增广</li><li>使用更大的模型</li><li>进行全量参数微调，或者使用更多层数的lora微调</li><li>提高训练的epoch并重新调整学习率，预期能够达到90%以上的精度。(由于时间有限没有进行这部分的实验验证)</li></ul> </li></ul>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/d0efb4c0ca58df216883a99ed55ae439/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">kkfileview介绍安装及使用</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/ebd980cbcc400133b559b9cc33c96661/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">github下载的项目如何上传到gitee</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>vSphere Web Service SDK编程学习（二） - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="vSphere Web Service SDK编程学习（二）" />
+<meta property="og:description" content="概要：VMware是当前主流的桌面虚拟化厂商之一，VMware vSphere是VMware套件的商业名称，包含了虚拟化、管理和界面等。VMware官方提供了vSphere Web Service SDK方便开发者客户端开发，调用vmware API进行开发，vSphere Web Services SDK是目前api中最全面的。本文主要根据官方的sdk、官方的guid文档和网上的分享展开sdk的编程学习。sdk源码提供c#和java两种编译方式，本文主要使用java进行相关说明。
+ws超时设置 vmware vcenter sdk提供的接口都是通过ws的形式，默认设置的超时时间是60秒，实际操作底层资源的时候很容易就会返回类似read time out这样的错误，需要手动设置下ws的超时时间。
+Map var1 = ((BindingProvider)basicConnection.getVimPort()).getRequestContext(); var1.put(&#34;com.sun.xml.internal.ws.connection.timeout&#34;, 3600000); var1.put(&#34;com.sun.xml.internal.ws.request.timeout&#34;, 3600000); 获取MOR信息 访问网址https://vcenterIP/mob/?moid=MOR可以获得目标引用下的相关属性和方法，如下图所示：
+获取host引用下的configManger的代码示例
+final GetMOREF getMOREF = new GetMOREF(connection); final HostConfigManager configManager =(HostConfigManager) getMOREF.entityProps(host, new String[]{&#34;configManager&#34;}).get(&#34;configManager&#34;); 当获取的内容是数组时：
+final GetMOREF getMOREF = new GetMOREF(connection); final ArrayOfHostVirtualNic hostVirtualNicArray = (ArrayOfHostVirtualNic) getMOREF.entityProps(networkSystem,new String[]{&#34;networkInfo.vnic&#34;}).get(&#34;networkInfo.vnic&#34;); 获取根目录下的数据中心：
+BasicConnection basicConnection=initConnection(); GetMOREF getMOREF=new GetMOREF(basicConnection); //获取数据中心MAP Map&lt;String, ManagedObjectReference&gt; dcResults = getMOREF.inFolderByType(basicConnection.getServiceContent().getRootFolder(), &#34;Datacenter&#34;, new RetrieveOptions())； 简单示例 通过mob页面我们可以看到host下设置的虚拟网卡和分布式交换机，我们通过代码来删除这些虚拟网卡和交换机，方便后续主机迁移操作" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/e58a690d836eaec30b5056b1860eb89f/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2021-10-29T09:33:04+08:00" />
+<meta property="article:modified_time" content="2021-10-29T09:33:04+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">vSphere Web Service SDK编程学习（二）</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>概要：VMware是当前主流的桌面虚拟化厂商之一，VMware vSphere是VMware套件的商业名称，包含了虚拟化、管理和界面等。VMware官方提供了vSphere Web Service SDK方便开发者客户端开发，调用vmware API进行开发，vSphere Web Services SDK是目前api中最全面的。本文主要根据官方的sdk、官方的guid文档和网上的分享展开sdk的编程学习。sdk源码提供c#和java两种编译方式，本文主要使用java进行相关说明。</p> 
+<h2>ws超时设置</h2> 
+<p>vmware vcenter sdk提供的接口都是通过ws的形式，默认设置的超时时间是60秒，实际操作底层资源的时候很容易就会返回类似read time out这样的错误，需要手动设置下ws的超时时间。</p> 
+<pre><code>        Map var1 = ((BindingProvider)basicConnection.getVimPort()).getRequestContext();
+        var1.put("com.sun.xml.internal.ws.connection.timeout", 3600000);
+        var1.put("com.sun.xml.internal.ws.request.timeout", 3600000);
+</code></pre> 
+<h2>获取MOR信息</h2> 
+<p>访问网址https://vcenterIP/mob/?moid=MOR可以获得目标引用下的相关属性和方法，如下图所示：</p> 
+<p style="text-align:center;"><img alt="img" src="https://images2.imgbox.com/9f/e5/NZk8JXkR_o.png"></p> 
+<p>获取host引用下的configManger的代码示例</p> 
+<pre><code>final GetMOREF getMOREF = new GetMOREF(connection);
+final HostConfigManager configManager =(HostConfigManager) getMOREF.entityProps(host, new String[]{"configManager"}).get("configManager");
+</code></pre> 
+<p>当获取的内容是数组时：</p> 
+<pre><code>final GetMOREF getMOREF = new GetMOREF(connection);
+final ArrayOfHostVirtualNic hostVirtualNicArray = (ArrayOfHostVirtualNic) getMOREF.entityProps(networkSystem,new String[]{"networkInfo.vnic"}).get("networkInfo.vnic");
+</code></pre> 
+<p>获取根目录下的数据中心：</p> 
+<pre><code>BasicConnection basicConnection=initConnection();
+GetMOREF getMOREF=new GetMOREF(basicConnection);
+//获取数据中心MAP
+Map&lt;String, ManagedObjectReference&gt; dcResults = getMOREF.inFolderByType(basicConnection.getServiceContent().getRootFolder(), "Datacenter", new RetrieveOptions())；
+</code></pre> 
+<h2>简单示例</h2> 
+<p>通过mob页面我们可以看到host下设置的虚拟网卡和分布式交换机，我们通过代码来删除这些虚拟网卡和交换机，方便后续主机迁移操作</p> 
+<blockquote> 
+ <p>删除虚拟网卡</p> 
+</blockquote> 
+<pre><code>## ManagedObjectReference host
+## Connection connection
+final GetMOREF getMOREF = new GetMOREF(connection);
+final VimPortType vimPort = connection.getVimPort();
+
+## 获取networkSystem
+final HostConfigManager configManager = (HostConfigManager) getMOREF.entityProps(host, new String[]{"configManager"}).get("configManager");
+final ManagedObjectReference networkSystem = configManager.getNetworkSystem();
+
+## 获取主机的虚拟网卡
+final ArrayOfHostVirtualNic hostVirtualNicArray = (ArrayOfHostVirtualNic) getMOREF.entityProps(networkSystem, new String[]{"networkInfo.vnic"}).get("networkInfo.vnic");
+
+final List hostVirtualNicList = hostVirtualNicArray.getHostVirtualNic();
+final Iterator iterator = hostVirtualNicList.iterator();
+
+//保留管理网的网卡
+final String keepNicName = "Management Network";
+while (iterator.hasNext()) {
+	final HostVirtualNic hostVirtualNic = (HostVirtualNic) iterator.next();
+	final String portGourpName = hostVirtualNic.getPortgroup();
+	//保留管理网nic，删除其他网卡
+	if(!keepNicName.equals(portGourpName))  {
+		log.info("删除虚拟网卡 {}", hostVirtualNic.getDevice());
+		vimPort.removeVirtualNic(networkSystem, hostVirtualNic.getDevice());
+	}
+}
+</code></pre> 
+<blockquote> 
+ <p>删除分布式逻辑交换机</p> 
+</blockquote> 
+<pre><code>## ManagedObjectReference host
+## Connection connection
+
+final GetMOREF getMOREF = new GetMOREF(connection);
+final VimPortType vimPort = connection.getVimPort();
+
+final ServiceContent serviceContent = connection.getServiceContent();
+//获取分布式逻辑交换机管理的引用
+final ManagedObjectReference dvSwitchManager = serviceContent.getDvSwitchManager();
+
+//获取主机上DistributedVirtualSwitch配置
+//第三个参数传null时获取所有的配置
+final DVSManagerDvsConfigTarget dvsConfigTarget = vimPort.queryDvsConfigTarget(dvSwitchManager, host, null);
+
+final List&lt;DistributedVirtualSwitchInfo&gt; switchInfos = dvsConfigTarget.getDistributedVirtualSwitch();
+
+for (final DistributedVirtualSwitchInfo switchInfo : switchInfos) {
+	log.info("删除分布式交换机switch name:{}, uuid:{}", switchInfo.getSwitchName(), switchInfo.getSwitchUuid());
+	final DistributedVirtualSwitchHostMemberConfigSpec hostSpec = new DistributedVirtualSwitchHostMemberConfigSpec(); 
+    ## 操作为移除
+    hostSpec.setOperation("remove");
+ 	hostSpec.setHost(host);
+	final List&lt;DistributedVirtualSwitchHostMemberConfigSpec&gt; hostSpecs = new ArrayList&lt;&gt;(1);
+	hostSpecs.add(hostSpec);
+    //通过反射塞值
+	Class clazz = DVSConfigSpec.class;
+	final DVSConfigSpec dvsConfigSpec = (DVSConfigSpec) clazz.newInstance();
+	Field declaredField = clazz.getDeclaredField("host");
+	declaredField.setAccessible(true);
+	declaredField.set(dvsConfigSpec, hostSpecs);
+    
+	//获取configVersion，重新配置时需要保持configVersion一致，否则会提示异常
+	final DVSConfigInfo dvsConfigInfo = (DVSConfigInfo) getMOREF.entityProps(switchInfo.getDistributedVirtualSwitch(), new String[]{"config"}).get("config");
+	log.info("dvsConfigInfo version {}" , dvsConfigInfo.getConfigVersion());
+	dvsConfigSpec.setConfigVersion(dvsConfigInfo.getConfigVersion());
+
+	vimPort.reconfigureDvsTask( switchInfo.getDistributedVirtualSwitch(), dvsConfigSpec);
+	}
+}</code></pre> 
+<p>作者：郑行家</p> 
+<p>链接：<a href="https://ecloud.10086.cn/api/query/developer/user/home.html?ticket=ST-10661-F0Xta3DdF4DK5IbJfcqg#L2FwaS9xdWVyeS9kZXZlbG9wZXIvYmxvZy9ibG9nZGV0YWlsLmh0bWw/YmxvZ19pZD05ZDBhNjAyMTQ4Y2E0OWQyYmQ5NDA2N2U4ZDA0Njk0Mw==" rel="nofollow" title="https://ecloud.10086.cn/api/query/developer/user/home.html?ticket=ST-10661-F0Xta3DdF4DK5IbJfcqg#L2FwaS9xdWVyeS9kZXZlbG9wZXIvYmxvZy9ibG9nZGV0YWlsLmh0bWw/YmxvZ19pZD05ZDBhNjAyMTQ4Y2E0OWQyYmQ5NDA2N2U4ZDA0Njk0Mw==">https://ecloud.10086.cn/api/query/developer/user/home.html?ticket=ST-10661-F0Xta3DdF4DK5IbJfcqg#L2FwaS9xdWVyeS9kZXZlbG9wZXIvYmxvZy9ibG9nZGV0YWlsLmh0bWw/YmxvZ19pZD05ZDBhNjAyMTQ4Y2E0OWQyYmQ5NDA2N2U4ZDA0Njk0Mw==</a></p> 
+<p>来源： <a href="https://ecloud.10086.cn/api/query/developer/user/home.html?ticket=ST-10661-F0Xta3DdF4DK5IbJfcqg#L2FwaS9xdWVyeS9kZXZlbG9wZXIvYmxvZy9ibG9nZGV0YWlsLmh0bWw/YmxvZ19pZD05ZDBhNjAyMTQ4Y2E0OWQyYmQ5NDA2N2U4ZDA0Njk0Mw==" rel="nofollow" title="移动云开发者社区">移动云开发者社区</a></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/6d86cadbf53726c332c2a7eccd6190ad/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">有关Horizon View 使用AVI做负载均衡的POC试验</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/51f3173e57c4d7422e0538a6773564e3/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">云手机产品介绍</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

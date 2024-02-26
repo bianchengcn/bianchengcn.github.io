@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>使用Qt线程 &#43; FFmpeg获取视频流并显示图像到窗口 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="使用Qt线程 &#43; FFmpeg获取视频流并显示图像到窗口" />
+<meta property="og:description" content="#ifndef FFMPEG_GET_IMAGE_RUNNABLE_H #define FFMPEG_GET_IMAGE_RUNNABLE_H #include &lt;QObject&gt; #include &lt;QString&gt; #include &lt;QPixmap&gt; #include &lt;QMutex&gt; class ffmpeg_get_image_worker : public QObject { Q_OBJECT public: ffmpeg_get_image_worker(); ~ffmpeg_get_image_worker(); void doWork(); void stopWork(); void clear(); const QPixmap *getPixmap() const; QString getStateString(); void setVideoPath(const QString &amp;value); bool getIsRunning() const; static int getRunningWorker(); QString getVideoPath() const; signals: void sendPixmap(const QPixmap &amp;); void finished(); private: enum class workerStateType { noPlay, playing, getStreamImageFailed, videoPathIsEmpty, openStreamFailed, readStreamFailed, noFildVideoStream, noFildCodec, openCodecFailed }; bool isRunning{false}; QString videoPath; QPixmap pixmap; workerStateType workerState{workerStateType::noPlay}; QMutex mutex; struct AVFormatContext * pFormatCtx{nullptr}; struct AVCodecContext * pCodecCtx{nullptr}; struct SwsContext *img_convert_ctx{nullptr}; struct AVFrame * pFrame{nullptr}; struct AVFrame * pFrameRGB{nullptr}; struct AVPacket * packet{nullptr}; struct AVDictionary *options{nullptr}; static int runningWorker; }; #endif // FFMPEG_GET_IMAGE_RUNNABLE_H #include &#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/b322775d94ac8ff5ac7f0596ec7ce828/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-03-28T15:52:53+08:00" />
+<meta property="article:modified_time" content="2022-03-28T15:52:53+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">使用Qt线程 &#43; FFmpeg获取视频流并显示图像到窗口</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <pre><code class="language-cpp">#ifndef FFMPEG_GET_IMAGE_RUNNABLE_H
+#define FFMPEG_GET_IMAGE_RUNNABLE_H
+
+#include &lt;QObject&gt;
+#include &lt;QString&gt;
+#include &lt;QPixmap&gt;
+#include &lt;QMutex&gt;
+
+class ffmpeg_get_image_worker : public QObject
+{
+    Q_OBJECT
+public:
+    ffmpeg_get_image_worker();
+    ~ffmpeg_get_image_worker();
+    void doWork();
+    void stopWork();
+    void clear();
+
+    const QPixmap *getPixmap() const;
+    QString getStateString();
+
+    void setVideoPath(const QString &amp;value);
+
+    bool getIsRunning() const;
+
+    static int getRunningWorker();
+
+    QString getVideoPath() const;
+
+signals:
+    void sendPixmap(const QPixmap &amp;);
+    void finished();
+
+private:
+    enum class workerStateType
+    {
+        noPlay,
+        playing,
+        getStreamImageFailed,
+        videoPathIsEmpty,
+        openStreamFailed,
+        readStreamFailed,
+        noFildVideoStream,
+        noFildCodec,
+        openCodecFailed
+    };
+
+    bool isRunning{false};
+    QString videoPath;
+    QPixmap pixmap;
+    workerStateType workerState{workerStateType::noPlay};
+    QMutex mutex;
+
+    struct AVFormatContext * pFormatCtx{nullptr};
+    struct AVCodecContext * pCodecCtx{nullptr};
+    struct SwsContext *img_convert_ctx{nullptr};
+    struct AVFrame * pFrame{nullptr};
+    struct AVFrame * pFrameRGB{nullptr};
+    struct AVPacket * packet{nullptr};
+    struct AVDictionary *options{nullptr};
+
+    static int runningWorker;
+};
+
+#endif // FFMPEG_GET_IMAGE_RUNNABLE_H</code></pre> 
+<pre><code class="language-cpp">#include "ffmpeg_get_image_worker.h"
+#include &lt;QDebug&gt;
+#include &lt;QThread&gt;
+
+extern "C"
+{
+    #include &lt;libavcodec/avcodec.h&gt;
+    #include &lt;libavformat/avformat.h&gt;
+    #include &lt;libswscale/swscale.h&gt;
+    #include &lt;libavdevice/avdevice.h&gt;
+    #include &lt;libavformat/version.h&gt;
+    #include &lt;libavutil/time.h&gt;
+    #include &lt;libavutil/mathematics.h&gt;
+    #include &lt;libavutil/imgutils.h&gt;
+};
+
+int ffmpeg_get_image_worker::runningWorker = 0;
+ffmpeg_get_image_worker::ffmpeg_get_image_worker()
+    :QObject()
+{
+}
+
+ffmpeg_get_image_worker::~ffmpeg_get_image_worker()
+{
+    clear();
+}
+
+void ffmpeg_get_image_worker::doWork()
+{
+    ++runningWorker;
+    if(videoPath.isEmpty())
+    {
+        workerState = workerStateType::videoPathIsEmpty;
+        isRunning = false;
+        clear();
+        return;
+    }
+    isRunning = true;
+
+    avformat_network_init();//初始化网络
+
+    //设置传输协议为TCP协议
+    av_dict_set(&amp;options, "rtsp_transport", "tcp", 0);
+
+    // 设置TCP连接最大延时时间
+    av_dict_set(&amp;options, "max_delay", "100", 0);
+
+    // 设置“buffer_size”缓存容量
+    av_dict_set(&amp;options, "buffer_size", "1024000", 0);
+
+    // 设置avformat_open_input超时时间为3秒
+    av_dict_set(&amp;options, "stimeout", "3000000", 0);
+
+    //打开视频文件
+    auto result = avformat_open_input(&amp;pFormatCtx,qPrintable(videoPath),nullptr,&amp;options);
+    if(result != 0)
+    {
+        workerState = workerStateType::openStreamFailed;
+        qDebug()&lt;&lt;"打开流失败"&lt;&lt;result;
+        isRunning = false;
+        clear();
+        return;
+    }
+
+    //获取多媒体流的信息（视频文件信息），一个视频文件中可能会同时包括视频文件、音频文件、字幕文件等多个媒体流。
+    if(avformat_find_stream_info(pFormatCtx,nullptr) != 0)
+    {
+        qDebug()&lt;&lt;"获取视频文件信息失败";
+        workerState = workerStateType::readStreamFailed;
+        isRunning = false;
+        clear();
+        return;
+    }
+
+    //从多个媒体流中找到视频流
+    int videoindex = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    if(videoindex == -1)
+    {
+        qDebug()&lt;&lt;"未发现视频流";
+        workerState = workerStateType::noFildVideoStream;
+        isRunning = false;
+        clear();
+        return;
+    }
+
+    auto pCodecParameter = pFormatCtx-&gt;streams[videoindex]-&gt;codecpar;
+    auto pCodec = avcodec_find_decoder(pCodecParameter-&gt;codec_id);
+    if(pCodec == nullptr)
+    {
+        workerState = workerStateType::noFildCodec;
+        qDebug()&lt;&lt;"未找到编解码器";
+        isRunning = false;
+        clear();
+        return;
+    }
+
+    pCodecCtx = avcodec_alloc_context3(pCodec);//初始化一个编解码上下文
+
+    //pCodecParameter中的流参数复制到pCodecCtx
+    avcodec_parameters_to_context(pCodecCtx,pCodecParameter);
+
+    if(avcodec_open2(pCodecCtx, pCodec,nullptr) &lt; 0)   //打开解码器，使用pCodec初始化pCodecCtx
+    {
+        workerState = workerStateType::openCodecFailed;
+        qDebug()&lt;&lt;"未打开编解码器";
+        isRunning = false;
+        clear();
+        return;
+    }
+
+    pFrame = av_frame_alloc();//存放从AVPacket中解码出来的原始数据
+    pFrameRGB = av_frame_alloc();//存放原始数据转换的目标数据
+
+    packet = av_packet_alloc();
+    av_new_packet(packet, pCodecCtx-&gt;width * pCodecCtx-&gt;height);//分配packet的有效载荷并初始化其字段
+
+    //av_image_get_buffer_size：返回存储给定参数的图像数据所需数据量的大小（以字节为单位）
+    //av_malloc：分配适合所有内存访问的对齐方式的内存块
+    auto buf = static_cast&lt;uchar *&gt;(av_malloc(static_cast&lt;size_t&gt;(av_image_get_buffer_size(AV_PIX_FMT_RGB32,
+                                                                                           pCodecCtx-&gt;width,
+                                                                                           pCodecCtx-&gt;height, 1))));
+
+    //根据后5个参数的内容填充前两个参数，成功返回源图像的大小，失败返回一个负值
+    if(av_image_fill_arrays(pFrameRGB-&gt;data,   // 需要填充的图像数据指针
+                         pFrameRGB-&gt;linesize,
+                         buf,
+                         AV_PIX_FMT_RGB32, //图像的格式
+                         pCodecCtx-&gt;width,
+                         pCodecCtx-&gt;height,
+                         1) &lt; 0)    //图像数据中linesize的对齐
+    {
+        workerState = workerStateType::getStreamImageFailed;
+        qDebug()&lt;&lt;"获取流图像失败";
+        isRunning = false;
+        clear();
+        return;
+    }
+
+    //用于视频图像的转换，将源数据转换为目标数据
+    img_convert_ctx = sws_getContext(pCodecCtx-&gt;width,
+                                    pCodecCtx-&gt;height,
+                                    pCodecCtx-&gt;pix_fmt,
+                                    pCodecCtx-&gt;width,
+                                    pCodecCtx-&gt;height,
+                                    AV_PIX_FMT_RGB32,
+                                    SWS_BICUBIC,
+                                    nullptr,
+                                    nullptr,
+                                    nullptr);
+
+    workerState = workerStateType::playing;
+    while(av_read_frame(pFormatCtx, packet) &gt;= 0)
+    {
+        if(!isRunning)
+        {
+            break;
+        }
+
+        if(packet-&gt;stream_index == videoindex)//此流是视频流
+        {
+            //解码一帧视频数据
+            //提供原始数据包数据作为解码器的输入
+             if(avcodec_send_packet(pCodecCtx, packet) != 0)
+             {
+                 qDebug()&lt;&lt;"输入待解码的数据出错";
+                 continue;
+             }
+
+             if(avcodec_receive_frame(pCodecCtx, pFrame) != 0)
+             {
+                 qDebug()&lt;&lt;"从解码器返回解码后的输出数据出错";
+                 continue;
+             }
+
+             //此函数可以：1.图像色彩空间转换；2.分辨率缩放；3.前后图像滤波处理。
+             sws_scale(img_convert_ctx,
+                       static_cast&lt;const uchar* const*&gt;(pFrame-&gt;data),
+                       pFrame-&gt;linesize,
+                       0,
+                       pCodecCtx-&gt;height,
+                       pFrameRGB-&gt;data,
+                       pFrameRGB-&gt;linesize);
+
+             pixmap = QPixmap::fromImage(QImage(static_cast&lt;uchar*&gt;(pFrameRGB-&gt;data[0]),
+                                                pCodecCtx-&gt;width,
+                                                pCodecCtx-&gt;height,
+                                                QImage::Format_RGB32));
+//             emit sendPixmap(QPixmap::fromImage(QImage((uchar*)pFrameRGB-&gt;data[0],
+//                                                               pCodecCtx-&gt;width,
+//                                                               pCodecCtx-&gt;height,
+//                                                               QImage::Format_RGB32)));
+
+             QThread::msleep(40);
+        }
+    }
+
+    clear();
+}
+
+void ffmpeg_get_image_worker::stopWork()
+{
+    QMutexLocker locker(&amp;mutex);
+    isRunning = false;
+    workerState = workerStateType::noPlay;
+    qDebug()&lt;&lt;"停止工作";
+}
+
+void ffmpeg_get_image_worker::clear()
+{
+    if(img_convert_ctx)
+        sws_freeContext(img_convert_ctx);
+    if(pFrameRGB)
+        av_frame_free(&amp;pFrameRGB);
+    if(pFrame)
+        av_frame_free(&amp;pFrame);
+    if(pCodecCtx)
+        avcodec_close(pCodecCtx);
+    if(pFormatCtx)
+        avformat_close_input(&amp;pFormatCtx);
+    if(packet)
+        av_packet_free(&amp;packet);
+    if(options)
+        av_dict_free(&amp;options);
+
+    img_convert_ctx = nullptr;
+    pFrameRGB = nullptr;
+    pFrame = nullptr;
+    pCodecCtx = nullptr;
+    pFormatCtx = nullptr;
+    packet = nullptr;
+    options = nullptr;
+    pixmap = QPixmap();
+
+    emit finished();
+    --runningWorker;
+}
+
+const QPixmap * ffmpeg_get_image_worker::getPixmap() const
+{
+    return &amp;pixmap;
+}
+
+QString ffmpeg_get_image_worker::getStateString()
+{
+    switch (workerState)
+    {
+        case workerStateType::noPlay:return tr("未播放");
+        case workerStateType::playing:return tr("正在播放");
+        case workerStateType::noFildCodec:return tr("未找到编解码器");
+        case workerStateType::openCodecFailed:return tr("未打开编解码器");
+        case workerStateType::openStreamFailed:return tr("打开流失败");
+        case workerStateType::readStreamFailed:return tr("获取视频流信息失败");
+        case workerStateType::videoPathIsEmpty:return tr("未设置视频地址");
+        case workerStateType::noFildVideoStream:return tr("未发现视频流");
+        case workerStateType::getStreamImageFailed:return tr("获取流图像失败，可能是多处在获取同一视频流");
+    }
+}
+
+void ffmpeg_get_image_worker::setVideoPath(const QString &amp;value)
+{
+    videoPath = value;
+}
+
+bool ffmpeg_get_image_worker::getIsRunning() const
+{
+    return isRunning;
+}
+
+int ffmpeg_get_image_worker::getRunningWorker()
+{
+    return runningWorker;
+}
+
+QString ffmpeg_get_image_worker::getVideoPath() const
+{
+    return videoPath;
+}</code></pre> 
+<p>窗口：</p> 
+<pre><code class="language-cpp">#ifndef FORM_H
+#define FORM_H
+
+#include &lt;QWidget&gt;
+#include &lt;QThread&gt;
+
+class Form : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit Form(QWidget *parent = nullptr);
+    ~Form();
+    void onSendPixmap(const QPixmap &amp; pixmap);
+    void onSendPixmap2(const QPixmap &amp; pixmap);
+
+signals:
+    void threadStartWork();
+    void threadStopWork();
+
+private:
+    void threadRun();
+    void stopThread();
+
+    void onWorkered();
+    QThread workerThread1;
+    QThread workerThread2;
+    class ffmpeg_get_image_worker * oneThread;
+    ffmpeg_get_image_worker * twoThread;
+    class QLabel * label1;
+    QLabel * label2;
+};
+
+#endif // FORM_H</code></pre> 
+<pre><code class="language-cpp">#include "form.h"
+#include &lt;QLabel&gt;
+#include &lt;QVBoxLayout&gt;
+#include &lt;QHBoxLayout&gt;
+#include &lt;QPushButton&gt;
+#include &lt;QDebug&gt;
+#include "ffmpeg_get_image_worker.h"
+
+Form::Form(QWidget *parent) :
+    QWidget(parent)
+{
+    QVBoxLayout * vb = new QVBoxLayout(this);
+    label1 = new QLabel;
+    label2 = new QLabel;
+    QHBoxLayout * hb = new QHBoxLayout;
+    hb-&gt;addWidget(label1);
+    hb-&gt;addWidget(label2);
+    hb-&gt;setSizeConstraint(QHBoxLayout::SetMinAndMaxSize);
+    vb-&gt;addLayout(hb);
+
+    hb = new QHBoxLayout;
+    QPushButton * btn = new QPushButton("开始");
+    connect(btn,&amp;QPushButton::clicked,this,&amp;Form::threadRun);
+    hb-&gt;addStretch();
+    hb-&gt;addWidget(btn);
+    btn = new QPushButton("停止");
+    connect(btn,&amp;QPushButton::clicked,this,&amp;Form::stopThread);
+    hb-&gt;addWidget(btn);
+    vb-&gt;addLayout(hb);
+
+    QString path1 = "http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8";
+
+//    QString path1 = "D:\\test.avi";
+
+    oneThread = new ffmpeg_get_image_worker();//这里不能设置父对象否则不能移到线程里
+    oneThread-&gt;setVideoPath(path1);
+    oneThread-&gt;moveToThread(&amp;workerThread1);
+    connect(this,&amp;Form::threadStartWork,oneThread,&amp;ffmpeg_get_image_worker::doWork);
+    connect(this,&amp;Form::threadStopWork,oneThread,&amp;ffmpeg_get_image_worker::stopWork,Qt::DirectConnection);
+    connect(oneThread,&amp;ffmpeg_get_image_worker::sendPixmap,this,&amp;Form::onSendPixmap);
+    connect(oneThread,&amp;ffmpeg_get_image_worker::finished,this,&amp;Form::onWorkered);
+
+    twoThread = new ffmpeg_get_image_worker();
+    twoThread-&gt;setVideoPath(path1);
+    twoThread-&gt;moveToThread(&amp;workerThread2);
+    connect(this,&amp;Form::threadStartWork,twoThread,&amp;ffmpeg_get_image_worker::doWork);
+    connect(this,&amp;Form::threadStopWork,twoThread,&amp;ffmpeg_get_image_worker::stopWork,Qt::DirectConnection);
+    connect(twoThread,&amp;ffmpeg_get_image_worker::sendPixmap,this,&amp;Form::onSendPixmap2);
+    connect(twoThread,&amp;ffmpeg_get_image_worker::finished,this,&amp;Form::onWorkered);
+}
+
+Form::~Form()
+{
+    emit threadStopWork();
+
+    if(workerThread1.isRunning())
+    {
+        workerThread1.quit();
+        workerThread1.wait();
+    }
+
+    if(workerThread2.isRunning())
+    {
+        workerThread2.quit();
+        workerThread2.wait();
+    }
+
+    oneThread-&gt;deleteLater();
+    twoThread-&gt;deleteLater();
+}
+
+void Form::onSendPixmap(const QPixmap &amp;pixmap)
+{
+    label1-&gt;setPixmap(pixmap.scaled(label1-&gt;size()));
+}
+
+void Form::onSendPixmap2(const QPixmap &amp;pixmap)
+{
+    label2-&gt;setPixmap(pixmap.scaled(label2-&gt;size()));
+}
+
+void Form::threadRun()
+{
+    if(!workerThread1.isRunning())
+    {
+        qDebug()&lt;&lt;"启动线程1";
+        workerThread1.start();
+    }
+    if(!workerThread2.isRunning())
+    {
+        qDebug()&lt;&lt;"启动线程2";
+        workerThread2.start();
+    }
+
+    emit threadStartWork();
+}
+
+void Form::stopThread()
+{
+    emit threadStopWork();
+}
+
+void Form::onWorkered()
+{
+    auto worker = sender();
+    if(worker == oneThread)
+    {
+        qDebug()&lt;&lt;"终止线程1";
+        workerThread1.quit();
+        workerThread1.wait();
+    }
+    else if(worker == twoThread)
+    {
+        qDebug()&lt;&lt;"终止线程2";
+        workerThread2.quit();
+        workerThread2.wait();
+    }
+}</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/28f28ba66168450a113543ad1c6b9806/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">rundll32.exe和regsvr32.exe</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/335ae354e20a6bbff40a617887366223/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">N皇后问题(c语言实现)</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

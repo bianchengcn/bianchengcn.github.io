@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Unity3D——Mecanim动画 AnimatorTransitionInfo和AnimatorStateInfo 在角色移动和待机平滑切换中的应用 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Unity3D——Mecanim动画 AnimatorTransitionInfo和AnimatorStateInfo 在角色移动和待机平滑切换中的应用" />
+<meta property="og:description" content="在之前的开发过程中一直仅仅使用到了 AnimatorStateInfo 这货，平时在做一些判断的时候还特意加入一个判断!Animator.IsInTransition(0) 来确定当前这个 Animator 没有在进行动画过渡，可是这几天同事们总是反应游戏中主角移动起步很慢和停止移动的时候会出现滑步的情况，这个不能忍，听得我很是汗颜啊。
+好吧，汗颜的事情就先不表了，我们来看看这个可能是神马问题吧。通常我们游戏当中，角色都会有一个待机的动作，跑步和行走都会有相应地动作，而不同的动作之间的切换，Unity3D 会自行做动画融合，这样主角从待机动作切换到跑步的动作时，就不会出现一帧直接切换导致看起来非常机械和卡顿的问题，看起来整个过程会是非常平滑的，这个就是我们要谈到的重点了。
+在之前的实现中，我在主角的移动控制脚本 PlayerMovement 中使用了一段这样的代码来判断当前女主角已经成功的从 Idle 状态切换到 Locomotion 状态了
+AnimatorStateInfo animInfo = animator.GetCurrentAnimatorStateInfo (0); if (animInfo.isName (&#34;Locomotion&#34;)) { // 这里控制角色的位置移动 } 然后在控制角色位置移动的代码段中，我们根据需要进行计算获得女主角在不同坐标上的移动位置，然后将位移作用到角色上。
+但是这样做会有什么问题呢？
+首先，当角色在从 Idle 切换到 Locomotion 动画的过渡中时，上面的这段代码会直接忽略动画过渡的这段时间，所以在女主角从静止起步到跑步的过程中，Animator 实际上一直都会保持为 Idle 的状态，直到整个 Transition 完成了，Animator 的 State 才会切换到 Locomotion，这样的话女主角实际上是在原地播放了这个过渡的动画，而这段时间的动画中，女主角的脚步会从静止切换到小碎步，再到大步跑，而这个时候女主角的位置不会发生变化（没有在女主角跑动动画对应的方向上移动），最终的结果就是主角看起来反应非常慢，起步的时候会出现卡顿，要在原地跑一段时间之后才会移动，这显然是不能接受的。 其次，当角色从 Locomotion 切换到 Idle 动画的过渡中时，依然会出现逻辑被忽略的情况，也就是角色实际上已经在从 Locomotion 切换到 Idle 了，角色的脚步动作越来越小了，但是因为 Animator 的设计是在切换过程中，State 的名字不会改变，会保持为状态切换之前的状态名，也就是在动画完全切换到 Idle 之前，State 的名字一直都是 Locomotion，所以主角在这个时间里头，逻辑会让主角继续运动（因为它满足上面的逻辑，所以还会计算位移，并应用到角色对象上），最终的结果就是看起来主角的跑步动画已经停止但是身体还在动画方向上做位移，出现滑步了，尼玛啊。 既然已经找到问题了，那么我们就肯定有办法来解决它。既然我们知道了动画在切换的过程中可以通过 AnimatorTransitionInfo 来获取过渡的信息，那么就有办法了，首先我们能确定 Idle 到 Locomotion 和 Locomotion 到 Idle 的 nameHash 值，通过比对这两个值就能明确知道当前 Animator 是从哪个状态切换到哪个状态了，然后根据 AnimatorTransitionInfo." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/eeafe17ba7df5fdce66452b1f91836a9/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2016-11-14T16:06:53+08:00" />
+<meta property="article:modified_time" content="2016-11-14T16:06:53+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Unity3D——Mecanim动画 AnimatorTransitionInfo和AnimatorStateInfo 在角色移动和待机平滑切换中的应用</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> 在之前的开发过程中一直仅仅使用到了 AnimatorStateInfo 这货，平时在做一些判断的时候还特意加入一个判断!Animator.IsInTransition(0) 来确定当前这个 Animator 没有在进行动画过渡，可是这几天同事们总是反应游戏中主角移动起步很慢和停止移动的时候会出现滑步的情况，这个不能忍，听得我很是汗颜啊。</p> 
+<p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> 好吧，汗颜的事情就先不表了，我们来看看这个可能是神马问题吧。通常我们游戏当中，角色都会有一个待机的动作，跑步和行走都会有相应地动作，而不同的动作之间的切换，Unity3D 会自行做动画融合，这样主角从待机动作切换到跑步的动作时，就不会出现一帧直接切换导致看起来非常机械和卡顿的问题，看起来整个过程会是非常平滑的，这个就是我们要谈到的重点了。</p> 
+<p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> 在之前的实现中，我在主角的移动控制脚本 PlayerMovement 中使用了一段这样的代码来判断当前女主角已经成功的从 Idle 状态切换到 Locomotion 状态了</p> 
+<p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> </p> 
+<pre><code class="language-csharp">AnimatorStateInfo animInfo = animator.GetCurrentAnimatorStateInfo (0);
+if (animInfo.isName ("Locomotion")) {
+    // 这里控制角色的位置移动
+}</code></pre> 
+<br> 
+<br> 
+<p></p> 
+<p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> 然后在控制角色位置移动的代码段中，我们根据需要进行计算获得女主角在不同坐标上的移动位置，然后将位移作用到角色上。</p> 
+<p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> 但是这样做会有什么问题呢？</p> 
+<ul style='margin:0px 0px 1.71429rem; padding:0px; border:0px; font-size:14px; vertical-align:baseline; list-style-position:outside; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'><li style="margin:0px 0px 0px 2.57143rem; padding:0px; border:0px; vertical-align:baseline"> 首先，当角色在从 Idle 切换到 Locomotion 动画的过渡中时，上面的这段代码会直接忽略动画过渡的这段时间，所以在女主角从静止起步到跑步的过程中，Animator 实际上一直都会保持为 Idle 的状态，直到整个 Transition 完成了，Animator 的 State 才会切换到 Locomotion，这样的话女主角实际上是在原地播放了这个过渡的动画，而这段时间的动画中，女主角的脚步会从静止切换到小碎步，再到大步跑，而这个时候女主角的位置不会发生变化（没有在女主角跑动动画对应的方向上移动），最终的结果就是主角看起来反应非常慢，起步的时候会出现卡顿，要在原地跑一段时间之后才会移动，这显然是不能接受的。</li><li style="margin:0px 0px 0px 2.57143rem; padding:0px; border:0px; vertical-align:baseline"> 其次，当角色从 Locomotion 切换到 Idle 动画的过渡中时，依然会出现逻辑被忽略的情况，也就是角色实际上已经在从 Locomotion 切换到 Idle 了，角色的脚步动作越来越小了，但是因为 Animator 的设计是在切换过程中，State 的名字不会改变，会保持为状态切换之前的状态名，也就是在动画完全切换到 Idle 之前，State 的名字一直都是 Locomotion，所以主角在这个时间里头，逻辑会让主角继续运动（因为它满足上面的逻辑，所以还会计算位移，并应用到角色对象上），最终的结果就是看起来主角的跑步动画已经停止但是身体还在动画方向上做位移，出现滑步了，尼玛啊。</li></ul> 
+<p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> 既然已经找到问题了，那么我们就肯定有办法来解决它。既然我们知道了动画在切换的过程中可以通过 AnimatorTransitionInfo 来获取过渡的信息，那么就有办法了，首先我们能确定 Idle 到 Locomotion 和 Locomotion 到 Idle 的 nameHash 值，通过比对这两个值就能明确知道当前 Animator 是从哪个状态切换到哪个状态了，然后根据 AnimatorTransitionInfo.normalizedTime 可以获取到过渡的进度信息，这样一来我们就能准确的计算出来动画过渡的过程中，角色应有的运动速度了，例如从 Idle 切换到 Locomotion 是从速度 0 到速度 4m/s，那么在 Idle 切换到 Locomotion 的过程中通过 <span style="margin:0px; padding:0px; border:0px; vertical-align:baseline; font-family:Menlo"><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline; color:rgb(51,99,164)">Mathf</span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline">.</span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline">Lerp</span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline"> (</span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline; color:rgb(245,124,0)">0</span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline">, </span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline">4</span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline">, </span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline">normalizedTime</span><span style="margin:0px; padding:0px; border:0px; vertical-align:baseline">)</span></span> 就可以获取实时速度了。最终代码如下：</p> 
+<p style='margin-top:0px; margin-bottom:1.71429rem; padding-top:0px; padding-bottom:0px; border:0px; font-size:14px; vertical-align:baseline; line-height:1.71429; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> </p> 
+<pre><code class="language-csharp">int hashIdle2Locomotion = Animator.StringToHash ("Base Layer.Idle -&gt; Base Layer.Locomotion");
+int hashLocomotion2Idle = Animator.StringToHash ("Base Layer.Locomotion -&gt; Base Layer.Idle");
+float moveSpeed = 4f;
+float speed = 0f;    
+if (animator.IsInTransition (0)) {
+    AnimatorTransitionInfo transitionInfo = animator.GetAnimatorTransitionInfo (0);
+    float normalizedTime = transitionInfo.normalizedTime;
+    if (transitionInfo.nameHash == hashIdle2Locomotion) {
+        speed = Mathf.Lerp (0, moveSpeed, normalizedTime);
+    } else if (transitionInfo.nameHash == hashLocomotion2Idle) {
+        speed = Mathf.Lerp (moveSpeed, 0, normalizedTime);
+    }
+} else if (animInfo.IsName ("Locomotion")) {
+    speed = moveSpeed;
+} else if (animInfo.IsName ("Idle")) {
+    speed = 0f;
+}</code></pre> 
+<br> 来源： 
+<p></p> 
+<h2 class="site-title" style='margin:0px; padding:0px; border:0px; font-size:1.85714rem; vertical-align:baseline; clear:both; line-height:1.84615; color:rgb(68,68,68); font-family:"Open Sans",Helvetica,Arial,sans-serif'> <a target="_blank" href="http://7dot9.com/2015/05/11/unity3d-mecanim%E5%8A%A8%E7%94%BBanimatortransitioninfo%E5%92%8Canimatorstateinfo%E5%9C%A8%E8%A7%92%E8%89%B2%E7%A7%BB%E5%8A%A8%E5%92%8C%E5%BE%85%E6%9C%BA%E5%B9%B3%E6%BB%91%E5%88%87%E6%8D%A2%E4%B8%AD/" rel="home noopener noreferrer" title="7dot9 Laputa" style="margin:0px; padding:0px; border:0px; font-size:26px; vertical-align:baseline; outline:none; color:rgb(81,81,81); display:inline-block; text-decoration:none">7dot9 Laputa</a></h2> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/29890225c54a0c573f7062c476269110/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">c# 画控件圆角矩形边框</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/c2e01c275dbdc0896c8a56b60e873a7a/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Scala DataFrame生成技巧</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

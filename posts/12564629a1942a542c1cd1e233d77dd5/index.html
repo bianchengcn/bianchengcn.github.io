@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>《操作系统真象还原》 第十四篇：定义并初始化TSS - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="《操作系统真象还原》 第十四篇：定义并初始化TSS" />
+<meta property="og:description" content="第十四篇：定义并初始化TSS 第十四篇：定义并初始化TSS任务状态段(TSS)的介绍TSS的定义TSS的初始化 任务状态段(TSS)的介绍 TSS由程序员提供，由CPU来维护。用于进程切换时，保存进程的上下文环境。
+在现代操作系统中，TSS仅用于为0特权级的任务提供栈指针
+当CPU由地特权级进入高特权级时，会自动从TSS中获取对应特权级的栈指针
+TSS结构如下：
+为了访问到TSS，需要在GDT中注册TSS描述符，并将其选择子写入tr(task register)寄存器
+TSS描述符结构如下：
+写入tr寄存器的命令如下：ltr “16位通用寄存器” 或 “16位内存单元”
+TSS的定义 //任务状态段tss结构 struct tss { uint32_t backlink; uint32_t* esp0; uint32_t ss0; uint32_t* esp1; uint32_t ss1; uint32_t* esp2; uint32_t ss2; uint32_t cr3; uint32_t (*eip) (void); uint32_t eflags; uint32_t eax; uint32_t ecx; uint32_t edx; uint32_t ebx; uint32_t esp; uint32_t ebp; uint32_t esi; uint32_t edi; uint32_t es; uint32_t cs; uint32_t ss; uint32_t ds; uint32_t fs; uint32_t gs; uint32_t ldt; uint32_t trace; uint32_t io_base; }; TSS的初始化 //更新tss中的esp0字段的值为pthread的0级栈 void update_tss_esp(struct task_struct* pthread) { tss." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/12564629a1942a542c1cd1e233d77dd5/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-31T11:12:24+08:00" />
+<meta property="article:modified_time" content="2024-01-31T11:12:24+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">《操作系统真象还原》 第十四篇：定义并初始化TSS</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="TSS_0"></a>第十四篇：定义并初始化TSS</h2> 
+<p></p> 
+<div class="toc"> 
+ <h4> </h4> 
+ <ul><li><a href="#TSS_0" rel="nofollow">第十四篇：定义并初始化TSS</a></li><li><ul><li><a href="#TSS_2" rel="nofollow">任务状态段(TSS)的介绍</a></li><li><a href="#TSS_26" rel="nofollow">TSS的定义</a></li><li><a href="#TSS_64" rel="nofollow">TSS的初始化</a></li></ul> 
+ </li></ul> 
+</div> 
+<p></p> 
+<h3><a id="TSS_2"></a>任务状态段(TSS)的介绍</h3> 
+<p>TSS由程序员提供，由CPU来维护。用于进程切换时，保存进程的上下文环境。</p> 
+<p>在现代操作系统中，TSS仅用于为0特权级的任务提供栈指针</p> 
+<p>当CPU由地特权级进入高特权级时，会自动从TSS中获取对应特权级的栈指针</p> 
+<p>TSS结构如下：</p> 
+<p><img src="https://images2.imgbox.com/d6/4b/DXNBTrb9_o.png" alt="在这里插入图片描述"></p> 
+<p>为了访问到TSS，需要在GDT中注册TSS描述符，并将其选择子写入tr(task register)寄存器</p> 
+<p>TSS描述符结构如下：</p> 
+<p><img src="https://images2.imgbox.com/9f/2e/Hc9lawdR_o.png" alt="在这里插入图片描述"></p> 
+<p>写入tr寄存器的命令如下：ltr “16位通用寄存器” 或 “16位内存单元”</p> 
+<h3><a id="TSS_26"></a>TSS的定义</h3> 
+<pre><code class="prism language-c"><span class="token comment">//任务状态段tss结构</span>
+<span class="token keyword">struct</span> <span class="token class-name">tss</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint32_t</span> backlink<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span><span class="token operator">*</span> esp0<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ss0<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span><span class="token operator">*</span> esp1<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ss1<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span><span class="token operator">*</span> esp2<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ss2<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> cr3<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> <span class="token punctuation">(</span><span class="token operator">*</span>eip<span class="token punctuation">)</span> <span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> eflags<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> eax<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ecx<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> edx<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ebx<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> esp<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ebp<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> esi<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> edi<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> es<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> cs<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ss<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ds<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> fs<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> gs<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> ldt<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> trace<span class="token punctuation">;</span>
+	<span class="token class-name">uint32_t</span> io_base<span class="token punctuation">;</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+
+</code></pre> 
+<h3><a id="TSS_64"></a>TSS的初始化</h3> 
+<pre><code class="prism language-c"><span class="token comment">//更新tss中的esp0字段的值为pthread的0级栈</span>
+<span class="token keyword">void</span> <span class="token function">update_tss_esp</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">task_struct</span><span class="token operator">*</span> pthread<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	tss<span class="token punctuation">.</span>esp0 <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token punctuation">)</span>pthread <span class="token operator">+</span> PG_SIZE<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">//创建gdt描述符</span>
+<span class="token keyword">struct</span> <span class="token class-name">gdt_desc</span> <span class="token function">make_gdt_desc</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span> desc_addr<span class="token punctuation">,</span> <span class="token class-name">uint32_t</span> limit<span class="token punctuation">,</span> <span class="token class-name">uint8_t</span> attr_low<span class="token punctuation">,</span> <span class="token class-name">uint8_t</span> attr_high<span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token class-name">uint32_t</span> desc_base <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token punctuation">)</span>desc_addr<span class="token punctuation">;</span>
+	<span class="token keyword">struct</span> <span class="token class-name">gdt_desc</span> desc<span class="token punctuation">;</span>
+	desc<span class="token punctuation">.</span>limit_low_word <span class="token operator">=</span> limit <span class="token operator">&amp;</span> <span class="token number">0x0000ffff</span><span class="token punctuation">;</span>
+	desc<span class="token punctuation">.</span>base_low_word <span class="token operator">=</span> desc_base <span class="token operator">&amp;</span> <span class="token number">0x0000ffff</span><span class="token punctuation">;</span>
+	desc<span class="token punctuation">.</span>base_mid_byte <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>desc_base <span class="token operator">&amp;</span> <span class="token number">0x00ff0000</span><span class="token punctuation">)</span> <span class="token operator">&gt;&gt;</span> <span class="token number">16</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	desc<span class="token punctuation">.</span>attr_low_byte <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token class-name">uint8_t</span><span class="token punctuation">)</span><span class="token punctuation">(</span>attr_low<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	desc<span class="token punctuation">.</span>limit_high_attr_high <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>limit <span class="token operator">&amp;</span> <span class="token number">0x000f0000</span><span class="token punctuation">)</span> <span class="token operator">&gt;&gt;</span> <span class="token number">16</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token class-name">uint8_t</span><span class="token punctuation">)</span><span class="token punctuation">(</span>attr_high<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	desc<span class="token punctuation">.</span>base_high_byte <span class="token operator">=</span> desc_base <span class="token operator">&gt;&gt;</span> <span class="token number">24</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span> desc<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">//在gdt中创建tss并重新加载gdt</span>
+<span class="token keyword">void</span> <span class="token function">tss_init</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span> <span class="token punctuation">{<!-- --></span>
+	<span class="token function">put_str</span><span class="token punctuation">(</span><span class="token string">"tss_init start\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token class-name">uint32_t</span> tss_size <span class="token operator">=</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>tss<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">memset</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>tss<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> tss_size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	tss<span class="token punctuation">.</span>ss0 <span class="token operator">=</span> SELECTOR_K_STACK<span class="token punctuation">;</span>
+	<span class="token comment">//没有io位图</span>
+	tss<span class="token punctuation">.</span>io_base <span class="token operator">=</span> tss_size<span class="token punctuation">;</span>
+	
+	<span class="token comment">//在gdt中添加dpl为0的TSS描述符</span>
+	<span class="token operator">*</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">gdt_desc</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token number">0xc0000920</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token function">make_gdt_desc</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token operator">&amp;</span>tss<span class="token punctuation">,</span> tss_size <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">,</span> TSS_ATTR_LOW<span class="token punctuation">,</span> TSS_ATTR_HIGH<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//在gdt中添加dpl为3的数据段和代码段描述符</span>
+	<span class="token operator">*</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">gdt_desc</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token number">0xc0000928</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token function">make_gdt_desc</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0xfffff</span><span class="token punctuation">,</span> GDT_CODE_ATTR_LOW_DPL3<span class="token punctuation">,</span> GDT_ATTR_HIGH<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token operator">*</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token keyword">struct</span> <span class="token class-name">gdt_desc</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token number">0xc0000930</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token function">make_gdt_desc</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0xfffff</span><span class="token punctuation">,</span> GDT_DATA_ATTR_LOW_DPL3<span class="token punctuation">,</span> GDT_ATTR_HIGH<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token class-name">uint64_t</span> gdt_ptr <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token number">8</span> <span class="token operator">*</span> <span class="token number">7</span> <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token class-name">uint64_t</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token class-name">uint32_t</span><span class="token punctuation">)</span><span class="token number">0xc0000900</span> <span class="token operator">&lt;&lt;</span> <span class="token number">16</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token comment">//重新载入gdt指针</span>
+	<span class="token keyword">asm</span> <span class="token keyword">volatile</span> <span class="token punctuation">(</span><span class="token string">"lgdt %0"</span> <span class="token operator">:</span> <span class="token operator">:</span> <span class="token string">"m"</span> <span class="token punctuation">(</span>gdt_ptr<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token comment">//载入tr寄存器</span>
+	<span class="token keyword">asm</span> <span class="token keyword">volatile</span> <span class="token punctuation">(</span><span class="token string">"ltr %w0"</span> <span class="token operator">:</span> <span class="token operator">:</span> <span class="token string">"r"</span> <span class="token punctuation">(</span>SELECTOR_TSS<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token function">put_str</span><span class="token punctuation">(</span><span class="token string">"tss_init done\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/9db5fb257433846520b7511362dfadc5/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">java 图书管理系统 spring boot项目</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/d9b51de6b41d163e89b562764e370825/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">科普类——设计一套无人驾驶遥操作系统的步骤、架构、软硬件需求（十一）</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

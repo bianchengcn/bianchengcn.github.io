@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Unity优化之Drawcall - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Unity优化之Drawcall" />
+<meta property="og:description" content="一、什么是Drawcalls 在Unity中，每次CPU准备数据并通知GPU的过程就称之为一个DrawCall。这个过程会指定一个Mesh被渲染，绘制材质。
+二、Drawcalls有什么影响 为了CPU和GPU可以进行并行工作，需要一个命令缓冲区，由CPU向其中添加命令，然后由GPU从中读取命令，这样就实现了通过CPU准备数据，通知GPU进行渲染。在每次调用DrawCall之前，CPU需要向GPU发送很多内容，主要是包括数据，渲染状态，命令等。所以如果DrawCall数量过多就会导致CPU进行大量计算，进而导致CPU的过载，影响程序运行效率。
+三、查看Drawcalls 在unity中查看drawcalls有2个方法，如图1所示查看Game窗口中的State下的Batces，这个数量和drawcalls数量相同。第二种方法是查看Window → Analysis → Profiler 中的Rendering下的Drawcalls，如图2所示。 图1 图2
+四、Drawcalls优化 1. 3D场景优化 1.1 静态批处理 静态批处理首先需要到 Project Setting → Player → Other Setting 中将Static Bathing 勾选上，然后把需要静止的物体标记为Static，然后无论大小，相同材质的都会组成Batch。如下图所示，当没有勾选 static 的时候，场景中2个cube的drawcalls为4，勾选了之后drawcalls变成了3。
+1.2 动态批处理 动态批处理需要在Project Setting → Player → Other Setting 中将Dynamic Bathing 勾选上，Unity会自动将使用相同材质的物体合并处理。如图所示，场景中虽然有3个cube，但是drawcalls还是只有3。
+不过，在使用动态批处理的时候，具有一些局限性。
+顶点属性最大限制900的可移动物体,
+使用lightmap的物体不行进行批处理
+使用多通道的shader也不会进行批处理
+缩放比不同的物体不会批处理
+1.3 勾选 Enable GPU Instancing 在使用大量重复的物体时，需要将该物体的材质的 Enable GPU Instancing 勾选上，这样Unity会将Mesh相同的物体合并处理，常用于树木，植被，粒子等。如图所以虽然我放置了5个cube，但是drawcalls依然只有3。
+正在上传…重新上传取消 1.4 减少实时光照和阴影效果 当开启灯光，在没有开启阴影的时候drawcalls为3，开启了之后drawcalls变成了7。实时阴影会导致drawcalls大幅上升，建议关闭实时阴影，使用lightmap满足你想要的阴影效果。
+1.5 合并Mesh和材质球 如果一个模型有2个或者以上的材质球的时候，drawcalls会直线上升，所以应该劲量将mesh和材质球合并成为一个，以减少drawcalls。如图所示我在一个测试cube中放置了3个material，这个时候drawcalls从3变成了10（和不同的material有关，每个material最低为1）。
+1.6 渲染顺序调整 Unity的渲染是有顺序的，这个顺序我们可以自己调整，相机按照深度进行渲染。在图中我使用了3个cube梯次排序，其中第一个和第三个使用相同的材质球。当第二个cube在中间时，drawcalls为5，第二个cube在前或者后时，drawcalls为4。
+出现图中情况的原因是在绘制第一个cube时候使用材质球A，绘制第二个cube的时候使用材质球B，绘制第三个cube的时候使用材质球A，这个时候第二个打断了材质球A的渲染使用，使第一个和第三个材质球分开渲染了。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/c396c264125d824acd783cdcae4e205e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-07-21T22:56:08+08:00" />
+<meta property="article:modified_time" content="2023-07-21T22:56:08+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Unity优化之Drawcall</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <div></div> 
+<div> 
+ <div> 
+  <div> 
+   <h2 style="text-align:justify;"><strong><span style="color:#000000;">一、什么是Drawcalls</span></strong></h2> 
+   <p style="text-align:justify;"><span style="color:#000000;">在Unity中，每次CPU准备数据并通知GPU的过程就称之为一个DrawCall。这个过程会指定一个Mesh被渲染，绘制材质。</span></p> 
+   <h2 style="text-align:justify;"><strong><span style="color:#000000;">二、Drawcalls有什么影响</span></strong></h2> 
+   <p style="text-align:justify;"><span style="color:#4d4d4d;">为了CPU和GPU可以进行并行工作，需要一个命令缓冲区，由CPU向其中添加命令，然后由GPU从中读取命令，这样就实现了通过CPU准备数据，通知GPU进行渲染。在每次调用DrawCall之前，CPU需要向GPU发送很多内容，主要是包括数据，渲染状态，命令等。所以如果DrawCall数量过多就会导致CPU进行大量计算，进而导致CPU的过载，影响程序运行效率。</span></p> 
+   <h2 style="text-align:justify;"><strong><span style="color:#4d4d4d;">三、查看Drawcalls</span></strong></h2> 
+   <p style="text-align:justify;"><span style="color:#4d4d4d;">在unity中查看drawcalls有2个方法，如图1所示查看Game窗口中的State下的Batces，这个数量和drawcalls数量相同。第二种方法是查看Window  → Analysis → Profiler 中的Rendering下的Drawcalls，如图2所示。 </span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/c1/41/MGrSJ3G1_o.png"></p> 
+   <p><strong><span style="color:#4d4d4d;">图1                                                                              </span></strong><strong><span style="color:#4d4d4d;">  图2</span></strong></p> 
+   <h2 style="text-align:justify;"><strong><span style="color:#4d4d4d;">四、Drawcalls优化</span></strong></h2> 
+   <h3 style="text-align:justify;"><strong><span style="color:#4d4d4d;">1. 3D场景优化</span></strong></h3> 
+   <h4 style="text-align:justify;"><strong><span style="color:#4d4d4d;">1.1 静态批处理</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#4d4d4d;">静态批处理首先需要到 Project Setting → Player → Other Setting 中将Static Bathing 勾选上，然后把需要静止的物体标记为Static，然后无论大小，相同材质的都会组成Batch。如下图所示，当没有勾选 static 的时候，场景中2个cube的drawcalls为4，勾选了之后drawcalls变成了3。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/1a/7d/HtzkXIhM_o.png"></p> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">1.2 动态批处理</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">动态批处理需要在</span><span style="color:#4d4d4d;">Project Setting → Player → Other Setting 中将Dynamic Bathing 勾选上，Unity会自动将使用相同材质的物体合并处理。如图所示，场景中虽然有3个cube，但是drawcalls还是只有3。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/1d/33/i7B9MBaK_o.png"></p> 
+   <p style="text-align:justify;"><span style="color:#000000;">不过，在使用动态批处理的时候，具有一些局限性。</span></p> 
+   <ul><li> <p style="text-align:left;"><span style="color:#000000;">顶点属性最大限制900的可移动物体,</span></p> </li><li> <p style="text-align:left;"><span style="color:#000000;">使用lightmap的物体不行进行批处理</span></p> </li><li> <p style="text-align:left;"><span style="color:#000000;">使用多通道的shader也不会进行批处理</span></p> </li><li> <p style="text-align:left;"><span style="color:#000000;">缩放比不同的物体不会批处理</span></p> </li></ul> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">1.3 勾选 Enable GPU Instancing</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">在使用大量重复的物体时，需要将该物体的材质的 Enable GPU Instancing 勾选上，这样Unity会将Mesh相同的物体合并处理，常用于树木，植被，粒子等。如图所以虽然我放置了5个cube，但是drawcalls依然只有3。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/f5/48/hVSlhZa9_o.gif"></p> 
+   <h4 style="text-align:justify;">正在上传…重新上传取消</h4> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">1.4 减少实时光照和阴影效果</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">当开启灯光，在没有开启阴影的时候drawcalls为3，开启了之后drawcalls变成了7。实时阴影会导致drawcalls大幅上升，建议关闭实时阴影，使用</span><span style="color:#4d4d4d;">lightmap满足你想要的阴影效果。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/11/46/O7zSAZgq_o.png"></p> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">1.5 合并Mesh和材质球</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">如果一个模型有2个或者以上的材质球的时候，drawcalls会直线上升，所以应该劲量将mesh和材质球合并成为一个，以减少drawcalls。如图所示我在一个测试cube中放置了3个material，这个时候drawcalls从3变成了10（和不同的material有关，每个material最低为1）。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/4f/68/tPTKR8yO_o.png"></p> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">1.6 渲染顺序调整</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">Unity的渲染是有顺序的，这个顺序我们可以自己调整，相机按照深度进行渲染。在图中我使用了3个cube梯次排序，其中第一个和第三个使用相同的材质球。当第二个cube在中间时，drawcalls为5，第二个cube在前或者后时，drawcalls为4。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/5c/a9/5bmpozCQ_o.png"></p> 
+   <p style="text-align:justify;"><span style="color:#000000;">出现图中情况的原因是在绘制第一个cube时候使用材质球A，绘制第二个cube的时候使用材质球B，绘制第三个cube的时候使用材质球A，这个时候第二个打断了材质球A的渲染使用，使第一个和第三个材质球分开渲染了。</span></p> 
+   <h3 style="text-align:justify;"><strong><span style="color:#000000;">2. 2D UI优化</span></strong></h3> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">2.1 图集制作</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">在制作UI的时候，文件夹中小的图片可以在Unity中制作成图集再给UI使用，这样可以减少drawcalls，具体操作为首先在</span><span style="color:#4d4d4d;">Project Setting →Editor → Sprite Packer 中选择Mode 为Enable。然后在Assets中右键 Create → Sprite Altas，再将需要打包图集的图片资源拖到Altas中的Objects for Packing中，再点击Pack Preview，图集就制作好了。</span></p> 
+   <p style="text-align:justify;"><span style="color:#4d4d4d;">如图所示，在没有使用图集的时候，3张图drawcalls为5，当使用的图集时，drawcalls变成了3,3个图使用同一张图集，drawcalls也就变成了3。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/6e/e1/ivIzEvqF_o.png"></p> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">2.2 不同图集重叠会打断合批</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">不同的图集之间重叠会打断合批，在制作UI的时候应该注意不同的UI放置位置，避免出现这种问题，如图，2个图集的UI在分开放的时候drawcalls为4，重叠隔开之后drawcalls变成了5。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/4a/44/N8K9d8eo_o.png"></p> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">2.3 谨慎使用多canvas</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">每添加一个canvas会添加一个drawcalls，哪怕你下面的资源使用同一个图集也会添加。如图所示当我添加一个canvas，改变了第三个图的层次之后，drawcalls从3变成了4。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/c4/58/JRzulpLd_o.png"></p> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">2.4 Mask会打断合批，新增drawcalls</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">当我给使用了图集的一个UI添加一个Mask组件之后，drawcalls从3变成了5。这里可以使用Rect Mask 2D，效果相同但是drawcalls不会增加，回到了3。当我在有Mask组件的UI下添加一个Image，sprite还是使用图集中的图片时，发现drawcalls从5变成了6，说明mask组件还会打断合批，使Mask内外资源分开渲染。这个时候将Mask改为Rect Mask 2D，drawcalls从6变回4，但是也比最初的3多了1，说明使用Rect Mask 2D 也会打断合批，分开渲染。</span></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/7b/c4/9H0S8DKk_o.png"></p> 
+   <h4 style="text-align:justify;"><strong><span style="color:#000000;">2.5 图文混排打断合批</span></strong></h4> 
+   <p style="text-align:justify;"><span style="color:#000000;">新加入两个Text文本（Text Mesh Pro效果相同），drawcalls从3变到4，因为text和image有不同写渲染方式需要分开渲染，移动Text，当2个Text打断了图的连续深度排序时，图片的合批会被，打断，生成多的drawcalls，在图文排版是应特别注意。下图列举了一些错误排版方式和正确方法以及建议排版。<strong>注意，unity必须重叠，才会多产生drawcall</strong></span></p> 
+   <p><strong><span style="color:#000000;">正确：</span></strong></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/34/31/QZvMNRZG_o.png"></p> 
+   <p><strong><span style="color:#000000;">错误：</span></strong></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/cc/c5/Ydqb3bhy_o.png"></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/01/a3/Xk0D1TRl_o.png"></p> 
+   <p><strong><span style="color:#000000;">建议：</span></strong></p> 
+   <p class="img-center"><img alt="" src="https://images2.imgbox.com/88/7b/hurb2hRS_o.png"></p> 
+  </div> 
+ </div> 
+</div> 
+<p>GPU instance 使用一次渲染调用来绘制多个物体，来节省每次绘制物体时CPU→GPU的通信</p> 
+<table><thead><tr><th></th><th></th><th></th></tr></thead><tbody><tr><td></td><td>使用限制</td><td>优点</td></tr><tr><td>静态合批</td><td>静止的问题，大内存，大包体 StaticBatchingUtility.Combine</td><td>适用范围较广</td></tr><tr><td>动态合批</td><td>* 顶点属性最大限制900,&lt;br&gt;* 使用lightmap的物体不行进行批处理&lt;br&gt;* 使用MultiplePass的shader也不会进行批处理</td><td>在一些动的物体上面，内存不会显著增长，不会影响打包的包体</td></tr><tr><td>GPUInstance</td><td>一般用于大批生成的物体</td><td>没有动态合批那样对网格数量的限制，也没有静态网格那样需要这么大的内存</td></tr><tr><td>SRP Batcher</td><td>不同mesh，只要使用相同shader且变体一样即可 缺点：constant Buffer显存固定开开销，不支持</td><td>节省Uniform Buffer的写入操作；按shader分 Batch，预先生存Uniform Buffer,Batch 内部无CPU Write</td></tr></tbody></table>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/26cb3e2fcb71d9dbba85552000876f94/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">安装nuxt3报错 Error: Failed to download template from registry</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/19c8d7bb09270d0fc3a4c6ef201d5f00/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">关闭屏幕 DFS</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

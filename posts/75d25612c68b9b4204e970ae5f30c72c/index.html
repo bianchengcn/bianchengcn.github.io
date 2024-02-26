@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>wireshark网络安全流量分析基础 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="wireshark网络安全流量分析基础" />
+<meta property="og:description" content="01.介绍 网络安全流量分析领域中，wireshark和csnas是取证、安全分析的好工具，包括很多研究安全规则、APT及木马流量特征的小伙伴，也会常用到两个工具。这两款流量嗅探、分析软件，今天先介绍wireshark作为安全分析工具的基本使用。
+02.基本使用 Wireshark对pcap包分析过程中常用的功能基本上包括：数据包筛选、数据包搜索、流还原、流量提取等。本次的演示找到了CTF相关pcap包，如感兴趣可自己下载分析：
+链接：https://pan.baidu.com/s/1UlmTrXG-botu0M3c4W-lfA 提取码：k0y4 2.1 数据包筛选
+海量数据中要想能察觉到可疑通信，找到攻击的蛛丝马迹，那就需要对一些端口、协议、请求方式和攻击特征等进行过滤，不断缩小可疑流量范围，才能更好进一步分析达到最终溯源的目的。
+2.1.1 筛选IP
+※流量过滤中可以使用过滤可疑IP或排除一些无用信息，减少无关流量包的干扰，更直接定位目标。
+&gt;筛选特定IP，过滤出所有与192.168.94.233相关的流量
+语法：ip.addr==192.168.94.233
+&gt;筛选源IP，过滤出所有源ip都为192.168.94.233
+语法：ip.src==192.168.94.233
+同样过滤目的IP语法：ip.dst==192.168.94.233
+且关系使用&amp;&amp;：ip.dst==192.168.94.233&amp;&amp; ip.dst==192.168.32.189
+或关系使用||：ip.dst==192.168.94.233||ip.dst==192.168.32.189
+非关系：!=
+2.1.2HTTP模式过滤
+※在web攻击流量分析中，http显得尤为重要，根据攻击特点过滤http流量能更准确定位攻击；如常见上传webshell使用POST请求、指定URI可疑发现一些上传路径或者后台等，另也可以从包含的一些关键特征判断使用的工具、木马、脚本等。
+http请求方式为GET语法：http.request.method==”GET”
+http请求方式为POST语法：http.request.method==”POST”
+请求的URI为/login.php语法：http.request.uri==”/login.php”
+请求的http中包含sqlmap的语法：http contains “sqlmap”
+请求方式为GET且请求中包含UA信息：http.request.method==”GET” &amp;&amp; http contain “User-Agent”
+2.1.3 mac地址筛选:
+※这部分过滤和IP过滤作用一样
+eth.dst ==A0:00:00:04:C5:84 筛选目标mac地址
+eth.addr==A0:00:00:04:C5:84 筛选MAC地址
+2.1.4 端口筛选：
+※通过常见端口如445、1433、3306等可以定位相关特殊的服务。
+tcp.dstport == 80 筛选tcp协议的目标端口为80 的流量包
+tcp.srcport == 80 筛选tcp协议的源端口为80 的流量包
+udp.srcport == 80 筛选udp协议的源端口为80 的流量包
+2.1.5 协议筛选：
+※协议过滤可以根据相关服务使用的协议类型进行
+tcp 筛选协议为tcp的流量包
+udp 筛选协议为udp的流量包
+arp/icmp/http/ftp/dns/ip 筛选协议为arp/icmp/http/ftp/dns/ip的流量包" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/75d25612c68b9b4204e970ae5f30c72c/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-04-07T14:16:14+08:00" />
+<meta property="article:modified_time" content="2023-04-07T14:16:14+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">wireshark网络安全流量分析基础</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h2><strong>01.介绍</strong></h2> 
+<p>网络安全流量分析领域中，wireshark和csnas是取证、安全分析的好工具，包括很多研究安全规则、APT及木马流量特征的小伙伴，也会常用到两个工具。这两款流量嗅探、分析软件，今天先介绍wireshark作为安全分析工具的基本使用。</p> 
+<h3 id="hid-2sQQPy"><strong>02.基本使用</strong></h3> 
+<p> Wireshark对pcap包分析过程中常用的功能基本上包括：数据包筛选、数据包搜索、流还原、流量提取等。本次的演示找到了CTF相关pcap包，如感兴趣可自己下载分析：</p> 
+<p>链接：https://pan.baidu.com/s/1UlmTrXG-botu0M3c4W-lfA  提取码：k0y4 </p> 
+<p><strong>2.1 数据包筛选</strong></p> 
+<p>海量数据中要想能察觉到可疑通信，找到攻击的蛛丝马迹，那就需要对一些端口、协议、请求方式和攻击特征等进行过滤，不断缩小可疑流量范围，才能更好进一步分析达到最终溯源的目的。</p> 
+<p><strong>2.1.1 筛选IP</strong></p> 
+<p>※流量过滤中可以使用过滤可疑IP或排除一些无用信息，减少无关流量包的干扰，更直接定位目标。</p> 
+<p>&gt;筛选特定IP，过滤出所有与192.168.94.233相关的流量</p> 
+<p>语法：ip.addr==192.168.94.233</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/16/28/mfem6ONb_o.png"></p> 
+<p>&gt;筛选源IP，过滤出所有源ip都为192.168.94.233</p> 
+<p>语法：ip.src==192.168.94.233</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/5a/2b/8jg2xA93_o.png"></p> 
+<p>同样过滤目的IP语法：ip.dst==192.168.94.233</p> 
+<p>且关系使用&amp;&amp;：ip.dst==192.168.94.233&amp;&amp; ip.dst==192.168.32.189</p> 
+<p>或关系使用||：ip.dst==192.168.94.233||ip.dst==192.168.32.189</p> 
+<p>非关系：!=</p> 
+<p></p> 
+<p><strong>2.1.2HTTP模式过滤</strong></p> 
+<p>※在web攻击流量分析中，http显得尤为重要，根据攻击特点过滤http流量能更准确定位攻击；如常见上传webshell使用POST请求、指定URI可疑发现一些上传路径或者后台等，另也可以从包含的一些关键特征判断使用的工具、木马、脚本等。</p> 
+<p>http请求方式为GET语法：http.request.method==”GET”</p> 
+<p>http请求方式为POST语法：http.request.method==”POST”</p> 
+<p>请求的URI为/login.php语法：http.request.uri==”/login.php”</p> 
+<p>请求的http中包含sqlmap的语法：http contains “sqlmap”</p> 
+<p>请求方式为GET且请求中包含UA信息：http.request.method==”GET” &amp;&amp; http contain “User-Agent”</p> 
+<p></p> 
+<p><strong> 2.1.3 mac地址筛选:</strong></p> 
+<p>※这部分过滤和IP过滤作用一样</p> 
+<p> eth.dst ==A0:00:00:04:C5:84 筛选目标mac地址</p> 
+<p> eth.addr==A0:00:00:04:C5:84 筛选MAC地址</p> 
+<p></p> 
+<p><strong> 2.1.4  端口筛选：</strong></p> 
+<p>※通过常见端口如445、1433、3306等可以定位相关特殊的服务。</p> 
+<p>tcp.dstport == 80  筛选tcp协议的目标端口为80 的流量包</p> 
+<p>tcp.srcport == 80  筛选tcp协议的源端口为80 的流量包</p> 
+<p>udp.srcport == 80  筛选udp协议的源端口为80 的流量包</p> 
+<p></p> 
+<p><strong>2.1.5  协议筛选：</strong></p> 
+<p><strong>※</strong>协议过滤可以根据相关服务使用的协议类型进行</p> 
+<p>tcp  筛选协议为tcp的流量包</p> 
+<p>udp 筛选协议为udp的流量包</p> 
+<p>arp/icmp/http/ftp/dns/ip  筛选协议为arp/icmp/http/ftp/dns/ip的流量包</p> 
+<p></p> 
+<p><strong> 2.1.6  包长度筛选：</strong></p> 
+<p><strong>※</strong>包长度、大小可以利用判断一些木马特征，扫描特征、ddos等</p> 
+<p>udp.length ==20   筛选长度为20的udp流量包</p> 
+<p>tcp.len &gt;=20  筛选长度大于20的tcp流量包</p> 
+<p>ip.len ==20  筛选长度为20的IP流量包</p> 
+<p>frame.len ==20 筛选长度为20的整个流量包</p> 
+<p></p> 
+<p><strong>2.2 数据流分析</strong></p> 
+<p>使用wireshark进行威胁流量发现时候，除了判断包特征，访问日志，证书等，数据量是较为直观发现异常行为的方式，我们常会查看一些HTTP流、TCP流和UDP流进行流量分析，wireshark中常用方法：</p> 
+<p>这里我就用找一个后台登入的http流做展示</p> 
+<p>1)找疑似后台登入点：http contains login</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/6a/6f/WxPvvQDR_o.png"></p> 
+<p>2）判断登入是否成功，这时可以查看http流的响应情况进行分析：”右键-追踪流-HTTP流”</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/6d/40/tYEkAE5F_o.png"></p> 
+<p> </p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/c3/4b/adujE7R5_o.png"></p> 
+<p>可以根据数据流的请求头、请求体判断源IP的一些信息，这个有助于进行追踪；响应头、响应体可以作为本次请求是否成功，达到的响应效果的判断。</p> 
+<p>HTTP流之外还会有TCP流、UDP流、HTTPS流等，操作的方法是一样的；</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/c4/02/onhJeSy4_o.png"></p> 
+<p><strong>2.3文件还原</strong></p> 
+<p>※攻击流量中少不了恶意脚本，样本文件，这时能对样本提取是对威胁攻击的进一步分析十分重要。而使用wireshark就可以做到简单文件还原，当然如果你需要对批量文件还原，可能还需要一些自己研究的工具进行还原，下面说一下wireshark怎么进行还原：</p> 
+<p>1）“文件-导出对象”这样可以选择导出的协议类型数据，选择http后会出现数据包所有的关于http协议的数据包；在所有http数据流中的文件，选中进行save进行；其他协议相关文件也一样。</p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/88/2c/jGWax6Jd_o.png"></p> 
+<p> </p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/cb/29/zDfSAI4X_o.png"></p> 
+<p>2）分组字节流还原</p> 
+<p>对于特定的字节流可以“右键-导出分组字节流”最后保存就ok了</p> 
+<p> </p> 
+<p class="img-center"><img alt="" src="https://images2.imgbox.com/a3/f0/NZmBc602_o.png"></p> 
+<p></p> 
+<p><strong>总结</strong>：wireshark比较适合对于小流量包威胁数据进行分析，CTF赛事也会常用wireshark进行分析；作为网络流量安全分析的好工具，功能其实也很多，本次分享的只是一些常见功能，如果对网络流量安全分析感兴趣，可以多去使用wireshark研究攻击数据包特征，可以先从简单web攻击数据包开始，再去看看一些窃密、木马、APT相关数据包，后面我也会慢慢分享一些关于分析威胁流量包的文章，也是记录自己的一个学习过程。</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/a73c08656ae4a40f5aab65ae7b3438dc/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">JAVA根据模板生成WORD文件并导出</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f93d546d56d095f2a40460acd2336e08/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Python学习笔记-3(运算分类)</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

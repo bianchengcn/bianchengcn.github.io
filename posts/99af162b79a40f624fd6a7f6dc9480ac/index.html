@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Java 菜单列表转成树形结构 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Java 菜单列表转成树形结构" />
+<meta property="og:description" content="在工作中菜单多的情况，会遇到list列表转为树形结构的菜单，特此记录下利用反射实现
+一、实体类中格式 /** * 系统菜单表 */ @ApiModel(value=&#34;系统菜单表&#34;) @Data public class Menu implements Serializable { private static final long serialVersionUID = 1L; /** * ID */ @TreeField(TreeField.Field.ID) @ApiModelProperty(value = &#34;ID&#34;) private String id; @ApiModelProperty(value = &#34;父ID&#34;) @TreeField(TreeField.Field.PARENDID) private String parentId; @ApiModelProperty(value = &#34;菜单名称&#34;) private String menuName; @ApiModelProperty(value = &#34;菜单路径&#34;) private String menuUrl; @ApiModelProperty(value = &#34;图标&#34;) private String menuIcon; @ApiModelProperty(value = &#34;子菜单&#34;) private List&lt;Menu&gt; children; } 二、自定义注解（通过反射） @Target({ElementType.FIELD}) @Retention(RetentionPolicy.RUNTIME) @Documented public @interface TreeField { TreeField." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/99af162b79a40f624fd6a7f6dc9480ac/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-10-12T10:27:39+08:00" />
+<meta property="article:modified_time" content="2022-10-12T10:27:39+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Java 菜单列表转成树形结构</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>  在工作中菜单多的情况，会遇到list列表转为树形结构的菜单，特此记录下利用反射实现</p> 
+<h2>一、实体类中格式</h2> 
+<pre><code class="language-java">/**
+ * 系统菜单表
+ */
+@ApiModel(value="系统菜单表")
+@Data
+public class Menu implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+    /**
+     * ID
+     */
+  
+    @TreeField(TreeField.Field.ID)
+    @ApiModelProperty(value = "ID")
+    private String id;
+
+    @ApiModelProperty(value = "父ID")
+    @TreeField(TreeField.Field.PARENDID)
+    private String parentId;
+
+   
+    @ApiModelProperty(value = "菜单名称")
+    private String menuName;
+
+   
+    @ApiModelProperty(value = "菜单路径")
+    private String menuUrl;
+
+   
+    @ApiModelProperty(value = "图标")
+    private String menuIcon;
+
+  
+    @ApiModelProperty(value = "子菜单")
+    private List&lt;Menu&gt; children;
+
+  
+}</code></pre> 
+<p></p> 
+<h2>二、自定义注解（通过反射）</h2> 
+<pre><code>@Target({ElementType.FIELD})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface TreeField {
+    TreeField.Field value();
+
+    public static enum Field {
+        ID,
+        PARENTID,
+        CHILDREN;
+
+        private Field() {
+        }
+    }
+}</code></pre> 
+<h2>三、工具类</h2> 
+<pre><code class="language-java">
+import java.lang.reflect.Field;
+import java.util.*;
+
+public class TreeUtil {
+   
+
+    /**
+     * list 转 tree
+     *
+     * @param list 节点集合
+     */
+    public static &lt;T&gt; List&lt;T&gt; listToTree(List&lt;T&gt; list) {
+        List&lt;T&gt; roots = new ArrayList&lt;&gt;();
+        if (list == null || list.size() == 0) {
+            return roots;
+        }
+        Class&lt;?&gt; clazz = list.get(0).getClass();
+        Field idField = getField(clazz, TreeField.Field.ID);
+        Field pIdField = getField(clazz, TreeField.Field.PARENTID);
+        Field childrenField = getField(clazz, TreeField.Field.CHILDREN);
+
+        try {
+            T parent;
+            Map&lt;Object, T&gt; map = new HashMap&lt;&gt;(list.size());
+            for (T node : list) {
+                map.put(idField.get(node), node);
+            }
+            for (T node : list) {
+                if ((parent = map.get(pIdField.get(node))) != null &amp;&amp; !parent.equals(node)) {
+                    if (childrenField.get(parent) == null) {
+                        childrenField.set(parent, new ArrayList&lt;&gt;());
+                    }
+                    ((List&lt;T&gt;) childrenField.get(parent)).add(node);
+                } else {
+                    roots.add(node);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return roots;
+    }
+
+    /**
+     * tree 转 list
+     *
+     * @param tree 结构化集合
+     */
+    public static &lt;T&gt; List&lt;T&gt; treeToList(List&lt;T&gt; tree) {
+        List&lt;T&gt; list = new ArrayList&lt;&gt;();
+        if (tree == null || tree.size() == 0) {
+            return list;
+        }
+        Class&lt;?&gt; clazz = tree.get(0).getClass();
+        Field childrenField = getField(clazz, TreeField.Field.CHILDREN);
+        // 使用Stack进行深度遍历（先进后出）
+        try {
+            Stack&lt;T&gt; stack = new Stack&lt;&gt;();
+            for (T root : tree) {
+                stack.push(root);
+                while (!stack.isEmpty()) {
+                    T node = stack.pop();
+                    if (childrenField.get(node) != null) {
+                        List&lt;T&gt; children = (List&lt;T&gt;) childrenField.get(node);
+                        // 子节点倒序入栈
+                        Collections.reverse(children);
+                        children.forEach(stack::push);
+                        childrenField.set(node, null);
+                    }
+                    list.add(node);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    private static Field getField(Class&lt;?&gt; clazz, TreeField.Field value) {
+        Field[] fields = clazz.getDeclaredFields();
+        for (Field field : fields) {
+            //打开私有访问
+            field.setAccessible(true);
+            if (field.isAnnotationPresent(TreeField.class)) {
+                TreeField anno = field.getAnnotation(TreeField.class);
+                if (anno.value() == value) {
+                    return field;
+                }
+            }
+        }
+        for (Field field : fields) {
+            if (field.getName().equalsIgnoreCase(value.toString())) {
+                return field;
+            }
+        }
+        return null;
+    }
+}
+</code></pre> 
+<p></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/4c658dc3a63a4652813566c0dbdd1c0b/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">naive-ui ngrid自适应布局</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/b495263d8d7186e61334686a4e33fc92/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Linux网卡的开关与网卡自启设置</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

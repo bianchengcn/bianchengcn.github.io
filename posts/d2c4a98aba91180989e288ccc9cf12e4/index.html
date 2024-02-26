@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>一文读懂spring的lookup-method的用法 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="一文读懂spring的lookup-method的用法" />
+<meta property="og:description" content="背景：在spring中，我们通常创建的Bean是单例的。那么当我们使用存在一个这样bean，它自身是单例的，但是其需要通过调用某个原型bean的方法。在这种场景下，我们应该去怎么实现这个需求呢？
+解决方案有如下几种，
+一、该类型实现ApplicationContextAware接口，感知到应用上下文 import org.springframework.beans.BeansException; import org.springframework.context.ApplicationContext; import org.springframework.context.ApplicationContextAware; public class CommandManager implements ApplicationContextAware { private ApplicationContext applicationContext; public Object process(Map commandState) { // grab a new instance of the appropriate Command Command command = createCommand(); // set the state on the (hopefully brand new) Command instance command.setState(commandState); return command.execute(); } protected Command createCommand() { // notice the Spring API dependency! return this.applicationContext.getBean(&#34;command&#34;, Command.class); } public void setApplicationContext( ApplicationContext applicationContext) throws BeansException { this." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/d2c4a98aba91180989e288ccc9cf12e4/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-02-07T20:21:04+08:00" />
+<meta property="article:modified_time" content="2023-02-07T20:21:04+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">一文读懂spring的lookup-method的用法</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p>背景：在spring中，我们通常创建的Bean是单例的。那么当我们使用存在一个这样bean，它自身是单例的，但是其需要通过调用某个原型bean的方法。在这种场景下，我们应该去怎么实现这个需求呢？</p> 
+<p>解决方案有如下几种，</p> 
+<h4>一、该类型实现ApplicationContextAware接口，感知到应用上下文</h4> 
+<pre><code class="language-java">import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+public class CommandManager implements ApplicationContextAware {
+  private ApplicationContext applicationContext;
+  public Object process(Map commandState) {
+  // grab a new instance of the appropriate Command
+  Command command = createCommand();
+  // set the state on the (hopefully brand new) Command instance
+  command.setState(commandState);
+  return command.execute();
+  }
+  protected Command createCommand() {
+  // notice the Spring API dependency!
+  return this.applicationContext.getBean("command", Command.class);
+  }
+  public void setApplicationContext(
+  ApplicationContext applicationContext) throws BeansException {
+  this.applicationContext = applicationContext;
+  }
+}
+</code></pre> 
+<p>通过这种写法是可以实现我们的功能，但是一般来说不建议这样处理。因为我们的业务代码跟spring框架进行了深度耦合了。我们可以使用Lockup-method来处理</p> 
+<h4>二、使用lookup-method进行解决</h4> 
+<p>1、CommandManager 代码如下</p> 
+<pre><code class="language-java">public abstract class CommandManager {
+
+    public abstract Command createCommand();
+
+    public Object process(Map&lt;String, String&gt; commandState) {
+        // grab a new instance of the appropriate Command
+        Command command = createCommand();
+        // set the state on the (hopefully brand new) Command instance
+        command.setState(commandState);
+        return command.execute();
+    }
+
+}</code></pre> 
+<p>2、 AsyncCommand的代码</p> 
+<pre><code class="language-java">public class AsyncCommand implements Command {
+    Map&lt;String, String&gt; commandState = null;
+
+    @Override
+    public AsyncCommand execute() {
+        System.out.println("执行异步分命令方法");
+        return new AsyncCommand();
+    }
+
+    @Override
+    public void setState(Map&lt;String, String&gt; commandState) {
+        this.commandState = commandState;
+    }
+}</code></pre> 
+<p>3、基于xml方法的配置：</p> 
+<pre><code class="language-XML">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd"&gt;
+    &lt;bean id="asyncCommand" class="com.example.lockup.AsyncCommand" scope="prototype"/&gt;
+    &lt;bean id="commandManager" class="com.example.lockup.CommandManager"&gt;
+        &lt;lookup-method name="createCommand" bean="asyncCommand"/&gt;
+    &lt;/bean&gt;
+&lt;/beans&gt;</code></pre> 
+<p>测试类：</p> 
+<pre><code class="language-java">public class LookupMethodTest {
+    @Test
+    public void testLookupMethod() {
+        ClassPathXmlApplicationContext applicationContext = new ClassPathXmlApplicationContext("lockup-method.xml");
+        CommandManager commandManager = applicationContext.getBean(CommandManager.class);
+        commandManager.process(new HashMap&lt;&gt;());
+    }
+}</code></pre> 
+<p>运行测试代码后，发现能够获取到CommandManager类的实例，并且成功调用了Command的execute方法。</p> 
+<p>4、基于注解的解决方法如下：</p> 
+<p>CommandManager类的createCommand方法添加上@Lookup注解</p> 
+<pre><code class="language-java">@Component
+public abstract class CommandManager {
+    @Lookup
+    public abstract Command createCommand();
+
+    public Object process(Map&lt;String, String&gt; commandState) {
+        // grab a new instance of the appropriate Command
+        Command command = createCommand();
+        // set the state on the (hopefully brand new) Command instance
+        command.setState(commandState);
+        return command.execute();
+    }
+
+}
+</code></pre> 
+<p>Appconfig类</p> 
+<pre><code class="language-java">@Configuration
+@ComponentScan(value = {"com.example.lockup.annotation"})
+public class AppConfig {
+    @Bean
+    @Scope(value = ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+    public Command myCommand(){
+        return new AsyncCommand();
+    }
+    
+}</code></pre> 
+<p>测试类：</p> 
+<pre><code class="language-java">public class LookupMethodTest {
+    @Test
+    public void testLookupMethod() {
+        AnnotationConfigApplicationContext applicationContext = new AnnotationConfigApplicationContext(AppConfig.class);
+        CommandManager commandManager = applicationContext.getBean(CommandManager.class);
+        commandManager.process(new HashMap&lt;&gt;());
+    }
+}</code></pre> 
+<h4>三、lookup-method 使用注意事项</h4> 
+<p>1、CommandManager对象可以是非抽象类</p> 
+<p>其中CommandManager对象可以不一定需要是抽象，被lookup修饰的方法也不一定要求是抽象的，即如果将CommandManager修改为如下形式也是可以正常处理的！</p> 
+<pre><code class="language-java">@Component
+public class CommandManager {
+    @Lookup
+    public  Command createCommand() {
+        return null;
+    }
+
+    public Object process(Map&lt;String, String&gt; commandState) {
+        // grab a new instance of the appropriate Command
+        Command command = createCommand();
+        // set the state on the (hopefully brand new) Command instance
+        command.setState(commandState);
+        return command.execute();
+    }
+
+}</code></pre> 
+<p>2、CommandManager类及对应的方法均不能被final修饰，下面是不正确的示例：</p> 
+<pre><code class="language-java">@Component
+public final class CommandManager {
+    @Lookup
+    public final Command createCommand() {
+        return null;
+    }
+
+    public Object process(Map&lt;String, String&gt; commandState) {
+        // grab a new instance of the appropriate Command
+        Command command = createCommand();
+        // set the state on the (hopefully brand new) Command instance
+        command.setState(commandState);
+        return command.execute();
+    }
+
+}</code></pre> 
+<p><img alt="" height="218" src="https://images2.imgbox.com/42/38/Lop4NSHt_o.png" width="1190"></p> 
+<p>3、createCommand方法中不能包含有入参，其方法签名应该如下所示：</p> 
+<blockquote> 
+ <p>&lt;public | protected&gt;  [abstract]  &lt;return-type&gt;  theMethodName(no-arguments);</p> 
+</blockquote> 
+<p> 即方法一定要有返回值且方法中不能有参数</p> 
+<h4>四、lookup的实现原理</h4> 
+<h4>1、原理实现的猜想</h4> 
+<p>示例中CommandManager是一个抽象对象，那肯定是通过动态代理生成的代理对象。</p> 
+<h4>2、猜想的快速验证</h4> 
+<p>既然的CommandManager是一个代理类，那么我们可以通过applicationContext来获取到bean实例是否为一个代理对象。运行测试用例方法top.hdsw.ioc.lookup.xml.LookupMethodTest#testLookupMethod，可以看出这里的对象是一个Cglib的代理对象。说明我们的猜想是正确的</p> 
+<p><img alt="" height="374" src="https://images2.imgbox.com/a8/b3/6MYkSZuu_o.png" width="1076"></p> 
+<p> </p> 
+<h4>3、深入源码查找对应创建代码的逻辑</h4> 
+<p>spring中都是通过InstantiationStrategy来进行创建的，目前已知的实现类有SimpleInstantiationStrategy、CglibSubclassingInstantiationStrategy。其类之间关系图如下：</p> 
+<p><img alt="" height="262" src="https://images2.imgbox.com/15/cd/amJIoXBH_o.png" width="416"></p> 
+<p> 创建的时候就是通过org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory#instantiateBean方法来进行创建，其中getInstantiationStrategy()返回的均CglibSubclassingInstantiationStrategy对象。</p> 
+<pre><code class="language-java">	protected BeanWrapper instantiateBean(String beanName, RootBeanDefinition mbd) {
+		try {
+			Object beanInstance = getInstantiationStrategy().instantiate(mbd, beanName, this);
+			BeanWrapper bw = new BeanWrapperImpl(beanInstance);
+			initBeanWrapper(bw);
+			return bw;
+		}
+		catch (Throwable ex) {
+			throw new BeanCreationException(mbd.getResourceDescription(), beanName, ex.getMessage(), ex);
+		}
+	}</code></pre> 
+<p>然后我们接下来查看CglibSubclassingInstantiationStrategy中的instantiate方法</p> 
+<pre><code class="language-java">    @Override
+	public Object instantiate(RootBeanDefinition bd, @Nullable String beanName, BeanFactory owner) {
+		// Don't override the class with CGLIB if no overrides.
+        // 如果bean的定义没有通过lookup-method或者replace-method的来定义方法的重写时，就直接使用 BeanUtils.instantiateClass(constructorToUse)来实例化对象
+		if (!bd.hasMethodOverrides()) {
+			Constructor&lt;?&gt; constructorToUse;
+			synchronized (bd.constructorArgumentLock) {
+				constructorToUse = (Constructor&lt;?&gt;) bd.resolvedConstructorOrFactoryMethod;
+				if (constructorToUse == null) {
+					final Class&lt;?&gt; clazz = bd.getBeanClass();
+					if (clazz.isInterface()) {
+						throw new BeanInstantiationException(clazz, "Specified class is an interface");
+					}
+					try {
+						constructorToUse = clazz.getDeclaredConstructor();
+						bd.resolvedConstructorOrFactoryMethod = constructorToUse;
+					}
+					catch (Throwable ex) {
+						throw new BeanInstantiationException(clazz, "No default constructor found", ex);
+					}
+				}
+			}
+			return BeanUtils.instantiateClass(constructorToUse);
+		}
+		else {
+			// Must generate CGLIB subclass.
+			return instantiateWithMethodInjection(bd, beanName, owner);
+		}
+	}</code></pre> 
+<p>上面的源码中，通过判断bean的定义信息中是否包含的methodOverrides方法来确定是否生成代理对象。这里我们继续往下看org.springframework.beans.factory.support.CglibSubclassingInstantiationStrategy#instantiateWithMethodInjection其源码如下：</p> 
+<pre><code class="language-java">	@Override
+	protected Object instantiateWithMethodInjection(RootBeanDefinition bd, @Nullable String beanName, BeanFactory owner,
+			@Nullable Constructor&lt;?&gt; ctor, Object... args) {
+
+		return new CglibSubclassCreator(bd, owner).instantiate(ctor, args);
+	}</code></pre> 
+<p>至此我们可以看到代理对象真正是通过CglibSubclassCreator的instantiate方法进行创建</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/e6381f54b21605918d0fe37702c4d989/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">Spring 集成Mybatis</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/1c846ed7e97c0bbd1f8f89146d707cb8/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">有序链表的合并</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>UE5 Shader基础学习笔记——13-20 DetailNormal/Smoothstep/Length/CeilFloorRound/DDXDDY/SinCos/Power - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="UE5 Shader基础学习笔记——13-20 DetailNormal/Smoothstep/Length/CeilFloorRound/DDXDDY/SinCos/Power" />
+<meta property="og:description" content="UE5 Shader基础学习笔记——13-20 DetailNormal/Smoothstep/Length/CeilFloorRound/DDXDDY/SinCos/Power Lec13 Detail Normal MappingLec14 Advanced Detail Mapping (etc.灰度mask)Lec15 Smoothstep (etc.溶解/高度混合)Lec16 Length &amp; Distance (etc.摇摆/内部假光)Lec17 Ceil Floor Round (etc.色阶)Lec18 DDX DDY (etc.面片法线,纹理mip计算)Lec19 Sin Cos (etc.涟漪)Lec20 Power 本系列学习资料来源，Ben Cloward的油管空间，本笔记主要对其中UE的部分进行记录
+Lec13 Detail Normal Mapping 使用Quixel的一个岩石资产（PkeeM）作为演示，拉太近之后纹理会比较模糊
+可以使用Detail Normal增加细节，所谓Detail Normal就是再拿一张法线纹理，平铺很多次，进行法线混合覆盖在上面
+Ben在视频中使用的DetailNormal如下，RG是法线，B是粗糙度，A是用于颜色Overlay的mask
+由于有很多信息，所以在导入UE时使用BC7格式压缩，并且取消SRGB
+使用如下
+此时放大近看可以看到细节
+不过这样是一直在计算DetailNormal，实际使用时为了让其不一直计算，可以在较低的Lod中舍弃这个，或者创建一个基于距离的mask，靠近时再计算
+Lec14 Advanced Detail Mapping (etc.灰度mask) 在这节使用一张纹理mask将多个Detail进行映射
+整个实现如下图，也就是RGBA四个通道各画一个Mask分别用不同的图
+这样是消耗比较高的，于是可以用UE的TextureArray来改善，创建TextureArray后插入要用的图
+采样TextureArray需要UVW三个参数，UV正常采样，W用于选择贴图
+为了分出用什么贴图，可以在mask上使用不同灰度值，这样实现更加节省性能，W用灰度值映射
+从评论中节选出一些问题
+TextureArray会只加载一个mip，无法利用Streaming的优势，但对于detail来说没问题，毕竟detail只在特写中需要。Ben关于这个的建议是使用低分辨率的TextureArray，然后应用所有角色，一直在内存中也没事。
+关于如何在mask中单独设置每个纹理的UV平铺，如果使用了if节点来设置就没有意义了。
+Ben的回复是之前在开发圣歌的时候尝试做过但是这种尝试并不干净，他决定使用一个全局的统一的分辨率控制缩放。Ben提议可以将纹理缩放倍数也编码为灰度颜色读取，但是会在边界上产生一些奇怪的结果，在涉及纹理压缩和低mipmap时尤为明显。
+在圣歌的开发中，Ben让艺术家在一个mask上使用16种材质，texture array设置有16份贴图，分辨率为64*64
+如果想要使用mask之间过渡，可以采用最开始分通道存储mask的方式
+也有人提出问题，UE更适合多种材质插槽，使用多种简单的材质更好。Ben觉得使用一个材质可以减少DrawCall。
+这种用灰度分mask的方法在其他游戏中也会用到，比如原神中根据不同灰度选择不同Ramp
+Lec15 Smoothstep (etc.溶解/高度混合) 关于Smoothstep，可以看看
+常用函数SmoothStep的实现原理
+Shader实验室: smoothstep函数" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/c7eddb767a5684c5c46b2c89476bcb0e/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-12-16T17:54:47+08:00" />
+<meta property="article:modified_time" content="2022-12-16T17:54:47+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">UE5 Shader基础学习笔记——13-20 DetailNormal/Smoothstep/Length/CeilFloorRound/DDXDDY/SinCos/Power</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>UE5 Shader基础学习笔记——13-20 DetailNormal/Smoothstep/Length/CeilFloorRound/DDXDDY/SinCos/Power </h4> 
+ <ul><li><a href="#Lec13_Detail_Normal_Mapping_4" rel="nofollow">Lec13 Detail Normal Mapping</a></li><li><a href="#Lec14_Advanced_Detail_Mapping_etcmask_17" rel="nofollow">Lec14 Advanced Detail Mapping (etc.灰度mask)</a></li><li><a href="#Lec15_Smoothstep_etc_42" rel="nofollow">Lec15 Smoothstep (etc.溶解/高度混合)</a></li><li><a href="#Lec16_Length__Distance_etc_70" rel="nofollow">Lec16 Length &amp; Distance (etc.摇摆/内部假光)</a></li><li><a href="#Lec17_Ceil_Floor_Round_etc_83" rel="nofollow">Lec17 Ceil Floor Round (etc.色阶)</a></li><li><a href="#Lec18_DDX_DDY_etcmip_90" rel="nofollow">Lec18 DDX DDY (etc.面片法线,纹理mip计算)</a></li><li><a href="#Lec19_Sin_Cos_etc_108" rel="nofollow">Lec19 Sin Cos (etc.涟漪)</a></li><li><a href="#Lec20_Power_127" rel="nofollow">Lec20 Power</a></li></ul> 
+</div> 
+<p></p> 
+<p>本系列学习资料来源，Ben Cloward的<a href="https://www.youtube.com/channel/UCoG9TB1eL6dm9eNbLFueHBQ" rel="nofollow">油管空间</a>，本笔记主要对其中UE的部分进行记录</p> 
+<h2><a id="Lec13_Detail_Normal_Mapping_4"></a>Lec13 Detail Normal Mapping</h2> 
+<p>使用Quixel的一个岩石资产（PkeeM）作为演示，拉太近之后纹理会比较模糊<br> <img src="https://images2.imgbox.com/a2/8e/V6oETluz_o.png" alt="在这里插入图片描述" width="600"><br> 可以使用Detail Normal增加细节，所谓Detail Normal就是再拿一张法线纹理，平铺很多次，进行法线混合覆盖在上面</p> 
+<p>Ben在视频中使用的DetailNormal如下，RG是法线，B是粗糙度，A是用于颜色Overlay的mask<br> 由于有很多信息，所以在导入UE时使用BC7格式压缩，并且取消SRGB<br> <img src="https://images2.imgbox.com/53/31/7HCbZbGz_o.png" alt="在这里插入图片描述" width="600"><br> 使用如下<br> <img src="https://images2.imgbox.com/8a/79/RvVHlP24_o.png" alt="在这里插入图片描述" width="600"><br> 此时放大近看可以看到细节<br> <img src="https://images2.imgbox.com/5d/36/sHqqQiIb_o.png" alt="在这里插入图片描述" width="600"><br> 不过这样是一直在计算DetailNormal，实际使用时为了让其不一直计算，可以在较低的Lod中舍弃这个，或者创建一个基于距离的mask，靠近时再计算</p> 
+<h2><a id="Lec14_Advanced_Detail_Mapping_etcmask_17"></a>Lec14 Advanced Detail Mapping (etc.灰度mask)</h2> 
+<p>在这节使用一张纹理mask将多个Detail进行映射<br> 整个实现如下图，也就是RGBA四个通道各画一个Mask分别用不同的图</p> 
+<p><img src="https://images2.imgbox.com/83/7e/2BkDkrsF_o.png" alt="在这里插入图片描述" width="800"><br> 这样是消耗比较高的，于是可以用UE的TextureArray来改善，创建TextureArray后插入要用的图<br> <img src="https://images2.imgbox.com/2e/77/cGEO2JJa_o.png" alt="在这里插入图片描述" width="800"><br> 采样TextureArray需要UVW三个参数，UV正常采样，W用于选择贴图<br> 为了分出用什么贴图，可以在mask上使用不同灰度值，这样实现更加节省性能，W用灰度值映射<br> <img src="https://images2.imgbox.com/82/e9/NNL0ISEO_o.png" alt="在这里插入图片描述" width="600"><br> <img src="https://images2.imgbox.com/97/e4/5pSM2c0f_o.png" alt="在这里插入图片描述" width="800"><br> 从评论中节选出一些问题</p> 
+<ul><li>TextureArray会只加载一个mip，无法利用Streaming的优势，但对于detail来说没问题，毕竟detail只在特写中需要。Ben关于这个的建议是使用低分辨率的TextureArray，然后应用所有角色，一直在内存中也没事。<br> <img src="https://images2.imgbox.com/21/84/Dpw2IMTw_o.png" alt="在这里插入图片描述"></li><li>关于如何在mask中单独设置每个纹理的UV平铺，如果使用了if节点来设置就没有意义了。<br> Ben的回复是之前在开发圣歌的时候尝试做过但是这种尝试并不干净，他决定使用一个全局的统一的分辨率控制缩放。Ben提议可以将纹理缩放倍数也编码为灰度颜色读取，但是会在边界上产生一些奇怪的结果，在涉及纹理压缩和低mipmap时尤为明显。<br> 在圣歌的开发中，Ben让艺术家在一个mask上使用16种材质，texture array设置有16份贴图，分辨率为64*64<br> <img src="https://images2.imgbox.com/bd/33/vkzOk0Dx_o.png" alt="在这里插入图片描述"></li><li>如果想要使用mask之间过渡，可以采用最开始分通道存储mask的方式<br> <img src="https://images2.imgbox.com/ad/4b/4gkcKdMx_o.png" alt="在这里插入图片描述"></li><li>也有人提出问题，UE更适合多种材质插槽，使用多种简单的材质更好。Ben觉得使用一个材质可以减少DrawCall。<br> <img src="https://images2.imgbox.com/f6/b4/hRSOY09Z_o.png" alt="在这里插入图片描述"></li></ul> 
+<p>这种用灰度分mask的方法在其他游戏中也会用到，比如原神中根据不同灰度选择不同Ramp<br> <img src="https://images2.imgbox.com/19/d0/jV0vHh7x_o.png" alt="在这里插入图片描述" width="400"></p> 
+<h2><a id="Lec15_Smoothstep_etc_42"></a>Lec15 Smoothstep (etc.溶解/高度混合)</h2> 
+<p>关于Smoothstep，可以看看<br> <a href="https://zhuanlan.zhihu.com/p/170493708" rel="nofollow">常用函数SmoothStep的实现原理</a><br> <a href="https://zhuanlan.zhihu.com/p/157758600" rel="nofollow">Shader实验室: smoothstep函数</a><br> 推荐使用 <a href="https://www.desmos.com/calculator?lang=zh-CN" rel="nofollow">Desmos这个网站</a> 来画函数图像</p> 
+<pre><code class="prism language-c"><span class="token function">SmoothStep</span><span class="token punctuation">(</span><span class="token keyword">float</span> edgo0<span class="token punctuation">,</span><span class="token keyword">float</span> edge1<span class="token punctuation">,</span> <span class="token keyword">float</span> x<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre> 
+<p>edge0是样条线插值的下界，edge1是样条线插值的上界，当x小于下界返回0，当x大于上界返回1，介于上界下界之间返回一个平滑的曲线。<br> <img src="https://images2.imgbox.com/68/b6/5ziIFSA0_o.png" alt="在这里插入图片描述" width="400"><br> 如下图对UV坐标在0.6和0.7之间Smoothstep<br> <img src="https://images2.imgbox.com/39/32/AiqwYI9t_o.png" alt="在这里插入图片描述" width="400"></p> 
+<p>数学上就是这些，下面有一些例子，比如溶解</p> 
+<p>sin(time)映射到0~1，将噪声图在两个值之间Smoothstep，边缘有0.03厚度进行溶解<br> <img src="https://images2.imgbox.com/49/f7/TO8FJcSi_o.png" alt="在这里插入图片描述" width="500"><br> <img src="https://images2.imgbox.com/d9/ab/L2Ts8XFw_o.gif" alt="在这里插入图片描述" width="200"><br> 对溶解做一些改进，再加一组Smoothstep，但是稍微偏移一点，两者相减，溶解就只剩边缘了，有一种扫描的效果<br> <img src="https://images2.imgbox.com/e3/1d/KrB09f6y_o.png" alt="在这里插入图片描述" width="600"><br> <img src="https://images2.imgbox.com/d6/56/cdxmOVyz_o.gif" alt="在这里插入图片描述" width="200"><br> 还有个例子，Smoothstep也可以用在地形材质的高度混合<br> <a href="https://blog.csdn.net/weixin_43803133/article/details/115440031">Building Worlds In Unreal 学习笔记——15-19 高度图地形专题&amp;地形自动材质专题</a><br> 首先拉一个渐变范围，然后让smoothstep去调整渐变的范围<br> <img src="https://images2.imgbox.com/29/90/vXXsQGxo_o.png" alt="在这里插入图片描述" width="900"><br> Smoothstep对调整范围很有帮助，因为有最大值最小值可以控制</p> 
+<h2><a id="Lec16_Length__Distance_etc_70"></a>Lec16 Length &amp; Distance (etc.摇摆/内部假光)</h2> 
+<p>Length输入一个向量计算长度，Distance输入起止点计算长度，下图上下是等效的<br> <img src="https://images2.imgbox.com/fc/a3/1uyoIopj_o.png" alt="在这里插入图片描述" width="800"></p> 
+<p>下面这个例子将局部坐标Z值与下面的点计算距离作为遮罩，进行横向移动，达到摇摆的效果<br> <img src="https://images2.imgbox.com/58/81/iRrXvols_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/05/db/CfaShECR_o.gif" alt="在这里插入图片描述" width="200"></p> 
+<p>下面的例子结构和摇摆的类似，不过这次将移动的sin作为测量距离的点，将距离pow之后作为自发光，得到一种虚假光源的效果<br> <img src="https://images2.imgbox.com/26/e6/EIfITwiu_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/f3/4e/yiijZVDH_o.gif" alt="在这里插入图片描述" width="200"><br> 和sdf进行Ray Marching有类似的思路，通过描述距离来实现效果 <a href="https://blog.csdn.net/weixin_43803133/article/details/116199862?spm=1001.2014.3001.5501">案例学习——Unity体绘制shader初探</a></p> 
+<h2><a id="Lec17_Ceil_Floor_Round_etc_83"></a>Lec17 Ceil Floor Round (etc.色阶)</h2> 
+<p>Ceil 向上取整<br> Floor 向下取整<br> Round 四舍五入</p> 
+<p>举例 半兰伯特分色阶<br> <img src="https://images2.imgbox.com/9a/74/qE2mZ7lk_o.png" alt="在这里插入图片描述" width="800"></p> 
+<h2><a id="Lec18_DDX_DDY_etcmip_90"></a>Lec18 DDX DDY (etc.面片法线,纹理mip计算)</h2> 
+<p>相邻像素之间求导<br> <img src="https://images2.imgbox.com/06/13/bSdiqoYY_o.png" alt="在这里插入图片描述" width="800"><br> DDX和DDY叉乘可以得到法线，用于隐藏呈现面片感的树叶<br> <a href="https://blog.csdn.net/weixin_43803133/article/details/114790872">UE4 Material 101学习笔记——30-37 植物叶片（透光/mask/面片隐藏/法线调整/AO/渐隐/世界空间色彩/随风舞动）</a><br> <img src="https://images2.imgbox.com/10/3a/4yqgzog7_o.png" alt="在这里插入图片描述" width="800"><br> 接着来DDXDDY还能修复HDR的latlong贴图<br> <img src="https://images2.imgbox.com/a9/9d/JkCLl3cL_o.jpg" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/fa/c4/LNlk5glo_o.png" alt="在这里插入图片描述"><br> 图片衔接处会有一个像素的白线，产生的原因是边界的不连续，交界处UV从0跳转到1，此时选择Mipmap出错，于是出现这个问题<br> <img src="https://images2.imgbox.com/70/ca/zKdCeuvn_o.png" alt="在这里插入图片描述" width="300"><br> 解决办法选择Dericative模式作为MipValueMode，将UV坐标作为DDXDDY输入，对于极坐标等也很有帮助<br> <img src="https://images2.imgbox.com/62/02/kjoLFtfq_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/72/40/DRq0UogU_o.png" alt="在这里插入图片描述" width="500"><br> 在HLSL中，这个功能相当于 tex2Dgrad(s,t,ddx,ddy)函数 使用微分并指定MIP层的二维纹理查找</p> 
+<p>DDXDDY还能用于将凹凸贴图转为法线贴图，下面这些节点的功能相当于PerturbNormalLQ<br> <img src="https://images2.imgbox.com/d8/38/tzupK2xA_o.png" alt="在这里插入图片描述"></p> 
+<h2><a id="Lec19_Sin_Cos_etc_108"></a>Lec19 Sin Cos (etc.涟漪)</h2> 
+<p>正弦余弦的定义不再赘述<br> 注意在UE中，sin和cos的周期是1，需要自己在参数栏设置成2pi才会是正常的sin，cos的速度<br> <img src="https://images2.imgbox.com/5b/69/Lbairy48_o.png" alt="在这里插入图片描述" width="300"></p> 
+<p>sin和cos的使用这里ben佬给出了几个例子<br> 第一个调整幅度<br> <img src="https://images2.imgbox.com/33/c1/dwYVdce9_o.png" alt="在这里插入图片描述" width="500"></p> 
+<p>第二个则可以利用径向渐变来实现ripple<br> <img src="https://images2.imgbox.com/6f/59/zjv5QgDJ_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/01/71/ZDDar6px_o.png" alt="在这里插入图片描述"><br> 更进阶的ripple做法<br> <a href="https://blog.csdn.net/weixin_43803133/article/details/112911745">UE4 Material 101学习笔记——13-18 完整的雨水着色器</a></p> 
+<p>第三个是用sin进行运动（加个sin就和弹跳动画一样）<br> <img src="https://images2.imgbox.com/ed/39/LlXLKUsK_o.png" alt="在这里插入图片描述" width="400"><br> 第四个是旋转UV<br> <img src="https://images2.imgbox.com/0b/9c/xu9tQZ04_o.png" alt="在这里插入图片描述" width="400"></p> 
+<h2><a id="Lec20_Power_127"></a>Lec20 Power</h2> 
+<p>幂运算的定义也不再赘述<br> power可以用于对比度调整，可以用于NdotV菲涅尔的调整，又比如power2.2和gamma校正一样<br> power性能比较昂贵，引擎也会做一些优化，比如二次方自动用硬编码的自身相乘替代</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/f4f02677717fc1096c08f5bca6199b93/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">git修改name用户名</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/f77b00307ba6ab44dc8d14928d08f61a/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Echarts图表的使用以及如何适应屏幕变化</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

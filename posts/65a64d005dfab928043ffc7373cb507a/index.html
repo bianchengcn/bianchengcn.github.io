@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>[样本分析] Ramnit感染型病毒 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="[样本分析] Ramnit感染型病毒" />
+<meta property="og:description" content="文章目录 样本信息样本行为详细分析脱壳样本主体行为获得默认浏览器路径创建互斥体自拷贝InlineHook创建傀儡进程，注入病毒DLLUnInlineHook 病毒DLL行为线程1线程2线程3线程4线程5开始感染 最终总结 样本信息 MD5：ff5e1f27193ce51eec318714ef038bef
+类型：exe32
+分析工具：DIE、OD、IDA
+样本行为 该样本属于Ramnit蠕虫病毒，样本主体会创建傀儡进程（默认浏览器进程）并向其注入病毒DLL，病毒DLL会创建几个线程分别执行功能，包括实现自启动、查询网络连通情况、记录系统时间、向C2(fget-career.com)发送收集到的用户数据、感染磁盘上的exe，dll，html，htm文件、感染可移动磁盘以试图感染更多主机等，感染性极强。
+详细分析 拿到样本之后，先拖到DIE中看一下，发现有UPX壳。
+脱壳 用UPX直接脱壳：
+脱壳成功后，用IDA打开，发现入口处是无意义的函数调用：
+这肯定不是真正的入口，在OD中跟踪一下，发现它中途有通过VirtualAlloc申请内存，是个突破点！
+在数据窗口中跟随此处申请到的内存（通过硬件断点），发现在此处填充数据后，随后就去执行了。
+retn返回之后就到了002C2CA9，之后是一堆jmp混淆。
+疯狂F8，中间经过了很多循环（应该是解密），最后跳到了正常的代码段（40开头）。
+一看是pushad，盲猜又是个壳，用ESP定律脱壳，就到了真正的入口：
+真是不容易啊，一层又一层！！！
+样本主体行为 入口处主要有六个行为：
+获得默认浏览器路径 查询注册表HKEY_CLASSES_ROOT\http\shell\open\command，获得默认浏览器的路径，如果没有，则用IE浏览器。
+创建互斥体 创建互斥体，名称为KyUffTh0kYwRRtgPP，这一步用来确保只有一个病毒实例存在。
+自拷贝 判断当前进程名，如果不是DesktopLayer.exe，则拷贝自身到C:\Program Files\Microsoft\DesktopLayer.exe，结束当前进程，启动新进程。
+InlineHook 对ZwWriteVirtualMemory函数进行InlineHook，Hook之前要挂起当前进程中的其他线程，Hook完之后恢复。
+挂起和恢复线程，用的是同一套代码(通过CreateToolhelp32Snapshot、Thread32First、Thread32Next遍历线程)：
+具体Hook过程如下：
+首先通过GetProcAddress获得OriginalAddress；然后通过VirtualProtect修改OriginalAddress的页面属性为PAGE_EXECUTE_READWRITE；然后通过VirtualAlloc申请一块可提交内存(大小为5&#43;10)，用于存放数据;保存OriginalAddress的前五字节，然后把它改成jmp FakeFunc；修改完成后，通过VirtualProtect恢复页面属性；
+Hook前后ZwWriteVirtualMemory函数的入口分别为：
+创建傀儡进程，注入病毒DLL 创建傀儡进程，即上面获得的默认浏览器进程。
+CreateProcessA内部会调用ZwWriteVirtualMemory，因此会进入自定义的钩子函数(00402A59)。
+调用堆栈为：
+钩子函数行为：
+调用原函数；获得浏览器进程的EP；
+将DLL及三个函数注入浏览器进程；
+首先在浏览器进程中申请内存，然后展开DLL并将其写入浏览器进程，随后写入三个函数。
+展开DLL的过程：
+修改浏览器进程的EP，使其调用之前写入的第三个函数。
+这样，当浏览器进程恢复运行时，会进入Func3函数，它会先调用Fun1初始化DLL的IAT表，然后遍历DLL的节区依次设置节区属性，最后跳到了DLL的EP：
+Func1主要是遍历DLL的导入表，依次加载DLL并初始化IAT表：
+至此，傀儡进程创建完成。 UnInlineHook 恢复ZwWriteVirtualMemory函数，之前Hook时提前保存了被换掉的那五字节。
+到这里，样本主体行为就分析完了，接下来看一下病毒DLL的行为。
+病毒DLL行为 在上面分析样本主体时过程中，将病毒DLL dump下来。
+DllEntryPoint中创建了五个线程来实现不同的功能，随后开始感染磁盘上的exe、dll、html、htm文件以及可移动磁盘。
+线程1 设置注册表项HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Winlogon下的Userinit，以实现开机自启动。并且每隔一段时间就会设置一次。
+线程2 尝试连接google.com、bing.com、yahoo.com，以测试网络的连通性。
+具体是通过套接字来测试的：
+线程3 创建dmlconf.dat文件，写入当前系统时间。
+线程4 连接fget-career.com，并向其发送收集到的用户数据。
+首先通过套接字绑定并监听4678端口：
+然后创建线程来连接fget-career.com并收发数据。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/65a64d005dfab928043ffc7373cb507a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-01-14T11:51:49+08:00" />
+<meta property="article:modified_time" content="2022-01-14T11:51:49+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">[样本分析] Ramnit感染型病毒</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-light">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p></p> 
+<div class="toc"> 
+ <h4>文章目录</h4> 
+ <ul><li><a href="#_1" rel="nofollow">样本信息</a></li><li><a href="#_5" rel="nofollow">样本行为</a></li><li><a href="#_7" rel="nofollow">详细分析</a></li><li><ul><li><a href="#_10" rel="nofollow">脱壳</a></li><li><a href="#_25" rel="nofollow">样本主体行为</a></li><li><ul><li><a href="#_28" rel="nofollow">获得默认浏览器路径</a></li><li><a href="#_31" rel="nofollow">创建互斥体</a></li><li><a href="#_33" rel="nofollow">自拷贝</a></li><li><a href="#InlineHook_36" rel="nofollow">InlineHook</a></li><li><a href="#DLL_50" rel="nofollow">创建傀儡进程，注入病毒DLL</a></li><li><a href="#UnInlineHook_77" rel="nofollow">UnInlineHook</a></li></ul> 
+   </li><li><a href="#DLL_81" rel="nofollow">病毒DLL行为</a></li><li><ul><li><a href="#1_85" rel="nofollow">线程1</a></li><li><a href="#2_89" rel="nofollow">线程2</a></li><li><a href="#3_95" rel="nofollow">线程3</a></li><li><a href="#4_98" rel="nofollow">线程4</a></li><li><a href="#5_105" rel="nofollow">线程5</a></li><li><a href="#_107" rel="nofollow">开始感染</a></li></ul> 
+  </li></ul> 
+  </li><li><a href="#_125" rel="nofollow">最终总结</a></li></ul> 
+</div> 
+<p></p> 
+<h2><a id="_1"></a>样本信息</h2> 
+<p>MD5：ff5e1f27193ce51eec318714ef038bef<br> 类型：exe32<br> 分析工具：DIE、OD、IDA</p> 
+<h2><a id="_5"></a>样本行为</h2> 
+<p>该样本属于Ramnit蠕虫病毒，样本主体会创建傀儡进程（默认浏览器进程）并向其注入病毒DLL，病毒DLL会创建几个线程分别执行功能，包括实现自启动、查询网络连通情况、记录系统时间、向C2(fget-career.com)发送收集到的用户数据、感染磁盘上的exe，dll，html，htm文件、感染可移动磁盘以试图感染更多主机等，感染性极强。</p> 
+<h2><a id="_7"></a>详细分析</h2> 
+<p>拿到样本之后，先拖到DIE中看一下，发现有UPX壳。<br> <img src="https://images2.imgbox.com/00/85/CRMVDwzM_o.png" alt="在这里插入图片描述"></p> 
+<h3><a id="_10"></a>脱壳</h3> 
+<p>用UPX直接脱壳：<br> <img src="https://images2.imgbox.com/35/c5/NUnzR6OJ_o.png" alt="在这里插入图片描述"><br> 脱壳成功后，用IDA打开，发现入口处是无意义的函数调用：<br> <img src="https://images2.imgbox.com/cd/6f/iXqeI0wd_o.png" alt="在这里插入图片描述"><br> 这肯定不是真正的入口，在OD中跟踪一下，发现它中途有通过VirtualAlloc申请内存，是个突破点！<br> <img src="https://images2.imgbox.com/fb/e3/tqHqGrF7_o.png" alt="在这里插入图片描述"><br> 在数据窗口中跟随此处申请到的内存（通过硬件断点），发现在此处填充数据后，随后就去执行了。<br> <img src="https://images2.imgbox.com/ab/33/xDaWx0Nk_o.png" alt="在这里插入图片描述"><br> <code>retn</code>返回之后就到了<code>002C2CA9</code>，之后是一堆jmp混淆。<br> <img src="https://images2.imgbox.com/ca/ff/5AGNC65y_o.png" alt="在这里插入图片描述"><br> 疯狂F8，中间经过了很多循环（应该是解密），最后跳到了正常的代码段（40开头）。<br> 一看是<code>pushad</code>，盲猜又是个壳，用ESP定律脱壳，就到了真正的入口：<br> <img src="https://images2.imgbox.com/65/43/Z5xBbF69_o.png" alt="在这里插入图片描述"><br> 真是不容易啊，一层又一层！！！</p> 
+<h3><a id="_25"></a>样本主体行为</h3> 
+<p>入口处主要有六个行为：<br> <img src="https://images2.imgbox.com/b4/71/0Z3EOFBu_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="_28"></a>获得默认浏览器路径</h4> 
+<p>查询注册表<code>HKEY_CLASSES_ROOT\http\shell\open\command</code>，获得默认浏览器的路径，如果没有，则用IE浏览器。<br> <img src="https://images2.imgbox.com/ce/d9/4JhZzyDr_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="_31"></a>创建互斥体</h4> 
+<p>创建互斥体，名称为<code>KyUffTh0kYwRRtgPP</code>，这一步用来确保只有一个病毒实例存在。</p> 
+<h4><a id="_33"></a>自拷贝</h4> 
+<p>判断当前进程名，如果不是<code>DesktopLayer.exe</code>，则拷贝自身到<code>C:\Program Files\Microsoft\DesktopLayer.exe</code>，结束当前进程，启动新进程。<br> <img src="https://images2.imgbox.com/08/8f/UNp1fWca_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="InlineHook_36"></a>InlineHook</h4> 
+<p>对<code>ZwWriteVirtualMemory</code>函数进行InlineHook，Hook之前要挂起当前进程中的其他线程，Hook完之后恢复。<br> 挂起和恢复线程，用的是同一套代码(通过<code>CreateToolhelp32Snapshot</code>、<code>Thread32First</code>、<code>Thread32Next</code>遍历线程)：<br> <img src="https://images2.imgbox.com/64/a9/mwxwCMqU_o.png" alt="在这里插入图片描述"><br> <strong>具体Hook过程如下</strong>：</p> 
+<ul><li>首先通过<code>GetProcAddress</code>获得<code>OriginalAddress</code>；</li><li>然后通过<code>VirtualProtect</code>修改<code>OriginalAddress</code>的页面属性为<code>PAGE_EXECUTE_READWRITE</code>；</li><li>然后通过<code>VirtualAlloc</code>申请一块可提交内存(大小为5+10)，用于存放数据;</li><li>保存<code>OriginalAddress</code>的前五字节，然后把它改成<code>jmp FakeFunc</code>；</li><li>修改完成后，通过<code>VirtualProtect</code>恢复页面属性；<br> <img src="https://images2.imgbox.com/05/9f/QzFR0xCm_o.png" alt="在这里插入图片描述"><br> Hook前后ZwWriteVirtualMemory函数的入口分别为：<br> <img src="https://images2.imgbox.com/cc/a9/McIQeSTv_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/46/30/Na7vUa0H_o.png" alt="在这里插入图片描述"></li></ul> 
+<h4><a id="DLL_50"></a>创建傀儡进程，注入病毒DLL</h4> 
+<p>创建傀儡进程，即上面获得的默认浏览器进程。<br> <img src="https://images2.imgbox.com/6b/33/yzwqBCSm_o.png" alt="在这里插入图片描述"><br> <code>CreateProcessA</code>内部会调用<code>ZwWriteVirtualMemory</code>，因此会进入自定义的钩子函数(00402A59)。<br> <strong>调用堆栈为</strong>：<br> <img src="https://images2.imgbox.com/cf/99/eurTR8Wu_o.png" alt="在这里插入图片描述"><br> <strong>钩子函数行为</strong>：<br> <img src="https://images2.imgbox.com/d7/5e/QYZQWN9o_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/b5/24/3qXNDCU9_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>调用原函数；</li><li>获得浏览器进程的EP；<br> <img src="https://images2.imgbox.com/bb/b9/6oK77Chb_o.png" alt="在这里插入图片描述"></li><li>将DLL及三个函数注入浏览器进程；<br> 首先在浏览器进程中申请内存，然后展开DLL并将其写入浏览器进程，随后写入三个函数。<br> <img src="https://images2.imgbox.com/69/e2/iWuPqOTW_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/b9/cb/5GmM7rFZ_o.png" alt="在这里插入图片描述"><br> 展开DLL的过程：<br> <img src="https://images2.imgbox.com/4b/81/zRhfURLm_o.png" alt="在这里插入图片描述"></li><li>修改浏览器进程的EP，使其调用之前写入的第三个函数。<br> <img src="https://images2.imgbox.com/5c/93/FyvbaGTd_o.png" alt="在这里插入图片描述"><br> 这样，当浏览器进程恢复运行时，会进入Func3函数，它会先调用Fun1初始化DLL的IAT表，然后遍历DLL的节区依次设置节区属性，最后跳到了DLL的EP：<br> <img src="https://images2.imgbox.com/36/0b/JAp6lsEG_o.png" alt="在这里插入图片描述"><br> Func1主要是遍历DLL的导入表，依次加载DLL并初始化IAT表：<br> <img src="https://images2.imgbox.com/04/b7/PRKrejQH_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/20/c5/ItrSpHVD_o.png" alt="在这里插入图片描述"><br> 至此，傀儡进程创建完成。</li></ul> 
+<h4><a id="UnInlineHook_77"></a>UnInlineHook</h4> 
+<p>恢复ZwWriteVirtualMemory函数，之前Hook时提前保存了被换掉的那五字节。<br> <img src="https://images2.imgbox.com/9d/03/KABCbrns_o.png" alt="在这里插入图片描述"><br> 到这里，样本主体行为就分析完了，接下来看一下病毒DLL的行为。</p> 
+<h3><a id="DLL_81"></a>病毒DLL行为</h3> 
+<p>在上面分析样本主体时过程中，将病毒DLL dump下来。<br> DllEntryPoint中创建了五个线程来实现不同的功能，随后开始感染磁盘上的exe、dll、html、htm文件以及可移动磁盘。<br> <img src="https://images2.imgbox.com/28/c5/rZtg0ep7_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="1_85"></a>线程1</h4> 
+<p>设置注册表项<code>HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Winlogon</code>下的<code>Userinit</code>，以实现开机自启动。并且每隔一段时间就会设置一次。<br> <img src="https://images2.imgbox.com/94/a6/SEDVaxH8_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/9a/84/6u2fz1PD_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="2_89"></a>线程2</h4> 
+<p>尝试连接google.com、bing.com、yahoo.com，以测试网络的连通性。<br> <img src="https://images2.imgbox.com/c9/22/RegT4cR3_o.png" alt="在这里插入图片描述"><br> 具体是通过套接字来测试的：<br> <img src="https://images2.imgbox.com/f5/59/GlubfnkZ_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/76/a1/RhPGLkEv_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="3_95"></a>线程3</h4> 
+<p>创建<code>dmlconf.dat</code>文件，写入当前系统时间。<br> <img src="https://images2.imgbox.com/13/17/1zp4hP3E_o.png" alt="在这里插入图片描述"></p> 
+<h4><a id="4_98"></a>线程4</h4> 
+<p>连接<code>fget-career.com</code>，并向其发送收集到的用户数据。<br> <img src="https://images2.imgbox.com/58/42/cP5JMSVd_o.png" alt="在这里插入图片描述"></p> 
+<ul><li>首先通过套接字绑定并监听<code>4678</code>端口：<br> <img src="https://images2.imgbox.com/88/37/quSBPmBI_o.png" alt="在这里插入图片描述"></li><li>然后创建线程来连接<code>fget-career.com</code>并收发数据。<br> <img src="https://images2.imgbox.com/de/44/nHNshTUD_o.png" alt="在这里插入图片描述"></li></ul> 
+<h4><a id="5_105"></a>线程5</h4> 
+<p>从<code>fget-career.com</code>上下载文件并运行。</p> 
+<h4><a id="_107"></a>开始感染</h4> 
+<p>sub_1000749F函数内部创建了两个线程来感染，分别感染磁盘上的文件以及将自身复制到可移动磁盘，尝试感染更多主机。<br> <img src="https://images2.imgbox.com/fa/25/4khK6wSU_o.png" alt="在这里插入图片描述"></p> 
+<ol><li>遍历磁盘，感染文件，感染的总体思路都是将自身写入目标文件。遍历的时候会跳过System目录和Windows目录下的文件。<br> <img src="https://images2.imgbox.com/8a/3f/MQbe0QEQ_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/91/5d/WOgU1pRC_o.png" alt="在这里插入图片描述"></li></ol> 
+<ul><li>对于exe和dll文件，会先做一系列的判断，满足是未签名的PE32、没有".rmnet"节、有LoadLibraryA和GetProcAddress函数，才会开始感染。具体的感染手段是在文件末尾新增一个<code>.rmnet</code>节，并写入sub_10006F2C函数和病毒样本。<br> <img src="https://images2.imgbox.com/bf/75/1m0f0MEu_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/20/47/HPPCGeWf_o.png" alt="在这里插入图片描述"></li><li>对于html和htm文件，会读取文件数据并匹配，看文件末尾是不是<code>&lt;/SCRIPT&gt;</code>，若不是则写入VB脚本，脚本会将病毒样本写入目标文件。<br> <img src="https://images2.imgbox.com/77/20/bpxVRhX1_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/be/76/x8ZWcajW_o.png" alt="在这里插入图片描述"></li></ul> 
+<ol start="2"><li>感染可移动磁盘。首先遍历磁盘，满足是可移动磁盘、磁盘上有可用空间、暂未被感染三个条件则开始感染。<br> <img src="https://images2.imgbox.com/09/d3/OMZDQyXt_o.png" alt="在这里插入图片描述"><br> 具体感染过程为：在可移动磁盘的根目录下创建目录<code>RECYCLER\S-x-x-xx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxx</code>，在其下创建<code>xxxxxxxx.exe</code>并写入病毒数据。另外在磁盘根目录下创建<code>autorun.inf</code>文件，并写入四段数据，其中第三段数据的作用是，当打开磁盘时自动运行<code>xxxxxxxx.exe</code>，即病毒样本。<br> <img src="https://images2.imgbox.com/1d/75/wDIwsaRy_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/e2/97/wwRcqBhB_o.png" alt="在这里插入图片描述"><br> <img src="https://images2.imgbox.com/14/e5/JqKepy52_o.png" alt="在这里插入图片描述"></li></ol> 
+<h2><a id="_125"></a>最终总结</h2> 
+<p>好像感染型病毒总体来说都差不了太多，都会将病毒样本写入目标文件并设法让其运行。对于PE文件来说，最常用的就是新增节，修改EP到节区首地址，然后将病毒数据写入新增节区，中间涉及到基址重定位和重建导入表的一些内容，需要分析者对PE文件结构很熟悉。对于其他类型的文件，以html为例，在文件末尾写入脚本来将病毒数据写入目标。其他类型的文件暂时没有接触到，后续分析遇到时再总结，就先到这里吧！</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/5cd852c0b648fcc88889a207d37028a3/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">【Verilog-41】Verilog中强度strength的用法</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/fafeb9e649bf09e1b5d0d8d4403348d0/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">利用SourceMap还原前端代码</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

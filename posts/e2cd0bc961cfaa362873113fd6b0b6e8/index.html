@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Elasticsearch—生产环境集群核心配置 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Elasticsearch—生产环境集群核心配置" />
+<meta property="og:description" content="一. Elasticsearch相关配置 path.data 和 path.log 这两个配置的目录分别用来存放索引数据和日志，它们的默认路径位于$_ES_HOME的子文件夹内。这样有很大风险，特别是在升级Elasticsearch版本时，这些数据很可能被删除，在生产环境中可参考下面的配置
+path: logs: /var/log/elasticsearch data: /var/data/elasticsearch 另外path.data支持配置多个目录，每个目录都会用来存放数据，但是单个分片会存放在同一个目录内，多目录配置参考
+path: data: - /mnt/elasticsearch_1 - /mnt/elasticsearch_2 - /mnt/elasticsearch_3 集群名称 默认情况下集群名为elasticsearch，为了区分不同集群，在生产环境需要进行修改。每个节点需要配置相同的集群名才能加入同一个集群中，且每个节点只能加入一个集群，要保证集群名相同，否则会加入错误的集群中。
+cluster.name: test-cluster 节点名称 默认情况下节点名称是操作系统的主机名，在Linux下使用hostname -f可查看主机名。也可通过elasticsearch.yml 配置文件显示的配置，使可读性更好。配置示例如下
+node.name: test-node 网络地址 network.host 默认配置下，Elasticsearch绑定的是一个环回地址127.0.0.1 ，这只适合在单机开发时使用。在正式环境中，为了保证该节点能够被其它节点找到，形成一个集群，需要设置一个非环回地址，如果在内网中部署集群，可通过ifconfig命令查看当前节点的内网ip地址。配置如下
+network.host: 192.168.60.11 服务发现和集群形成设置 1. 服务发现种子主机 discovery.seed_hosts
+在开发环境中，服务发现主机名不需要设置，Elasticsearch默认会从本机的9300-9305端口尝试去连接其它节点，这提供了自动集群的体验，不需要任何配置。但在正式环境中，每个节点理论上都是不同的机器，这时候需要配置discovery.seed_hosts，discovery.seed_hosts可以是ip、ip:端口和域名。如果配置是ip，Elasticsearch默认会使用transport.profiles.default.port配置项的端口，该端口默认为9300；如果配置是域名，且该域名下绑定了多个ip，ES会尝试去连接多个ip。下面是配置示例
+discovery.seed_hosts: - 192.168.1.10:9300 - 192.168.1.11 - seeds.mydomain.com 2. 初始主节点 cluster.initial_master_nodes
+当开启一个全新的集群时，会有一个集群的引导步骤，这步骤用来确定哪些节点参与第一次的主节点选举。在开发模式下，这个步骤由节点自动完成，这种模式本质上是不安全的，因为不是所有节点都适合做主节点，主节点关系到集群的稳定性。因此在生产模式下，集群第一次启动时，需要有一个适合作为主节点的节点列表，这个列表就是通过cluster.initial_master_nodes来配置，在配置中需要写出具体的节点名称，对应node.name配置项。配置示例如下
+cluster.initial_master_nodes: - master-node-a - master-node-b - master-node-c 设置堆内存容量 默认情况下，Elasticsearch中JVM堆内存的最小值和最大值为1GB，在生产模式下，堆内存容量是非常重要的，需要确保Elasticsearch有足够的堆内存可用。我们可以在jvm.options 配置文件中，通过配置Xmx 和Xms项来决定JVM堆内存容量，配置的容量本身也取决于服务器的物理内存，Xmx 和Xms的值不超过物理内存的50%。因为Elasticsearch除了堆内存，也会有其它的操作，比如使用堆外缓冲区进行网络通信，通过操作系统的文件系统缓存来访问文件，还有JVM自身也需要一些内存。对内存容量，最大可设置接近32GB，26GB是安全值，有些系统下可到达30GB。示例配置如下
+-Xms2g -Xmx2g 二. 操作系统配置 文件描述符 Linux默认配置下最大打开文件数为1024，可通过ulimit -n查看，而ES在建索引过程中会打开很多小文件，这样很容易超过限制，文件描述符临时设置命令如下" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/e2cd0bc961cfaa362873113fd6b0b6e8/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2020-09-18T10:07:15+08:00" />
+<meta property="article:modified_time" content="2020-09-18T10:07:15+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Elasticsearch—生产环境集群核心配置</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <h3 id="item-1">一. Elasticsearch相关配置</h3> 
+<h4 id="item-1-1">path.data 和 path.log</h4> 
+<p>这两个配置的目录分别用来存放<code>索引数据</code>和<code>日志</code>，它们的默认路径位于<code>$_ES_HOME</code>的子文件夹内。这样有很大风险，特别是在升级Elasticsearch版本时，这些数据很可能被删除，在生产环境中可参考下面的配置</p> 
+<pre><code class="language-html hljs">path:  logs: /var/log/elasticsearch  data: /var/data/elasticsearch</code></pre> 
+<p>另外path.data支持配置多个目录，每个目录都会用来存放数据，但是单个分片会存放在同一个目录内，多目录配置参考</p> 
+<pre><code class="language-html hljs">path:  data:
+    - /mnt/elasticsearch_1
+    - /mnt/elasticsearch_2
+    - /mnt/elasticsearch_3</code></pre> 
+<h4 id="item-1-2">集群名称</h4> 
+<p>默认情况下集群名为<code>elasticsearch</code>，为了区分不同集群，在生产环境需要进行修改。每个节点需要配置相同的集群名才能加入同一个集群中，且每个节点只能加入一个集群，要保证集群名相同，否则会加入错误的集群中。</p> 
+<pre><code class="language-html hljs">cluster.name: test-cluster</code></pre> 
+<h4 id="item-1-3">节点名称</h4> 
+<p>默认情况下节点名称是操作系统的主机名，在Linux下使用<code>hostname -f</code>可查看主机名。也可通过<code>elasticsearch.yml </code>配置文件显示的配置，使可读性更好。配置示例如下</p> 
+<pre><code class="language-html hljs">node.name: test-node</code></pre> 
+<h4 id="item-1-4">网络地址 network.host</h4> 
+<p>默认配置下，Elasticsearch绑定的是一个环回地址<code>127.0.0.1 </code>，这只适合在单机开发时使用。在正式环境中，为了保证该节点能够被其它节点找到，形成一个集群，需要设置一个非环回地址，如果在内网中部署集群，可通过<code>ifconfig</code>命令查看当前节点的内网ip地址。配置如下</p> 
+<pre><code class="language-html hljs">network.host: 192.168.60.11</code></pre> 
+<h4 id="item-1-5">服务发现和集群形成设置</h4> 
+<p>1. 服务发现种子主机 discovery.seed_hosts</p> 
+<p>在开发环境中，服务发现主机名不需要设置，Elasticsearch默认会从本机的9300-9305端口尝试去连接其它节点，这提供了自动集群的体验，不需要任何配置。但在正式环境中，每个节点理论上都是不同的机器，这时候需要配置<code>discovery.seed_hosts</code>，<code>discovery.seed_hosts</code>可以是<code>ip</code>、<code>ip:端口</code>和<code>域名</code>。如果配置是ip，Elasticsearch默认会使用<code>transport.profiles.default.port</code>配置项的端口，该端口默认为9300；如果配置是域名，且该域名下绑定了多个ip，ES会尝试去连接多个ip。下面是配置示例</p> 
+<pre><code class="language-html hljs">discovery.seed_hosts:   - 192.168.1.10:9300
+   - 192.168.1.11 
+   - seeds.mydomain.com</code></pre> 
+<p>2. 初始主节点 cluster.initial_master_nodes</p> 
+<p>当开启一个全新的集群时，会有一个集群的引导步骤，这步骤用来确定哪些节点参与第一次的主节点选举。在开发模式下，这个步骤由节点自动完成，这种模式本质上是不安全的，因为不是所有节点都适合做主节点，主节点关系到集群的稳定性。因此在生产模式下，集群第一次启动时，需要有一个适合作为主节点的节点列表，这个列表就是通过<code>cluster.initial_master_nodes</code>来配置，在配置中需要写出具体的节点名称，对应<code>node.name</code>配置项。配置示例如下</p> 
+<pre><code class="language-html hljs">cluster.initial_master_nodes: 
+   - master-node-a
+   - master-node-b
+   - master-node-c</code></pre> 
+<h4 id="item-1-6">设置堆内存容量</h4> 
+<p>默认情况下，Elasticsearch中JVM堆内存的最小值和最大值为1GB，在生产模式下，堆内存容量是非常重要的，需要确保Elasticsearch有足够的堆内存可用。我们可以在<code>jvm.options </code>配置文件中，通过配置<code>Xmx </code>和<code>Xms</code>项来决定JVM堆内存容量，配置的容量本身也取决于服务器的物理内存，<code>Xmx </code>和<code>Xms</code>的值不超过物理内存的50%。因为Elasticsearch除了堆内存，也会有其它的操作，比如使用堆外缓冲区进行网络通信，通过操作系统的文件系统缓存来访问文件，还有JVM自身也需要一些内存。对内存容量，最大可设置接近32GB，26GB是安全值，有些系统下可到达30GB。示例配置如下</p> 
+<pre><code class="language-html hljs">-Xms2g 
+-Xmx2g</code></pre> 
+<h3 id="item-2">二. 操作系统配置</h3> 
+<h4 id="item-2-7">文件描述符</h4> 
+<p>Linux默认配置下最大打开文件数为1024，可通过<code>ulimit -n</code>查看，而ES在建索引过程中会打开很多小文件，这样很容易超过限制，文件描述符临时设置命令如下</p> 
+<pre><code class="language-html hljs">sudo su  
+ulimit -n 65535 
+su elasticsearch</code></pre> 
+<p>永久设置可修改<code>/etc/security/limits.conf</code>文件</p> 
+<pre><code class="language-html hljs">elasticsearch  -  nofile  65535</code></pre> 
+<p>上面的配置表示设置elasticsearch用户下，打开文件描述符最大数量为65535。</p> 
+<h4 id="item-2-8">禁止交换空间</h4> 
+<p>Linux的交换空间机制是指，当内存资源不足时，Linux把某些页的内容转移至硬盘上的一块空间上，以释放内存空间。硬盘上的那块空间叫做交换空间(swap space)。如果不关闭swap，Elasticsearch的堆内存可能会被挤到磁盘中，垃圾回收速度会从毫秒级别变成分钟级别，导致节点的响应速度慢甚至和集群断开连接。有三种方式来避免交换空间发生</p> 
+<p>1.禁止所有交换空间</p> 
+<p>在Linux上，临时关闭操作系统交换空间可执行下面命令</p> 
+<pre><code class="language-html hljs">sudo swapoff -a</code></pre> 
+<p>永久关闭需要修改<code>/etc/fstab </code>文件。</p> 
+<p>2.配置swappiness</p> 
+<p>修改 <code>/etc/sysctl.conf</code>文件，设置<code>vm.swappiness = 1</code>，可以使Linux在一般情况下不使用交换，除非万不得已。</p> 
+<p>3.使用内存锁</p> 
+<p>使用内存锁可以在ES启动时，锁住一段堆内存，保证堆内存不被挤到磁盘中，对应Linux中的<code>mlockall </code>系统调用，在ES中配置<code>config/elasticsearch.yml </code>文件。配置如下</p> 
+<pre><code class="language-html hljs">bootstrap.memory_lock: true</code></pre> 
+<h4 id="item-2-9">虚拟内存</h4> 
+<p>Elasticsearch通过文件映射(mmap)来读取磁盘中的文件，这样可以比<code>read</code>系统调用少一次内存拷贝，也被称为0拷贝技术。ES映射的文件会很多，所以需要修改最大映射文件的数量，通过修改<code>vm.max_map_count</code>配置项可实现。临时修改可调用下面命令</p> 
+<pre><code class="language-html hljs">sysctl -w vm.max_map_count=262144</code></pre> 
+<p>要永久修改这个值，需要修改<code>/etc/sysctl.conf</code>文件，增加如下行</p> 
+<pre><code class="language-html hljs">vm.max_map_count=262144</code></pre> 
+<p>然后再运行<code>sysctl -p </code>重新加载系统配置才会生效，最后运行<code>sysctl vm.max_map_count</code>命令检测设置是否生效。</p> 
+<h4 id="item-2-10">设置线程</h4> 
+<p>Elasticsearch中不同的操作有不同的线程池，为了确保Elasticsearch线程正常创建线程，需要设置操作系统的线程数限制。最小值为4096，可通过修改<code>/etc/security/limits.conf</code>来完成设置。</p> 
+<h3 id="item-3">总结</h3> 
+<p>以上的配置在生产环境中都很重要，大部分参考了官方文档，结合了自己的理解，如有描述错误的地方，请指正。希望对你有帮助，谢谢！</p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/b138afb40a083e56cbb65555f1f9c041/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">谷歌浏览器启用webrtc_如何在谷歌浏览器中启用Google即时搜索</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/5166a8e039cfe8f5b26a709c17a45127/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">FirebaseApp name [DEFAULT] already exists!</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

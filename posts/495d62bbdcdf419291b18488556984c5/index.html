@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Redis -- String 字符串, 计数命令，字符串操作 - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="Redis -- String 字符串, 计数命令，字符串操作" />
+<meta property="og:description" content="&#34;学如逆水行舟，不进则退。&#34;
+目录
+Redis的String字符串
+常见命令 set
+get
+mget
+mset setnx
+setex
+psetex
+计数命令 incr
+incrby
+decr
+decrby
+incrbyfloat
+字符串操作
+append
+getrange
+setrange
+strlen
+小结
+string内部编码
+Redis的String字符串 redis中所有的key都是字符串的，但是value是存在各种差异的。Redis中的字符串直接就是按照二进制的方式进行存储的，不会做任何编码转换，存的是啥取得就是啥。对于value来说，不仅仅可以存储文本数据，还可以存储整数，普通文本，Json，xml，还有一些二进制文件，例如图片音频等，但是redis对string类型限制了大小，最高位512MB。
+下面是字符串类型的value的不同形式：
+区别于MySQL，MySQL有一个默认的字符集，为拉丁文的字符集，插入中文机会检测插入失败。但是redis是直接存储的二进制，因此redis遇到乱码的概率就小的多。
+常见命令 set 将 string 类型的 value 设置到 key 中。如果 key 之前存在，则覆盖，无论原来的数据类型是什么。之前关于此 key 的 TTL 也全部失效。
+除了最常见的set key value之外，我们还可以在set的时候设置存活时间，类似于expire的操作。
+语法：set key value [expiration EX seconds | PX milliseconds] [NX|XX]
+相当于set key value和expire key 10这两步的操作。EX设置的相当于秒级，PX设置的表示毫秒级。NX表示如果key不存在才设置，XX表示key存在，则不设置，并且返回nil（相当于更新操作）
+[ ]表示一个独立的单元，相当于一个可有可无的选项，[ ]中的|表示或者的意思，即使是多个|也只能选择其中的一个。[ ]和[ ]之间是可以同时存在的。
+还有一个小技巧就是在redis-cli输入flushAll，这个操作就相当于mysql里面的drop database。
+演示 ：" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/495d62bbdcdf419291b18488556984c5/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-01-31T22:11:10+08:00" />
+<meta property="article:modified_time" content="2024-01-31T22:11:10+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Redis -- String 字符串, 计数命令，字符串操作</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="htmledit_views">
+                    <p><em>"学如逆水行舟，不进则退。"</em></p> 
+<hr> 
+<p id="main-toc"><strong>目录</strong></p> 
+<p id="Redis%E7%9A%84String%E5%AD%97%E7%AC%A6%E4%B8%B2-toc" style="margin-left:0px;"><a href="#Redis%E7%9A%84String%E5%AD%97%E7%AC%A6%E4%B8%B2" rel="nofollow">Redis的String字符串</a></p> 
+<p id="%E5%B8%B8%E8%A7%81%E5%91%BD%E4%BB%A4%C2%A0-toc" style="margin-left:0px;"><a href="#%E5%B8%B8%E8%A7%81%E5%91%BD%E4%BB%A4%C2%A0" rel="nofollow">常见命令 </a></p> 
+<p id="set-toc" style="margin-left:40px;"><a href="#set" rel="nofollow">set</a></p> 
+<p id="get-toc" style="margin-left:40px;"><a href="#get" rel="nofollow">get</a></p> 
+<p id="mget-toc" style="margin-left:40px;"><a href="#mget" rel="nofollow">mget</a></p> 
+<p id="mset%C2%A0-toc" style="margin-left:40px;"><a href="#mset%C2%A0" rel="nofollow">mset </a></p> 
+<p id="setnx-toc" style="margin-left:40px;"><a href="#setnx" rel="nofollow">setnx</a></p> 
+<p id="setex-toc" style="margin-left:40px;"><a href="#setex" rel="nofollow">setex</a></p> 
+<p id="psetex-toc" style="margin-left:40px;"><a href="#psetex" rel="nofollow">psetex</a></p> 
+<p id="%E8%AE%A1%E6%95%B0%E5%91%BD%E4%BB%A4%C2%A0-toc" style="margin-left:0px;"><a href="#%E8%AE%A1%E6%95%B0%E5%91%BD%E4%BB%A4%C2%A0" rel="nofollow">计数命令 </a></p> 
+<p id="incr-toc" style="margin-left:40px;"><a href="#incr" rel="nofollow">incr</a></p> 
+<p id="incrby-toc" style="margin-left:40px;"><a href="#incrby" rel="nofollow">incrby</a></p> 
+<p id="decr-toc" style="margin-left:40px;"><a href="#decr" rel="nofollow">decr</a></p> 
+<p id="decrby-toc" style="margin-left:40px;"><a href="#decrby" rel="nofollow">decrby</a></p> 
+<p id="incrbyfloat-toc" style="margin-left:40px;"><a href="#incrbyfloat" rel="nofollow">incrbyfloat</a></p> 
+<p id="%E5%AD%97%E7%AC%A6%E4%B8%B2%E6%93%8D%E4%BD%9C-toc" style="margin-left:0px;"><a href="#%E5%AD%97%E7%AC%A6%E4%B8%B2%E6%93%8D%E4%BD%9C" rel="nofollow">字符串操作</a></p> 
+<p id="append-toc" style="margin-left:40px;"><a href="#append" rel="nofollow">append</a></p> 
+<p id="getrange-toc" style="margin-left:40px;"><a href="#getrange" rel="nofollow">getrange</a></p> 
+<p id="setrange-toc" style="margin-left:40px;"><a href="#setrange" rel="nofollow">setrange</a></p> 
+<p id="strlen-toc" style="margin-left:40px;"><a href="#strlen" rel="nofollow">strlen</a></p> 
+<p id="%E5%B0%8F%E7%BB%93-toc" style="margin-left:0px;"><a href="#%E5%B0%8F%E7%BB%93" rel="nofollow">小结</a></p> 
+<p id="string%E5%86%85%E9%83%A8%E7%BC%96%E7%A0%81-toc" style="margin-left:0px;"><a href="#string%E5%86%85%E9%83%A8%E7%BC%96%E7%A0%81" rel="nofollow">string内部编码</a></p> 
+<hr> 
+<p class="img-center"><img alt="" height="65" src="https://images2.imgbox.com/4b/3f/RGlWyh7N_o.png" width="130"></p> 
+<h2 id="Redis%E7%9A%84String%E5%AD%97%E7%AC%A6%E4%B8%B2">Redis的String字符串</h2> 
+<p>        redis中所有的key都是字符串的，但是value是存在各种差异的。Redis中的字符串直接就是按照二进制的方式进行存储的，不会做任何编码转换，存的是啥取得就是啥。对于value来说，不仅仅可以存储文本数据，还可以存储整数，普通文本，Json，xml，还有一些二进制文件，例如图片音频等，但是redis对string类型限制了大小，最高位512MB。</p> 
+<p>        下面是字符串类型的value的不同形式：</p> 
+<p><img alt="" height="283" src="https://images2.imgbox.com/32/fc/uScDT4sf_o.png" width="1200"></p> 
+<p><img alt="" height="304" src="https://images2.imgbox.com/b6/dc/Gs7EYHG8_o.png" width="1200"><img alt="" height="145" src="https://images2.imgbox.com/9d/3d/5VbMUkRM_o.png" width="1197"></p> 
+<p> <img alt="" height="333" src="https://images2.imgbox.com/c9/ce/m44PuUHM_o.png" width="1200"></p> 
+<p>        区别于MySQL，MySQL有一个默认的字符集，为拉丁文的字符集，插入中文机会检测插入失败。但是redis是直接存储的二进制，因此redis遇到乱码的概率就小的多。</p> 
+<h2 id="%E5%B8%B8%E8%A7%81%E5%91%BD%E4%BB%A4%C2%A0">常见命令 </h2> 
+<h3 id="set">set</h3> 
+<p>        将 string 类型的 value 设置到 key 中。<span style="color:#be191c;">如果 key 之前存在，则覆盖</span>，无论原来的数据类型是什么。之前关于此 key 的 TTL 也全部失效。</p> 
+<p>         除了最常见的set key value之外，我们还可以在set的时候设置存活时间，类似于expire的操作。</p> 
+<p><span style="color:#be191c;"><strong>语法</strong></span>：<strong>set </strong>key value [<strong><span style="color:#9c8ec1;">expiration</span></strong> EX seconds | PX milliseconds] [NX|XX]</p> 
+<p>        相当于set key value和expire key 10这两步的操作。EX设置的相当于秒级，PX设置的表示毫秒级。NX表示如果key不存在才设置，XX表示key存在，则不设置，并且返回nil（<em><span style="color:#a2e043;">相当于更新操作</span></em>）</p> 
+<p>        <em><span style="color:#d7d8d9;">[ ]表示一个独立的单元，相当于一个可有可无的选项，[ ]中的|表示或者的意思，即使是多个|也只能选择其中的一个。[ ]和[ ]之间是可以同时存在的。</span></em></p> 
+<p><em><span style="color:#d7d8d9;">        还有一个小技巧就是在redis-cli输入flushAll，这个操作就相当于mysql里面的drop database。</span></em></p> 
+<p><img alt="" height="85" src="https://images2.imgbox.com/39/01/71gH70Cv_o.png" width="327"></p> 
+<p><span style="color:#4da8ee;"><strong>演示</strong></span> ：</p> 
+<p><img alt="" height="162" src="https://images2.imgbox.com/30/19/AACk61EC_o.png" width="420"></p> 
+<p>         -2表示当前key已经被删除了</p> 
+<p>        设置NX参数：</p> 
+<p><img alt="" height="83" src="https://images2.imgbox.com/66/69/avtFn13n_o.png" width="418"></p> 
+<p>        nil表明key1已经存在无法设置</p> 
+<p>        设置XX参数：</p> 
+<p><img alt="" height="163" src="https://images2.imgbox.com/3a/7b/Cxvk80c6_o.png" width="401"></p> 
+<p>        OK表示覆盖key1成功</p> 
+<h3 id="get">get</h3> 
+<p>        get key来获取对应key的value，但是只能获取对应value为字符串类型的key。</p> 
+<p>        例如 ：</p> 
+<p><img alt="" height="87" src="https://images2.imgbox.com/e6/ff/Xsl5P7TP_o.png" width="755"></p> 
+<p>        创建一个列表类型的value，然后尝试使用get去获取，发现报错。 </p> 
+<p><img alt="" height="43" src="https://images2.imgbox.com/b4/9d/dpEkuI22_o.png" width="331"></p> 
+<h3 id="mget">mget</h3> 
+<p>        一次性get多个key 的value。对比与get操作，mget可以减少网络传输的次数，可以节省网络资源。</p> 
+<p>        时间复杂度为O （N），n是key的数量</p> 
+<p class="img-center"><img alt="" height="328" src="https://images2.imgbox.com/22/09/xAymgMaS_o.png" width="523"></p> 
+<p class="img-center"><img alt="" height="331" src="https://images2.imgbox.com/9f/47/r2cQUMcZ_o.png" width="511"></p> 
+<p>         下面是一个简单的时间消耗对比：</p> 
+<p><img alt="" height="467" src="https://images2.imgbox.com/29/d2/1ByRGERr_o.png" width="1200"></p> 
+<p>        但是由于其是单一线程模型，同一个请求的任务的执行时间不宜过长。学会使用批量操作，可以有效提高业务处理效率，但是要注意，每次批量操作所发送的键的数量也不是无节制的，否则可能造成单一命令执行时间过长，导致 Redis 阻塞。</p> 
+<p><span style="color:#be191c;"><strong>语法</strong></span>：mget key [key1 key2 key3 ... ]</p> 
+<p>        多个key之间使用空格间隔开</p> 
+<p><span style="color:#ad720d;"><strong>演示：</strong></span></p> 
+<p>        设置三个key-value </p> 
+<p><img alt="" height="172" src="https://images2.imgbox.com/cd/d6/5jQMStSu_o.png" width="483"></p> 
+<p>        使用mget获取三个key-value</p> 
+<p><img alt="" height="112" src="https://images2.imgbox.com/be/d6/qoe8yvBZ_o.png" width="507"></p> 
+<h3 id="mset%C2%A0">mset </h3> 
+<p>        一次性可以设置多个key-value，其用法和mget类型。</p> 
+<p>        时间复杂度O（N）</p> 
+<p> <span style="color:#be191c;"><strong>语法</strong></span>：mset key value [ key2 value2 key3 value3 ... ]</p> 
+<p>         多个key-value之间使用空格间隔</p> 
+<p>        返回值为ok。</p> 
+<p><span style="color:#ad720d;"><strong>演示</strong></span>：<img alt="" height="172" src="https://images2.imgbox.com/d9/9b/4yIPMWA0_o.png" width="757"></p> 
+<h3 id="setnx">setnx</h3> 
+<p>     <span style="color:#fe2c24;"><strong>   set if not exists</strong></span></p> 
+<p>        功能类似于set key value ex,也就是说，设置的这个key已经存在，那么就会设置失败并且返回一个integer0。</p> 
+<p><span style="color:#be191c;"><strong>语法</strong></span>：setnx key value </p> 
+<p><span style="color:#a2e043;"><strong>演示</strong></span>：</p> 
+<p><img alt="" height="168" src="https://images2.imgbox.com/9d/dd/YTNT59kc_o.png" width="457"></p> 
+<h3 id="setex">setex</h3> 
+<p>        设置一个key-value，并且向此key value增加一个存活时间</p> 
+<p><span style="color:#be191c;"><strong>语法</strong></span>：setex  key value seconds value</p> 
+<p>        解释：second表示秒级，代表你要输入的秒数</p> 
+<p>演示：</p> 
+<p>        设置一个存活时间为10秒的key value</p> 
+<p><img alt="" height="60" src="https://images2.imgbox.com/e5/84/ryFNfi5c_o.png" width="503"></p> 
+<p><img alt="" height="121" src="https://images2.imgbox.com/e7/8f/R5WLzP0G_o.png" width="378"></p> 
+<p>           -2表示这个key已经不存在了</p> 
+<hr> 
+<p>        既然有秒级，那么必然有毫秒级，毫秒级别的指令为psetex</p> 
+<hr> 
+<h3 id="psetex">psetex</h3> 
+<p>        设置一个key-value，并且向此key value增加一个存活时间（毫秒级别）</p> 
+<p><span style="color:#be191c;"><strong>语法</strong></span>：psetex key value milliseconds value</p> 
+<p>        解释：second表示毫秒级，代表你要输入的毫秒数</p> 
+<p><span style="color:#9c8ec1;"><strong>演示</strong></span>：</p> 
+<p>        设置一个存活时间为1000ms的key value.</p> 
+<p><img alt="" height="110" src="https://images2.imgbox.com/24/50/brIAGrgo_o.png" width="515"></p> 
+<hr> 
+<h2 id="%E8%AE%A1%E6%95%B0%E5%91%BD%E4%BB%A4%C2%A0">计数命令 </h2> 
+<ul><li>incr：针对数字字符串的value 进行 +1 操作</li><li>incrby：针对数字字符串的value进行 +n操作</li><li>decr：针对数字字符串的value进行 -1操作</li><li>decrby：针对数字字符串的value进行 -n操作 </li><li>incrbyfloat：针对浮点数进行处理</li></ul> 
+<p>        这些命令的对象的value必须是数字类型的字符串例如 "111",但是不能是"111好" </p> 
+<h3 id="incr">incr</h3> 
+<p>        设置一个value为10的key，然后对其进行incr操作：</p> 
+<p><img alt="" height="173" src="https://images2.imgbox.com/34/f7/TTPNloru_o.png" width="374"></p> 
+<p>        如果设置一个非整数字符串，然后对其进行incr操作：</p> 
+<p><img alt="" height="120" src="https://images2.imgbox.com/20/ad/z8gklt0j_o.png" width="725"></p> 
+<p>        此时就会发生错误：ERR value is not an integer or out of range</p> 
+<p>        说明，这个value为非数字字符串，或者超出了范围（64位），上述例子为超出了范围。</p> 
+<p>        <em><span style="color:#be191c;">这里的范围可以理解为java中的long类型</span></em>。</p> 
+<p><span style="color:#fe2c24;"><strong>注意</strong></span>：</p> 
+<p>        如果对一个不存在的key进行incr操作会有什么效果？</p> 
+<p><img alt="" height="227" src="https://images2.imgbox.com/a2/c2/i1VxHSEM_o.png" width="422"></p> 
+<p>        ? 咦？这说明什么？incr操作的key如果不存在，就会把这个key当作0来处理</p> 
+<p>        </p> 
+<h3 id="incrby">incrby</h3> 
+<p>        针对一个数字类型的value来进行+n操作。</p> 
+<p><span style="color:#fe2c24;"><strong>语法</strong></span>：incrby key num</p> 
+<p>        解释：对key的value进行+num操作。这里的key的value必须是一个整数的字符串形式。</p> 
+<p>        返回值为+num后的结果</p> 
+<p><span style="color:#511b78;"><strong>演示</strong></span>：</p> 
+<p><img alt="" height="166" src="https://images2.imgbox.com/e2/1e/gbQig7F0_o.png" width="416"></p> 
+<p>        同理如果针对一个不存在的key，那么效果如incr一样，key都会被当作0来进行+num操作。</p> 
+<p>        当然你也可以使用incrby key -20来让它进行一个-n的操作。</p> 
+<h3 id="decr">decr</h3> 
+<p><span style="color:#fe2c24;"><strong>语法</strong></span>：decr key</p> 
+<p>        返回值为计算之后的值，例如key的value为10，那么decr的返回值就为9</p> 
+<p>演示：</p> 
+<p><img alt="" height="171" src="https://images2.imgbox.com/7f/73/gHFxves9_o.png" width="398"></p> 
+<p>        同理如果decr的key不存在，那么这个key就会被当作0，然后进行-1操作：</p> 
+<p><img alt="" height="167" src="https://images2.imgbox.com/47/81/Bc3WTYZb_o.png" width="372"></p> 
+<h3 id="decrby">decrby</h3> 
+<p>        -n操作</p> 
+<p> 语法：decrby key num</p> 
+<p>        返回值为计算之后的结果</p> 
+<p>演示：</p> 
+<p><img alt="" height="169" src="https://images2.imgbox.com/bf/91/UFfPPKge_o.png" width="434"></p> 
+<h3 id="incrbyfloat">incrbyfloat</h3> 
+<p>        针对浮点数进行加减操作</p> 
+<p><span style="color:#a2e043;"><strong>语法</strong></span>：incrbyfloat key float</p> 
+<p>        返回值仍然为计算之后的结果。</p> 
+<p><span style="color:#1c7892;"><strong>演示</strong></span>：</p> 
+<p><img alt="" height="230" src="https://images2.imgbox.com/3b/2c/GQMBnnE2_o.png" width="622"></p> 
+<p>        如果incrbyfloat一个不存在的key？</p> 
+<p><img alt="" height="173" src="https://images2.imgbox.com/05/06/S97rCIwJ_o.png" width="530"></p> 
+<p>        同样会把这个key2当作0来进行处理。</p> 
+<hr> 
+<p>        <span style="color:#fe2c24;"><strong>很遗憾没有decrbyfloat操作</strong></span>，但是你可以使用incrbyfloat 负数的形式实现减法：</p> 
+<p><img alt="" height="167" src="https://images2.imgbox.com/ac/01/40MsXNCP_o.png" width="541"></p> 
+<hr> 
+<p>        上述这几个计数命令的时间复杂度都是O（1）</p> 
+<p>        很多存储系统和编程语言内部使用 <strong>CAS</strong> 机制实现计数功能，会有一定的 CPU 开销，但在 Redis 中完全不存在这个问题，因为 <strong>Redis 是单线程架构</strong>，任何命令到了 Redis 服务端都要顺序执行，因此多个客户端对同一个value进行计数操作是不会引起'线程安全'的问题的。</p> 
+<hr> 
+<p>        除了对数字类型的字符串进行incr等操作，还有一些更多更常见的场景也需要使用到一些非常常用的命令，例如对一个字符串进行拼接操作等，字符串拼接操作在java中可以说是非常常见了。Redis中也存在对字符串形式的value进行<strong>拼接</strong>等一系列操作的命令。</p> 
+<h2 id="%E5%AD%97%E7%AC%A6%E4%B8%B2%E6%93%8D%E4%BD%9C">字符串操作</h2> 
+<h3 id="append">append</h3> 
+<p>        如果这个key已经存在，并且是一个string，append命令会将会将要添加的内容追加到原有的value后边，如果key不存在，则等同于set命令。</p> 
+<p><span style="color:#ad720d;"><strong>语法</strong></span>：append key otherString</p> 
+<p>        返回值值的单位为字节，如果使用的是xshell的终端，默认的字符集编码是utf8，在终端输入汉字之后，也是按照utf8编码，一个汉字在utf8编码通常是3个字节。</p> 
+<p><span style="color:#b95514;"><strong>演示</strong></span>：</p> 
+<p><img alt="" height="172" src="https://images2.imgbox.com/0f/38/fS2ma560_o.png" width="469"></p> 
+<p>        可以看到返回值为integer10，正好为字母数量。</p> 
+<p>        如果append的key不存在，那么就相当于set：</p> 
+<p><img alt="" height="168" src="https://images2.imgbox.com/5f/f5/z9oewceq_o.png" width="507"></p> 
+<p>        汉字的返回值根据它的字符集来计算：</p> 
+<p><img alt="" height="62" src="https://images2.imgbox.com/99/c1/t1bPtPdO_o.png" width="486"></p> 
+<p>        然后我们通过get来获取这个中文value的key：</p> 
+<p><img alt="" height="62" src="https://images2.imgbox.com/26/91/0mJQyOjA_o.png" width="403"></p> 
+<p>        这个汉字被转化为16进制去了。</p> 
+<p>        可以去字符编码查看网站。</p> 
+<p>        那么如何将其设置为可以识别中文？</p> 
+<p>        只需要在启动redis客户端的时候，加上--raw这样的选项，redis就会尝试翻译二进制数据。</p> 
+<p><img alt="" height="92" src="https://images2.imgbox.com/77/e4/c9byWkRG_o.png" width="750"></p> 
+<h3 id="getrange">getrange</h3> 
+<p>        返回 key 对应的 string 的子串，由 start 和 end 确定（<em><span style="color:#be191c;">左闭右闭：[start, end]</span></em>）。可以使用负数表示倒数。-1 代表倒数第一个字符，-2 代表倒数第二个，其他的与此类似。超过范围的偏移量会根据 string 的长度调整成正确的值。</p> 
+<p><strong>语法</strong>：<span style="color:#1c7331;"><strong>getrange</strong> </span> key  <span style="color:#be191c;"><strong>start</strong></span>   <span style="color:#1a439c;"><strong>end</strong></span></p> 
+<p>         时间复杂度：O（N）</p> 
+<p>演示：</p> 
+<p>        我们以helloworld为例：</p> 
+<p><img alt="" height="65" src="https://images2.imgbox.com/ed/68/pPz1S6He_o.png" width="530"></p> 
+<p>        对helloworld进行各种getrange操作：</p> 
+<p><img alt="" height="230" src="https://images2.imgbox.com/dc/cc/Potst68r_o.png" width="524"></p> 
+<p>        最后发现，发现getrange操作是不会改变原有的key的value的。</p> 
+<p>        需要注意的是，这里的0 -1,0 -2都是指的字符，但是如果是中文也可以如此吗，例如：</p> 
+<p><img alt="" height="257" src="https://images2.imgbox.com/9e/84/dcNbMYiK_o.png" width="510"></p> 
+<p>        就会出现各种乱码问题这是为嘛？所以为汉字的时候就尽量不要使用getrange，很可能切出来就不是完整的汉字，上述的代码是强行切除了几个自己，所以在utf8中查出不知道是什么字符。</p> 
+<h3 id="setrange">setrange</h3> 
+<p>        覆盖字符串的一部分，从指定的偏移开始。</p> 
+<p><span style="color:#ff9900;"><strong>语法</strong></span>：<strong>setrange  </strong>key <span style="color:#ff9900;"><strong>offset </strong></span><span style="color:#1a439c;"><strong>value</strong></span></p> 
+<p>        其中offset是从第几个字节开始进行替换。举个例子：</p> 
+<p>        set key hellowrold</p> 
+<p>        setrange key  1 <span style="color:#fe2c24;"><strong>aaa</strong></span></p> 
+<p>        get key 输出 h<span style="color:#fe2c24;"><strong>aaa</strong></span>oworld</p> 
+<p>        时间复杂度：O(N), N 为 value 的长度. 由于一般给的 value 比较短, 通常视为 O(1).<br>         返回值：替换后的 string 的长度。</p> 
+<p><span style="color:#9c8ec1;"><strong>演示</strong></span>：</p> 
+<p>        如果offset为1，那么就是从第一个字节开始，如果为0就是从第一个字节的前面开始：</p> 
+<p><img alt="" height="228" src="https://images2.imgbox.com/fc/39/onIGznzh_o.png" width="508"></p> 
+<p><img alt="" height="177" src="https://images2.imgbox.com/5d/d3/P89eVDG8_o.png" width="511"></p> 
+<p>        假设要替换的字节比较靠后，进行替换的字符串也比较长，那么：</p> 
+<p><img alt="" height="115" src="https://images2.imgbox.com/cc/69/WbPO4iOw_o.png" width="572"></p> 
+<p>        同样的，尽量<span style="color:#fe2c24;">不要对中文字符串进行setrange操作</span>。</p> 
+<h3 id="strlen">strlen</h3> 
+<p>        获取 key 对应的 string 的长度，<span style="color:#fe2c24;">单位是字节</span>。当 key 存放的类似不是 string 时，报错。 </p> 
+<p><strong>语法</strong>：strlen key</p> 
+<p>        输出key的vaue 的字节数。</p> 
+<p><strong>案例</strong>：</p> 
+<p><img alt="" height="230" src="https://images2.imgbox.com/dd/ad/i2oe5iA8_o.png" width="497"></p> 
+<h2 id="%E5%B0%8F%E7%BB%93">小结</h2> 
+<p><img alt="" height="1200" src="https://images2.imgbox.com/7d/ec/2XTTelXQ_o.png" width="1200"></p> 
+<h2 id="string%E5%86%85%E9%83%A8%E7%BC%96%E7%A0%81">string内部编码</h2> 
+<p>字符串类型的内部编码有 3 种：<br> • int：8 个字节的长整型。<br> • embstr：小于等于 39 个字节的字符串。<br> • raw：大于 39 个字节的字符串。<br> Redis 会根据当前值的类型和长度动态决定使用哪种内部编码实现。 </p> 
+<p><img alt="" height="293" src="https://images2.imgbox.com/3a/a0/USNrt0lk_o.png" width="300"></p>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/4e731a38c536eecfc98227329260c70c/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">vscode 插件 Tailwind CSS IntelliSense 解决 class 提示问题</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/af35662120ecbcd8b371bb561e72c152/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">算法训练营day19,二叉树8-2</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

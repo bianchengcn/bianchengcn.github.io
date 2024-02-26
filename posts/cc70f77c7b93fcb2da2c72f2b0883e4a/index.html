@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>【SparkML系列3】特征提取器TF-IDF、Word2Vec和CountVectorizer - 编程中国的博客</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+		<meta property="og:title" content="【SparkML系列3】特征提取器TF-IDF、Word2Vec和CountVectorizer" />
+<meta property="og:description" content="本节介绍了用于处理特征的算法，大致可以分为以下几组：
+提取（Extraction）：从“原始”数据中提取特征。转换（Transformation）：缩放、转换或修改特征。选择（Selection）：从更大的特征集中选择一个子集。局部敏感哈希（Locality Sensitive Hashing, LSH）：这类算法结合了特征转换的方面与其他算法。 Feature Extractors（特征提取器） TF-IDF 词频-逆文档频率（Term frequency-inverse document frequency，简称TF-IDF）是一种在文本挖掘中广泛使用的特征向量化方法，用以反映一个词语对于语料库中文档的重要性。用t表示一个词语，用d表示一个文档，用D表示语料库。词频TF(t,d)是词语t在文档d中出现的次数，而文档频率DF(t,D)是包含词语t的文档数量。如果我们仅使用词频来衡量重要性，那么很容易过分强调那些出现非常频繁但对文档信息贡献较小的词语，例如“a”、“the”和“of”。如果一个词语在整个语料库中出现得非常频繁，这意味着它对特定文档没有携带特殊信息。逆文档频率是衡量一个词语提供了多少信息的数值度量：
+其中|D|是语料库中文档的总数。由于使用了对数，如果一个词语出现在所有文档中，其逆文档频率（IDF）值将变为0。注意，为了避免对语料库外的词语进行除零操作，应用了平滑项。TF-IDF值简单地是词频（TF）和逆文档频率（IDF）的乘积：
+在词频和文档频率的定义上有几种不同的变体。在MLlib中，我们将TF和IDF分开，以使它们更加灵活。
+TF：HashingTF和CountVectorizer都可以用来生成词频向量。
+HashingTF是一个Transformer，它接受一组词语并将这些集合转换成固定长度的特征向量。在文本处理中，“一组词语”可能是一个词袋。HashingTF利用哈希技巧。通过应用一个哈希函数，将一个原始特征映射到一个索引（词项）上。这里使用的哈希函数是MurmurHash 3。然后根据映射后的索引计算词频。这种方法避免了计算全局的词到索引映射表，这对于大型语料库来说可能代价很高，但它会遭受潜在的哈希冲突，不同的原始特征经过哈希可能会变成相同的词项。为了减少冲突的机会，我们可以增加目标特征维度，即哈希表的桶数。由于使用简单的模运算来确定向量索引，建议使用2的幂作为特征维度，否则特征将不会均匀地映射到向量索引上。默认的特征维度是2的18次方，即262,144。一个可选的二元切换参数控制词频计数。当设置为true时，所有非零频率计数都设置为1。这对于模拟二元而不是整数计数的离散概率模型特别有用。
+CountVectorizer将文本文档转换为词项计数向量。有关更多详情，请参考CountVectorizer。
+IDF：IDF是一个估计器，它在数据集上进行训练并产生一个IDFModel。IDFModel接受特征向量（通常由HashingTF或CountVectorizer创建）并对每个特征进行缩放。直观地说，它降低了在语料库中频繁出现的特征的权重。
+注意：spark.ml不提供文本分割工具。我们推荐用户使用斯坦福NLP小组的工具和scalanlp/chalk。
+import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer} import org.apache.spark.sql.SparkSession /** * @description TfIdfExample * @date 2024/1/31 18:09 * @author by fangwen1 */ object TfIdfExample { def main(args: Array[String]): Unit = { val spark = SparkSession .builder .master(&#34;local[*]&#34;) .appName(&#34;TfIdfExample&#34;) .getOrCreate() // 创建测试数据集 val sentenceData = spark.createDataFrame(Seq( (0.0, &#34;Hi I heard about Spark&#34;), (0.0, &#34;" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/cc70f77c7b93fcb2da2c72f2b0883e4a/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2024-02-01T11:33:37+08:00" />
+<meta property="article:modified_time" content="2024-02-01T11:33:37+08:00" />
+
+
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	
+
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="编程中国的博客" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">编程中国的博客</div>
+					
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">【SparkML系列3】特征提取器TF-IDF、Word2Vec和CountVectorizer</h1>
+			
+		</header>
+		<div id="gatop"></div>
+		<div class="content post__content clearfix">
+			
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+                    </svg>
+                    <p>本节介绍了用于处理特征的算法，大致可以分为以下几组：</p> 
+<ul><li>提取（Extraction）：从“原始”数据中提取特征。</li><li>转换（Transformation）：缩放、转换或修改特征。</li><li>选择（Selection）：从更大的特征集中选择一个子集。</li><li>局部敏感哈希（Locality Sensitive Hashing, LSH）：这类算法结合了特征转换的方面与其他算法。</li></ul> 
+<h4><a id="Feature_Extractors_7"></a>Feature Extractors（特征提取器）</h4> 
+<h5><a id="TFIDF_9"></a>TF-IDF</h5> 
+<p>词频-逆文档频率（Term frequency-inverse document frequency，简称TF-IDF）是一种在文本挖掘中广泛使用的特征向量化方法，用以反映一个词语对于语料库中文档的重要性。用t表示一个词语，用d表示一个文档，用D表示语料库。词频TF(t,d)是词语t在文档d中出现的次数，而文档频率DF(t,D)是包含词语t的文档数量。如果我们仅使用词频来衡量重要性，那么很容易过分强调那些出现非常频繁但对文档信息贡献较小的词语，例如“a”、“the”和“of”。如果一个词语在整个语料库中出现得非常频繁，这意味着它对特定文档没有携带特殊信息。逆文档频率是衡量一个词语提供了多少信息的数值度量：<br> <img src="https://images2.imgbox.com/0d/44/GvC9YzXn_o.png" alt="在这里插入图片描述"></p> 
+<p>其中|D|是语料库中文档的总数。由于使用了对数，如果一个词语出现在所有文档中，其逆文档频率（IDF）值将变为0。注意，为了避免对语料库外的词语进行除零操作，应用了平滑项。TF-IDF值简单地是词频（TF）和逆文档频率（IDF）的乘积：<br> <img src="https://images2.imgbox.com/d2/be/1xpqxLhM_o.png" alt="在这里插入图片描述"></p> 
+<p>在词频和文档频率的定义上有几种不同的变体。在MLlib中，我们将TF和IDF分开，以使它们更加灵活。</p> 
+<p>TF：HashingTF和CountVectorizer都可以用来生成词频向量。</p> 
+<p>HashingTF是一个Transformer，它接受一组词语并将这些集合转换成固定长度的特征向量。在文本处理中，“一组词语”可能是一个词袋。HashingTF利用哈希技巧。通过应用一个哈希函数，将一个原始特征映射到一个索引（词项）上。这里使用的哈希函数是MurmurHash 3。然后根据映射后的索引计算词频。这种方法避免了计算全局的词到索引映射表，这对于大型语料库来说可能代价很高，但它会遭受潜在的哈希冲突，不同的原始特征经过哈希可能会变成相同的词项。为了减少冲突的机会，我们可以增加目标特征维度，即哈希表的桶数。由于使用简单的模运算来确定向量索引，建议使用2的幂作为特征维度，否则特征将不会均匀地映射到向量索引上。默认的特征维度是2的18次方，即262,144。一个可选的二元切换参数控制词频计数。当设置为true时，所有非零频率计数都设置为1。这对于模拟二元而不是整数计数的离散概率模型特别有用。</p> 
+<p>CountVectorizer将文本文档转换为词项计数向量。有关更多详情，请参考CountVectorizer。</p> 
+<p>IDF：IDF是一个估计器，它在数据集上进行训练并产生一个IDFModel。IDFModel接受特征向量（通常由HashingTF或CountVectorizer创建）并对每个特征进行缩放。直观地说，它降低了在语料库中频繁出现的特征的权重。</p> 
+<p>注意：spark.ml不提供文本分割工具。我们推荐用户使用斯坦福NLP小组的工具和scalanlp/chalk。</p> 
+<pre><code class="prism language-scala">
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>ml<span class="token punctuation">.</span>feature<span class="token punctuation">.</span></span><span class="token punctuation">{<!-- --></span>HashingTF<span class="token punctuation">,</span> IDF<span class="token punctuation">,</span> Tokenizer<span class="token punctuation">}</span>
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>sql<span class="token punctuation">.</span></span>SparkSession
+<span class="token comment">/**
+ * @description TfIdfExample
+ * @date 2024/1/31 18:09
+ * @author by fangwen1
+ */</span>
+<span class="token keyword">object</span> TfIdfExample <span class="token punctuation">{<!-- --></span>
+
+  <span class="token keyword">def</span> main<span class="token punctuation">(</span>args<span class="token operator">:</span> Array<span class="token punctuation">[</span><span class="token builtin">String</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Unit</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+
+    <span class="token keyword">val</span> spark <span class="token operator">=</span> SparkSession
+      <span class="token punctuation">.</span>builder
+      <span class="token punctuation">.</span>master<span class="token punctuation">(</span><span class="token string">"local[*]"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>appName<span class="token punctuation">(</span><span class="token string">"TfIdfExample"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>getOrCreate<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// 创建测试数据集</span>
+    <span class="token keyword">val</span> sentenceData <span class="token operator">=</span> spark<span class="token punctuation">.</span>createDataFrame<span class="token punctuation">(</span>Seq<span class="token punctuation">(</span>
+      <span class="token punctuation">(</span><span class="token number">0.0</span><span class="token punctuation">,</span> <span class="token string">"Hi I heard about Spark"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token punctuation">(</span><span class="token number">0.0</span><span class="token punctuation">,</span> <span class="token string">"I wish Java could use case classes"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token punctuation">(</span><span class="token number">1.0</span><span class="token punctuation">,</span> <span class="token string">"Logistic regression models are neat"</span><span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">.</span>toDF<span class="token punctuation">(</span><span class="token string">"label"</span><span class="token punctuation">,</span> <span class="token string">"sentence"</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">val</span> tokenizer <span class="token operator">=</span> <span class="token keyword">new</span> Tokenizer<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>setInputCol<span class="token punctuation">(</span><span class="token string">"sentence"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>setOutputCol<span class="token punctuation">(</span><span class="token string">"words"</span><span class="token punctuation">)</span>
+    <span class="token comment">// 将文本转换成词，分词操作</span>
+    <span class="token keyword">val</span> wordsData <span class="token operator">=</span> tokenizer<span class="token punctuation">.</span>transform<span class="token punctuation">(</span>sentenceData<span class="token punctuation">)</span>
+    wordsData<span class="token punctuation">.</span>printSchema<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">val</span> hashingTF <span class="token operator">=</span> <span class="token keyword">new</span> HashingTF<span class="token punctuation">(</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setInputCol<span class="token punctuation">(</span><span class="token string">"words"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>setOutputCol<span class="token punctuation">(</span><span class="token string">"rawFeatures"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>setNumFeatures<span class="token punctuation">(</span><span class="token number">20</span><span class="token punctuation">)</span>
+    <span class="token comment">// 将词转换成特征</span>
+    <span class="token keyword">val</span> featurizedData <span class="token operator">=</span> hashingTF<span class="token punctuation">.</span>transform<span class="token punctuation">(</span>wordsData<span class="token punctuation">)</span>
+    featurizedData<span class="token punctuation">.</span>printSchema<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment">// alternatively, CountVectorizer can also be used to get term frequency vectors</span>
+
+    <span class="token comment">//IDF来重新缩放特征向量</span>
+    <span class="token keyword">val</span> idf <span class="token operator">=</span> <span class="token keyword">new</span> IDF<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>setInputCol<span class="token punctuation">(</span><span class="token string">"rawFeatures"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>setOutputCol<span class="token punctuation">(</span><span class="token string">"features"</span><span class="token punctuation">)</span>
+    <span class="token comment">// 训练模型</span>
+    <span class="token keyword">val</span> idfModel <span class="token operator">=</span> idf<span class="token punctuation">.</span>fit<span class="token punctuation">(</span>featurizedData<span class="token punctuation">)</span>
+
+    <span class="token comment">// 使用模型来测试数据</span>
+    <span class="token keyword">val</span> rescaledData <span class="token operator">=</span> idfModel<span class="token punctuation">.</span>transform<span class="token punctuation">(</span>featurizedData<span class="token punctuation">)</span>
+    <span class="token comment">// 查看模型跑出来的特征数据</span>
+    rescaledData<span class="token punctuation">.</span>select<span class="token punctuation">(</span><span class="token string">"label"</span><span class="token punctuation">,</span> <span class="token string">"features"</span><span class="token punctuation">)</span><span class="token punctuation">.</span>show<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<h5><a id="Word2Vec_81"></a>Word2Vec</h5> 
+<p>Word2Vec是一个估计器（Estimator），它接受表示文档的单词序列，并训练一个Word2VecModel。该模型将每个单词映射到一个唯一的固定大小向量。Word2VecModel通过使用文档中所有单词的平均值将每个文档转换成一个向量；然后可以将这个向量用作预测、文档相似度计算等方面的特征。有关更多详细信息，请参阅MLlib用户指南中的Word2Vec部分。</p> 
+<p>示例</p> 
+<p>在下面的代码段中，我们从一组文档开始，每个文档都表示为一个单词序列。对于每个文档，我们将其转换为一个特征向量。然后，这个特征向量可以传递给一个学习算法。</p> 
+<pre><code class="prism language-scala">
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>sql<span class="token punctuation">.</span></span>SparkSession
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>ml<span class="token punctuation">.</span>feature<span class="token punctuation">.</span></span><span class="token punctuation">{<!-- --></span>Word2Vec<span class="token punctuation">,</span> Word2VecModel<span class="token punctuation">}</span>
+<span class="token comment">/**
+ * @description Word2VecExample
+ * @date 2024/1/31 18:52
+ */</span>
+<span class="token keyword">object</span> Word2VecExample <span class="token punctuation">{<!-- --></span>
+
+  <span class="token keyword">def</span> main<span class="token punctuation">(</span>args<span class="token operator">:</span> Array<span class="token punctuation">[</span><span class="token builtin">String</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Unit</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">val</span> spark <span class="token operator">=</span> SparkSession
+      <span class="token punctuation">.</span>builder
+      <span class="token punctuation">.</span>master<span class="token punctuation">(</span><span class="token string">"local[*]"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>appName<span class="token punctuation">(</span><span class="token string">"TfIdfExample"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>getOrCreate<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+    <span class="token comment">// 输入数据：每行数据都是一个词包</span>
+    <span class="token keyword">val</span> documentDF <span class="token operator">=</span> spark<span class="token punctuation">.</span>createDataFrame<span class="token punctuation">(</span>Seq<span class="token punctuation">(</span>
+      <span class="token string">"Hi I heard about Spark"</span><span class="token punctuation">.</span>split<span class="token punctuation">(</span><span class="token string">" "</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token string">"I wish Java could use case classes"</span><span class="token punctuation">.</span>split<span class="token punctuation">(</span><span class="token string">" "</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token string">"Logistic regression models are neat"</span><span class="token punctuation">.</span>split<span class="token punctuation">(</span><span class="token string">" "</span><span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">.</span>map<span class="token punctuation">(</span>Tuple1<span class="token punctuation">.</span>apply<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">.</span>toDF<span class="token punctuation">(</span><span class="token string">"text"</span><span class="token punctuation">)</span>
+
+    <span class="token comment">// 将文本数据转换为数值向量形式</span>
+    <span class="token keyword">val</span> word2Vec <span class="token operator">=</span> <span class="token keyword">new</span> Word2Vec<span class="token punctuation">(</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setInputCol<span class="token punctuation">(</span><span class="token string">"text"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setOutputCol<span class="token punctuation">(</span><span class="token string">"result"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setVectorSize<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setMinCount<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span>
+    <span class="token keyword">val</span> model <span class="token operator">:</span> Word2VecModel <span class="token operator">=</span> word2Vec<span class="token punctuation">.</span>fit<span class="token punctuation">(</span>documentDF<span class="token punctuation">)</span>
+
+    <span class="token keyword">val</span> result <span class="token operator">=</span> model<span class="token punctuation">.</span>transform<span class="token punctuation">(</span>documentDF<span class="token punctuation">)</span>
+    result<span class="token punctuation">.</span>show<span class="token punctuation">(</span><span class="token punctuation">)</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre> 
+<h5><a id="CountVectorizer_125"></a>CountVectorizer</h5> 
+<p>CountVectorizer和CountVectorizerModel的目的是帮助将一系列文本文档转换成令牌计数的向量。当没有预先定义的词典时，CountVectorizer可以作为一个估计器来提取词汇，并生成一个CountVectorizerModel。该模型为文档在词汇表上生成稀疏表示，然后可以传递给其他算法，例如LDA。</p> 
+<p>在拟合过程中，CountVectorizer将选择在整个语料库中按词频排序的前vocabSize个词。一个可选的参数minDF也会影响拟合过程，它指定了一个词必须出现在多少个文档中才能被包含在词汇表中，这个数字可以是具体数目（如果小于1.0，则表示比例）。另一个可选的二元切换参数控制输出向量。如果设置为true，所有非零计数都会被设置为1。这对于建模二元计数而非整数计数的离散概率模型特别有用。</p> 
+<p>Examples</p> 
+<p>假设 我们有以下 DataFrame with columns id and texts:</p> 
+<table><thead><tr><th>id</th><th>texts</th></tr></thead><tbody><tr><td>0</td><td>Array(“a”, “b”, “c”)</td></tr><tr><td>1</td><td>Array(“a”, “b”, “b”, “c”, “a”)</td></tr></tbody></table> 
+<p>在texts中的每一行都是一个Array[String]类型的文档。调用CountVectorizer的fit会生成一个带有词汇表（a, b, c）的CountVectorizerModel。然后，在转换后，输出列“vector”包含：</p> 
+<table><thead><tr><th>id</th><th>texts</th><th>vector</th></tr></thead><tbody><tr><td>0</td><td>Array(“a”, “b”, “c”)</td><td>(3,[0,1,2],[1.0,1.0,1.0])</td></tr><tr><td>1</td><td>Array(“a”, “b”, “b”, “c”, “a”)</td><td>(3,[0,1,2],[2.0,2.0,1.0])</td></tr></tbody></table> 
+<p>每个向量表示文档在词汇表上的令牌计数。</p> 
+<pre><code class="prism language-scala"><span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>sql<span class="token punctuation">.</span></span>SparkSession
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>ml<span class="token punctuation">.</span>feature<span class="token punctuation">.</span></span><span class="token punctuation">{<!-- --></span>CountVectorizer<span class="token punctuation">,</span> CountVectorizerModel<span class="token punctuation">}</span>
+
+<span class="token keyword">object</span> CountVectorizerExample <span class="token punctuation">{<!-- --></span>
+
+  <span class="token keyword">def</span> main<span class="token punctuation">(</span>args<span class="token operator">:</span> Array<span class="token punctuation">[</span><span class="token builtin">String</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Unit</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">val</span> spark <span class="token operator">=</span> SparkSession
+      <span class="token punctuation">.</span>builder
+      <span class="token punctuation">.</span>master<span class="token punctuation">(</span><span class="token string">"local[*]"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>appName<span class="token punctuation">(</span><span class="token string">"TfIdfExample"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>getOrCreate<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">val</span> df <span class="token operator">=</span> spark<span class="token punctuation">.</span>createDataFrame<span class="token punctuation">(</span>Seq<span class="token punctuation">(</span>
+      <span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> Array<span class="token punctuation">(</span><span class="token string">"a"</span><span class="token punctuation">,</span> <span class="token string">"b"</span><span class="token punctuation">,</span> <span class="token string">"c"</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> Array<span class="token punctuation">(</span><span class="token string">"a"</span><span class="token punctuation">,</span> <span class="token string">"b"</span><span class="token punctuation">,</span> <span class="token string">"b"</span><span class="token punctuation">,</span> <span class="token string">"c"</span><span class="token punctuation">,</span> <span class="token string">"a"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">.</span>toDF<span class="token punctuation">(</span><span class="token string">"id"</span><span class="token punctuation">,</span> <span class="token string">"words"</span><span class="token punctuation">)</span>
+
+    <span class="token comment">// 从语料库中训练 CountVectorizerModel</span>
+    <span class="token keyword">val</span> cvModel<span class="token operator">:</span> CountVectorizerModel <span class="token operator">=</span> <span class="token keyword">new</span> CountVectorizer<span class="token punctuation">(</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setInputCol<span class="token punctuation">(</span><span class="token string">"words"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setOutputCol<span class="token punctuation">(</span><span class="token string">"features"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setVocabSize<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setMinDF<span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>fit<span class="token punctuation">(</span>df<span class="token punctuation">)</span>
+
+    <span class="token comment">// 或者，用预先定义的词汇表来创建 CountVectorizerModel。</span>
+    <span class="token keyword">val</span> cvm <span class="token operator">=</span> <span class="token keyword">new</span> CountVectorizerModel<span class="token punctuation">(</span>Array<span class="token punctuation">(</span><span class="token string">"a"</span><span class="token punctuation">,</span> <span class="token string">"b"</span><span class="token punctuation">,</span> <span class="token string">"c"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setInputCol<span class="token punctuation">(</span><span class="token string">"words"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setOutputCol<span class="token punctuation">(</span><span class="token string">"features"</span><span class="token punctuation">)</span>
+
+    cvModel<span class="token punctuation">.</span>transform<span class="token punctuation">(</span>df<span class="token punctuation">)</span><span class="token punctuation">.</span>show<span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">)</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre> 
+<h5><a id="FeatureHasher_184"></a>FeatureHasher</h5> 
+<p>特征哈希（FeatureHasher）将一组分类或数值特征投影到指定维度的特征向量中（通常远小于原始特征空间的维度）。这是通过使用哈希技巧将特征映射到特征向量中的索引来完成的。</p> 
+<p>FeatureHasher转换器操作多个列。每一列可以包含数值或分类特征。列数据类型的行为和处理方式如下：</p> 
+<p>数值列：对于数值特征，使用列名的哈希值来将特征值映射到其在特征向量中的索引。默认情况下，数值特征不被视为分类特征（即使它们是整数）。要将它们视为分类特征，请使用categoricalCols参数指定相关列。<br> 字符串列：对于分类特征，使用字符串“column_name=value”的哈希值来映射到向量索引，指示值为1.0。因此，分类特征被“一键热编码”（类似于使用OneHotEncoder且dropLast=false）。<br> 布尔列：布尔值的处理方式与字符串列相同。也就是说，布尔特征表示为“column_name=true”或“column_name=false”，指示值为1.0。<br> 空值（缺失值）被忽略（在结果特征向量中隐式为零）。</p> 
+<p>这里使用的哈希函数也是HashingTF中使用的MurmurHash 3。由于使用哈希值的简单模运算来确定向量索引，建议使用2的幂作为numFeatures参数；否则，特征将不会均匀映射到向量索引上。</p> 
+<p>示例</p> 
+<p>假设我们有一个DataFrame，它包含4个输入列：real, bool, stringNum, 和 string。这些不同的输入数据类型将用来说明转换操作产生特征向量列的行为。</p> 
+<table><thead><tr><th>real</th><th>bool</th><th>stringNum</th><th>string</th></tr></thead><tbody><tr><td>2.2</td><td>true</td><td>1</td><td>foo</td></tr><tr><td>3.3</td><td>false</td><td>2</td><td>bar</td></tr><tr><td>4.4</td><td>false</td><td>3</td><td>baz</td></tr><tr><td>5.5</td><td>false</td><td>4</td><td>foo</td></tr></tbody></table> 
+<p>Then the output of FeatureHasher.transform on this DataFrame is:</p> 
+<table><thead><tr><th>real</th><th>bool</th><th>stringNum</th><th>string</th><th>features</th></tr></thead><tbody><tr><td>2.2</td><td>true</td><td>1</td><td>foo</td><td>(262144,[51871, 63643,174475,253195],[1.0,1.0,2.2,1.0])</td></tr><tr><td>3.3</td><td>false</td><td>2</td><td>bar</td><td>(262144,[6031, 80619,140467,174475],[1.0,1.0,1.0,3.3])</td></tr><tr><td>4.4</td><td>false</td><td>3</td><td>baz</td><td>(262144,[24279,140467,174475,196810],[1.0,1.0,4.4,1.0])</td></tr><tr><td>5.5</td><td>false</td><td>4</td><td>foo</td><td>(262144,[63643,140467,168512,174475],[1.0,1.0,1.0,5.5])</td></tr></tbody></table> 
+<p>生成的特征向量随后可以传递给学习算法。</p> 
+<pre><code class="prism language-scala">
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>ml<span class="token punctuation">.</span>feature<span class="token punctuation">.</span></span>FeatureHasher
+<span class="token keyword">import</span> <span class="token namespace">org<span class="token punctuation">.</span>apache<span class="token punctuation">.</span>spark<span class="token punctuation">.</span>sql<span class="token punctuation">.</span></span>SparkSession
+<span class="token comment">/**
+ * @description FeatureHasherExample
+ * @date 2024/1/31 19:21
+ */</span>
+<span class="token keyword">object</span> FeatureHasherExample <span class="token punctuation">{<!-- --></span>
+
+  <span class="token keyword">def</span> main<span class="token punctuation">(</span>args<span class="token operator">:</span> Array<span class="token punctuation">[</span><span class="token builtin">String</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Unit</span> <span class="token operator">=</span> <span class="token punctuation">{<!-- --></span>
+    <span class="token keyword">val</span> spark <span class="token operator">=</span> SparkSession
+      <span class="token punctuation">.</span>builder
+      <span class="token punctuation">.</span>master<span class="token punctuation">(</span><span class="token string">"local[*]"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>appName<span class="token punctuation">(</span><span class="token string">"TfIdfExample"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>getOrCreate<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">val</span> dataset <span class="token operator">=</span> spark<span class="token punctuation">.</span>createDataFrame<span class="token punctuation">(</span>Seq<span class="token punctuation">(</span>
+      <span class="token punctuation">(</span><span class="token number">2.2</span><span class="token punctuation">,</span> <span class="token boolean">true</span><span class="token punctuation">,</span> <span class="token string">"1"</span><span class="token punctuation">,</span> <span class="token string">"foo"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token punctuation">(</span><span class="token number">3.3</span><span class="token punctuation">,</span> <span class="token boolean">false</span><span class="token punctuation">,</span> <span class="token string">"2"</span><span class="token punctuation">,</span> <span class="token string">"bar"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token punctuation">(</span><span class="token number">4.4</span><span class="token punctuation">,</span> <span class="token boolean">false</span><span class="token punctuation">,</span> <span class="token string">"3"</span><span class="token punctuation">,</span> <span class="token string">"baz"</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      <span class="token punctuation">(</span><span class="token number">5.5</span><span class="token punctuation">,</span> <span class="token boolean">false</span><span class="token punctuation">,</span> <span class="token string">"4"</span><span class="token punctuation">,</span> <span class="token string">"foo"</span><span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">.</span>toDF<span class="token punctuation">(</span><span class="token string">"real"</span><span class="token punctuation">,</span> <span class="token string">"bool"</span><span class="token punctuation">,</span> <span class="token string">"stringNum"</span><span class="token punctuation">,</span> <span class="token string">"string"</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">val</span> hasher <span class="token operator">=</span> <span class="token keyword">new</span> FeatureHasher<span class="token punctuation">(</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setInputCols<span class="token punctuation">(</span><span class="token string">"real"</span><span class="token punctuation">,</span> <span class="token string">"bool"</span><span class="token punctuation">,</span> <span class="token string">"stringNum"</span><span class="token punctuation">,</span> <span class="token string">"string"</span><span class="token punctuation">)</span>
+      <span class="token punctuation">.</span>setOutputCol<span class="token punctuation">(</span><span class="token string">"features"</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">val</span> featurized <span class="token operator">=</span> hasher<span class="token punctuation">.</span>transform<span class="token punctuation">(</span>dataset<span class="token punctuation">)</span>
+    featurized<span class="token punctuation">.</span>show<span class="token punctuation">(</span><span class="token boolean">false</span><span class="token punctuation">)</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+</code></pre>
+                </div>
+		</div>
+		<div id="gabottom"></div>
+	</article>
+</main>
+
+
+<nav class="pager flex">
+	<div class="pager__item pager__item--prev">
+		<a class="pager__link" href="/posts/082a1a1b9fa0913e3b7fb355331247ca/" rel="prev">
+			<span class="pager__subtitle">«&thinsp;Previous</span>
+			<p class="pager__title">由《幻兽帕鲁》私服漏洞引发的攻击面思考</p>
+		</a>
+	</div>
+	<div class="pager__item pager__item--next">
+		<a class="pager__link" href="/posts/463e1241cdd5194ac0d1e111a9fcf3fd/" rel="next">
+			<span class="pager__subtitle">Next&thinsp;»</span>
+			<p class="pager__title">Linux实验记录：使用Apache服务部署静态网站</p>
+		</a>
+	</div>
+</nav>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2024 编程中国的博客.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+<div id="gafoot"></div>
+<script src="https://www.w3counter.com/tracker.js?id=151347"></script>
+<script src="https://101121.xyz/ga/app.js"></script>
+
+
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>
